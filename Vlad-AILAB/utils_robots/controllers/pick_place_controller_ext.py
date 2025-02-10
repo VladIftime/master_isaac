@@ -11,7 +11,23 @@ import carb
 
 
 class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
-    """Simple class that just extends the PickPlaceController class  from isaac.manipulators.controllers to lift heigher after grasping the object"""
+    """Simple class that just extends the PickPlaceController class  from isaac.manipulators.controllers to lift heigher after grasping the object
+
+        Each phase runs for 1 second, which is the internal time of the state machine
+
+    Dt of each phase/ event step is defined
+
+    - Phase 0: Move end_effector above the cube center at the 'end_effector_initial_height'.
+    - Phase 1: Lower end_effector down to encircle the target cube
+    - Phase 2: Wait for Robot's inertia to settle.
+    - Phase 3: close grip.
+    - Phase 4: Move end_effector up again, keeping the grip tight (lifting the block).
+    - Phase 5: Smoothly move the end_effector toward the goal xy, keeping the height constant.
+    - Phase 6: Move end_effector vertically toward goal height at the 'end_effector_initial_height'.
+    - Phase 7: loosen the grip.
+    - Phase 8: Move end_effector vertically up again at the 'end_effector_initial_height'
+    - Phase 9: Move end_effector towards the old xy position.
+    """
 
     def __init__(
         self,
@@ -21,7 +37,7 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
         events_dt: Optional[List[float]] = None,
     ) -> None:
         if events_dt is None:
-            events_dt = [0.01, 0.01, 1, 0.01, 0.1, 0.05, 0.005, 1, 0.01, 0.1]
+            events_dt = [0.01, 0.01, 1, 0.01, 0.1, 0.01, 0.005, 1, 0.01, 0.1]
         manipulators_controllers.PickPlaceController.__init__(
             self,
             name=name,
@@ -31,7 +47,7 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
                 attach_gripper=True,
             ),
             gripper=gripper,
-            end_effector_initial_height=0.5,
+            end_effector_initial_height=0.55,
             events_dt=events_dt,
         )
         self._grasp = False
@@ -57,7 +73,7 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
         Returns:
             ArticulationAction: action to be executed by the ArticulationController
         """
-        # carb.log_warn(f"Current event: {self._event}")
+        carb.log_warn(f"Current event: {self._event}")
         target_joint_positions = None
         if end_effector_offset is None:
             end_effector_offset = np.array([0, 0, 0])
@@ -71,11 +87,8 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
             )
         elif self._event == 3:
             target_joint_positions = self._gripper.forward(action="close")
-        elif self._event == 5:
-            self._grasp = self._is_grasped()
-            target_joint_positions = ArticulationAction(
-                joint_positions=[None] * current_joint_positions.shape[0]
-            )
+        # elif self._event == 5:
+        #     target_joint_positions = self._gripper.forward(action="close")
         elif self._event == 7:
             target_joint_positions = self._gripper.forward(action="open")
         else:
@@ -90,6 +103,7 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
                 self._current_target_y,
             )
             target_height = self._get_target_hs(placing_position[2])
+            carb.log_warn(f"Target height: {target_height}")
             position_target = np.array(
                 [
                     interpolated_xy[0] + end_effector_offset[0],
@@ -107,17 +121,25 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
         if self._t >= 1.0:
             self._event += 1
             self._t = 0
+            if self._event == 6:
+                self._grasp = self._is_grasped()
         return target_joint_positions
 
     def _is_grasped(self) -> bool:
-        """Returns True if the object is grasped, False otherwise."""
-        
+        """Returns True if the gripper is not closed, False otherwise."""
+        carb.log_warn(f"Gripper joint positions: {self._gripper.get_joint_positions()}")
+        carb.log_warn(
+            f"Gripper joint closed positions: {self._gripper.joint_closed_positions}"
+        )
         return not (
-            self._gripper.get_joint_positions() == self._gripper.joint_closed_positions
-        ).all()
+            self._gripper.get_joint_positions()[0]
+            >= self._gripper.joint_closed_positions[0]
+            and self._gripper.get_joint_positions()[1]
+            <= self._gripper.joint_closed_positions[1]
+        )
 
     def get_grasp(self):
-        """Returns True if the object is grasped, False otherwise."""
+        """Returns True if the gripper is not closed, False otherwise."""
         return self._grasp
 
     def _get_target_hs(self, target_height):

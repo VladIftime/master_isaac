@@ -12,6 +12,7 @@ from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.core.utils.rotations import euler_angles_to_quat
 import numpy as np
 import typing
+import carb
 from omni.isaac.manipulators.grippers.gripper import Gripper
 from omni.isaac.universal_robots.controllers import RMPFlowController
 
@@ -117,11 +118,12 @@ class BasicManipulationController(BaseController):
         # Increment event time by _event_dt
         # If _event_dt accumulates to 1 unit time, end the phase and reset event time
         self._t += self._events_dt[self._event]
+        carb.log_warn(f"T: {self._t}")
         if self._t >= 1.0:
             self._event += 1
             self._t = 0
 
-        # Return information about the position (x, y, z) and orientation the end effector should move towards
+        # Return information about the position (x, y, _z) and orientation the end effector should move towards
         return target_joint_positions
 
     # Function to open the gripper fingers
@@ -239,3 +241,24 @@ class BasicManipulationController(BaseController):
         """Resumes the state machine's time and phase."""
         self._pause = False
         return
+
+    def _calculate_target_position(self, target_position, current_joint_positions):
+        # Use linear interpolation for straight-line movement
+        alpha = self._get_alpha()
+        xy_target = (1 - alpha) * np.array(
+            [current_joint_positions[0], current_joint_positions[1]]
+        ) + alpha * np.array([target_position[0], target_position[1]])
+        return xy_target
+
+    def _get_alpha(self):
+        # Use a linear progression for alpha
+        if self._event == 0:
+            return 0
+        elif self._event == 1:
+            return self._t  # Linear interpolation
+        elif self._event == 2:
+            return 1.0
+        elif self._event == 3:
+            return 1.0
+        else:
+            raise ValueError()

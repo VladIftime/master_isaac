@@ -40,6 +40,7 @@ def save_point_cloud_as_png(point_cloud, filename, projection="xy"):
     plt.savefig(filename, dpi=300, bbox_inches="tight")
     plt.close()
 
+
 def depth_image_from_distance_image(distance, intrinsics):
     """Computes depth image from distance image.
 
@@ -66,5 +67,13 @@ def depth_image_from_distance_image(distance, intrinsics):
     x_over_z = (px - cx) / fx
     y_over_z = (py - cy) / fy
 
+    # Compute depth
     z = distance / np.sqrt(1.0 + x_over_z**2 + y_over_z**2)
+
+    # Handle background pixels
+    # Assuming background pixels in the distance image are represented by a large value (e.g., infinity)
+    # get the largest value in the distance image
+    background_value = np.max(distance)
+    z[distance == background_value] = 0
+
     return z
