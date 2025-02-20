@@ -11,25 +11,25 @@ import carb
 from matplotlib import pyplot as plt
 import omni
 import copy
-from omni.isaac.core.utils.semantics import add_update_semantics
-from omni.isaac.core.utils.stage import add_reference_to_stage
-import omni.isaac.core.tasks as tasks
-from omni.isaac.core.utils.nucleus import get_assets_root_path
-from omni.isaac.core.scenes.scene import Scene
-from omni.isaac.core.objects import FixedCuboid, DynamicCuboid
-from omni.isaac.core.utils.prims import is_prim_path_valid
-from omni.isaac.core.utils.string import find_unique_string_name
-from omni.isaac.core.utils.prims import create_prim, get_prim_path, define_prim
-from omni.isaac.core.utils.stage import get_stage_units
-from omni.isaac.core.materials import PhysicsMaterial
-from omni.isaac.core.prims import RigidPrim, GeometryPrim
-from omni.isaac.sensor import Camera
-from omni.isaac.core.utils.stage import get_current_stage
+from isaacsim.core.utils.semantics import add_update_semantics
+from isaacsim.core.utils.stage import add_reference_to_stage
+from isaacsim.core.api.tasks import PickPlace
+from isaacsim.core.utils.nucleus import get_assets_root_path
+from isaacsim.core.api.scenes.scene import Scene
+from isaacsim.core.api.objects import FixedCuboid, DynamicCuboid
+from isaacsim.core.utils.prims import is_prim_path_valid
+from isaacsim.core.utils.string import find_unique_string_name
+from isaacsim.core.utils.prims import create_prim, get_prim_path, define_prim
+from isaacsim.core.utils.stage import get_stage_units
+from isaacsim.core.api.materials import PhysicsMaterial
+from isaacsim.core.prims import RigidPrim, GeometryPrim
+from isaacsim.sensors.camera import Camera
+from isaacsim.core.utils.stage import get_current_stage
 from pxr import UsdGeom, UsdPhysics
-from omni.isaac.nucleus import get_assets_root_path, is_file
-import omni.isaac.core.utils.stage as stage_utils
-from omni.isaac.core.utils.rotations import euler_angles_to_quat
-from dev_utils.pc_to_png import depth_image_from_distance_image
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from dev_utils.point_cloud_utils import depth_image_from_distance_image
+from dev_utils.point_cloud_utils import get_heightmap
+from scipy.spatial.transform import Rotation as R
 
 from utils_robots.robots.ur5e_handeye import UR5eHandeye
 import os, random
@@ -39,7 +39,7 @@ from pathlib import Path
 from PIL import Image
 
 
-class UR5ePickPlace(tasks.PickPlace):
+class UR5ePickPlace(PickPlace):
     """[summary]
 
     Args:
@@ -55,10 +55,7 @@ class UR5ePickPlace(tasks.PickPlace):
         overhead_camera_name: Optional[str] = "overhead_camera",
         pespective_camera_name: Optional[str] = "perspective_camera",
     ) -> None:
-        tasks.PickPlace.__init__(
-            self,
-            name=name,
-        )
+        super().__init__(name=name)
         self.stage_usd_path = stage_usd_path
         self.load_stage = True
         self.imported_objects_prim_path = "/World/object"
@@ -159,7 +156,7 @@ class UR5ePickPlace(tasks.PickPlace):
             edge.set_collision_approximation("convexHull")
             edge.apply_physics_material(physics_material)
             scene.add(edge)
-
+        self.workspace_limits = np.asarray([[0.25, 0.75], [-0.25, 0.25], [0.05, 0.15]])
         # -----------------------------------------------------------
         # Rest of setup
         # -----------------------------------------------------------
@@ -372,33 +369,6 @@ class UR5ePickPlace(tasks.PickPlace):
     def get_camera_persp(self):
         return self.camera_persp
 
-    def get_rgb_and_depth_images(self, camera):
-        """Capture and return RGB and normalized depth images from the given camera.
-
-        Args:
-            camera: The camera object to capture images from.
-
-        Returns:
-            tuple: A tuple containing the RGB image and the normalized depth image.
-        """
-        # Capture the current frame
-        frame = camera.get_current_frame()
-
-        # Extract RGB image
-        rgb_image = frame["rgba"][:, :, :3]
-
-        # Extract and process distance image to get depth image
-        distance_image = frame["distance_to_camera"]
-        intrinsics = camera.get_intrinsics_matrix()
-        depth_image = depth_image_from_distance_image(distance_image, intrinsics)
-
-        # Normalize the depth image to 0-255 and convert to uint8
-        depth_image_normalized = (depth_image / np.max(depth_image) * 255).astype(
-            np.uint8
-        )
-
-        return rgb_image, depth_image_normalized
-
     def get_semantic_mask(self, camera: Camera, goal: str = None):
         """Generate a semantic mask from the camera's instance segmentation data.
 
@@ -466,9 +436,7 @@ class UR5ePickPlace(tasks.PickPlace):
             np.uint8
         )
 
-        # visualise the
-
-        return rgb_image, depth_image_normalized
+        return rgb_image, depth_image_normalized, distance_image
 
     def set_usd_objects(self, object_number: int, object_position: np.ndarray) -> None:
         # Define the prim path for the object
@@ -494,27 +462,41 @@ class UR5ePickPlace(tasks.PickPlace):
         if a_name_prim and a_name_prim.HasAPI(UsdPhysics.RigidBodyAPI):
             a_name_prim.RemoveAPI(UsdPhysics.RigidBodyAPI)
 
+        # Ensure orientations is a 2D array
+        orientation = np.array([1, 0, 0, 0])
+        orientations = np.expand_dims(orientation, axis=0)
+
+        # Ensure scales is a 2D array
+        scale = np.array([0.2, 0.2, 0.2])
+        scales = np.expand_dims(scale, axis=0)
+
+        # Ensure masses is a 1D array
+        mass = np.array([0.01])
+
+        # Ensure collisions is a 1D array
+        collision = np.array([True])
+
         # Create the rigid prim
         rigid_prim = RigidPrim(
-            prim_path=object_prim_path,
-            position=object_position,
-            orientation=np.array([1, 0, 0, 0]),
+            prim_paths_expr=object_prim_path,
+            positions=np.expand_dims(object_position, axis=0),  # Ensure positions is 2D
+            orientations=orientations,
             name="rigid_prim",
-            scale=np.array([0.2] * 3),
-            mass=0.01,
+            scales=scales,
+            masses=mass,  # Ensure masses is a 1D array
         )
         rigid_prim.enable_rigid_body_physics()
 
         # Create the geometry prim
         geometry_prim = GeometryPrim(
-            prim_path=geometry_prim_path,
+            prim_paths_expr=geometry_prim_path,
             name="geometry_prim",
-            position=object_position,
-            orientation=np.array([1, 0, 0, 0]),
-            scale=np.array([0.2] * 3),
-            collision=True,
+            positions=np.expand_dims(object_position, axis=0),  # Ensure positions is 2D
+            orientations=orientations,
+            scales=scales,
+            collisions=collision,  # Ensure collisions is a 1D array
         )
-        geometry_prim.apply_physics_material(
+        geometry_prim.apply_physics_materials(
             PhysicsMaterial(
                 prim_path=self.imported_objects_prim_path
                 + f"/physics_material_{object_number}",
@@ -531,3 +513,54 @@ class UR5ePickPlace(tasks.PickPlace):
 
     def get_object_name(self, object_number: int) -> str:
         return self.objects_list[object_number]["name"]
+
+    def get_height_at_position(self, camera: Camera, position: np.ndarray) -> float:
+        """Get the height at a specific position using the depth camera.
+
+        Args:
+            camera (Camera): The camera object to capture images from.
+            position (np.ndarray): The world coordinates (x, y) to measure height.
+
+        Returns:
+            float: The height at the specified position.
+        """
+        self.heightmap_resolution = 0.001
+
+        # Capture the current frame
+        rgb_image, depth_image, distance_image = self.get_rgb_depth_images(camera)
+
+        # Get camera intrinsics and pose
+        cam_intrinsics = camera.get_intrinsics_matrix()
+        cam_position, cam_orientation = camera.get_local_pose()
+        carb.log_warn(f"cam_position: {cam_position}, cam_orientation: {cam_orientation}")
+
+        # Convert quaternion to rotation matrix
+        rotation_matrix = R.from_quat(cam_orientation).as_matrix()
+
+        # Construct the full transformation matrix
+        cam_pose = np.eye(4)
+        cam_pose[0:3, 0:3] = rotation_matrix
+        cam_pose[0:3, 3] = cam_position
+
+        # Compute the heightmap
+        _, depth_heightmap = get_heightmap(
+            rgb_image,
+            depth_image,
+            cam_intrinsics,
+            cam_pose,
+            self.workspace_limits,
+            self.heightmap_resolution,
+        )
+
+        # Convert the world position to heightmap pixel coordinates
+        pixel_x = int(
+            (position[0] - self.workspace_limits[0][0]) / self.heightmap_resolution
+        )
+        pixel_y = int(
+            (position[1] - self.workspace_limits[1][0]) / self.heightmap_resolution
+        )
+
+        # Get the height value from the heightmap
+        height = depth_heightmap[pixel_y, pixel_x]
+
+        return height

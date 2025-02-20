@@ -41,16 +41,12 @@ class UR5eHandeye(Robot):
         gripper_dof_names: Optional[List[str]] = None,
         gripper_open_position: Optional[np.ndarray] = None,
         gripper_closed_position: Optional[np.ndarray] = None,
-        rgb_cam_prim_name: Optional[str] = None,  ### BSH
-        depth_cam_prim_name: Optional[str] = None,  ### BSH
         deltas: Optional[np.ndarray] = None,
     ) -> None:
         prim = get_prim_at_path(prim_path)
         self._end_effector = None
         self._gripper = None
         self._end_effector_prim_name = end_effector_prim_name
-        self._rgb_cam = rgb_cam_prim_name  ### BSH
-        self._depth_cam = depth_cam_prim_name  ### BSH
         if not prim.IsValid():
             if usd_path:
                 add_reference_to_stage(usd_path=usd_path, prim_path=prim_path)
@@ -64,8 +60,6 @@ class UR5eHandeye(Robot):
                 add_reference_to_stage(usd_path=usd_path, prim_path=prim_path)
             if self._end_effector_prim_name is None:
                 self._end_effector_prim_path = prim_path + "/flange"
-                # self._end_effector_prim_path = prim_path + "/robotiq_arg2f_base_link"
-                # self._end_effector_prim_path = prim_path + "/right_inner_finger_pad"
 
             else:
                 self._end_effector_prim_path = prim_path + "/" + end_effector_prim_name
@@ -78,10 +72,7 @@ class UR5eHandeye(Robot):
                 gripper_open_position = np.array([0.0, 0.0])
             if gripper_closed_position is None:
                 gripper_closed_position = np.array([np.pi * 2 / 9, -np.pi * 2 / 9])
-            if rgb_cam_prim_name is None:  ### BSH
-                self._rgb_cam_prim_path = prim_path + "/realsense/RGB"
-            if depth_cam_prim_name is None:  ### BSH
-                self._depth_cam_prim_path = prim_path + "/realsense/Depth"
+
         else:
             if self._end_effector_prim_name is None:
                 # self._end_effector_prim_path = prim_path + "/robotiq_arg2f_base_link"
@@ -97,10 +88,7 @@ class UR5eHandeye(Robot):
                 gripper_open_position = np.array([0.0, 0.0])
             if gripper_closed_position is None:
                 gripper_closed_position = np.array([np.pi * 2 / 9, -np.pi * 2 / 9])
-            if rgb_cam_prim_name is None:  ### BSH
-                self._rgb_cam_prim_path = prim_path + "/realsense/RGB"
-            if depth_cam_prim_name is None:  ### BSH
-                self._depth_cam_prim_path = prim_path + "/realsense/Depth"
+
         super().__init__(
             prim_path=prim_path,
             name=name,
@@ -118,17 +106,6 @@ class UR5eHandeye(Robot):
                 joint_closed_positions=gripper_closed_position,
                 action_deltas=deltas,
             )
-
-        # Hand mounted cameras
-        # self._rgb_cam = Camera(
-        #     prim_path=self._rgb_cam_prim_path, frequency=30, resolution=(1920, 1080)
-        # )  ### BSH
-        # self._depth_cam = Camera(
-        #     prim_path=self._depth_cam_prim_path,
-        #     #  frequency=30, resolution=(1920, 1080)) ### BSH
-        #     frequency=30,
-        #     resolution=(1280, 720),
-        # )  ### BSH
         return
 
     @property
@@ -149,7 +126,7 @@ class UR5eHandeye(Robot):
         """
         return self._gripper
 
-    @property  ### BSH
+    @property
     def rgb_cam(self) -> Camera:
         """[summary]
 
@@ -158,7 +135,7 @@ class UR5eHandeye(Robot):
         """
         return self._rgb_cam
 
-    @property  ### BSH
+    @property
     def depth_cam(self) -> Camera:
         """[summary]
 
@@ -174,8 +151,7 @@ class UR5eHandeye(Robot):
             prim_path=self._end_effector_prim_path, name=self.name + "_end_effector"
         )
         self._end_effector.initialize(physics_sim_view)
-        # self._rgb_cam.initialize(physics_sim_view)  ### BSH
-        # self._depth_cam.initialize(physics_sim_view)  ### BSH
+
         self._gripper.initialize(
             physics_sim_view=physics_sim_view,
             articulation_apply_action_func=self.apply_action,

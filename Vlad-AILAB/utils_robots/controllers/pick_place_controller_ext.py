@@ -3,7 +3,9 @@ from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.core.articulations import Articulation
 from omni.isaac.manipulators.grippers.parallel_gripper import ParallelGripper
 import omni.isaac.manipulators.controllers as manipulators_controllers
-from utils_robots.controllers.RMPFflow_pickplace import RMPFlowController
+from isaacsim.robot.manipulators.examples.universal_robots.controllers.rmpflow_controller import (
+    RMPFlowController,
+)
 import numpy as np
 import typing
 from typing import Optional, List

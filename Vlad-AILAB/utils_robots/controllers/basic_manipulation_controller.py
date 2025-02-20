@@ -74,6 +74,7 @@ class BasicManipulationController(BaseController):
         current_joint_positions: np.ndarray,
         end_effector_offset: typing.Optional[np.ndarray] = None,
         end_effector_orientation: typing.Optional[np.ndarray] = None,
+        gripper_position: typing.Optional[np.ndarray] = None,
     ) -> ArticulationAction:
         """Runs the controller one step.
 
