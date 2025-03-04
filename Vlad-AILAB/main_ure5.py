@@ -1,6 +1,5 @@
 from unittest import skip
 from isaacsim import SimulationApp
-
 # Initialize the simulation application with a GUI
 simulation_app = SimulationApp({"headless": False})
 
@@ -25,6 +24,7 @@ from isaacsim.core.api import World
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 import isaacsim.core.utils.stage as stage_utils
 from omni.kit.viewport.utility import get_active_viewport
+from dev_utils.point_cloud_utils import display_heightmap
 
 import cv2
 import numpy as np
@@ -51,6 +51,12 @@ from utils_robots.controllers.RMPFflow_pickplace import RMPFlowController
 from utils_robots.tasks.pick_place_task import UR5ePickPlace
 
 
+# Save the depth image to a file
+save_root_depth = os.path.join(os.getcwd(), "camera_image/depth.png")
+save_root_rgb = os.path.join(os.getcwd(), "camera_image/rgb.png")
+save_root_semantic = os.path.join(os.getcwd(), "camera_image/semantic.png")
+
+
 # Define the path to the objects directory
 PATH_to_objects = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "objects"
@@ -75,16 +81,15 @@ my_world.reset()
 task_params = my_task.get_params()
 my_ur5e = my_world.scene.get_object(task_params["robot_name"]["value"])
 camera_ortho = my_task.get_camera_ortho()
-camera_perspective = my_task.get_camera_persp()
+camera_pointcloud = my_task.get_camera_pointcloud()
 
 # Create PickPlace controller
-# pick_and_place_controller = PickPlaceController(
-#     name="pick_place_controller", gripper=my_ur5e.gripper, robot_articulation=my_ur5e
-# )
-
 pick_and_place_controller = CustomPickPlaceController(
     name="pick_place_controller", gripper=my_ur5e.gripper, robot_articulation=my_ur5e
 )
+
+# Declare instance for robot control (PD control)
+articulation_controller = my_ur5e.get_articulation_controller()
 
 
 # Create EndEffector Controller for push manipulation
@@ -94,18 +99,12 @@ push_controller = PushManipulationController(
     robot_articulation=my_ur5e,
     end_effector_offset=[0, 0, 0.09],
     original_position=[0.5, 0, 0.3],
-    original_joint_positions=my_ur5e.get_joint_positions(),
 )
 
-
-# Declare instance for robot control (PD control)
-articulation_controller = my_ur5e.get_articulation_controller()
-original_joint_positions = my_ur5e.get_joint_positions()
 
 # Specify the view point in the GUI (when converting from Depth camera view to Perspective view, it is generally easier to see)
 viewport = get_active_viewport()
 viewport.set_active_camera("/World/OverheadCamera")
-# viewport.set_active_camera("/World/PerspCamera")
 viewport.set_active_camera("/OmniverseKit_Persp")
 
 # Declare found_obj to check if the target object is found (initially not found, so False)
@@ -115,8 +114,9 @@ found_obj = False
 print(
     "---------------------------------Start simulation---------------------------------"
 )
+first_observation = None
+last_observation = None
 
-change_world_center = False
 while simulation_app.is_running():
     my_world.step(render=True)
     if my_world.is_playing():
@@ -125,61 +125,25 @@ while simulation_app.is_running():
         if my_world.current_time_step_index == 0:
             my_world.reset()
             pick_and_place_controller.reset()
+            
+            current_joint_positions = (my_ur5e.get_joint_positions(),)
+            end_effector_offset = (np.array([0, 0, 0.9]),)
 
-        # Get the RGBA data from the camera
-        rgba_data = camera_ortho.get_rgba()
-
-        # Check the shape of the returned data
-        if rgba_data.ndim == 1:
-            # If the data is 1-dimensional, handle it accordingly
-            rgb_image = rgba_data.reshape(-1, 4)[:, :3]  # Assuming N x 4 shape
-        else:
-            # If the data is already in the expected shape, use it directly
-            rgb_image = rgba_data[:, :, :3]
-
-        distance_image = camera_ortho.get_current_frame()["distance_to_camera"]
-
-        # Convert distance image to depth image using camera intrinsics
-        if my_world.current_time_step_index % 20 == 0:
-            # Specify the goal object class name, e.g., goal="3" for the cylinder
-            if number_of_objects:
-                goal_object_name = my_task.get_object_name(
-                    random.randint(0, number_of_objects - 1)
-                )
-            else:
-                goal_object_name = "0"
-            rgb_image, depth_image, distance_image = my_task.get_rgb_depth_images(
-                camera_ortho
-            )
-            semantic_mask = my_task.get_semantic_mask(
-                camera_ortho, goal=goal_object_name
-            )
-
-            # Save the depth image to a file
-            save_root_depth = os.path.join(os.getcwd(), "camera_image/depth.png")
-            save_root_rgb = os.path.join(os.getcwd(), "camera_image/rgb.png")
-            save_root_semantic = os.path.join(os.getcwd(), "camera_image/semantic.png")
-
-            image = Image.fromarray(depth_image)
-            image.save(save_root_depth)
-            image = Image.fromarray(rgb_image)
-            image.save(save_root_rgb)
-            image = Image.fromarray(semantic_mask)
-            image.save(save_root_semantic)
-
-            # Get the height at the push start and end positions
-            height_at_start = my_task.get_height_at_position(camera_ortho, np.array([0.5, 0, 0.14]))
-            carb.log_warn(f"Height at start: {height_at_start}")
-
-        observations = my_world.get_observations()
-
-        # actions = push_controller.forward(
-        #     push_start_position=np.array([0.5, 0, 0.14]),
-        #     push_end_position=np.array([0.7, 0.3, 0.14]),
-        # )
+        actions = push_controller.forward(
+            push_start_position=np.array([0.5, 0, 0.14]),
+            push_end_position=np.array([0.55, 0.1, 0.14]),
+        )
+        if first_observation is None and my_world.current_time_step_index > 10:
+            first_observation = my_task.get_observations()
         if push_controller.is_done():
             print("Push done")
+            last_observation = my_task.get_observations()
+            
         if actions is not None:
             articulation_controller.apply_action(actions)
 
+    if last_observation is not None:
+        display_heightmap(last_observation["height_map"], "last_height_map")
+    if first_observation is not None:
+        display_heightmap(first_observation["height_map"], "first_height_map")
 simulation_app.close()

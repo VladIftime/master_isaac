@@ -11,6 +11,7 @@ import carb
 from matplotlib import pyplot as plt
 import omni
 import copy
+import cv2
 from isaacsim.core.utils.semantics import add_update_semantics
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.api.tasks import PickPlace
@@ -66,6 +67,7 @@ class UR5ePickPlace(PickPlace):
         self.overhead_camera_name = overhead_camera_name
         self.perspective_camera_name = pespective_camera_name
         self.number_of_objects = number_of_objects
+        self._robot_name = None
         return
 
     def set_up_scene(self, scene: Scene) -> None:
@@ -78,8 +80,28 @@ class UR5ePickPlace(PickPlace):
         # -----------------------------------------------------------
         scene.add_default_ground_plane()
         self._robot = self.set_robot()
+
         scene.add(self._robot)
-        # -----------------------------------------------------------
+        carb.log_warn(f"Robot state: {self._robot.get_joints_state()}")
+        self._robot.set_joints_default_state(
+            positions=np.array(
+                [
+                    0,
+                    -np.pi / 2,
+                    -np.pi / 2,
+                    -np.pi / 2,
+                    np.pi / 2,
+                    np.pi / 2,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ]
+            ),
+        )
+        # -------------------       ----------------------------------------
         # Platform with welded edges using FixedCuboid and physics material
         # -----------------------------------------------------------
         self.platform_center = np.array([0.5, 0, 0.025])
@@ -156,7 +178,7 @@ class UR5ePickPlace(PickPlace):
             edge.set_collision_approximation("convexHull")
             edge.apply_physics_material(physics_material)
             scene.add(edge)
-        self.workspace_limits = np.asarray([[0.25, 0.75], [-0.25, 0.25], [0.05, 0.15]])
+        self.workspace_limits = np.asarray([[0.2, 0.8], [-0.25, 0.35], [0.05, 0.15]])
         # -----------------------------------------------------------
         # Rest of setup
         # -----------------------------------------------------------
@@ -257,6 +279,7 @@ class UR5ePickPlace(PickPlace):
             initial_name="my_ur5e",
             is_unique_fn=lambda x: not self.scene.object_exists(x),
         )
+        self._robot_name = ur5e_robot_name
         return UR5eHandeye(
             prim_path=ur5e_prim_path, name=ur5e_robot_name, usd_path=ur5e_usd_path
         )
@@ -277,35 +300,60 @@ class UR5ePickPlace(PickPlace):
         }
         return params_representation
 
-    def get_observations(self) -> dict:
-        """[summary]
-
+    def get_observations(self, goal_object_name: Optional[str] = None) -> dict:
+        """
+        Get the observations from the robot and the environment.
+        Args:
+            goal_object_name: Optional; the name of the goal object.
         Returns:
-            dict: [description]
+            dict: observation dictionary
         """
         joints_state = self._robot.get_joints_state()
         end_effector_position, _ = self._robot.end_effector.get_local_pose()
-
+        rgb_image, depth_image = self.get_rgb_depth_images(self.camera)
+        pointcloud = self.pointcloud_camera.get_pointcloud()
+        # Display the pointcloud for debugging
+        
+        height_map = self.get_height_map(
+            rgb_image=rgb_image,
+            depth_image=depth_image,
+            pointcloud=pointcloud,
+            camera=self.camera,
+            position=end_effector_position,
+        )
+        if goal_object_name is not None:
+            goal_mask = self.get_semantic_mask(self.camera, goal_object_name)
         observation_dict = dict()
-
-        observation_dict[self._robot.name] = {
-            "joint_positions": joints_state.positions,
-            "end_effector_position": end_effector_position,
-        }
+       
+        if goal_object_name is not None:
+            observation_dict = {
+                "joint_positions": joints_state.positions,
+                "end_effector_position": end_effector_position,
+                "rgb_image": rgb_image,
+                "depth_image": depth_image,
+                "pointcloud": pointcloud,
+                "height_map": height_map,
+                "goal_mask": goal_mask,
+            }
+        else:
+            observation_dict = {
+                "joint_positions": joints_state.positions,
+                "end_effector_position": end_effector_position,
+                "rgb_image": rgb_image,
+                "depth_image": depth_image,
+                "pointcloud": pointcloud,
+                "height_map": height_map,
+            }
         return observation_dict
 
     def set_camera(self):
         # Position camera 1m above the front platform, facing downward
-        overhead_position = np.array([0.5, 0, 0.5])  # Centered above the platform
+        overhead_position = np.array([0.5, 0, 0.3])  # Centered above the platform
         overhead_orientation = np.array(
             [0.5, -0.5, 0.5, 0.5]
         )  # Facing downward (90 degrees around X-axis)
-        perspective_position = np.array([1.0, 0, 0.5])  # Centered above the platform
-        perspective_orientation = euler_angles_to_quat(
-            np.array([np.pi * 2, np.pi / 2, np.pi])
-        )
 
-        # Create the camera
+        # Create the main camera
         self.camera = Camera(
             prim_path="/World/OverheadCamera",  # Unique prim path
             frequency=20,
@@ -325,7 +373,8 @@ class UR5ePickPlace(PickPlace):
         self.camera.set_clipping_range(0.01, 10000)
 
         # Add necessary frame processing
-
+        self.camera.add_pointcloud_to_frame()
+        self.camera.add_distance_to_image_plane_to_frame()
         self.camera.add_distance_to_camera_to_frame()
         self.camera.add_instance_segmentation_to_frame()
         self.camera.add_instance_id_segmentation_to_frame()
@@ -333,41 +382,46 @@ class UR5ePickPlace(PickPlace):
         self.camera.add_bounding_box_2d_loose_to_frame()
         self.camera.add_bounding_box_2d_tight_to_frame()
 
-        # Create the camera
-        self.camera_persp = Camera(
-            prim_path="/World/PerspCamera",  # Unique prim path
-            frequency=20,
-            resolution=(640, 480),
-            position=perspective_position,
-            orientation=perspective_orientation,
+        # Create a second camera 3 meters above the first one, specifically for point cloud capture
+        pointcloud_camera_position = np.array(
+            [0.5, 0, 3.0]
+        )  # 3m above the original camera
+        pointcloud_camera_orientation = (
+            overhead_orientation  # Same orientation as the main camera
         )
-        self.camera_persp.initialize()
-        APERTURE_SIZE = 0.5
-        self.camera_persp.set_focal_length(1.93)
-        self.camera_persp.set_focus_distance(4)
-        self.camera_persp.set_horizontal_aperture(
-            APERTURE_SIZE
-        )  # Set horizontal aperture
-        self.camera_persp.set_vertical_aperture(
-            APERTURE_SIZE
-        )  # Set vertical aperture to the same value
-        self.camera_persp.set_clipping_range(0.01, 10000)
 
-        # Add necessary frame processing
+        self.pointcloud_camera = Camera(
+            prim_path="/World/PointCloudCamera",  # Unique prim path
+            frequency=20,
+            resolution=(540, 540),
+            position=pointcloud_camera_position,
+            orientation=pointcloud_camera_orientation,
+        )
+        self.pointcloud_camera.initialize()
 
-        self.camera_persp.add_distance_to_camera_to_frame()
-        self.camera_persp.add_instance_segmentation_to_frame()
-        self.camera_persp.add_instance_id_segmentation_to_frame()
-        self.camera_persp.add_semantic_segmentation_to_frame()
-        self.camera_persp.add_bounding_box_2d_loose_to_frame()
-        self.camera_persp.add_bounding_box_2d_tight_to_frame()
-        return
+        # Configure the point cloud camera
+        PC_APERTURE_SIZE = 0.5
+        self.pointcloud_camera.set_projection_mode("orthographic")
+        self.pointcloud_camera.set_focal_length(1.93)
+        self.pointcloud_camera.set_focus_distance(4)
+        self.pointcloud_camera.set_horizontal_aperture(PC_APERTURE_SIZE)
+        self.pointcloud_camera.set_vertical_aperture(PC_APERTURE_SIZE)
+        self.pointcloud_camera.set_clipping_range(0.01, 10000)
+
+        # Only add point cloud processing to this camera
+        self.pointcloud_camera.add_pointcloud_to_frame()
+        self.pointcloud_camera.add_distance_to_image_plane_to_frame()
+        self.pointcloud_camera.add_distance_to_camera_to_frame()
+
+        return self.camera, self.pointcloud_camera
 
     def get_camera_ortho(self):
+        """Get the orthographic camera."""
         return self.camera
 
-    def get_camera_persp(self):
-        return self.camera_persp
+    def get_camera_pointcloud(self):
+        """Get the point cloud camera."""
+        return self.pointcloud_camera
 
     def get_semantic_mask(self, camera: Camera, goal: str = None):
         """Generate a semantic mask from the camera's instance segmentation data.
@@ -422,21 +476,17 @@ class UR5ePickPlace(PickPlace):
         """
         # Capture the current frame
         frame = camera.get_current_frame()
-
         # Extract RGB image
         rgb_image = frame["rgba"][:, :, :3]
 
-        # Extract and process distance image to get depth image
-        distance_image = frame["distance_to_camera"]
-        intrinsics = camera.get_intrinsics_matrix()
-        depth_image = depth_image_from_distance_image(distance_image, intrinsics)
+        depth_image = camera.get_depth()
 
         # Normalize the depth image to 0-255 and convert to uint8
         depth_image_normalized = (depth_image / np.max(depth_image) * 255).astype(
             np.uint8
         )
 
-        return rgb_image, depth_image_normalized, distance_image
+        return rgb_image, depth_image_normalized
 
     def set_usd_objects(self, object_number: int, object_position: np.ndarray) -> None:
         # Define the prim path for the object
@@ -514,7 +564,14 @@ class UR5ePickPlace(PickPlace):
     def get_object_name(self, object_number: int) -> str:
         return self.objects_list[object_number]["name"]
 
-    def get_height_at_position(self, camera: Camera, position: np.ndarray) -> float:
+    def get_height_map(
+        self,
+        rgb_image: np.ndarray,
+        depth_image: np.ndarray,
+        pointcloud: np.ndarray,
+        camera: Camera,
+        position: np.ndarray,
+    ) -> float:
         """Get the height at a specific position using the depth camera.
 
         Args:
@@ -526,13 +583,12 @@ class UR5ePickPlace(PickPlace):
         """
         self.heightmap_resolution = 0.001
 
-        # Capture the current frame
-        rgb_image, depth_image, distance_image = self.get_rgb_depth_images(camera)
-
         # Get camera intrinsics and pose
         cam_intrinsics = camera.get_intrinsics_matrix()
         cam_position, cam_orientation = camera.get_local_pose()
-        carb.log_warn(f"cam_position: {cam_position}, cam_orientation: {cam_orientation}")
+        carb.log_warn(
+            f"cam_position: {cam_position}, cam_orientation: {cam_orientation}"
+        )
 
         # Convert quaternion to rotation matrix
         rotation_matrix = R.from_quat(cam_orientation).as_matrix()
@@ -542,25 +598,20 @@ class UR5ePickPlace(PickPlace):
         cam_pose[0:3, 0:3] = rotation_matrix
         cam_pose[0:3, 3] = cam_position
 
-        # Compute the heightmap
-        _, depth_heightmap = get_heightmap(
+        depth_heightmap = get_heightmap(
             rgb_image,
             depth_image,
+            pointcloud,
             cam_intrinsics,
             cam_pose,
             self.workspace_limits,
             self.heightmap_resolution,
         )
 
-        # Convert the world position to heightmap pixel coordinates
-        pixel_x = int(
-            (position[0] - self.workspace_limits[0][0]) / self.heightmap_resolution
-        )
-        pixel_y = int(
-            (position[1] - self.workspace_limits[1][0]) / self.heightmap_resolution
-        )
+        return depth_heightmap
 
-        # Get the height value from the heightmap
-        height = depth_heightmap[pixel_y, pixel_x]
+    def get_pointcloud(self, camera: Camera):
+        frame = camera.get_current_frame()
+        pointcloud = frame["pointcloud"]
 
-        return height
+        return pointcloud

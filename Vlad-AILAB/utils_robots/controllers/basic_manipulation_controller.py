@@ -15,6 +15,9 @@ import typing
 import carb
 from omni.isaac.manipulators.grippers.gripper import Gripper
 from omni.isaac.universal_robots.controllers import RMPFlowController
+from isaacsim.robot_motion.motion_generation.motion_policy_controller import (
+    MotionPolicyController,
+)
 
 
 class BasicManipulationController(BaseController):
@@ -44,7 +47,7 @@ class BasicManipulationController(BaseController):
         self,
         name: str,  # Controller name
         gripper: Gripper,  # Gripper
-        cspace_controller: BaseController = RMPFlowController,  # Motion controller
+        robot_articulation,  # Robot articulation
         events_dt: typing.Optional[typing.List[float]] = None,  # Event dt
     ) -> None:
         BaseController.__init__(self, name=name)
@@ -62,7 +65,7 @@ class BasicManipulationController(BaseController):
                 self._events_dt = self._events_dt.tolist()
             if len(self._events_dt) > 1:
                 raise Exception("events dt length must be less than 1")
-        self._cspace_controller = cspace_controller  # Set motion controller
+        self._cspace_controller = MotionPolicyController()
         self._gripper = gripper  # Set gripper
         self._pause = False  # Disable simulation pause
         return
@@ -110,9 +113,16 @@ class BasicManipulationController(BaseController):
         if end_effector_orientation is None:
             end_effector_orientation = euler_angles_to_quat(np.array([0, np.pi, 0]))
 
-        # Create ArticulationAction
+        # Check if self._cspace_controller is properly initialized
+        if self._cspace_controller is None:
+            carb.log_error("C-space controller is not initialized")
+            return ArticulationAction(
+                joint_positions=[None] * current_joint_positions.shape[0]
+            )
+
+        # Call the forward method on the instance
         target_joint_positions = self._cspace_controller.forward(
-            target_end_effector_position=position_target,
+            target_end_effector_position=position_target[:3],
             target_end_effector_orientation=end_effector_orientation,
         )
 

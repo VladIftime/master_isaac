@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+from scipy.spatial.transform import Rotation as R
+import carb
+from typing import Optional
 
 def save_point_cloud_as_png(point_cloud, filename, projection="xy"):
     """
@@ -79,41 +81,141 @@ def depth_image_from_distance_image(distance, intrinsics):
     return z
 
 
-def get_pointcloud(color_img, depth_img, cam_intrinsics):
-    """Convert RGB-D images to a 3D point cloud."""
+def get_pointcloud(color_img, distance_img, cam_intrinsics, is_orthographic=True):
+    """Convert RGB-D images to a 3D point cloud.
+
+    Args:
+        color_img: RGB image (HxWx3)
+        distance_img: Distance image (HxW) or depth image
+        cam_intrinsics: Camera intrinsics matrix (3x3)
+        is_orthographic: Whether the camera uses orthographic projection
+
+    Returns:
+        points: Nx3 array of 3D points
+        colors: Nx3 array of RGB colors
+    """
     # Get image dimensions
-    im_h, im_w = depth_img.shape
+    im_h = distance_img.shape[0]
+    im_w = distance_img.shape[1]
 
-    # Create a meshgrid of pixel coordinates
-    pix_x, pix_y = np.meshgrid(np.arange(im_w), np.arange(im_h))
+    # Convert distance to depth if needed
+    depth_img = depth_image_from_distance_image(distance_img, cam_intrinsics)
 
-    # Convert pixel coordinates to normalized image coordinates
-    cam_x = (pix_x - cam_intrinsics[0, 2]) / cam_intrinsics[0, 0]
-    cam_y = (pix_y - cam_intrinsics[1, 2]) / cam_intrinsics[1, 1]
+    # Project depth into 3D point cloud in camera coordinates
+    pix_x, pix_y = np.meshgrid(
+        np.linspace(0, im_w - 1, im_w), np.linspace(0, im_h - 1, im_h)
+    )
 
-    # Reconstruct 3D coordinates from depth image
-    cam_z = depth_img
-    cam_x = np.multiply(cam_x, cam_z)
-    cam_y = np.multiply(cam_y, cam_z)
+    if is_orthographic:
+        # For orthographic projection, the x and y coordinates are directly proportional
+        # to the pixel coordinates, and don't depend on depth
+        fx = cam_intrinsics[0, 0]
+        fy = cam_intrinsics[1, 1]
+        cx = cam_intrinsics[0, 2]
+        cy = cam_intrinsics[1, 2]
 
-    # Stack to form a 3D point cloud make the shape of the point cloud Nx3
-    # Make sure the projection is correct
-    points_xy = np.stack((cam_x, cam_y, cam_z), axis=-1).reshape(-1, 3)
-    colors = color_img.reshape(-1, 3)
+        # Calculate world coordinates (flat plane, no perspective)
+        cam_pts_x = (
+            pix_x - cx
+        ) / fx  # Scale by focal length but don't multiply by depth
+        cam_pts_y = (pix_y - cy) / fy
+        cam_pts_z = depth_img.copy()  # Z is just the depth
+    else:
+        # For perspective projection
+        cam_pts_x = np.multiply(
+            pix_x - cam_intrinsics[0][2], depth_img / cam_intrinsics[0][0]
+        )
+        cam_pts_y = np.multiply(
+            pix_y - cam_intrinsics[1][2], depth_img / cam_intrinsics[1][1]
+        )
+        cam_pts_z = depth_img.copy()
 
+    # Reshape for output
+    cam_pts_x = cam_pts_x.reshape(-1, 1)
+    cam_pts_y = cam_pts_y.reshape(-1, 1)
+    cam_pts_z = cam_pts_z.reshape(-1, 1)
 
-    return points_xy, colors
+    # Reshape image into colors for 3D point cloud
+    rgb_pts_r = color_img[:, :, 0]
+    rgb_pts_g = color_img[:, :, 1]
+    rgb_pts_b = color_img[:, :, 2]
+    rgb_pts_r = rgb_pts_r.reshape(-1, 1)
+    rgb_pts_g = rgb_pts_g.reshape(-1, 1)
+    rgb_pts_b = rgb_pts_b.reshape(-1, 1)
+
+    # Combine points and colors
+    cam_pts = np.concatenate((cam_pts_x, cam_pts_y, cam_pts_z), axis=1)
+    rgb_pts = np.concatenate((rgb_pts_r, rgb_pts_g, rgb_pts_b), axis=1)
+
+    # Filter out points with zero or invalid depth
+    valid_depth = (cam_pts_z.reshape(-1) > 0) & np.isfinite(cam_pts_z.reshape(-1))
+    cam_pts = cam_pts[valid_depth]
+    rgb_pts = rgb_pts[valid_depth]
+
+    # Debug: Save raw point cloud before any transformations
+    plt.figure(figsize=(10, 10))
+    plt.scatter(cam_pts[:, 0], cam_pts[:, 1], c=cam_pts[:, 2], cmap="viridis", s=1)
+    plt.colorbar(label="Depth (Z)")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("Raw Point Cloud (Camera Frame)")
+    plt.savefig("raw_point_cloud.png")
+    plt.close()
+
+    # Debug: 3D visualization of raw point cloud
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection="3d")
+    # Sample points to avoid overcrowding
+    sample_size = min(5000, cam_pts.shape[0])
+    if sample_size > 0:
+        sample_indices = np.random.choice(cam_pts.shape[0], sample_size, replace=False)
+        ax.scatter(
+            cam_pts[sample_indices, 0],
+            cam_pts[sample_indices, 1],
+            cam_pts[sample_indices, 2],
+            c=cam_pts[sample_indices, 2],
+            cmap="viridis",
+            s=5,
+        )
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_title("3D Raw Point Cloud (Camera Frame)")
+    plt.savefig("3d_raw_point_cloud.png")
+    plt.close()
+
+    return cam_pts, rgb_pts
 
 
 def get_heightmap(
     color_img,
-    depth_img,
+    distance_img,
+    pointcloud,
     cam_intrinsics,
     cam_pose,
     workspace_limits,
     heightmap_resolution,
+    is_orthographic=True,
 ):
-    """Generate a heightmap from RGB-D images."""
+    """Generate a heightmap from RGB-D images.
+
+    Args:
+        color_img: RGB image (HxWx3)
+        distance_img: Distance image (HxW)
+        pointcloud: Point cloud data (Nx3)
+        cam_intrinsics: Camera intrinsics matrix (3x3)
+        cam_pose: Camera pose as a 4x4 transformation matrix or a tuple of (position, orientation)
+        workspace_limits: Workspace limits as [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
+        heightmap_resolution: Resolution of the heightmap in meters
+        is_orthographic: Whether the camera uses orthographic projection
+
+    Returns:
+        depth_heightmap: Depth heightmap (HxW)
+    """
+    # Ensure cam_pose is a numpy array
+    cam_pose = np.array(cam_pose)
+    carb.log_warn(f"Camera pose matrix:\n{cam_pose}")
+    carb.log_warn(f"Camera intrinsics matrix:\n{cam_intrinsics}")
 
     # Compute heightmap size
     heightmap_size = np.round(
@@ -122,21 +224,18 @@ def get_heightmap(
             (workspace_limits[0][1] - workspace_limits[0][0]) / heightmap_resolution,
         )
     ).astype(int)
+    carb.log_warn(f"Workspace limits: {workspace_limits}")
+    carb.log_warn(f"Heightmap size: {heightmap_size}")
 
-    # Get 3D point cloud from RGB-D images
-    surface_pts, color_pts = get_pointcloud(color_img, depth_img, cam_intrinsics)
+    surface_pts = pointcloud
 
-    # Transform 3D point cloud from camera coordinates to robot coordinates
-    surface_pts = np.transpose(
-        np.dot(cam_pose[0:3, 0:3], np.transpose(surface_pts))
-        + np.tile(cam_pose[0:3, 3:], (1, surface_pts.shape[0]))
-    )
-    #visualize the surface_pts
-    save_point_cloud_as_png(surface_pts, "surface_pts.png")
-    # Sort surface points by z value
-    sort_z_ind = np.argsort(surface_pts[:, 2])
-    surface_pts = surface_pts[sort_z_ind]
-    color_pts = color_pts[sort_z_ind]
+    # Print min/max values to check against workspace limits
+    x_min, x_max = np.min(surface_pts[:, 0]), np.max(surface_pts[:, 0])
+    y_min, y_max = np.min(surface_pts[:, 1]), np.max(surface_pts[:, 1])
+    z_min, z_max = np.min(surface_pts[:, 2]), np.max(surface_pts[:, 2])
+    carb.log_warn(f"Point cloud X range: {x_min} to {x_max}")
+    carb.log_warn(f"Point cloud Y range: {y_min} to {y_max}")
+    carb.log_warn(f"Point cloud Z range: {z_min} to {z_max}")
 
     # Filter out surface points outside heightmap boundaries
     heightmap_valid_ind = np.logical_and(
@@ -152,38 +251,63 @@ def get_heightmap(
         ),
         surface_pts[:, 2] < workspace_limits[2][1],
     )
-    print(f"heightmap_valid_ind: {heightmap_valid_ind}")
-    surface_pts = surface_pts[heightmap_valid_ind]
-    color_pts = color_pts[heightmap_valid_ind]
-    save_point_cloud_as_png(surface_pts, "surface_pts_filtered.png")
-    # Create orthographic top-down-view RGB-D heightmaps
-    color_heightmap_r = np.zeros(
-        (heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8
-    )
-    color_heightmap_g = np.zeros(
-        (heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8
-    )
-    color_heightmap_b = np.zeros(
-        (heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8
-    )
-    depth_heightmap = np.zeros(heightmap_size)
-    heightmap_pix_x = np.floor(
-        (surface_pts[:, 0] - workspace_limits[0][0]) / heightmap_resolution
-    ).astype(int)
-    heightmap_pix_y = np.floor(
-        (surface_pts[:, 1] - workspace_limits[1][0]) / heightmap_resolution
-    ).astype(int)
-    color_heightmap_r[heightmap_pix_y, heightmap_pix_x] = color_pts[:, [0]]
-    color_heightmap_g[heightmap_pix_y, heightmap_pix_x] = color_pts[:, [1]]
-    color_heightmap_b[heightmap_pix_y, heightmap_pix_x] = color_pts[:, [2]]
-    color_heightmap = np.concatenate(
-        (color_heightmap_r, color_heightmap_g, color_heightmap_b), axis=2
-    )
-    depth_heightmap[heightmap_pix_y, heightmap_pix_x] = surface_pts[:, 2]
-    z_bottom = workspace_limits[2][0]
 
-    depth_heightmap = depth_heightmap - z_bottom
-    depth_heightmap[depth_heightmap < 0] = 0
-    depth_heightmap[depth_heightmap == -z_bottom] = np.nan
+    # Check if any valid points exist
+    valid_count = np.sum(heightmap_valid_ind)
+    carb.log_warn(
+        f"Valid points within workspace: {valid_count} out of {surface_pts.shape[0]}"
+    )
 
-    return color_heightmap, depth_heightmap
+    if valid_count == 0:
+        carb.log_warn("No valid points found within workspace limits")
+        # Try with expanded workspace limits for debugging
+        expanded_limits = [
+            [workspace_limits[0][0] - 0.1, workspace_limits[0][1] + 0.1],
+            [workspace_limits[1][0] - 0.1, workspace_limits[1][1] + 0.1],
+            [workspace_limits[2][0] - 0.1, workspace_limits[2][1] + 0.1],
+        ]
+        carb.log_warn(f"Trying with expanded limits: {expanded_limits}")
+
+        # Check with expanded limits
+        expanded_valid_ind = np.logical_and(
+            np.logical_and(
+                np.logical_and(
+                    np.logical_and(
+                        surface_pts[:, 0] >= expanded_limits[0][0],
+                        surface_pts[:, 0] < expanded_limits[0][1],
+                    ),
+                    surface_pts[:, 1] >= expanded_limits[1][0],
+                ),
+                surface_pts[:, 1] < expanded_limits[1][1],
+            ),
+            surface_pts[:, 2] < expanded_limits[2][1],
+        )
+        expanded_valid_count = np.sum(expanded_valid_ind)
+        carb.log_warn(f"Valid points with expanded limits: {expanded_valid_count}")
+
+        if expanded_valid_count > 0:
+            carb.log_warn(
+                "Points found with expanded limits - consider adjusting your workspace limits"
+            )
+
+        return np.zeros(
+            (heightmap_size[0], heightmap_size[1], 3), dtype=np.uint8
+        ), np.zeros(heightmap_size)
+
+    depth_heightmap = surface_pts[heightmap_valid_ind]
+
+    return depth_heightmap
+
+def display_heightmap(heightmap, name: Optional[str] = None):
+    plt.figure(figsize=(10, 10))
+    plt.scatter(
+        heightmap[:, 0], heightmap[:, 1], c=heightmap[:, 2], cmap="viridis", s=1
+    )
+    plt.colorbar(label="Height (Z)")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("Heightmap")
+    plt.show()
+    if name is not None:
+        plt.savefig(f"/home/vladi/.local/share/ov/pkg/isaac-sim-4.5.0/master_isaac/Vlad-AILAB/camera_image/{name}.png")
+        plt.close()

@@ -89,6 +89,7 @@ class UR5eHandeye(Robot):
             if gripper_closed_position is None:
                 gripper_closed_position = np.array([np.pi * 2 / 9, -np.pi * 2 / 9])
 
+        # Get the number of DOFs for this robot after initialization
         super().__init__(
             prim_path=prim_path,
             name=name,
@@ -106,7 +107,6 @@ class UR5eHandeye(Robot):
                 joint_closed_positions=gripper_closed_position,
                 action_deltas=deltas,
             )
-        return
 
     @property
     def end_effector(self) -> RigidPrim:

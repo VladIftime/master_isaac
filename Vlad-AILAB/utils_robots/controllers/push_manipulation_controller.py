@@ -54,10 +54,9 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
         events_dt: Optional[List[float]] = None,
         end_effector_offset: Optional[np.ndarray] = None,
         original_position: Optional[np.ndarray] = None,
-        original_joint_positions: Optional[np.ndarray] = None,
     ) -> None:
         if events_dt is None:
-            events_dt = [0.05, 0.005, 0.008, 0.008]
+            events_dt = [0.008, 0.03, 0.01, 0.008, 0.008]
         manipulators_controllers.PickPlaceController.__init__(
             self,
             name=name,
@@ -73,9 +72,40 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
         self._h0 = None
         self._h1 = 0.3 / get_stage_units()
         self._end_effector_orientation = None
-        self._original_joint_positions = original_joint_positions
+        self._overhead_position = np.array(
+            [
+                np.pi,
+                -np.pi / 2,
+                -np.pi / 2,
+                -np.pi / 2,
+                np.pi / 2,
+                np.pi / 2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ]
+        )
         self._end_effector_position = None
         self._original_position = original_position
+        self._turned_position = np.array(
+            [
+                np.pi / 2,
+                -np.pi / 2,
+                -np.pi / 2,
+                -np.pi / 2,
+                np.pi / 2,
+                np.pi / 2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ]
+        )
         return
 
     def forward(
@@ -101,15 +131,20 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
 
         if self._pause or self.is_done():
             self.pause()
-            target_joint_positions = [None] * self._original_joint_positions.shape[0]
+            target_joint_positions = [None] * self._overhead_position.shape[0]
             return ArticulationAction(joint_positions=target_joint_positions)
 
         if self._event == 0:
+            carb.log_warn("Moving to overhead position")
+            target_joint_positions = ArticulationAction(
+                joint_positions=self._overhead_position
+            )
+        elif self._event == 1:
             # Close the gripper
             carb.log_warn("Closing gripper")
             target_joint_positions = self._gripper.forward(action="close")
 
-        elif self._event == 1:
+        elif self._event == 2:
             # Move to push start position
             carb.log_warn("Moving to push start position")
             self._current_target_x = push_start_position[0]
@@ -138,7 +173,7 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
                 target_end_effector_position=position_target[:3],
                 target_end_effector_orientation=self._end_effector_orientation,
             )
-        elif self._event == 2:
+        elif self._event == 3:
             # Execute the push
             carb.log_warn("Executing push")
             self._current_target_x = push_end_position[0]
@@ -159,6 +194,7 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
                     h + self._end_effector_offset[2],
                 ]
             )
+            carb.log_warn(f"Position target: {position_target}")
             if self._end_effector_orientation is None:
                 self._end_effector_orientation = euler_angles_to_quat(
                     np.array([np.pi / 2, np.pi / 2, -np.pi / 2])
@@ -169,9 +205,9 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
             )
         else:
             # Return to original position using XYZ coordinates
-            carb.log_warn("Returning to original position")
+            carb.log_warn("Returning to turned position")
             target_joint_positions = ArticulationAction(
-                joint_positions=self._original_joint_positions
+                joint_positions=self._turned_position
             )
 
         self._t += self._events_dt[self._event]
