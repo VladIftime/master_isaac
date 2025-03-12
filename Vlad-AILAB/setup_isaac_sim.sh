@@ -11,3 +11,5 @@ source ~/.local/share/ov/pkg/isaac-sim-4.5.0/setup_conda_env.sh
 
 # Return to the original directory
 cd "$CURRENT_DIR"
+
+# Ecc

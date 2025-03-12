@@ -128,12 +128,12 @@ while simulation_app.is_running():
             
             current_joint_positions = (my_ur5e.get_joint_positions(),)
             end_effector_offset = (np.array([0, 0, 0.9]),)
-
-        actions = push_controller.forward(
-            push_start_position=np.array([0.5, 0, 0.14]),
-            push_end_position=np.array([0.55, 0.1, 0.14]),
-        )
-        if first_observation is None and my_world.current_time_step_index > 10:
+        if my_world.current_time_step_index > 100:
+            actions = push_controller.forward(
+                push_start_position=np.array([0.5, 0, 0.14]),
+                push_end_position=np.array([0.55, 0.1, 0.14]),
+            )
+        if first_observation is None and my_world.current_time_step_index > 100:
             first_observation = my_task.get_observations()
         if push_controller.is_done():
             print("Push done")
@@ -141,9 +141,18 @@ while simulation_app.is_running():
             
         if actions is not None:
             articulation_controller.apply_action(actions)
+            if first_observation is not None:
+                height_at_goal = first_observation["height_map"][250, 250]
+                print(f"Height at goal: {height_at_goal}")
 
-    if last_observation is not None:
-        display_heightmap(last_observation["height_map"], "last_height_map")
-    if first_observation is not None:
-        display_heightmap(first_observation["height_map"], "first_height_map")
 simulation_app.close()
+
+if last_observation is not None:
+    display_heightmap(last_observation["height_map"], "last_height_map")
+if first_observation is not None:
+    display_heightmap(first_observation["height_map"], "first_height_map")
+    # Save all the images
+    cv2.imwrite(save_root_depth, first_observation["depth_image"])
+    cv2.imwrite(save_root_rgb, first_observation["rgb_image"])
+    if "goal_mask" in first_observation: 
+        cv2.imwrite(save_root_semantic, first_observation["goal_mask"])

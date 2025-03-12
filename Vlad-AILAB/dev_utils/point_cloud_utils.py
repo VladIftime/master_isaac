@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 import carb
 from typing import Optional
+import os
 
 def save_point_cloud_as_png(point_cloud, filename, projection="xy"):
     """
@@ -205,7 +206,7 @@ def get_heightmap(
         pointcloud: Point cloud data (Nx3)
         cam_intrinsics: Camera intrinsics matrix (3x3)
         cam_pose: Camera pose as a 4x4 transformation matrix or a tuple of (position, orientation)
-        workspace_limits: Workspace limits as [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
+        workspace_limits: Workspace limits (ignored, using point cloud bounds instead)
         heightmap_resolution: Resolution of the heightmap in meters
         is_orthographic: Whether the camera uses orthographic projection
 
@@ -216,87 +217,50 @@ def get_heightmap(
     cam_pose = np.array(cam_pose)
     carb.log_warn(f"Camera pose matrix:\n{cam_pose}")
     carb.log_warn(f"Camera intrinsics matrix:\n{cam_intrinsics}")
+    
+    # Transform 3D point cloud from camera coordinates to robot coordinates
+    pointcloud_robot = pointcloud
 
-    # Compute heightmap size
-    heightmap_size = np.round(
-        (
-            (workspace_limits[1][1] - workspace_limits[1][0]) / heightmap_resolution,
-            (workspace_limits[0][1] - workspace_limits[0][0]) / heightmap_resolution,
-        )
-    ).astype(int)
-    carb.log_warn(f"Workspace limits: {workspace_limits}")
-    carb.log_warn(f"Heightmap size: {heightmap_size}")
-
-    surface_pts = pointcloud
-
-    # Print min/max values to check against workspace limits
-    x_min, x_max = np.min(surface_pts[:, 0]), np.max(surface_pts[:, 0])
-    y_min, y_max = np.min(surface_pts[:, 1]), np.max(surface_pts[:, 1])
-    z_min, z_max = np.min(surface_pts[:, 2]), np.max(surface_pts[:, 2])
-    carb.log_warn(f"Point cloud X range: {x_min} to {x_max}")
-    carb.log_warn(f"Point cloud Y range: {y_min} to {y_max}")
-    carb.log_warn(f"Point cloud Z range: {z_min} to {z_max}")
-
-    # Filter out surface points outside heightmap boundaries
-    heightmap_valid_ind = np.logical_and(
-        np.logical_and(
-            np.logical_and(
-                np.logical_and(
-                    surface_pts[:, 0] >= workspace_limits[0][0],
-                    surface_pts[:, 0] < workspace_limits[0][1],
-                ),
-                surface_pts[:, 1] >= workspace_limits[1][0],
-            ),
-            surface_pts[:, 1] < workspace_limits[1][1],
-        ),
-        surface_pts[:, 2] < workspace_limits[2][1],
-    )
-
-    # Check if any valid points exist
-    valid_count = np.sum(heightmap_valid_ind)
-    carb.log_warn(
-        f"Valid points within workspace: {valid_count} out of {surface_pts.shape[0]}"
-    )
-
-    if valid_count == 0:
-        carb.log_warn("No valid points found within workspace limits")
-        # Try with expanded workspace limits for debugging
-        expanded_limits = [
-            [workspace_limits[0][0] - 0.1, workspace_limits[0][1] + 0.1],
-            [workspace_limits[1][0] - 0.1, workspace_limits[1][1] + 0.1],
-            [workspace_limits[2][0] - 0.1, workspace_limits[2][1] + 0.1],
-        ]
-        carb.log_warn(f"Trying with expanded limits: {expanded_limits}")
-
-        # Check with expanded limits
-        expanded_valid_ind = np.logical_and(
-            np.logical_and(
-                np.logical_and(
-                    np.logical_and(
-                        surface_pts[:, 0] >= expanded_limits[0][0],
-                        surface_pts[:, 0] < expanded_limits[0][1],
-                    ),
-                    surface_pts[:, 1] >= expanded_limits[1][0],
-                ),
-                surface_pts[:, 1] < expanded_limits[1][1],
-            ),
-            surface_pts[:, 2] < expanded_limits[2][1],
-        )
-        expanded_valid_count = np.sum(expanded_valid_ind)
-        carb.log_warn(f"Valid points with expanded limits: {expanded_valid_count}")
-
-        if expanded_valid_count > 0:
-            carb.log_warn(
-                "Points found with expanded limits - consider adjusting your workspace limits"
-            )
-
-        return np.zeros(
-            (heightmap_size[0], heightmap_size[1], 3), dtype=np.uint8
-        ), np.zeros(heightmap_size)
-
-    depth_heightmap = surface_pts[heightmap_valid_ind]
-
-    return depth_heightmap
+    # Get point cloud bounds
+    x_min, x_max = np.min(pointcloud_robot[:, 0]), np.max(pointcloud_robot[:, 0])
+    y_min, y_max = np.min(pointcloud_robot[:, 1]), np.max(pointcloud_robot[:, 1])
+    
+    # Create grid coordinates based on point cloud bounds
+    x_coords = np.arange(x_min, x_max + heightmap_resolution, heightmap_resolution)
+    y_coords = np.arange(y_min, y_max + heightmap_resolution, heightmap_resolution)
+    
+    # Create meshgrid for the XY plane
+    xx, yy = np.meshgrid(x_coords, y_coords)
+    heightmap = np.zeros_like(xx)
+    
+    # For each point in the point cloud, find its corresponding cell in the grid
+    x_indices = ((pointcloud_robot[:, 0] - x_min) / heightmap_resolution).astype(int)
+    y_indices = ((pointcloud_robot[:, 1] - y_min) / heightmap_resolution).astype(int)
+    
+    # For each valid cell, take the maximum z-value of points that fall into it
+    for i in range(len(pointcloud_robot)):
+        if 0 <= x_indices[i] < len(x_coords) and 0 <= y_indices[i] < len(y_coords):
+            current_height = heightmap[y_indices[i], x_indices[i]]
+            if current_height == 0 or pointcloud_robot[i, 2] > current_height:
+                heightmap[y_indices[i], x_indices[i]] = pointcloud_robot[i, 2]
+    
+    # Display the projected heightmap
+    plt.figure(figsize=(10, 10))
+    plt.imshow(heightmap, cmap='viridis', origin='lower')
+    plt.colorbar(label='Height (Z)')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('Projected Heightmap')
+    plt.show()
+    
+    # Create point cloud representation of the heightmap
+    non_zero_mask = heightmap != 0
+    projected_points = np.zeros((np.sum(non_zero_mask), 3))
+    projected_points[:, 0] = xx[non_zero_mask]
+    projected_points[:, 1] = yy[non_zero_mask]
+    projected_points[:, 2] = heightmap[non_zero_mask]
+    
+    return projected_points
 
 def display_heightmap(heightmap, name: Optional[str] = None):
     plt.figure(figsize=(10, 10))
@@ -306,8 +270,39 @@ def display_heightmap(heightmap, name: Optional[str] = None):
     plt.colorbar(label="Height (Z)")
     plt.xlabel("X")
     plt.ylabel("Y")
-    plt.title("Heightmap")
-    plt.show()
     if name is not None:
-        plt.savefig(f"/home/vladi/.local/share/ov/pkg/isaac-sim-4.5.0/master_isaac/Vlad-AILAB/camera_image/{name}.png")
-        plt.close()
+        plt.title(name)
+    plt.show()
+
+def get_height_at_position(heightmap_points, query_x, query_y, radius=0.01):
+    """Get the height (z-value) at a specific x,y coordinate from a heightmap point cloud.
+    
+    Args:
+        heightmap_points: Nx3 array of points from the heightmap
+        query_x: x-coordinate to query
+        query_y: y-coordinate to query
+        radius: radius to search for nearby points (in same units as heightmap)
+    
+    Returns:
+        float: Interpolated height at the query point. Returns None if no points found within radius.
+    """
+    # Calculate distances from query point to all heightmap points
+    distances = np.sqrt(
+        (heightmap_points[:, 0] - query_x)**2 + 
+        (heightmap_points[:, 1] - query_y)**2
+    )
+    
+    # Find points within the radius
+    nearby_points = heightmap_points[distances < radius]
+    
+    if len(nearby_points) == 0:
+        return None
+    
+    # Weight points by inverse distance
+    weights = 1 / (distances[distances < radius] + 1e-6)  # Add small epsilon to avoid division by zero
+    weights = weights / np.sum(weights)  # Normalize weights
+    
+    # Calculate weighted average height
+    interpolated_height = np.sum(nearby_points[:, 2] * weights)
+    
+    return interpolated_height

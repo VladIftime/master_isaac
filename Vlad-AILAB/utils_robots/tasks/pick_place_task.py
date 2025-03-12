@@ -597,7 +597,6 @@ class UR5ePickPlace(PickPlace):
         cam_pose = np.eye(4)
         cam_pose[0:3, 0:3] = rotation_matrix
         cam_pose[0:3, 3] = cam_position
-
         depth_heightmap = get_heightmap(
             rgb_image,
             depth_image,
