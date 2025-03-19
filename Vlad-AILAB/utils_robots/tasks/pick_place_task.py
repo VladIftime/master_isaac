@@ -313,7 +313,7 @@ class UR5ePickPlace(PickPlace):
         rgb_image, depth_image = self.get_rgb_depth_images(self.camera)
         pointcloud = self.pointcloud_camera.get_pointcloud()
         # Display the pointcloud for debugging
-        
+
         height_map = self.get_height_map(
             rgb_image=rgb_image,
             depth_image=depth_image,
@@ -321,10 +321,11 @@ class UR5ePickPlace(PickPlace):
             camera=self.camera,
             position=end_effector_position,
         )
+
         if goal_object_name is not None:
             goal_mask = self.get_semantic_mask(self.camera, goal_object_name)
         observation_dict = dict()
-       
+
         if goal_object_name is not None:
             observation_dict = {
                 "joint_positions": joints_state.positions,
@@ -614,3 +615,103 @@ class UR5ePickPlace(PickPlace):
         pointcloud = frame["pointcloud"]
 
         return pointcloud
+
+    def pixel_to_robot_space(
+        self,
+        u: int,
+        v: int,
+        camera: Camera,
+        display: bool = True,
+        rgb_image: Optional[np.ndarray] = None,
+        depth_image: Optional[np.ndarray] = None,
+        heightmap: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        """Convert pixel coordinates from orthographic camera view to robot space coordinates.
+
+        Args:
+            u (int): Pixel x-coordinate in the image
+            v (int): Pixel y-coordinate in the image
+            camera (Camera): The camera object to use for the conversion
+            display (bool): Whether to display the image with the selected pixel marked
+            rgb_image (Optional[np.ndarray]): Pre-captured RGB image
+            depth_image (Optional[np.ndarray]): Pre-captured depth image
+
+        Returns:
+            np.ndarray: 3D point in robot space coordinates [x, y, z]
+        
+        """
+        x, y, z = 0, 0, 0.14
+        # Get current camera frame if not provided
+        if rgb_image is None or depth_image is None:
+            frame = camera.get_current_frame()
+            rgb_image = frame["rgba"][:, :, :3]
+            depth_image = camera.get_depth()
+
+        # Get camera parameters
+        cam_position, cam_orientation = camera.get_local_pose()
+
+        # Get image dimensions
+        height, width = rgb_image.shape[:2]
+
+        # Get aperture sizes
+        horizontal_aperture = camera.get_horizontal_aperture()
+        vertical_aperture = camera.get_vertical_aperture()
+
+        # For orthographic projection with camera looking down:
+        # The camera's X axis in image maps to Y in world space
+        # The camera's Y axis in image maps to X in world space
+        # This is due to the camera's orientation quaternion [0.5, -0.5, 0.5, 0.5]
+        world_y = ((u / width) - 0.5) * horizontal_aperture
+        world_x = cam_position[0] + ((v / height) - 0.5) * vertical_aperture
+
+        # Get the depth at this pixel
+        for point in heightmap:
+            if point[0] == world_x and point[1] == world_y:
+                z = point[2]
+                break
+
+        # Create point in world space
+        point_world = np.array([world_x, world_y, z])
+
+        # Log for debugging
+        carb.log_warn(f"Camera position: {cam_position}")
+        carb.log_warn(f"Pixel coordinates (u,v): ({u}, {v})")
+        carb.log_warn(f"World coordinates: {point_world}")
+
+        # Display the image with selected pixel if requested
+        if display:
+            display_img = rgb_image.copy()
+
+            # Draw a red circle at the selected pixel
+            cv2.circle(display_img, (u, v), 5, (255, 0, 0), -1)
+
+            # Draw coordinate axes for reference
+            center = (width // 2, height // 2)
+            axis_length = 50
+            # X-axis in magenta (corresponds to vertical in image)
+            cv2.line(
+                display_img,
+                center,
+                (center[0], center[1] + axis_length),
+                (255, 0, 255),
+                2,
+            )
+            # Y-axis in green (corresponds to horizontal in image)
+            cv2.line(
+                display_img,
+                center,
+                (center[0] + axis_length, center[1]),
+                (0, 255, 0),
+                2,
+            )
+
+            plt.figure(figsize=(10, 10))
+            plt.imshow(display_img)
+            plt.title(
+                f"Selected Pixel (u={u}, v={v})\nWorld Coordinates: [{point_world[0]:.3f}, {point_world[1]:.3f}, {point_world[2]:.3f}]"
+            )
+            plt.axis("on")
+            plt.grid(True)
+            plt.show()
+
+        return point_world

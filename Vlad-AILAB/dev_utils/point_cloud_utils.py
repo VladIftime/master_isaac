@@ -5,6 +5,7 @@ import carb
 from typing import Optional
 import os
 
+
 def save_point_cloud_as_png(point_cloud, filename, projection="xy"):
     """
     Save a 2D projection of the point cloud as a .png image.
@@ -217,50 +218,51 @@ def get_heightmap(
     cam_pose = np.array(cam_pose)
     carb.log_warn(f"Camera pose matrix:\n{cam_pose}")
     carb.log_warn(f"Camera intrinsics matrix:\n{cam_intrinsics}")
-    
+
     # Transform 3D point cloud from camera coordinates to robot coordinates
     pointcloud_robot = pointcloud
 
     # Get point cloud bounds
     x_min, x_max = np.min(pointcloud_robot[:, 0]), np.max(pointcloud_robot[:, 0])
     y_min, y_max = np.min(pointcloud_robot[:, 1]), np.max(pointcloud_robot[:, 1])
-    
+
     # Create grid coordinates based on point cloud bounds
     x_coords = np.arange(x_min, x_max + heightmap_resolution, heightmap_resolution)
     y_coords = np.arange(y_min, y_max + heightmap_resolution, heightmap_resolution)
-    
+
     # Create meshgrid for the XY plane
     xx, yy = np.meshgrid(x_coords, y_coords)
     heightmap = np.zeros_like(xx)
-    
+
     # For each point in the point cloud, find its corresponding cell in the grid
     x_indices = ((pointcloud_robot[:, 0] - x_min) / heightmap_resolution).astype(int)
     y_indices = ((pointcloud_robot[:, 1] - y_min) / heightmap_resolution).astype(int)
-    
+
     # For each valid cell, take the maximum z-value of points that fall into it
     for i in range(len(pointcloud_robot)):
         if 0 <= x_indices[i] < len(x_coords) and 0 <= y_indices[i] < len(y_coords):
             current_height = heightmap[y_indices[i], x_indices[i]]
             if current_height == 0 or pointcloud_robot[i, 2] > current_height:
                 heightmap[y_indices[i], x_indices[i]] = pointcloud_robot[i, 2]
-    
+
     # Display the projected heightmap
     plt.figure(figsize=(10, 10))
-    plt.imshow(heightmap, cmap='viridis', origin='lower')
-    plt.colorbar(label='Height (Z)')
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.title('Projected Heightmap')
+    plt.imshow(heightmap, cmap="viridis", origin="lower")
+    plt.colorbar(label="Height (Z)")
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("Projected Heightmap")
     plt.show()
-    
+
     # Create point cloud representation of the heightmap
     non_zero_mask = heightmap != 0
     projected_points = np.zeros((np.sum(non_zero_mask), 3))
     projected_points[:, 0] = xx[non_zero_mask]
     projected_points[:, 1] = yy[non_zero_mask]
     projected_points[:, 2] = heightmap[non_zero_mask]
-    
+
     return projected_points
+
 
 def display_heightmap(heightmap, name: Optional[str] = None):
     plt.figure(figsize=(10, 10))
@@ -274,35 +276,38 @@ def display_heightmap(heightmap, name: Optional[str] = None):
         plt.title(name)
     plt.show()
 
+
 def get_height_at_position(heightmap_points, query_x, query_y, radius=0.01):
     """Get the height (z-value) at a specific x,y coordinate from a heightmap point cloud.
-    
+
     Args:
         heightmap_points: Nx3 array of points from the heightmap
         query_x: x-coordinate to query
         query_y: y-coordinate to query
         radius: radius to search for nearby points (in same units as heightmap)
-    
+
     Returns:
         float: Interpolated height at the query point. Returns None if no points found within radius.
     """
     # Calculate distances from query point to all heightmap points
     distances = np.sqrt(
-        (heightmap_points[:, 0] - query_x)**2 + 
-        (heightmap_points[:, 1] - query_y)**2
+        (heightmap_points[:, 0] - query_x) ** 2
+        + (heightmap_points[:, 1] - query_y) ** 2
     )
-    
+
     # Find points within the radius
     nearby_points = heightmap_points[distances < radius]
-    
+
     if len(nearby_points) == 0:
         return None
-    
+
     # Weight points by inverse distance
-    weights = 1 / (distances[distances < radius] + 1e-6)  # Add small epsilon to avoid division by zero
+    weights = 1 / (
+        distances[distances < radius] + 1e-6
+    )  # Add small epsilon to avoid division by zero
     weights = weights / np.sum(weights)  # Normalize weights
-    
+
     # Calculate weighted average height
     interpolated_height = np.sum(nearby_points[:, 2] * weights)
-    
+
     return interpolated_height

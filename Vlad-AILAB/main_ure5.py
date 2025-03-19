@@ -1,5 +1,6 @@
 from unittest import skip
 from isaacsim import SimulationApp
+
 # Initialize the simulation application with a GUI
 simulation_app = SimulationApp({"headless": False})
 
@@ -116,43 +117,62 @@ print(
 )
 first_observation = None
 last_observation = None
+start_point = None
 
 while simulation_app.is_running():
     my_world.step(render=True)
     if my_world.is_playing():
         actions = None
         rgb_image, depth_image, distance_image = None, None, None
+
         if my_world.current_time_step_index == 0:
             my_world.reset()
             pick_and_place_controller.reset()
-            
+
             current_joint_positions = (my_ur5e.get_joint_positions(),)
             end_effector_offset = (np.array([0, 0, 0.9]),)
-        if my_world.current_time_step_index > 100:
-            actions = push_controller.forward(
-                push_start_position=np.array([0.5, 0, 0.14]),
-                push_end_position=np.array([0.55, 0.1, 0.14]),
-            )
+
         if first_observation is None and my_world.current_time_step_index > 100:
             first_observation = my_task.get_observations()
+            start_point = my_task.pixel_to_robot_space(
+                u=100,
+                v=100,
+                camera=camera_ortho,
+                display=True,
+                rgb_image=first_observation["rgb_image"],
+                depth_image=first_observation["depth_image"],
+                heightmap=first_observation["height_map"],
+            )
+            end_point = my_task.pixel_to_robot_space(
+                u=200,
+                v=200,
+                camera=camera_ortho,
+                rgb_image=first_observation["rgb_image"],
+                depth_image=first_observation["depth_image"],
+                heightmap=first_observation["height_map"],
+            )
+            cv2.imwrite(save_root_depth, first_observation["depth_image"])
+            cv2.imwrite(save_root_rgb, first_observation["rgb_image"])
+            if "goal_mask" in first_observation:
+                cv2.imwrite(save_root_semantic, first_observation["goal_mask"])
+
+        if start_point is not None and end_point is not None:
+            print(f"Start point: {start_point}, End point: {end_point}")
+            actions = push_controller.forward(
+                push_start_position=start_point,
+                push_end_position=end_point,
+            )
+
         if push_controller.is_done():
             print("Push done")
             last_observation = my_task.get_observations()
-            
+            cv2.imwrite(save_root_depth, last_observation["depth_image"])
+            cv2.imwrite(save_root_rgb, last_observation["rgb_image"])
+            if "goal_mask" in last_observation:
+                cv2.imwrite(save_root_semantic, last_observation["goal_mask"])
+
         if actions is not None:
             articulation_controller.apply_action(actions)
-            if first_observation is not None:
-                height_at_goal = first_observation["height_map"][250, 250]
-                print(f"Height at goal: {height_at_goal}")
+
 
 simulation_app.close()
-
-if last_observation is not None:
-    display_heightmap(last_observation["height_map"], "last_height_map")
-if first_observation is not None:
-    display_heightmap(first_observation["height_map"], "first_height_map")
-    # Save all the images
-    cv2.imwrite(save_root_depth, first_observation["depth_image"])
-    cv2.imwrite(save_root_rgb, first_observation["rgb_image"])
-    if "goal_mask" in first_observation: 
-        cv2.imwrite(save_root_semantic, first_observation["goal_mask"])
