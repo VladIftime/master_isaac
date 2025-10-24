@@ -15,8 +15,8 @@ import cv2
 from isaacsim.core.utils.semantics import add_update_semantics
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.api.tasks import PickPlace
-from isaacsim.core.utils.nucleus import get_assets_root_path
-from isaacsim.core.api.scenes.scene import Scene
+from isaacsim.storage.native import get_assets_root_path
+from isaacsim.core.api import World
 from isaacsim.core.api.objects import FixedCuboid, DynamicCuboid
 from isaacsim.core.utils.prims import is_prim_path_valid
 from isaacsim.core.utils.string import find_unique_string_name
@@ -70,7 +70,7 @@ class UR5ePickPlace(PickPlace):
         self._robot_name = None
         return
 
-    def set_up_scene(self, scene: Scene) -> None:
+    def set_up_scene(self, scene) -> None:
         # Try first to import the scene from the usd file
         self._scene = scene
         # stage_utils.open_stage(os.path.realpath("ure5_stage_basket.usd"))
@@ -434,14 +434,10 @@ class UR5ePickPlace(PickPlace):
         Returns:
             np.ndarray: The semantic mask image.
         """
-        # Capture the current frame
-        frame = camera.get_current_frame()
-
-        # Extract instance segmentation data
-        instance_segmentation_image = frame["instance_segmentation"]["data"]
-        instance_segmentation_dict = frame["instance_segmentation"]["info"][
-            "idToSemantics"
-        ]
+        # Get instance segmentation data using the new API
+        instance_segmentation_data = camera.get_instance_segmentation()
+        instance_segmentation_image = instance_segmentation_data["data"]
+        instance_segmentation_dict = instance_segmentation_data["info"]["idToSemantics"]
         carb.log_warn(instance_segmentation_dict)
 
         # Initialize the mask with zeros
@@ -475,10 +471,8 @@ class UR5ePickPlace(PickPlace):
         Returns:
             tuple: A tuple containing the RGB image, the normalized depth image, and the semantic mask.
         """
-        # Capture the current frame
-        frame = camera.get_current_frame()
-        # Extract RGB image
-        rgb_image = frame["rgba"][:, :, :3]
+        # Extract RGB image using the new API
+        rgb_image = camera.get_rgba()[:, :, :3]
 
         depth_image = camera.get_depth()
 
@@ -611,8 +605,7 @@ class UR5ePickPlace(PickPlace):
         return depth_heightmap
 
     def get_pointcloud(self, camera: Camera):
-        frame = camera.get_current_frame()
-        pointcloud = frame["pointcloud"]
+        pointcloud = camera.get_pointcloud()
 
         return pointcloud
 
@@ -643,8 +636,7 @@ class UR5ePickPlace(PickPlace):
         x, y, z = 0, 0, 0.14
         # Get current camera frame if not provided
         if rgb_image is None or depth_image is None:
-            frame = camera.get_current_frame()
-            rgb_image = frame["rgba"][:, :, :3]
+            rgb_image = camera.get_rgba()[:, :, :3]
             depth_image = camera.get_depth()
 
         # Get camera parameters
@@ -665,10 +657,11 @@ class UR5ePickPlace(PickPlace):
         world_x = cam_position[0] + ((v / height) - 0.5) * vertical_aperture
 
         # Get the depth at this pixel
-        for point in heightmap:
-            if point[0] == world_x and point[1] == world_y:
-                z = point[2]
-                break
+        if heightmap is not None:
+            for point in heightmap:
+                if point[0] == world_x and point[1] == world_y:
+                    z = point[2]
+                    break
 
         # Create point in world space
         point_world = np.array([world_x, world_y, z])
@@ -679,7 +672,7 @@ class UR5ePickPlace(PickPlace):
         carb.log_warn(f"World coordinates: {point_world}")
 
         # Display the image with selected pixel if requested
-        if display:
+        if display and rgb_image is not None:
             display_img = rgb_image.copy()
 
             # Draw a red circle at the selected pixel
@@ -715,3 +708,249 @@ class UR5ePickPlace(PickPlace):
             plt.show()
 
         return point_world
+    
+    def detect_object_center_from_camera(
+        self,
+        camera: Camera,
+        object_name: Optional[str] = None,
+        rgb_image: Optional[np.ndarray] = None,
+        depth_image: Optional[np.ndarray] = None,
+        heightmap: Optional[np.ndarray] = None,
+        display: bool = True,
+    ) -> Optional[np.ndarray]:
+        """Detect an object's center position using camera data.
+        
+        Args:
+            camera: The camera object
+            object_name: Optional name of the object to detect (uses semantic segmentation)
+            rgb_image: Pre-captured RGB image
+            depth_image: Pre-captured depth image
+            heightmap: Pre-computed heightmap
+            display: Whether to visualize the detection
+            
+        Returns:
+            np.ndarray: 3D coordinates [x, y, z] of the object's bottom center, or None if not found
+        """
+        # Get images if not provided
+        if rgb_image is None:
+            rgb_image = camera.get_rgba()[:, :, :3]
+        if depth_image is None:
+            depth_image = camera.get_depth()
+        if heightmap is None:
+            pointcloud = camera.get_pointcloud()
+            cam_position, cam_orientation = camera.get_local_pose()
+            heightmap = self.get_height_map(
+                rgb_image=rgb_image,
+                depth_image=depth_image,
+                pointcloud=pointcloud,
+                camera=camera,
+                position=cam_position,
+            )
+        
+        # Method 1: Use semantic segmentation if object name is provided
+        if object_name is not None:
+            try:
+                semantic_mask = self.get_semantic_mask(camera, object_name)
+                if semantic_mask is not None and np.any(semantic_mask > 0):
+                    # Find the center of the mask
+                    mask_points = np.where(semantic_mask > 0)
+                    center_v = int(np.mean(mask_points[0]))  # row = v
+                    center_u = int(np.mean(mask_points[1]))  # col = u
+                    
+                    carb.log_info(f"Object '{object_name}' detected at pixel ({center_u}, {center_v})")
+                    
+                    # Convert to robot space
+                    object_center = self.pixel_to_robot_space(
+                        u=center_u,
+                        v=center_v,
+                        camera=camera,
+                        display=False,
+                        rgb_image=rgb_image,
+                        depth_image=depth_image,
+                        heightmap=heightmap,
+                    )
+                    
+                    # Find the minimum z in the mask region to get the bottom of the object
+                    if heightmap is not None:
+                        mask_heightmap_indices = []
+                        for point in heightmap:
+                            # Check if this heightmap point corresponds to a masked pixel
+                            pixel_u, pixel_v = self.world_to_pixel(point[0], point[1], camera)
+                            if 0 <= pixel_v < semantic_mask.shape[0] and 0 <= pixel_u < semantic_mask.shape[1]:
+                                if semantic_mask[pixel_v, pixel_u] > 0:
+                                    mask_heightmap_indices.append(point)
+                        
+                        if mask_heightmap_indices:
+                            mask_heights = [p[2] for p in mask_heightmap_indices]
+                            min_z = np.min(mask_heights)
+                            object_center[2] = min_z + 0.01  # Add small offset above the bottom
+                    
+                    if display:
+                        self._display_detection(rgb_image, semantic_mask, center_u, center_v, object_center)
+                    
+                    return object_center
+            except Exception as e:
+                carb.log_warn(f"Semantic segmentation failed: {e}")
+        
+        # Method 2: Use depth-based segmentation (find highest point = object on platform)
+        # Find objects by looking for height above the platform
+        platform_height = 0.05  # Approximate platform height
+        object_threshold = platform_height + 0.02  # Objects at least 2cm above platform
+        
+        # Filter heightmap for potential object points
+        if heightmap is None:
+            carb.log_warn("Heightmap is None, cannot detect object")
+            return None
+        
+        object_points = [p for p in heightmap if p[2] > object_threshold]
+        
+        if len(object_points) > 0:
+            # Find center of object points
+            object_points_array = np.array(object_points)
+            center_x = np.mean(object_points_array[:, 0])
+            center_y = np.mean(object_points_array[:, 1])
+            min_z = np.min(object_points_array[:, 2])
+            
+            object_center = np.array([center_x, center_y, min_z + 0.01])
+            
+            carb.log_info(f"Object detected at world position: {object_center}")
+            
+            if display and rgb_image is not None:
+                # Create a mask for visualization
+                height, width = rgb_image.shape[:2]
+                detection_mask = np.zeros((height, width), dtype=np.uint8)
+                
+                for point in object_points:
+                    pixel_u, pixel_v = self.world_to_pixel(point[0], point[1], camera)
+                    if 0 <= pixel_v < height and 0 <= pixel_u < width:
+                        detection_mask[pixel_v, pixel_u] = 255
+                
+                # Find approximate center pixel
+                center_u, center_v = self.world_to_pixel(float(center_x), float(center_y), camera)
+                self._display_detection(rgb_image, detection_mask, center_u, center_v, object_center)
+            
+            return object_center
+        
+        carb.log_warn("No object detected in camera view")
+        return None
+    
+    def world_to_pixel(self, world_x: float, world_y: float, camera: Camera) -> tuple:
+        """Convert world coordinates to pixel coordinates.
+        
+        Args:
+            world_x: World X coordinate
+            world_y: World Y coordinate
+            camera: Camera object
+            
+        Returns:
+            tuple: (u, v) pixel coordinates
+        """
+        cam_position, _ = camera.get_local_pose()
+        horizontal_aperture = camera.get_horizontal_aperture()
+        vertical_aperture = camera.get_vertical_aperture()
+        
+        # Get image resolution
+        resolution = camera.get_resolution()
+        width, height = resolution
+        
+        # Inverse of pixel_to_robot_space conversion
+        u = int(((world_y / horizontal_aperture) + 0.5) * width)
+        v = int((((world_x - cam_position[0]) / vertical_aperture) + 0.5) * height)
+        
+        return u, v
+    
+    def _display_detection(
+        self,
+        rgb_image: np.ndarray,
+        mask: np.ndarray,
+        center_u: int,
+        center_v: int,
+        world_coords: np.ndarray
+    ):
+        """Display the detection result with visualization."""
+        display_img = rgb_image.copy()
+        
+        # Overlay mask in green
+        mask_colored = np.zeros_like(display_img)
+        mask_colored[:, :, 1] = mask  # Green channel
+        display_img = cv2.addWeighted(display_img, 0.7, mask_colored, 0.3, 0)
+        
+        # Draw center point
+        cv2.circle(display_img, (center_u, center_v), 8, (255, 0, 0), -1)
+        cv2.circle(display_img, (center_u, center_v), 12, (255, 255, 255), 2)
+        
+        # Draw crosshair
+        cv2.line(display_img, (center_u - 20, center_v), (center_u + 20, center_v), (255, 0, 0), 2)
+        cv2.line(display_img, (center_u, center_v - 20), (center_u, center_v + 20), (255, 0, 0), 2)
+        
+        # Display
+        plt.figure(figsize=(12, 10))
+        plt.imshow(display_img)
+        plt.title(
+            f"Object Detection\nPixel: ({center_u}, {center_v})\n"
+            f"World: [{world_coords[0]:.3f}, {world_coords[1]:.3f}, {world_coords[2]:.3f}]"
+        )
+        plt.axis("on")
+        plt.grid(True)
+        plt.show()
+        
+        carb.log_info(f"Object center at pixel ({center_u}, {center_v}) = world {world_coords}")
+    
+    def get_box_center_from_image_center(
+        self,
+        camera: Camera,
+        rgb_image: Optional[np.ndarray] = None,
+        depth_image: Optional[np.ndarray] = None,
+        heightmap: Optional[np.ndarray] = None,
+        display: bool = False,
+    ) -> np.ndarray:
+        """Get the 3D world coordinates of the box at the center of the camera image.
+        
+        This is a convenience method that assumes the camera is positioned above the box,
+        so the center of the image corresponds to the center of the box.
+        
+        Args:
+            camera: The camera object
+            rgb_image: Pre-captured RGB image (optional)
+            depth_image: Pre-captured depth image (optional)
+            heightmap: Pre-computed heightmap (optional)
+            display: Whether to visualize the detection
+            
+        Returns:
+            np.ndarray: 3D coordinates [x, y, z] of the box center
+        """
+        # Get images if not provided
+        if rgb_image is None:
+            rgb_image = camera.get_rgba()[:, :, :3]
+        if depth_image is None:
+            depth_image = camera.get_depth()
+        if heightmap is None:
+            pointcloud = camera.get_pointcloud()
+            cam_position, cam_orientation = camera.get_local_pose()
+            heightmap = self.get_height_map(
+                rgb_image=rgb_image,
+                depth_image=depth_image,
+                pointcloud=pointcloud,
+                camera=camera,
+                position=cam_position,
+            )
+        
+        # Get image center
+        height, width = rgb_image.shape[:2]
+        center_u = width // 2
+        center_v = height // 2
+        
+        carb.log_info(f"Getting box center from image center: pixel ({center_u}, {center_v})")
+        
+        # Convert center pixel to world coordinates
+        box_center = self.pixel_to_robot_space(
+            u=center_u,
+            v=center_v,
+            camera=camera,
+            display=display,
+            rgb_image=rgb_image,
+            depth_image=depth_image,
+            heightmap=heightmap,
+        )
+        
+        return box_center

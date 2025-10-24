@@ -2,17 +2,16 @@
 
 from typing import Optional, List
 import numpy as np
-from omni.isaac.core.robots.robot import Robot
-from omni.isaac.core.prims.rigid_prim import RigidPrim
-from omni.isaac.core.utils.prims import get_prim_at_path
-from omni.isaac.core.utils.nucleus import get_assets_root_path
-from omni.isaac.core.utils.stage import add_reference_to_stage, get_stage_units
+from isaacsim.core.prims import SingleArticulation, SingleRigidPrim
+from isaacsim.core.utils.prims import get_prim_at_path
+from isaacsim.storage.native import get_assets_root_path
+from isaacsim.core.utils.stage import add_reference_to_stage, get_stage_units
 import carb
-from omni.isaac.manipulators.grippers.parallel_gripper import ParallelGripper
-from omni.isaac.sensor import Camera
+from isaacsim.robot.manipulators.grippers.parallel_gripper import ParallelGripper
+from isaacsim.sensors.camera import Camera
 
 
-class UR5eHandeye(Robot):
+class UR5eHandeye(SingleArticulation):
     """[summary]
     made by seongho bak.
     modified 'Franka' class
@@ -46,7 +45,11 @@ class UR5eHandeye(Robot):
         prim = get_prim_at_path(prim_path)
         self._end_effector = None
         self._gripper = None
-        self._end_effector_prim_name = end_effector_prim_name
+        if end_effector_prim_name is not None:
+            self._end_effector_prim_name = end_effector_prim_name
+        else:
+            self._end_effector_prim_name = "flange"
+        
         if not prim.IsValid():
             if usd_path:
                 add_reference_to_stage(usd_path=usd_path, prim_path=prim_path)
@@ -62,7 +65,7 @@ class UR5eHandeye(Robot):
                 self._end_effector_prim_path = prim_path + "/flange"
 
             else:
-                self._end_effector_prim_path = prim_path + "/" + end_effector_prim_name
+                self._end_effector_prim_path = prim_path + "/" + self._end_effector_prim_name
             if gripper_dof_names is None:
                 gripper_dof_names = [
                     "left_outer_knuckle_joint",
@@ -78,7 +81,7 @@ class UR5eHandeye(Robot):
                 # self._end_effector_prim_path = prim_path + "/robotiq_arg2f_base_link"
                 self._end_effector_prim_path = prim_path + "/right_inner_finger_pad"
             else:
-                self._end_effector_prim_path = prim_path + "/" + end_effector_prim_name
+                self._end_effector_prim_path = prim_path + "/" + self._end_effector_prim_name
             if gripper_dof_names is None:
                 gripper_dof_names = [
                     "left_outer_knuckle_joint",
@@ -95,21 +98,16 @@ class UR5eHandeye(Robot):
             name=name,
             position=position,
             orientation=orientation,
-            articulation_controller=None,
         )
-        if gripper_dof_names is not None:
-            if deltas is None:
-                deltas = np.array([-np.pi * 2 / 9, np.pi * 2 / 9])
-            self._gripper = ParallelGripper(
-                end_effector_prim_path=self._end_effector_prim_path,
-                joint_prim_names=gripper_dof_names,
-                joint_opened_positions=gripper_open_position,
-                joint_closed_positions=gripper_closed_position,
-                action_deltas=deltas,
-            )
+        
+        # Store gripper parameters to create it during initialization
+        self._gripper_dof_names = gripper_dof_names
+        self._gripper_open_position = gripper_open_position
+        self._gripper_closed_position = gripper_closed_position
+        self._gripper_deltas = deltas if deltas is not None else np.array([-np.pi * 2 / 9, np.pi * 2 / 9])
 
     @property
-    def end_effector(self) -> RigidPrim:
+    def end_effector(self) -> SingleRigidPrim:
         """[summary]
 
         Returns:
@@ -147,28 +145,35 @@ class UR5eHandeye(Robot):
     def initialize(self, physics_sim_view=None) -> None:
         """[summary]"""
         super().initialize(physics_sim_view)
-        self._end_effector = RigidPrim(
+        
+        self._end_effector = SingleRigidPrim(
             prim_path=self._end_effector_prim_path, name=self.name + "_end_effector"
         )
         self._end_effector.initialize(physics_sim_view)
 
-        self._gripper.initialize(
-            physics_sim_view=physics_sim_view,
-            articulation_apply_action_func=self.apply_action,
-            get_joint_positions_func=self.get_joint_positions,
-            set_joint_positions_func=self.set_joint_positions,
-            dof_names=self.dof_names,
-        )
+        # Create and initialize the gripper after articulation is initialized
+        if self._gripper_dof_names is not None:
+            self._gripper = ParallelGripper(
+                end_effector_prim_path=self._end_effector_prim_path,
+                joint_prim_names=self._gripper_dof_names,
+                joint_opened_positions=self._gripper_open_position,
+                joint_closed_positions=self._gripper_closed_position,
+                action_deltas=self._gripper_deltas,
+            )
+            
+            # Initialize gripper using articulation's methods directly
+            self._gripper.initialize(
+                physics_sim_view=physics_sim_view,
+                articulation_apply_action_func=self.apply_action,
+                get_joint_positions_func=self.get_joint_positions,
+                set_joint_positions_func=self.set_joint_positions,
+                dof_names=self.dof_names,
+            )
         return
 
     def post_reset(self) -> None:
         """[summary]"""
         super().post_reset()
-        self._gripper.post_reset()
-        self._articulation_controller.switch_dof_control_mode(
-            dof_index=self.gripper.joint_dof_indicies[0], mode="position"
-        )
-        self._articulation_controller.switch_dof_control_mode(
-            dof_index=self.gripper.joint_dof_indicies[1], mode="position"
-        )
+        if self._gripper is not None:
+            self._gripper.post_reset()
         return

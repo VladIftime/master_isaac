@@ -7,11 +7,10 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-import omni.isaac.core.tasks as tasks
-from omni.isaac.core.scenes.scene import Scene
-from omni.isaac.core.objects import DynamicCuboid
-from omni.isaac.core.utils.prims import is_prim_path_valid
-from omni.isaac.core.utils.string import find_unique_string_name
+from isaacsim.core.api import tasks
+from isaacsim.core.api.objects import DynamicCuboid
+from isaacsim.core.utils.prims import is_prim_path_valid
+from isaacsim.core.utils.string import find_unique_string_name
 
 # add necessary directories to sys.path
 import sys, os
@@ -75,10 +74,11 @@ class UR5ePickPlace(tasks.PickPlace):
         if target_position is None:
             self.target_position = np.array([0.4, -0.33, 0])
             self.target_position[2] = 0.05  # considering the length of the gripper tip
-        self.target_position = self.target_position + self._offset
+        if self._offset is not None:
+            self.target_position = self.target_position + self._offset
         return
 
-    def set_up_scene(self, scene: Scene) -> None:
+    def set_up_scene(self, scene) -> None:
         """[summary]
         The cuboid added to the scene.
 

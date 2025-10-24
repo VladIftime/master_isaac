@@ -1,8 +1,8 @@
-from omni.isaac.core.utils.rotations import euler_angles_to_quat
-from omni.isaac.core.utils.types import ArticulationAction
-from omni.isaac.core.articulations import Articulation
-from omni.isaac.manipulators.grippers.parallel_gripper import ParallelGripper
-import omni.isaac.manipulators.controllers as manipulators_controllers
+from isaacsim.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.utils.types import ArticulationAction
+from isaacsim.core.prims import Articulation
+from isaacsim.robot.manipulators.grippers.parallel_gripper import ParallelGripper
+import isaacsim.robot.manipulators.controllers as manipulators_controllers
 from isaacsim.robot.manipulators.examples.universal_robots.controllers.rmpflow_controller import (
     RMPFlowController,
 )

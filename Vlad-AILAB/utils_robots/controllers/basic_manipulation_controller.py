@@ -6,15 +6,15 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
-from omni.isaac.core.controllers import BaseController
-from omni.isaac.core.utils.stage import get_stage_units
-from omni.isaac.core.utils.types import ArticulationAction
-from omni.isaac.core.utils.rotations import euler_angles_to_quat
+from isaacsim.core.api.controllers.base_controller import BaseController
+from isaacsim.core.utils.stage import get_stage_units
+from isaacsim.core.utils.types import ArticulationAction
+from isaacsim.core.utils.rotations import euler_angles_to_quat
 import numpy as np
 import typing
 import carb
-from omni.isaac.manipulators.grippers.gripper import Gripper
-from omni.isaac.universal_robots.controllers import RMPFlowController
+from isaacsim.robot.manipulators.grippers.gripper import Gripper
+from isaacsim.robot.manipulators.examples.universal_robots.controllers.rmpflow_controller import RMPFlowController
 from isaacsim.robot_motion.motion_generation.motion_policy_controller import (
     MotionPolicyController,
 )
