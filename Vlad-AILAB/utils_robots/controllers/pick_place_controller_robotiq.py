@@ -27,6 +27,12 @@ class PickPlaceController(manipulators_controllers.PickPlaceController):
     ) -> None:
         if events_dt is None:
             events_dt = [0.01, 0.01, 1, 0.01, 0.1, 0.05, 0.005, 1, 0.01, 0.1]
+        
+        # Get USD path from robot if available
+        robot_usd_path = None
+        if hasattr(robot_articulation, '_usd_path'):
+            robot_usd_path = robot_articulation._usd_path
+        
         manipulators_controllers.PickPlaceController.__init__(
             self,
             name=name,
@@ -34,6 +40,7 @@ class PickPlaceController(manipulators_controllers.PickPlaceController):
                 name=name + "_cspace_controller",
                 robot_articulation=robot_articulation,
                 attach_gripper=True,
+                usd_path=robot_usd_path,
             ),
             gripper=gripper,
             end_effector_initial_height=0.5,

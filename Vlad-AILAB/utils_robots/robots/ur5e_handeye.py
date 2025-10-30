@@ -45,6 +45,7 @@ class UR5eHandeye(SingleArticulation):
         prim = get_prim_at_path(prim_path)
         self._end_effector = None
         self._gripper = None
+        self._usd_path = usd_path  # Store USD path for RMPFlow configuration
         if end_effector_prim_name is not None:
             self._end_effector_prim_name = end_effector_prim_name
         else:
@@ -78,8 +79,9 @@ class UR5eHandeye(SingleArticulation):
 
         else:
             if self._end_effector_prim_name is None:
-                # self._end_effector_prim_path = prim_path + "/robotiq_arg2f_base_link"
-                self._end_effector_prim_path = prim_path + "/right_inner_finger_pad"
+                # Use tool0 - the standard UR robot tool center point
+                # This should match what RMPFlow controls for position-based checks
+                self._end_effector_prim_path = prim_path + "/tool0"
             else:
                 self._end_effector_prim_path = prim_path + "/" + self._end_effector_prim_name
             if gripper_dof_names is None:

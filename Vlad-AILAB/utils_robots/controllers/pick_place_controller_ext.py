@@ -2,10 +2,9 @@ from isaacsim.core.utils.rotations import euler_angles_to_quat
 from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.core.prims import Articulation
 from isaacsim.robot.manipulators.grippers.parallel_gripper import ParallelGripper
+
 import isaacsim.robot.manipulators.controllers as manipulators_controllers
-from isaacsim.robot.manipulators.examples.universal_robots.controllers.rmpflow_controller import (
-    RMPFlowController,
-)
+from utils_robots.controllers.RMPFflow_pickplace import RMPFlowController
 import numpy as np
 import typing
 from typing import Optional, List
@@ -40,6 +39,12 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
     ) -> None:
         if events_dt is None:
             events_dt = [0.01, 0.01, 1, 0.01, 0.1, 0.01, 0.005, 1, 0.01, 0.1]
+        
+        # Get USD path from robot if available
+        robot_usd_path = None
+        if hasattr(robot_articulation, '_usd_path'):
+            robot_usd_path = robot_articulation._usd_path
+        
         manipulators_controllers.PickPlaceController.__init__(
             self,
             name=name,
@@ -47,6 +52,7 @@ class CustomPickPlaceController(manipulators_controllers.PickPlaceController):
                 name=name + "_cspace_controller",
                 robot_articulation=robot_articulation,
                 attach_gripper=True,
+                usd_path=robot_usd_path,
             ),
             gripper=gripper,
             end_effector_initial_height=0.55,

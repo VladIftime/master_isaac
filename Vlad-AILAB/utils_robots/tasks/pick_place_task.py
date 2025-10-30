@@ -281,7 +281,10 @@ class UR5ePickPlace(PickPlace):
         )
         self._robot_name = ur5e_robot_name
         return UR5eHandeye(
-            prim_path=ur5e_prim_path, name=ur5e_robot_name, usd_path=ur5e_usd_path
+            prim_path=ur5e_prim_path, 
+            name=ur5e_robot_name, 
+            usd_path=ur5e_usd_path,
+            end_effector_prim_name="flange"  # CRITICAL: Match USD structure and RMPFlow config
         )
 
     def get_params(self) -> dict:
@@ -364,7 +367,10 @@ class UR5ePickPlace(PickPlace):
         )
         self.camera.initialize()
         APERTURE_SIZE = 0.5
-        self.camera.set_projection_mode("orthographic")  # Set orthographic projection
+        # Set orthographic projection
+        # Note: You may see "Unknown projection type, defaulting to pinhole" warnings from Hydra.
+        # This is a rendering warning only - the camera sensor correctly uses orthographic projection.
+        self.camera.set_projection_mode("orthographic")
         self.camera.set_focal_length(1.93)
         self.camera.set_focus_distance(4)
         self.camera.set_horizontal_aperture(APERTURE_SIZE)  # Set horizontal aperture
@@ -656,12 +662,20 @@ class UR5ePickPlace(PickPlace):
         world_y = ((u / width) - 0.5) * horizontal_aperture
         world_x = cam_position[0] + ((v / height) - 0.5) * vertical_aperture
 
-        # Get the depth at this pixel
-        if heightmap is not None:
-            for point in heightmap:
-                if point[0] == world_x and point[1] == world_y:
-                    z = point[2]
-                    break
+        # Get the depth at this pixel from heightmap
+        # Find the nearest point in heightmap instead of exact match
+        if heightmap is not None and len(heightmap) > 0:
+            # Calculate distances to all heightmap points (only X and Y)
+            distances = np.sqrt((heightmap[:, 0] - world_x)**2 + (heightmap[:, 1] - world_y)**2)
+            nearest_idx = np.argmin(distances)
+            nearest_distance = distances[nearest_idx]
+            
+            # Only use the heightmap Z if the nearest point is reasonably close (within 1cm)
+            if nearest_distance < 0.01:
+                z = heightmap[nearest_idx, 2]
+                carb.log_info(f"Found heightmap Z={z:.4f} at distance {nearest_distance*1000:.2f}mm from target XY")
+            else:
+                carb.log_warn(f"Nearest heightmap point is {nearest_distance*100:.2f}cm away, using default Z")
 
         # Create point in world space
         point_world = np.array([world_x, world_y, z])

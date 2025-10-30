@@ -119,7 +119,10 @@ class UR5ePickPlace(tasks.PickPlace):
             is_unique_fn=lambda x: not self.scene.object_exists(x),
         )
         return UR5eHandeye(
-            prim_path=ur5e_prim_path, name=ur5e_robot_name, usd_path=ur5e_usd_path
+            prim_path=ur5e_prim_path, 
+            name=ur5e_robot_name, 
+            usd_path=ur5e_usd_path,
+            end_effector_prim_name="flange"  # CRITICAL: Match USD structure and RMPFlow config
         )
 
     def get_params(self) -> dict:
