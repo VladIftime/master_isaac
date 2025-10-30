@@ -58,12 +58,12 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
         # At 60Hz physics: 0.01 increment = ~100 steps to reach t=1.0 (~1.67 seconds per phase)
         # Faster values = quicker phase progression
         if events_dt is None:
-            events_dt = [0.005, 0.01, 0.005, 0.003, 0.005]  # Balanced speed
-            # Element1: move to overhead position
-            # Element2: close gripper
-            # Element3: move to push start position
-            # Element4: push
-            # Element5: return to original position
+            events_dt = [0.009, 0.01, 0.009, 0.003, 0.009]  # Balanced speed
+            # Element0: move to overhead position
+            # Element1: close gripper
+            # Element2: move to push start position
+            # Element3: push
+            # Element4: return to original position
         # Get USD path from robot if available
         robot_usd_path = None
         if hasattr(robot_articulation, '_usd_path'):
