@@ -12,8 +12,7 @@ from isaacsim.sensors.camera import Camera
 
 
 class UR5eHandeye(SingleArticulation):
-    """[summary]
-    made by seongho bak.
+    """
     modified 'Franka' class
     modified from '~/.local/share/ov/pkg/isaac_sim-2022.2.0/exts/omni.isaac.franka/omni/isaac/franka/franka.py'
 

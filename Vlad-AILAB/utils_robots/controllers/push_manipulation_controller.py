@@ -51,7 +51,7 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
     ) -> None:
         # Phase timing: [overhead, close_gripper, move_to_start, push, lift_up, return]
         if events_dt is None:
-            events_dt = [0.009, 0.01, 0.009, 0.002, 0.008, 0.009]
+            events_dt = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
         robot_usd_path = getattr(robot_articulation, '_usd_path', None)
         
         manipulators_controllers.PickPlaceController.__init__(
@@ -94,26 +94,26 @@ class PushManipulationController(manipulators_controllers.PickPlaceController):
 
         if self._t == 0:
             if self._event == 0:
-                carb.log_info("PHASE 0: Overhead position")
+                carb.log_warn("PHASE 0: Overhead position")
                 self._current_phase_target = None
             elif self._event == 1:
-                carb.log_info("PHASE 1: Close gripper")
+                carb.log_warn("PHASE 1: Close gripper")
                 self._current_phase_target = None
             elif self._event == 2:
-                carb.log_info(f"PHASE 2: Move to push start [{push_start_position[0]:.3f}, {push_start_position[1]:.3f}, {push_start_position[2]:.3f}]")
+                carb.log_warn(f"PHASE 2: Move to push start [{push_start_position[0]:.3f}, {push_start_position[1]:.3f}, {push_start_position[2]:.3f}]")
                 self._current_phase_target = push_start_position + (self._end_effector_offset if self._end_effector_offset is not None else np.zeros(3))
             elif self._event == 3:
                 push_vector = push_end_position - push_start_position
-                carb.log_info(f"PHASE 3: Execute push - vector [{push_vector[0]:.3f}, {push_vector[1]:.3f}, {push_vector[2]:.3f}]")
+                carb.log_warn(f"PHASE 3: Execute push - vector [{push_vector[0]:.3f}, {push_vector[1]:.3f}, {push_vector[2]:.3f}]")
                 self._current_phase_target = push_end_position + (self._end_effector_offset if self._end_effector_offset is not None else np.zeros(3))
             elif self._event == 4:
                 ee_pos, _ = self._robot_articulation.end_effector.get_world_pose()
                 lift_target = ee_pos.copy()
                 lift_target[2] += self._lift_height
                 self._current_phase_target = lift_target
-                carb.log_info(f"PHASE 4: Lift up {self._lift_height*100:.1f}cm to [{lift_target[0]:.3f}, {lift_target[1]:.3f}, {lift_target[2]:.3f}]")
+                carb.log_warn(f"PHASE 4: Lift up {self._lift_height*100:.1f}cm to [{lift_target[0]:.3f}, {lift_target[1]:.3f}, {lift_target[2]:.3f}]")
             elif self._event == 5:
-                carb.log_info("PHASE 5: Return home")
+                carb.log_warn("PHASE 5: Return home")
                 self._current_phase_target = None
 
         # Calculate position target with offset
