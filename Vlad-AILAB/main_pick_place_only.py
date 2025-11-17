@@ -47,18 +47,20 @@ import sys
 import os
 import cv2
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 from omni.kit.viewport.utility import get_active_viewport
 from dev_utils.point_cloud_utils import display_heightmap
 from isaacsim.core.api.objects import DynamicCuboid
 
 import isaacsim
 from isaacsim.core.api import World
-from utils_robots.controllers.pick_place_controller_ext import CustomPickPlaceController
+from isaacsim.core.utils.rotations import euler_angles_to_quat
 from utils_robots.tasks.pick_place_task import UR5ePickPlace
 
 # Add the path to the custom utility scripts
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from utils_robots.controllers.pick_place_controller_ext import CustomPickPlaceController
+# Alternative: Use discrete controller (no interpolation, simpler like push controller)
+from utils_robots.controllers.pick_place_controller_discrete import DiscretePickPlaceController
 
 # Save paths for images
 save_root_depth = os.path.join(os.getcwd(), "camera_image/depth.png")
@@ -90,38 +92,30 @@ print(f"Robot base position (world frame): [{robot_base_pos[0]:.3f}, {robot_base
 print(f"Robot base orientation (world):    [{robot_base_ori[0]:.3f}, {robot_base_ori[1]:.3f}, {robot_base_ori[2]:.3f}, {robot_base_ori[3]:.3f}]")
 print(f"{'='*70}\n")
 
-def world_to_robot_frame(world_pos: np.ndarray, robot_base_pos: np.ndarray, robot_base_ori: np.ndarray) -> np.ndarray:
-    """Convert world frame position to robot local frame.
-    
-    Args:
-        world_pos: Position in world frame [x, y, z]
-        robot_base_pos: Robot base position in world frame [x, y, z]
-        robot_base_ori: Robot base orientation quaternion in world frame [w, x, y, z]
-    
-    Returns:
-        Position in robot local frame [x, y, z]
-    """
-    # Convert quaternion to rotation matrix
-    rot_matrix = R.from_quat([robot_base_ori[1], robot_base_ori[2], robot_base_ori[3], robot_base_ori[0]]).as_matrix()
-    
-    # Translate to robot base origin
-    pos_relative = world_pos - robot_base_pos
-    
-    # Rotate to robot frame (inverse rotation)
-    rot_matrix_inv = rot_matrix.T
-    robot_frame_pos = rot_matrix_inv @ pos_relative
-    
-    return robot_frame_pos
-
 # Declare instance for robot control (PD control)
 articulation_controller = my_ur5e.get_articulation_controller()
 
-# Create PickPlace controller with end_effector_offset in constructor (like push controller)
-pick_and_place_controller = CustomPickPlaceController(
+# Create PickPlace controller using CustomPickPlaceController
+# This controller has optimized timings and clear phase logging with smooth interpolation
+# pick_and_place_controller = CustomPickPlaceController(
+#     name="pick_place_controller",
+#     gripper=my_ur5e.gripper,
+#     robot_articulation=my_ur5e,
+#     events_dt=[0.01, 0.01, 1.0, 0.01, 0.1, 0.01, 0.005, 1.0, 0.01, 0.1],  # Optimized timings
+#     end_effector_offset=np.array([0, 0, 0.0]),
+#     end_effector_initial_height=0.50,  # 50cm above workspace (safe height)
+# )
+
+# Alternative: Use DiscretePickPlaceController for simpler discrete waypoint control
+# Uses SINGLE-AXIS movements only to avoid complex paths that could collide with obstacles
+pick_and_place_controller = DiscretePickPlaceController(
     name="pick_place_controller",
     gripper=my_ur5e.gripper,
     robot_articulation=my_ur5e,
-    end_effector_offset=np.array([0, 0, 0.02]),
+    # 10 phases: [overhead, horiz_to_pick, lower_z, settle, close, lift_z, horiz_to_place, lower_z, open, turned]
+    events_dt=[0.01, 0.01, 0.01, 1.0, 0.01, 0.01, 0.01, 0.01, 1.0, 0.01],
+    end_effector_offset=np.array([0, 0, 0.0]),
+    end_effector_initial_height=0.50,  # 50cm above workspace (safe height)
 )
 
 # Specify the view point in the GUI
@@ -169,22 +163,15 @@ while simulation_app.is_running():
                 
                 if target_object is not None:
                     # Get object's actual position in world coordinates
+                    # FIXED: Use world frame positions directly - RMPFlow expects world frame!
                     object_world_pos, object_world_ori = target_object.get_world_pose()
-                    
-                    # Convert from world frame to robot local frame (required by controller)
-                    robot_base_pos_current, robot_base_ori_current = my_ur5e.get_world_pose()
-                    picking_position = world_to_robot_frame(
-                        np.array(object_world_pos),
-                        robot_base_pos_current,
-                        robot_base_ori_current
-                    )
+                    picking_position = np.array(object_world_pos)
                     
                     print(f"\n{'='*60}")
                     print(f"OBJECT FOUND")
                     print(f"{'='*60}")
                     print(f"Object prim path: {object_prim_path}")
-                    print(f"Object world position: [{object_world_pos[0]:.3f}, {object_world_pos[1]:.3f}, {object_world_pos[2]:.3f}]")
-                    print(f"Picking position (robot frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
+                    print(f"Picking position (world frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
                     print(f"{'='*60}\n")
                     
                     object_position_found = True
@@ -198,6 +185,7 @@ while simulation_app.is_running():
                 center_u = rgb_image.shape[1] // 2
                 center_v = rgb_image.shape[0] // 2
                 
+                # pixel_to_robot_space already returns world frame coordinates
                 picking_position = my_task.pixel_to_robot_space(
                     u=center_u,
                     v=center_v,
@@ -211,7 +199,7 @@ while simulation_app.is_running():
                 print(f"\n{'='*60}")
                 print(f"OBJECT POSITION ESTIMATED FROM CAMERA")
                 print(f"{'='*60}")
-                print(f"Estimated position: [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
+                print(f"Estimated position (world frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
                 print(f"{'='*60}\n")
 
         # Calculate placing position (to the right of the object) and capture observation
@@ -224,12 +212,11 @@ while simulation_app.is_running():
             if "goal_mask" in observation:
                 cv2.imwrite(save_root_semantic, observation["goal_mask"])
             
-            # Calculate placing position: to the right of the object (+X direction)
+            # Calculate placing position: to the right of the object (+X direction in world frame)
             if picking_position is not None:
-                placing_position = np.array(picking_position)
-                placing_position[0] += 0.15  # Move 15cm to the right (+X direction)
-                placing_position[1] = picking_position[1]  # Keep same Y
-                placing_position[2] = picking_position[2]  # Keep same height
+                placing_position = picking_position.copy()
+                placing_position[0] += 0.15  # Move 15cm to the right (+X direction in world frame)
+                # Keep Y and Z the same
             else:
                 print("ERROR: Picking position not found, cannot calculate placing position")
                 placing_position = None

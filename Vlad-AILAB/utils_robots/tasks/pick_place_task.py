@@ -101,7 +101,7 @@ class UR5ePickPlace(PickPlace):
                 ]
             ),
         )
-        # -------------------       ----------------------------------------
+        # -----------------------------------------------------------
         # Platform with welded edges using FixedCuboid and physics material
         # -----------------------------------------------------------
         self.platform_center = np.array([0.5, 0, 0.025])
