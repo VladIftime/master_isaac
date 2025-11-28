@@ -198,6 +198,7 @@ def get_heightmap(
     workspace_limits,
     heightmap_resolution,
     is_orthographic=True,
+    show_heightmap=False,
 ):
     """Generate a heightmap from RGB-D images.
 
@@ -246,13 +247,14 @@ def get_heightmap(
                 heightmap[y_indices[i], x_indices[i]] = pointcloud_robot[i, 2]
 
     # Display the projected heightmap
-    plt.figure(figsize=(10, 10))
-    plt.imshow(heightmap, cmap="viridis", origin="lower")
-    plt.colorbar(label="Height (Z)")
-    plt.xlabel("X")
-    plt.ylabel("Y")
-    plt.title("Projected Heightmap")
-    plt.show()
+    if show_heightmap:
+        plt.figure(figsize=(10, 10))
+        plt.imshow(heightmap, cmap="viridis", origin="lower")
+        plt.colorbar(label="Height (Z)")
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.title("Projected Heightmap")
+        plt.show()
 
     # Create point cloud representation of the heightmap
     non_zero_mask = heightmap != 0

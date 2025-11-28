@@ -26,13 +26,19 @@ parser.add_argument(
     default=False,
     help="Display intermediate camera images and visualizations",
 )
+parser.add_argument(
+    "--headless",
+    action="store_true",
+    default=False,
+    help="Run simulation in headless mode",
+)
 args, _ = parser.parse_known_args()
 
 # Flag to control display of intermediate pictures
-DISPLAY_INTERMEDIATE_IMAGES = args.display_images
+DISPLAY_INTERMEDIATE_IMAGES = False
 
 # Initialize the simulation application with a GUI
-simulation_app = SimulationApp({"headless": False})
+simulation_app = SimulationApp({"headless": args.headless})
 
 # Disable Materials and Lights: To get simpler/faster rendering
 import carb
@@ -47,28 +53,29 @@ import sys
 import os
 import cv2
 import numpy as np
-from omni.kit.viewport.utility import get_active_viewport
-from dev_utils.point_cloud_utils import display_heightmap
+import numpy as np
+# from omni.kit.viewport.utility import get_active_viewport
 from isaacsim.core.api.objects import DynamicCuboid
-
-import isaacsim
 from isaacsim.core.api import World
 from isaacsim.core.utils.rotations import euler_angles_to_quat
 from utils_robots.tasks.pick_place_task import UR5ePickPlace
+from isaacsim.core.prims import XFormPrim
+from isaacsim.core.utils.prims import is_prim_path_valid
+
 
 # Add the path to the custom utility scripts
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from utils_robots.controllers.pick_place_controller_ext import CustomPickPlaceController
 # Alternative: Use discrete controller (no interpolation, simpler like push controller)
-from utils_robots.controllers.pick_place_controller_discrete import DiscretePickPlaceController
+from utils_robots.controllers.pick_place_controller_rmpflow import RMPFlowPickPlaceController
 
 # Save paths for images
 save_root_depth = os.path.join(os.getcwd(), "camera_image/depth.png")
 save_root_rgb = os.path.join(os.getcwd(), "camera_image/rgb.png")
 save_root_semantic = os.path.join(os.getcwd(), "camera_image/semantic.png")
 
-# Define the number of objects (1 for single object pick and place)
-number_of_objects = 1
+# Define the number of objects (3 for multi-object pick and place)
+number_of_objects = 3
 
 # Initialize the simulation world
 my_world = World(physics_dt=0.01, stage_units_in_meters=1.0)
@@ -95,34 +102,28 @@ print(f"{'='*70}\n")
 # Declare instance for robot control (PD control)
 articulation_controller = my_ur5e.get_articulation_controller()
 
-# Create PickPlace controller using CustomPickPlaceController
-# This controller has optimized timings and clear phase logging with smooth interpolation
-# pick_and_place_controller = CustomPickPlaceController(
-#     name="pick_place_controller",
-#     gripper=my_ur5e.gripper,
-#     robot_articulation=my_ur5e,
-#     events_dt=[0.01, 0.01, 1.0, 0.01, 0.1, 0.01, 0.005, 1.0, 0.01, 0.1],  # Optimized timings
-#     end_effector_offset=np.array([0, 0, 0.0]),
-#     end_effector_initial_height=0.50,  # 50cm above workspace (safe height)
-# )
-
-# Alternative: Use DiscretePickPlaceController for simpler discrete waypoint control
-# Uses SINGLE-AXIS movements only to avoid complex paths that could collide with obstacles
-pick_and_place_controller = DiscretePickPlaceController(
+# Use RMPFlow Controller with Interpolation
+pick_and_place_controller = RMPFlowPickPlaceController(
     name="pick_place_controller",
     gripper=my_ur5e.gripper,
     robot_articulation=my_ur5e,
-    # 10 phases: [overhead, horiz_to_pick, lower_z, settle, close, lift_z, horiz_to_place, lower_z, open, turned]
-    events_dt=[0.01, 0.01, 0.01, 1.0, 0.01, 0.01, 0.01, 0.01, 1.0, 0.01],
-    end_effector_offset=np.array([0, 0, 0.0]),
-    end_effector_initial_height=0.50,  # 50cm above workspace (safe height)
+    # Adjust timings as needed for RMPFlow
+    # 10 phases: [turned, align_pick, lower_pick, settle, close, lift, align_place, lower_place, open, turned]
+    events_dt=[3.0, 3.0, 3.0, 0.5, 0.5, 2.0, 3.0, 2.0, 0.5, 3.0],
+    # Add Z offset for gripper length + hand-eye camera mount
+    # Based on push task (Flange Z ~0.32 for Object Z ~0.05), offset should be ~0.27m
+    end_effector_offset=None, # Manually added to target
+    end_effector_initial_height=0.45,  # 45cm above workspace (safe height for flange)
 )
 
 # Specify the view point in the GUI
-viewport = get_active_viewport()
-viewport.set_active_camera("/OmniverseKit_Persp")
+if not args.headless:
+    from omni.kit.viewport.utility import get_active_viewport
+    viewport = get_active_viewport()
+    viewport.set_active_camera("/OmniverseKit_Persp")
 
 # State variables
+current_object_idx = 0
 pick_place_started = False
 observation_captured = False
 object_position_found = False
@@ -131,136 +132,147 @@ object_position_found = False
 picking_position = None
 placing_position = None
 target_object = None
+ee_offset = np.array([0, 0, 0.27])
 
 print("-" * 60)
-print("Starting Pick and Place Simulation")
+print("Starting Multi-Object Pick and Place Simulation")
 print(f"Display images: {'ENABLED' if DISPLAY_INTERMEDIATE_IMAGES else 'DISABLED'}")
 print("-" * 60)
 
-while simulation_app.is_running():
-    my_world.step(render=True)
-    if my_world.is_playing():
-        actions = None
+my_world.reset()
+try:
+    while simulation_app.is_running():
+        my_world.step(render=True)
+        if my_world.is_playing():
+            if my_world.current_time_step_index % 100 == 0:
+                ee_pos, _ = my_ur5e.end_effector.get_world_pose()
+                print(f"Step: {my_world.current_time_step_index}, EE Pos: [{ee_pos[0]:.3f}, {ee_pos[1]:.3f}, {ee_pos[2]:.3f}]")
+            actions = None
 
-        if my_world.current_time_step_index == 0:
-            my_world.reset()
-            pick_and_place_controller.reset()
-            pick_place_started = False
-            observation_captured = False
-            object_position_found = False
-            picking_position = None
-            placing_position = None
-            target_object = None
-
-        # Wait for scene to settle, then find object and plan pick/place
-        if not object_position_found and my_world.current_time_step_index > 200:
-            # Get the first object from the scene (since number_of_objects=1)
-            # Objects are stored in the task with prim paths like "/World/object_0"
-            try:
-                # Try to get the object from the scene using the prim path
-                object_prim_path = f"{my_task.imported_objects_prim_path}_0"
-                target_object = my_world.scene.get_object(object_prim_path)
-                
-                if target_object is not None:
-                    # Get object's actual position in world coordinates
-                    # FIXED: Use world frame positions directly - RMPFlow expects world frame!
-                    object_world_pos, object_world_ori = target_object.get_world_pose()
-                    picking_position = np.array(object_world_pos)
-                    
-                    print(f"\n{'='*60}")
-                    print(f"OBJECT FOUND")
-                    print(f"{'='*60}")
-                    print(f"Object prim path: {object_prim_path}")
-                    print(f"Picking position (world frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
-                    print(f"{'='*60}\n")
-                    
-                    object_position_found = True
-                else:
-                    raise ValueError("Object not found in scene")
-            except Exception as e:
-                print(f"Could not find object directly ({e}), using camera estimation")
-                # Fallback: use observation to find object position
-                observation = my_task.get_observations()
-                rgb_image = observation["rgb_image"]
-                center_u = rgb_image.shape[1] // 2
-                center_v = rgb_image.shape[0] // 2
-                
-                # pixel_to_robot_space already returns world frame coordinates
-                picking_position = my_task.pixel_to_robot_space(
-                    u=center_u,
-                    v=center_v,
-                    camera=camera_ortho,
-                    display=DISPLAY_INTERMEDIATE_IMAGES,
-                    rgb_image=observation["rgb_image"],
-                    depth_image=observation["depth_image"],
-                    heightmap=observation["height_map"],
-                )
-                object_position_found = True
-                print(f"\n{'='*60}")
-                print(f"OBJECT POSITION ESTIMATED FROM CAMERA")
-                print(f"{'='*60}")
-                print(f"Estimated position (world frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
-                print(f"{'='*60}\n")
-
-        # Calculate placing position (to the right of the object) and capture observation
-        if object_position_found and not observation_captured and my_world.current_time_step_index > 250:
-            observation = my_task.get_observations()
-            
-            # Save images
-            cv2.imwrite(save_root_depth, observation["depth_image"])
-            cv2.imwrite(save_root_rgb, observation["rgb_image"])
-            if "goal_mask" in observation:
-                cv2.imwrite(save_root_semantic, observation["goal_mask"])
-            
-            # Calculate placing position: to the right of the object (+X direction in world frame)
-            if picking_position is not None:
-                placing_position = picking_position.copy()
-                placing_position[0] += 0.15  # Move 15cm to the right (+X direction in world frame)
-                # Keep Y and Z the same
-            else:
-                print("ERROR: Picking position not found, cannot calculate placing position")
+            if my_world.current_time_step_index == 0:
+                my_world.reset()
+                pick_and_place_controller.reset()
+                current_object_idx = 0
+                pick_place_started = False
+                observation_captured = False
+                object_position_found = False
+                picking_position = None
                 placing_position = None
-            
-            if DISPLAY_INTERMEDIATE_IMAGES:
-                display_heightmap(observation["height_map"], name="Height Map - Pick and Place")
-            
-            print(f"\n{'='*60}")
-            print(f"OBSERVATION CAPTURED AND PLACING POSITION CALCULATED")
-            print(f"{'='*60}")
-            print(f"RGB image saved: {save_root_rgb}")
-            print(f"Depth image saved: {save_root_depth}")
-            if "goal_mask" in observation:
-                print(f"Semantic image saved: {save_root_semantic}")
-            print(f"\nPICK AND PLACE PLANNING")
-            if picking_position is not None and placing_position is not None:
-                print(f"Picking position:  [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
-                print(f"Placing position:  [{placing_position[0]:.3f}, {placing_position[1]:.3f}, {placing_position[2]:.3f}]")
-                print(f"Distance: {np.linalg.norm(placing_position - picking_position)*100:.1f}cm")
-            else:
-                print("ERROR: Positions not properly initialized")
-            print(f"{'='*60}\n")
-            
-            observation_captured = True
-            pick_place_started = True
+                target_object = None
 
-        # Execute pick and place manipulation
-        if pick_place_started and not pick_and_place_controller.is_done() and picking_position is not None and placing_position is not None:
-            current_joint_positions = my_ur5e.get_joint_positions()
-            actions = pick_and_place_controller.forward(
-                picking_position=picking_position,
-                placing_position=placing_position,
-                current_joint_positions=current_joint_positions,
-            )
+            # Check if all objects are processed
+            if current_object_idx >= number_of_objects:
+                # Optional: print completion message once
+                pass
 
-        # After pick and place completes
-        if pick_and_place_controller.is_done() and pick_place_started:
-            print(f"\n{'='*60}")
-            print(f"PICK AND PLACE SEQUENCE COMPLETED")
-            print(f"{'='*60}\n")
-            pick_place_started = False  # Prevent repeated messages
+            # Wait for scene to settle, then find object and plan pick/place
+            elif not object_position_found and my_world.current_time_step_index > 200:
+                # Get the current object from the scene
+                try:
+                    # Try to get the object from the scene using the prim path
+                    # Note: The task creates objects with suffix _0, _1, _2...
+                    object_prim_path = f"{my_task.imported_objects_prim_path}_{current_object_idx}"
+                    
+                    if is_prim_path_valid(object_prim_path):
+                        target_object = XFormPrim(object_prim_path)
+                        target_object.initialize()
+                        
+                        # Get object's actual position in world coordinates
+                        # Get object's actual position in world coordinates
+                        # API uses vectorized get_world_poses
+                        object_world_poses, object_world_oris = target_object.get_world_poses()
+                        object_world_pos = object_world_poses[0]
+                        object_world_ori = object_world_oris[0]
+                        
+                        picking_position = np.array(object_world_pos)
+                        
+                        print(f"\n{'='*60}")
+                        print(f"OBJECT {current_object_idx} FOUND")
+                        print(f"{'='*60}")
+                        print(f"Object prim path: {object_prim_path}")
+                        print(f"Picking position (world frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
+                        print(f"{'='*60}\n")
+                        
+                        object_position_found = True
+                    else:
+                        print(f"Object prim path {object_prim_path} is invalid, skipping...")
+                        current_object_idx += 1 # Skip this object
+                except Exception as e:
+                    print(f"Error finding object {current_object_idx}: {e}")
+                    current_object_idx += 1
 
-        if actions is not None:
-            articulation_controller.apply_action(actions)
+            # Calculate placing position and capture observation
+            if object_position_found and not observation_captured and my_world.current_time_step_index > 250:
+                observation = my_task.get_observations()
+                
+                # Save images (overwrite for each object or could append index)
+                cv2.imwrite(save_root_depth, observation["depth_image"])
+                cv2.imwrite(save_root_rgb, observation["rgb_image"])
+                
+                # Calculate placing position: Stack them or place in a row
+                # Place in a row along Y axis, starting from a base position
+                # Base place position: [0.6, -0.2, 0.05]
+                base_place_pos = np.array([0.6, -0.2, 0.05])
+                
+                if picking_position is not None:
+                    placing_position = base_place_pos.copy()
+                    # Offset each object by 15cm in Y direction
+                    placing_position[1] += current_object_idx * 0.15
+                    
+                    # Ensure Z is correct (same as picking or slightly higher if stacking)
+                    placing_position[2] = picking_position[2] 
+                else:
+                    print("ERROR: Picking position not found")
+                    placing_position = None
+                
+                print(f"\n{'='*60}")
+                print(f"PLANNING FOR OBJECT {current_object_idx}")
+                print(f"{'='*60}")
+                if picking_position is not None and placing_position is not None:
+                    print(f"Picking position:  [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
+                    print(f"Placing position:  [{placing_position[0]:.3f}, {placing_position[1]:.3f}, {placing_position[2]:.3f}]")
+                print(f"{'='*60}\n")
+                
+                observation_captured = True
+                pick_place_started = True
+
+            # Execute pick and place manipulation
+            if pick_place_started and not pick_and_place_controller.is_done() and picking_position is not None and placing_position is not None:
+                current_joint_positions = my_ur5e.get_joint_positions()
+                actions = pick_and_place_controller.forward(
+                    picking_position=picking_position + ee_offset,
+                    placing_position=placing_position + ee_offset,
+                    current_joint_positions=current_joint_positions,
+                )
+
+            # After pick and place completes for current object
+            if pick_and_place_controller.is_done() and pick_place_started:
+                print(f"\n{'='*60}")
+                print(f"OBJECT {current_object_idx} COMPLETED")
+                print(f"{'='*60}\n")
+                
+                # Prepare for next object
+                current_object_idx += 1
+                pick_and_place_controller.reset()
+                pick_place_started = False
+                observation_captured = False
+                object_position_found = False
+                picking_position = None
+                placing_position = None
+                target_object = None
+                
+                if current_object_idx >= number_of_objects:
+                    print(f"\n{'='*60}")
+                    print(f"ALL TASKS COMPLETED")
+                    print(f"{'='*60}\n")
+
+            if actions is not None:
+                articulation_controller.apply_action(actions)
+
+except Exception as e:
+    print(f"Simulation loop error: {e}")
+    import traceback
+    traceback.print_exc()
 
 
 simulation_app.close()

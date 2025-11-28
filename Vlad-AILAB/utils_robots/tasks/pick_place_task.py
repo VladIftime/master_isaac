@@ -8,10 +8,7 @@
 #
 import time
 import carb
-from matplotlib import pyplot as plt
-import omni
 import copy
-import cv2
 from isaacsim.core.utils.semantics import add_update_semantics
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.api.tasks import PickPlace
@@ -238,14 +235,14 @@ class UR5ePickPlace(PickPlace):
                 new_position = np.array(
                     [
                         random.uniform(
-                            platform_center[0] - platform_half_size[0],
-                            platform_center[0] + platform_half_size[0],
+                            platform_center[0] - 0.15,
+                            platform_center[0] + 0.15,
                         ),
                         random.uniform(
-                            platform_center[1] - platform_half_size[1],
-                            platform_center[1] + platform_half_size[1],
+                            platform_center[1] - 0.15,
+                            platform_center[1] + 0.15,
                         ),
-                        random.uniform(0.1, 0.3),
+                        random.uniform(0.15, 0.2),
                     ]
                 )
                 # Check for overlap with a minimum distance of 0.1 (adjust as needed)
@@ -518,7 +515,7 @@ class UR5ePickPlace(PickPlace):
         orientations = np.expand_dims(orientation, axis=0)
 
         # Ensure scales is a 2D array
-        scale = np.array([0.2, 0.2, 0.2])
+        scale = np.array([0.15, 0.15, 0.15])
         scales = np.expand_dims(scale, axis=0)
 
         # Ensure masses is a 1D array
@@ -685,42 +682,6 @@ class UR5ePickPlace(PickPlace):
         carb.log_warn(f"Pixel coordinates (u,v): ({u}, {v})")
         carb.log_warn(f"World coordinates: {point_world}")
 
-        # Display the image with selected pixel if requested
-        if display and rgb_image is not None:
-            display_img = rgb_image.copy()
-
-            # Draw a red circle at the selected pixel
-            cv2.circle(display_img, (u, v), 5, (255, 0, 0), -1)
-
-            # Draw coordinate axes for reference
-            center = (width // 2, height // 2)
-            axis_length = 50
-            # X-axis in magenta (corresponds to vertical in image)
-            cv2.line(
-                display_img,
-                center,
-                (center[0], center[1] + axis_length),
-                (255, 0, 255),
-                2,
-            )
-            # Y-axis in green (corresponds to horizontal in image)
-            cv2.line(
-                display_img,
-                center,
-                (center[0] + axis_length, center[1]),
-                (0, 255, 0),
-                2,
-            )
-
-            plt.figure(figsize=(10, 10))
-            plt.imshow(display_img)
-            plt.title(
-                f"Selected Pixel (u={u}, v={v})\nWorld Coordinates: [{point_world[0]:.3f}, {point_world[1]:.3f}, {point_world[2]:.3f}]"
-            )
-            plt.axis("on")
-            plt.grid(True)
-            plt.show()
-
         return point_world
     
     def detect_object_center_from_camera(
@@ -799,8 +760,7 @@ class UR5ePickPlace(PickPlace):
                             min_z = np.min(mask_heights)
                             object_center[2] = min_z + 0.01  # Add small offset above the bottom
                     
-                    if display:
-                        self._display_detection(rgb_image, semantic_mask, center_u, center_v, object_center)
+
                     
                     return object_center
             except Exception as e:
@@ -841,7 +801,8 @@ class UR5ePickPlace(PickPlace):
                 
                 # Find approximate center pixel
                 center_u, center_v = self.world_to_pixel(float(center_x), float(center_y), camera)
-                self._display_detection(rgb_image, detection_mask, center_u, center_v, object_center)
+                # self._display_detection(rgb_image, detection_mask, center_u, center_v, object_center)
+                pass
             
             return object_center
         
@@ -873,40 +834,7 @@ class UR5ePickPlace(PickPlace):
         
         return u, v
     
-    def _display_detection(
-        self,
-        rgb_image: np.ndarray,
-        mask: np.ndarray,
-        center_u: int,
-        center_v: int,
-        world_coords: np.ndarray
-    ):
-        """Display the detection result with visualization."""
-        display_img = rgb_image.copy()
-        
-        # Overlay mask in green
-        mask_colored = np.zeros_like(display_img)
-        mask_colored[:, :, 1] = mask  # Green channel
-        display_img = cv2.addWeighted(display_img, 0.7, mask_colored, 0.3, 0)
-        
-        # Draw center point
-        cv2.circle(display_img, (center_u, center_v), 8, (255, 0, 0), -1)
-        cv2.circle(display_img, (center_u, center_v), 12, (255, 255, 255), 2)
-        
-        # Draw crosshair
-        cv2.line(display_img, (center_u - 20, center_v), (center_u + 20, center_v), (255, 0, 0), 2)
-        cv2.line(display_img, (center_u, center_v - 20), (center_u, center_v + 20), (255, 0, 0), 2)
-        
-        # Display
-        plt.figure(figsize=(12, 10))
-        plt.imshow(display_img)
-        plt.title(
-            f"Object Detection\nPixel: ({center_u}, {center_v})\n"
-            f"World: [{world_coords[0]:.3f}, {world_coords[1]:.3f}, {world_coords[2]:.3f}]"
-        )
-        plt.axis("on")
-        plt.grid(True)
-        plt.show()
+
         
         carb.log_info(f"Object center at pixel ({center_u}, {center_v}) = world {world_coords}")
     
