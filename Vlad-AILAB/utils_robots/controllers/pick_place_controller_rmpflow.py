@@ -119,13 +119,13 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
         self._end_effector_orientation = None
         self._current_phase_target = None
         self._phase_start_pos = None
-        self._safe_height = end_effector_initial_height
+        self._safe_height = 0.45
         self._last_print_time = 0.0
         
         # Joint space positions for overhead and turned positions
         self._overhead_position = np.array([np.pi, -np.pi/2, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2, 0, 0, 0, 0, 0, 0])
     
-        self._turned_position = np.array([-np.pi, -np.pi/2, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2, 0, 0, 0, 0, 0, 0])
+        self._turned_position = np.array([np.pi/2, -np.pi/2, -np.pi/2, -np.pi/2, np.pi/2, np.pi/2, 0, 0, 0, 0, 0, 0])
         
         carb.log_warn(f"RMPFlowPickPlaceController '{name}' initialized")
         return
@@ -159,7 +159,7 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
         self._last_print_time = 0.0
         self._rmpflow.reset()
 
-    def _check_position_reached(self, target_position: np.ndarray) -> bool:
+    def _check_position_reached(self, target_position: np.ndarray, apply_offset: bool = True) -> bool:
         """Check if end effector has reached target position."""
         ee_position, _ = self._robot_articulation.end_effector.get_world_pose()
         
@@ -167,7 +167,7 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
         # We must apply the offset to the target to compare apples to apples (flange to flange target).
         # effectively: target_flange = target_tip + offset
         target_flange = target_position
-        if self._end_effector_offset is not None:
+        if apply_offset and self._end_effector_offset is not None:
              target_flange = target_position + self._end_effector_offset
              
         distance = np.linalg.norm(ee_position - target_flange)
@@ -177,9 +177,7 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
     def forward(
         self,
         picking_position: np.ndarray,
-        placing_position: np.ndarray,
         current_joint_positions: np.ndarray,
-        end_effector_offset: typing.Optional[np.ndarray] = None,
         end_effector_orientation: typing.Optional[np.ndarray] = None,
     ) -> ArticulationAction:
         
@@ -210,34 +208,41 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
                 self._current_phase_target = np.array([picking_position[0], picking_position[1], self._safe_height])
                 carb.log_warn(f"Action: Move to Pre-Pick [X, Y, SafeZ]")
                 carb.log_warn(f"Target: {self._current_phase_target}")
-            elif self._event == 2: # Lower to pick
+            elif self._event == 2: # Align
+                self._current_phase_target = np.array([picking_position[0], picking_position[1], self._safe_height])
+                carb.log_warn(f"Action: Align Orientation [Yaw]")
+                carb.log_warn(f"Target: {self._current_phase_target}")
+            elif self._event == 3: # Lower to pick
                 self._current_phase_target = picking_position.copy()
                 carb.log_warn(f"Action: Lower to Pick [X, Y, PickZ]")
                 carb.log_warn(f"Target: {self._current_phase_target}")
-            elif self._event == 3: # Settle
+            elif self._event == 4: # Settle
                 self._current_phase_target = None
                 carb.log_warn("Action: Settle")
-            elif self._event == 4: # Close gripper
+            elif self._event == 5: # Close gripper
                 self._current_phase_target = None
                 carb.log_warn("Action: Close Gripper")
-            elif self._event == 5: # Lift
+            elif self._event == 6: # Lift
                 self._current_phase_target = np.array([picking_position[0], picking_position[1], self._safe_height])
                 carb.log_warn(f"Action: Lift to Safe Height")
                 carb.log_warn(f"Target: {self._current_phase_target}")
-            elif self._event == 6: # Move to pre-place
-                self._current_phase_target = np.array([placing_position[0], placing_position[1], self._safe_height])
-                carb.log_warn(f"Action: Move to Pre-Place")
+            elif self._event == 7: # Grasp Check
+                self._current_phase_target = None
+                carb.log_warn("Action: Grasp Check (Re-close)")
+            elif self._event == 8: # Turned Intermediate
+                self._current_phase_target = np.array([0.0, 0.5, 0.6])
+                carb.log_warn("Action: Move to Turned Position (Cartesian)")
                 carb.log_warn(f"Target: {self._current_phase_target}")
-            elif self._event == 7: # Lower to place
-                self._current_phase_target = placing_position.copy()
-                carb.log_warn(f"Action: Lower to Place")
+            elif self._event == 9: # Lower to Drop
+                self._current_phase_target = self._phase_start_pos - np.array([0, 0, 0.20])
+                carb.log_warn(f"Action: Lower 20cm to Drop")
                 carb.log_warn(f"Target: {self._current_phase_target}")
-            elif self._event == 8: # Open gripper
+            elif self._event == 10: # Open gripper
                 self._current_phase_target = None
                 carb.log_warn("Action: Open Gripper")
-            elif self._event == 9: # Return
+            elif self._event == 11: # Return
                 self._current_phase_target = None
-                carb.log_warn("Action: Return to Home (Joint Space)")
+                carb.log_warn("Action: Return to Overhead Position")
             
             if self._current_phase_target is not None:
                 dist = np.linalg.norm(self._current_phase_target - self._phase_start_pos)
@@ -245,13 +250,17 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
                 carb.log_warn(f"Distance to travel: {dist:.4f}m")
             carb.log_warn(f"{'='*40}\n")
 
+        # Update internal orientation if provided
+        if end_effector_orientation is not None:
+            self._end_effector_orientation = end_effector_orientation
+
         # Set default orientation if not set
         if self._end_effector_orientation is None:
             # Standard top-down orientation for UR5e
             self._end_effector_orientation = euler_angles_to_quat(np.array([np.pi/2, np.pi/2, -np.pi/2]))
 
         # Helper to get RMPFlow action with interpolation
-        def get_interpolated_rmp_action(target_pos):
+        def get_interpolated_rmp_action(target_pos, target_ori=None, apply_offset=True):
             # Calculate interpolation factor alpha
             duration = self._events_dt[self._event]
             # Ensure duration is at least one step to avoid divide by zero
@@ -259,58 +268,84 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
             
             alpha = min(self._t / duration, 1.0)
             
-            # Interpolate position
-            # Linear interpolation: p(t) = p_start + (p_end - p_start) * alpha
-            interpolated_target = self._phase_start_pos + (target_pos - self._phase_start_pos) * alpha
+            # Apply offset to target_pos if requested to get the target flange position
+            target_flange = target_pos + (self._end_effector_offset if apply_offset and self._end_effector_offset is not None else np.zeros(3))
             
-            # Apply offset if needed
-            # Note: RMPFlow might handle offset differently, but since we are driving the target,
-            # we should apply the offset to the target position so the end-effector (flange) goes to the right place.
-            # However, RMPFlow config usually defines the EE frame. If it's "flange", we need to offset.
-            # If it's "tool0" or "gripper_tip", we might not need to.
-            # Assuming "flange" based on previous tasks.
-            final_target = interpolated_target + (self._end_effector_offset if self._end_effector_offset is not None else np.zeros(3))
+            # Interpolate from start (flange) to target (flange)
+            # Linear interpolation: p(t) = p_start + (p_end - p_start) * alpha
+            final_target = self._phase_start_pos + (target_flange - self._phase_start_pos) * alpha
+            
+            # Use provided orientation or internal state
+            ori = target_ori if target_ori is not None else self._end_effector_orientation
             
             action = self._rmpflow.forward(
                 target_end_effector_position=final_target,
-                target_end_effector_orientation=self._end_effector_orientation
+                target_end_effector_orientation=ori
             )
             
             return action
 
-        # Execute Phase
+        # Default Down Orientation (for Phase 1)
+        # [pi, 0, pi] -> [0, 1, 0, 0] (w, x, y, z) roughly?
+        # Using the same as main script default
+        default_down_ori = euler_angles_to_quat(np.array([np.pi, 0, np.pi]))
+
         # Execute Phase
         if self._event == 0: # Turned Position (Start)
             # Use turned position as the start/home position
-            target_joint_positions = ArticulationAction(joint_positions=self._turned_position)
+            target_joint_positions = ArticulationAction(joint_positions=self._overhead_position)
             
-        elif self._event == 1: # Pre-pick
+        elif self._event == 1: # Pre-pick (Move to position, Default Orientation)
+            # Use default down orientation (Yaw=0)
+            target_joint_positions = get_interpolated_rmp_action(self._current_phase_target, target_ori=default_down_ori)
+            
+        elif self._event == 2: # Align (Rotate to Target Yaw)
+            # Stay at Pre-Pick Position, Rotate to Target Orientation
+            target_joint_positions = get_interpolated_rmp_action(self._current_phase_target, target_ori=self._end_effector_orientation)
+            
+        elif self._event == 3: # Pick (Lower)
             target_joint_positions = get_interpolated_rmp_action(self._current_phase_target)
             
-        elif self._event == 2: # Pick
-            target_joint_positions = get_interpolated_rmp_action(self._current_phase_target)
-            
-        elif self._event == 3: # Settle
+        elif self._event == 4: # Settle
             # Just hold position
             target_joint_positions = ArticulationAction(joint_positions=[None] * current_joint_positions.shape[0])
             
-        elif self._event == 4: # Close gripper
+        elif self._event == 5: # Close gripper
             target_joint_positions = self._gripper.forward(action="close")
             
-        elif self._event == 5: # Lift
+        elif self._event == 6: # Lift
             target_joint_positions = get_interpolated_rmp_action(self._current_phase_target)
+
+        elif self._event == 7: # Grasp Check
+            # Try to close gripper again to ensure grasp
+            target_joint_positions = self._gripper.forward(action="close")
             
-        elif self._event == 6: # Pre-place
-            target_joint_positions = get_interpolated_rmp_action(self._current_phase_target)
+            # Check if grasped at the end of the phase (handled in phase_done logic typically, 
+            # but we can also check here for logging)
+            if self._t >= self._events_dt[self._event] - 0.1: # Near end of phase
+                 if self._is_grasped(current_joint_positions):
+                     if self._t > self._events_dt[self._event] - 0.05: # Log once
+                        carb.log_warn("GRASP SUCCESSFUL")
+                 else:
+                     if self._t > self._events_dt[self._event] - 0.05:
+                        carb.log_warn("GRASP FAILED")
+
+        elif self._event == 8: # Turned Position (Intermediate)
+            # Move to turned position in Cartesian space to preserve orientation
+            # Target: [0.0, 0.5, 0.6] (Safe side position)
+            turned_target = np.array([0.0, 0.5, 0.6])
+            target_joint_positions = get_interpolated_rmp_action(turned_target, apply_offset=False)
             
-        elif self._event == 7: # Place
-            target_joint_positions = get_interpolated_rmp_action(self._current_phase_target)
+        elif self._event == 9: # Lower to Drop (20cm down from Turned)
+            # Target is 20cm below the start of this phase
+            drop_target = self._phase_start_pos - np.array([0, 0, 0.20])
+            target_joint_positions = get_interpolated_rmp_action(drop_target, apply_offset=False)
             
-        elif self._event == 8: # Open gripper
+        elif self._event == 10: # Open gripper
             target_joint_positions = self._gripper.forward(action="open")
             
-        elif self._event == 9: # Return
-            target_joint_positions = ArticulationAction(joint_positions=self._turned_position)
+        elif self._event == 11: # Return to Overhead
+            target_joint_positions = ArticulationAction(joint_positions=self._overhead_position)
             
         else:
             target_joint_positions = ArticulationAction(joint_positions=[None] * current_joint_positions.shape[0])
@@ -323,7 +358,12 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
         phase_done = False
         if self._t >= self._events_dt[self._event]: # Duration elapsed
             if self._current_phase_target is not None:
-                if self._check_position_reached(self._current_phase_target):
+                # For Cartesian phases (7 and 8), target is already flange, so don't apply offset
+                apply_offset = True
+                if self._event in [8, 9]:
+                    apply_offset = False
+                    
+                if self._check_position_reached(self._current_phase_target, apply_offset=apply_offset):
                     phase_done = True
                 elif self._t > self._events_dt[self._event] + 8.0: # Timeout (8s extra)
                     current_dist = np.linalg.norm(current_ee_pos - self._current_phase_target)
@@ -340,15 +380,73 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
             self._t = 0
             self._last_print_time = 0
             if self._event == 5: # After close gripper (was 4)
-                 self._grasp = self._is_grasped()
+                 self._grasp = self._is_grasped(current_joint_positions)
 
+        self._check_action_safety(target_joint_positions)
         return target_joint_positions
 
-    def _is_grasped(self) -> bool:
-        """Returns True if the gripper is not closed (meaning it's holding something), False otherwise."""
-        # Simple check: if joints are not at fully closed position
-        # This depends on the gripper specifics
-        return True # Simplified for now, or implement actual check
+    def _check_action_safety(self, action: ArticulationAction) -> None:
+        """
+        Checks if the generated action is safe for the robot.
+        Raises RuntimeError if safety violation is detected.
+        """
+        if action.joint_positions is None:
+            return
+
+        # Handle list of Nones or mixed types which result in object array
+        if any(x is None for x in action.joint_positions):
+             return
+
+        joint_positions = np.array(action.joint_positions)
+        
+        # Check for NaNs or Infs
+        if not np.all(np.isfinite(joint_positions)):
+            carb.log_error(f"Safety Violation: NaN or Inf detected in joint positions: {joint_positions}")
+            raise RuntimeError("Controller Safety Violation: NaN or Inf detected in joint positions.")
+
+        # Check joint limits (Hardcoded for UR5e as fallback)
+        # Limits: +/- 2*pi for most joints, but let's be generous and say +/- 2.5*pi to catch wild spins
+        # Real limits are usually +/- 360 deg (2pi) for UR5e joints.
+        limit = 2.5 * np.pi
+        if np.any(np.abs(joint_positions) > limit):
+             # Filter out None values which might be present if we are not controlling all joints
+             # But ArticulationAction usually expects all joints or specific indices. 
+             # Here we assume it matches the robot dof if it's a full array.
+             # If it contains Nones, np.array might be object type.
+             pass 
+        
+        # If we have access to robot limits, we should use them.
+        # For now, let's just check for extreme values that indicate explosion.
+        if np.any(np.abs(joint_positions) > 100.0): # Arbitrary large number
+             carb.log_error(f"Safety Violation: Extreme joint positions detected: {joint_positions}")
+             raise RuntimeError(f"Controller Safety Violation: Extreme joint positions detected: {joint_positions}")
+
+    def _is_grasped(self, current_joint_positions: np.ndarray) -> bool:
+        """Returns True if the gripper is holding something (not fully closed)."""
+        # Gripper joints are the last 6 joints (indices 6-11)
+        # Based on ur5e_handeye.py, closed position is [2pi/9, -2pi/9] for the two main joints
+        # But the gripper has 6 joints in the articulation? 
+        # Let's assume the first two gripper joints (indices 6 and 7) are the ones to check.
+        # Closed: ~0.698 rad. Open: 0.0 rad.
+        
+        # If we are holding something, the joints will NOT reach the closed limit.
+        # So if distance to closed limit is > threshold, we have an object.
+        
+        # Hardcoded closed position for UR5e gripper (Robotiq 2F-85 usually)
+        # From ur5e_handeye.py: [np.pi * 2 / 9, -np.pi * 2 / 9] -> [0.698, -0.698]
+        # Note: The simulation might have 6 joints for the gripper, but usually only the first few are driven/relevant.
+        
+        gripper_joints = current_joint_positions[6:8] # Check first 2 gripper joints
+        closed_pos = np.array([np.pi * 2 / 9, -np.pi * 2 / 9])
+        
+        # Check difference
+        diff = np.abs(gripper_joints - closed_pos)
+        
+        # If any joint is significantly far from closed (e.g. > 0.05 rad), we are holding something
+        # 0.05 rad is about 3 degrees.
+        is_holding = np.any(diff > 0.05)
+        
+        return is_holding
     
     def get_grasp(self):
         return self._grasp

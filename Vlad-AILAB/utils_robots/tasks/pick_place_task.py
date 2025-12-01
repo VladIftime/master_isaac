@@ -52,6 +52,7 @@ class UR5ePickPlace(PickPlace):
         robot_name: Optional[str] = "ur5e",
         overhead_camera_name: Optional[str] = "overhead_camera",
         pespective_camera_name: Optional[str] = "perspective_camera",
+        randomize_position: bool = True,
     ) -> None:
         super().__init__(name=name)
         self.stage_usd_path = stage_usd_path
@@ -64,6 +65,7 @@ class UR5ePickPlace(PickPlace):
         self.overhead_camera_name = overhead_camera_name
         self.perspective_camera_name = pespective_camera_name
         self.number_of_objects = number_of_objects
+        self.randomize_position = randomize_position
         self._robot_name = None
         return
 
@@ -231,25 +233,37 @@ class UR5ePickPlace(PickPlace):
 
         # Place objects randomly on the platform
         for i in range(len(self.objects_list)):
-            while True:
+            if not self.randomize_position:
+                # Place in the center
                 new_position = np.array(
                     [
-                        random.uniform(
-                            platform_center[0] - 0.15,
-                            platform_center[0] + 0.15,
-                        ),
-                        random.uniform(
-                            platform_center[1] - 0.15,
-                            platform_center[1] + 0.15,
-                        ),
-                        random.uniform(0.15, 0.2),
+                        platform_center[0],
+                        platform_center[1],
+                        0.175,
                     ]
                 )
-                # Check for overlap with a minimum distance of 0.1 (adjust as needed)
-                if not is_overlapping(new_position, placed_positions, min_distance=0.1):
-                    placed_positions.append(new_position)
-                    self.set_usd_objects(i, new_position)
-                    break
+                placed_positions.append(new_position)
+                self.set_usd_objects(i, new_position)
+            else:
+                while True:
+                    new_position = np.array(
+                        [
+                            random.uniform(
+                                platform_center[0] - 0.15,
+                                platform_center[0] + 0.15,
+                            ),
+                            random.uniform(
+                                platform_center[1] - 0.15,
+                                platform_center[1] + 0.15,
+                            ),
+                            random.uniform(0.15, 0.2),
+                        ]
+                    )
+                    # Check for overlap with a minimum distance of 0.1 (adjust as needed)
+                    if not is_overlapping(new_position, placed_positions, min_distance=0.1):
+                        placed_positions.append(new_position)
+                        self.set_usd_objects(i, new_position)
+                        break
 
         return
 

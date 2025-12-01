@@ -53,7 +53,6 @@ import sys
 import os
 import cv2
 import numpy as np
-import numpy as np
 # from omni.kit.viewport.utility import get_active_viewport
 from isaacsim.core.api.objects import DynamicCuboid
 from isaacsim.core.api import World
@@ -61,11 +60,12 @@ from isaacsim.core.utils.rotations import euler_angles_to_quat
 from utils_robots.tasks.pick_place_task import UR5ePickPlace
 from isaacsim.core.prims import XFormPrim
 from isaacsim.core.utils.prims import is_prim_path_valid
+from scipy.spatial.transform import Rotation as R
 
 
 # Add the path to the custom utility scripts
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
-from utils_robots.controllers.pick_place_controller_ext import CustomPickPlaceController
+
 # Alternative: Use discrete controller (no interpolation, simpler like push controller)
 from utils_robots.controllers.pick_place_controller_rmpflow import RMPFlowPickPlaceController
 
@@ -75,12 +75,12 @@ save_root_rgb = os.path.join(os.getcwd(), "camera_image/rgb.png")
 save_root_semantic = os.path.join(os.getcwd(), "camera_image/semantic.png")
 
 # Define the number of objects (3 for multi-object pick and place)
-number_of_objects = 3
+number_of_objects = 1
 
 # Initialize the simulation world
 my_world = World(physics_dt=0.01, stage_units_in_meters=1.0)
 
-my_task = UR5ePickPlace(number_of_objects=number_of_objects)
+my_task = UR5ePickPlace(number_of_objects=number_of_objects, randomize_position=False)
 # Add the task to the simulation world and reset the world
 my_world.add_task(my_task)
 my_world.reset()
@@ -102,18 +102,21 @@ print(f"{'='*70}\n")
 # Declare instance for robot control (PD control)
 articulation_controller = my_ur5e.get_articulation_controller()
 
+ee_offset = np.array([0, 0, 0.22])
+
 # Use RMPFlow Controller with Interpolation
 pick_and_place_controller = RMPFlowPickPlaceController(
     name="pick_place_controller",
     gripper=my_ur5e.gripper,
     robot_articulation=my_ur5e,
     # Adjust timings as needed for RMPFlow
-    # 10 phases: [turned, align_pick, lower_pick, settle, close, lift, align_place, lower_place, open, turned]
-    events_dt=[3.0, 3.0, 3.0, 0.5, 0.5, 2.0, 3.0, 2.0, 0.5, 3.0],
+    # Adjust timings as needed for RMPFlow
+    # 12 phases: [turned, align_pick, rotate_yaw, lower_pick, settle, close, lift, check_grasp, turned_intermediate, lower_drop, open, overhead]
+    events_dt=[3.0, 3.0, 2.0, 3.0, 0.5, 1.0, 2.0, 1.0, 3.0, 3.0, 2.0, 3.0],
     # Add Z offset for gripper length + hand-eye camera mount
     # Based on push task (Flange Z ~0.32 for Object Z ~0.05), offset should be ~0.27m
-    end_effector_offset=None, # Manually added to target
-    end_effector_initial_height=0.45,  # 45cm above workspace (safe height for flange)
+    end_effector_offset=ee_offset, # Manually added to target
+    end_effector_initial_height=0.55,  # 55cm above workspace (safe height for flange)
 )
 
 # Specify the view point in the GUI
@@ -131,8 +134,9 @@ object_position_found = False
 # Pick and place planning variables
 picking_position = None
 placing_position = None
+target_orientation = None # Target orientation for the gripper
 target_object = None
-ee_offset = np.array([0, 0, 0.27])
+target_object = None
 
 print("-" * 60)
 print("Starting Multi-Object Pick and Place Simulation")
@@ -158,6 +162,7 @@ try:
                 object_position_found = False
                 picking_position = None
                 placing_position = None
+                target_orientation = None
                 target_object = None
 
             # Check if all objects are processed
@@ -178,19 +183,37 @@ try:
                         target_object.initialize()
                         
                         # Get object's actual position in world coordinates
-                        # Get object's actual position in world coordinates
-                        # API uses vectorized get_world_poses
                         object_world_poses, object_world_oris = target_object.get_world_poses()
                         object_world_pos = object_world_poses[0]
                         object_world_ori = object_world_oris[0]
                         
                         picking_position = np.array(object_world_pos)
                         
+                        # Calculate target orientation (Down + Object Yaw)
+                        # Default Down: [pi, 0, pi] (from reference)
+                        q_default_isaac = euler_angles_to_quat(np.array([np.pi, 0, np.pi]))
+                        # Convert to Scipy [x, y, z, w]
+                        r_default = R.from_quat([q_default_isaac[1], q_default_isaac[2], q_default_isaac[3], q_default_isaac[0]])
+                        
+                        # Object orientation
+                        r_obj = R.from_quat([object_world_ori[1], object_world_ori[2], object_world_ori[3], object_world_ori[0]])
+                        yaw = r_obj.as_euler('xyz')[2]
+                        
+                        # Rotate default by Yaw around Z
+                        r_z = R.from_euler('z', yaw)
+                        r_target = r_z * r_default
+                        
+                        # Convert back to Isaac [w, x, y, z]
+                        q_target_scipy = r_target.as_quat()
+                        target_orientation = np.array([q_target_scipy[3], q_target_scipy[0], q_target_scipy[1], q_target_scipy[2]])
+                        
                         print(f"\n{'='*60}")
                         print(f"OBJECT {current_object_idx} FOUND")
                         print(f"{'='*60}")
                         print(f"Object prim path: {object_prim_path}")
-                        print(f"Picking position (world frame): [{picking_position[0]:.3f}, {picking_position[1]:.3f}, {picking_position[2]:.3f}]")
+                        print(f"Picking position: {picking_position}")
+                        print(f"Object Yaw: {yaw:.3f} rad")
+                        print(f"Target Orientation: {target_orientation}")
                         print(f"{'='*60}\n")
                         
                         object_position_found = True
@@ -240,9 +263,9 @@ try:
             if pick_place_started and not pick_and_place_controller.is_done() and picking_position is not None and placing_position is not None:
                 current_joint_positions = my_ur5e.get_joint_positions()
                 actions = pick_and_place_controller.forward(
-                    picking_position=picking_position + ee_offset,
-                    placing_position=placing_position + ee_offset,
+                    picking_position=picking_position,
                     current_joint_positions=current_joint_positions,
+                    end_effector_orientation=target_orientation,
                 )
 
             # After pick and place completes for current object
@@ -259,6 +282,7 @@ try:
                 object_position_found = False
                 picking_position = None
                 placing_position = None
+                target_orientation = None
                 target_object = None
                 
                 if current_object_idx >= number_of_objects:
