@@ -171,7 +171,7 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
              target_flange = target_position + self._end_effector_offset
              
         distance = np.linalg.norm(ee_position - target_flange)
-        carb.log_warn(f"Distance to target: {distance}")
+        # carb.log_warn(f"Distance to target: {distance}")
         return bool(distance < self._position_threshold)
 
     def forward(
@@ -187,8 +187,8 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
 
         # Print phase dt info every 0.5 seconds
         if self._t - self._last_print_time >= 0.5 or self._t == 0:
-            print(f"Phase {self._event} dt: {self._t:.4f}/{self._events_dt[self._event]}")
-            print(f"Joints: {current_joint_positions[:6]}") # Print first 6 joints
+            # print(f"Phase {self._event} dt: {self._t:.4f}/{self._events_dt[self._event]}")
+            # print(f"Joints: {current_joint_positions[:6]}") # Print first 6 joints
             self._last_print_time = self._t
 
         # Get current EE position for interpolation start
@@ -196,59 +196,59 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
 
         # Log phase start and set targets
         if self._t == 0:
-            carb.log_warn(f"\n{'='*40}")
-            carb.log_warn(f"STARTING PHASE {self._event}")
-            carb.log_warn(f"Current Joints: {current_joint_positions}")
+            # carb.log_warn(f"\n{'='*40}")
+            # carb.log_warn(f"STARTING PHASE {self._event}")
+            # carb.log_warn(f"Current Joints: {current_joint_positions}")
             self._phase_start_pos = current_ee_pos
             
             if self._event == 0:
                 self._current_phase_target = None # Joint space
-                carb.log_warn("Action: Move to Turned Position (Joint Space)")
+                # carb.log_warn("Action: Move to Turned Position (Joint Space)")
             elif self._event == 1: # Move to pre-pick
                 self._current_phase_target = np.array([picking_position[0], picking_position[1], self._safe_height])
-                carb.log_warn(f"Action: Move to Pre-Pick [X, Y, SafeZ]")
-                carb.log_warn(f"Target: {self._current_phase_target}")
+                # carb.log_warn(f"Action: Move to Pre-Pick [X, Y, SafeZ]")
+                # carb.log_warn(f"Target: {self._current_phase_target}")
             elif self._event == 2: # Align
                 self._current_phase_target = np.array([picking_position[0], picking_position[1], self._safe_height])
-                carb.log_warn(f"Action: Align Orientation [Yaw]")
-                carb.log_warn(f"Target: {self._current_phase_target}")
+                # carb.log_warn(f"Action: Align Orientation [Yaw]")
+                # carb.log_warn(f"Target: {self._current_phase_target}")
             elif self._event == 3: # Lower to pick
                 self._current_phase_target = picking_position.copy()
-                carb.log_warn(f"Action: Lower to Pick [X, Y, PickZ]")
-                carb.log_warn(f"Target: {self._current_phase_target}")
+                # carb.log_warn(f"Action: Lower to Pick [X, Y, PickZ]")
+                # carb.log_warn(f"Target: {self._current_phase_target}")
             elif self._event == 4: # Settle
                 self._current_phase_target = None
-                carb.log_warn("Action: Settle")
+                # carb.log_warn("Action: Settle")
             elif self._event == 5: # Close gripper
                 self._current_phase_target = None
-                carb.log_warn("Action: Close Gripper")
+                # carb.log_warn("Action: Close Gripper")
             elif self._event == 6: # Lift
                 self._current_phase_target = np.array([picking_position[0], picking_position[1], self._safe_height])
-                carb.log_warn(f"Action: Lift to Safe Height")
-                carb.log_warn(f"Target: {self._current_phase_target}")
+                # carb.log_warn(f"Action: Lift to Safe Height")
+                # carb.log_warn(f"Target: {self._current_phase_target}")
             elif self._event == 7: # Grasp Check
                 self._current_phase_target = None
-                carb.log_warn("Action: Grasp Check (Re-close)")
+                # carb.log_warn("Action: Grasp Check (Re-close)")
             elif self._event == 8: # Turned Intermediate
                 self._current_phase_target = np.array([0.0, 0.5, 0.6])
-                carb.log_warn("Action: Move to Turned Position (Cartesian)")
-                carb.log_warn(f"Target: {self._current_phase_target}")
+                # carb.log_warn("Action: Move to Turned Position (Cartesian)")
+                # carb.log_warn(f"Target: {self._current_phase_target}")
             elif self._event == 9: # Lower to Drop
                 self._current_phase_target = self._phase_start_pos - np.array([0, 0, 0.20])
-                carb.log_warn(f"Action: Lower 20cm to Drop")
-                carb.log_warn(f"Target: {self._current_phase_target}")
+                # carb.log_warn(f"Action: Lower 20cm to Drop")
+                # carb.log_warn(f"Target: {self._current_phase_target}")
             elif self._event == 10: # Open gripper
                 self._current_phase_target = None
-                carb.log_warn("Action: Open Gripper")
+                # carb.log_warn("Action: Open Gripper")
             elif self._event == 11: # Return
                 self._current_phase_target = None
-                carb.log_warn("Action: Return to Overhead Position")
+                # carb.log_warn("Action: Return to Overhead Position")
             
             if self._current_phase_target is not None:
                 dist = np.linalg.norm(self._current_phase_target - self._phase_start_pos)
-                carb.log_warn(f"Start Pos: {self._phase_start_pos}")
-                carb.log_warn(f"Distance to travel: {dist:.4f}m")
-            carb.log_warn(f"{'='*40}\n")
+                # carb.log_warn(f"Start Pos: {self._phase_start_pos}")
+                # carb.log_warn(f"Distance to travel: {dist:.4f}m")
+            # carb.log_warn(f"{'='*40}\n")
 
         # Update internal orientation if provided
         if end_effector_orientation is not None:
@@ -352,7 +352,9 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
 
         # Update timing and check completion
         # Assuming 60Hz physics step or similar. Ideally dt should be passed in.
-        self._t += 1.0 / 60.0
+        dt = 1.0 / 60.0
+        self._t += dt
+        self._total_time += dt
         
         # Check if phase is done
         phase_done = False
@@ -379,11 +381,45 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
             self._event += 1
             self._t = 0
             self._last_print_time = 0
-            if self._event == 5: # After close gripper (was 4)
+            if self._event == 6: # After close gripper (Phase 5 done, now in Phase 6)
+                 self._grasp = self._is_grasped(current_joint_positions)
+            elif self._event == 8: # After Grasp Check (Phase 7 done, now in Phase 8)
                  self._grasp = self._is_grasped(current_joint_positions)
 
+        self._clamp_action_joints(target_joint_positions)
         self._check_action_safety(target_joint_positions)
         return target_joint_positions
+
+    def _clamp_action_joints(self, action: ArticulationAction) -> None:
+        """
+        Clamps joint positions to [-2pi, 2pi] to avoid PhysX errors.
+        Handles cases where some joints are None.
+        """
+        if action.joint_positions is None:
+            return
+
+        # Convert to list to handle mixed types (float and None)
+        joints = list(action.joint_positions)
+        
+        # Clamp to slightly less than 2pi to be safe
+        limit = 2.0 * np.pi - 0.01
+        
+        modified = False
+        for i, val in enumerate(joints):
+            if val is not None:
+                # Check if value is finite
+                if np.isfinite(val):
+                    # Clamp
+                    if val > limit:
+                        joints[i] = limit
+                        modified = True
+                    elif val < -limit:
+                        joints[i] = -limit
+                        modified = True
+        
+        # Update action if modified
+        if modified:
+            action.joint_positions = joints
 
     def _check_action_safety(self, action: ArticulationAction) -> None:
         """
@@ -424,29 +460,35 @@ class RMPFlowPickPlaceController(manipulators_controllers.PickPlaceController):
     def _is_grasped(self, current_joint_positions: np.ndarray) -> bool:
         """Returns True if the gripper is holding something (not fully closed)."""
         # Gripper joints are the last 6 joints (indices 6-11)
-        # Based on ur5e_handeye.py, closed position is [2pi/9, -2pi/9] for the two main joints
-        # But the gripper has 6 joints in the articulation? 
-        # Let's assume the first two gripper joints (indices 6 and 7) are the ones to check.
-        # Closed: ~0.698 rad. Open: 0.0 rad.
-        
-        # If we are holding something, the joints will NOT reach the closed limit.
-        # So if distance to closed limit is > threshold, we have an object.
-        
-        # Hardcoded closed position for UR5e gripper (Robotiq 2F-85 usually)
-        # From ur5e_handeye.py: [np.pi * 2 / 9, -np.pi * 2 / 9] -> [0.698, -0.698]
-        # Note: The simulation might have 6 joints for the gripper, but usually only the first few are driven/relevant.
+        # Observed fully closed values from logs: ~[-0.782, 0.781]
+        # This corresponds roughly to +/- 45 degrees (0.785 rad)
         
         gripper_joints = current_joint_positions[6:8] # Check first 2 gripper joints
-        closed_pos = np.array([np.pi * 2 / 9, -np.pi * 2 / 9])
+        
+        # Updated closed position based on simulation logs
+        # Index 6 is negative, Index 7 is positive
+        closed_pos = np.array([-0.785, 0.785])
         
         # Check difference
         diff = np.abs(gripper_joints - closed_pos)
         
         # If any joint is significantly far from closed (e.g. > 0.05 rad), we are holding something
-        # 0.05 rad is about 3 degrees.
+        # If we are holding something, the gripper stops EARLY, so the value is smaller in magnitude.
+        # e.g. if holding, joints might be [-0.5, 0.5].
+        # diff = abs(-0.5 - (-0.785)) = 0.285 > 0.05 -> True.
+        # If empty, joints are [-0.785, 0.785].
+        # diff = 0 < 0.05 -> False.
+        
         is_holding = np.any(diff > 0.05)
+        
+        # Debug print
+        # carb.log_warn(f"Grasp Check: Joints={gripper_joints}, Closed={closed_pos}, Diff={diff}, Holding={is_holding}")
+        print(f"DEBUG: Grasp Check: Joints={gripper_joints}, Diff={diff}, Holding={is_holding}")
         
         return is_holding
     
     def get_grasp(self):
         return self._grasp
+
+    def get_total_time(self):
+        return self._total_time

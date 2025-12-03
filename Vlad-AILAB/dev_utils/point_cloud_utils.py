@@ -217,8 +217,8 @@ def get_heightmap(
     """
     # Ensure cam_pose is a numpy array
     cam_pose = np.array(cam_pose)
-    carb.log_warn(f"Camera pose matrix:\n{cam_pose}")
-    carb.log_warn(f"Camera intrinsics matrix:\n{cam_intrinsics}")
+    # carb.log_warn(f"Camera pose matrix:\n{cam_pose}")
+    # carb.log_warn(f"Camera intrinsics matrix:\n{cam_intrinsics}")
 
     # Transform 3D point cloud from camera coordinates to robot coordinates
     pointcloud_robot = pointcloud

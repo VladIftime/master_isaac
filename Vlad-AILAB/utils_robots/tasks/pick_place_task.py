@@ -49,6 +49,7 @@ class UR5ePickPlace(PickPlace):
         name: str = "ur5e_pick_place",
         stage_usd_path: Optional[str] = None,
         number_of_objects: Optional[int] = 1,
+        max_objects: Optional[int] = 5,
         robot_name: Optional[str] = "ur5e",
         overhead_camera_name: Optional[str] = "overhead_camera",
         pespective_camera_name: Optional[str] = "perspective_camera",
@@ -65,6 +66,7 @@ class UR5ePickPlace(PickPlace):
         self.overhead_camera_name = overhead_camera_name
         self.perspective_camera_name = pespective_camera_name
         self.number_of_objects = number_of_objects
+        self.max_objects = max_objects
         self.randomize_position = randomize_position
         self._robot_name = None
         return
@@ -207,8 +209,9 @@ class UR5ePickPlace(PickPlace):
             label2name[obj_idx] = os.path.basename(obj_dir)
 
         # Select usd file path for random objects
+        # We sample max_objects to ensure we have enough unique objects loaded
         self.objects_list = random.sample(
-            list(object_info.values()), self.number_of_objects
+            list(object_info.values()), self.max_objects
         )
         self.objects_usd_list = []
         for obj_info in self.objects_list:
@@ -265,6 +268,88 @@ class UR5ePickPlace(PickPlace):
                         self.set_usd_objects(i, new_position)
                         break
 
+        return
+
+    def post_reset(self) -> None:
+        """Reset the task logic.
+        
+        Randomizes object positions for the active number of objects.
+        Hides inactive objects.
+        """
+        # print(f"DEBUG: Entering post_reset. Number of objects: {self.number_of_objects}, Max: {self.max_objects}")
+        # Get the stage
+        stage = get_current_stage()
+        
+        platform_half_size = (
+            (self.base_size - self.edge_thickness) / 2,
+            (self.base_size - self.edge_thickness) / 2,
+        )
+        platform_center = self.platform_center
+        
+        placed_positions = []
+        
+        def is_overlapping(new_pos, existing_positions, min_distance):
+            for pos in existing_positions:
+                if np.linalg.norm(new_pos - pos) < min_distance:
+                    return True
+            return False
+            
+        # 1. Place active objects
+        for i in range(self.number_of_objects):
+            object_prim_path = self.imported_objects_prim_path + f"_{i}"
+            prim = stage.GetPrimAtPath(object_prim_path)
+            if not prim.IsValid():
+                # print(f"DEBUG: Prim {object_prim_path} is invalid!")
+                continue
+                
+            # Randomize position
+            while True:
+                new_position = np.array(
+                    [
+                        random.uniform(
+                            platform_center[0] - 0.15,
+                            platform_center[0] + 0.15,
+                        ),
+                        random.uniform(
+                            platform_center[1] - 0.15,
+                            platform_center[1] + 0.15,
+                        ),
+                        random.uniform(0.15, 0.2),
+                    ]
+                )
+                if not is_overlapping(new_position, placed_positions, min_distance=0.1):
+                    placed_positions.append(new_position)
+                    
+                    # Using RigidPrim from isaacsim.core.prims
+                    try:
+                        rigid_prim = RigidPrim(object_prim_path)
+                        rigid_prim.initialize() # Ensure it's initialized
+                        rigid_prim.set_world_poses(positions=np.array([new_position]))
+                        rigid_prim.set_visibilities(visibilities=np.array([True]))
+                        # print(f"DEBUG: Placed object {i} at {new_position}")
+                    except Exception as e:
+                        print(f"Error placing object {i}: {e}")
+                    break
+                    
+        # 2. Hide inactive objects
+        for i in range(self.number_of_objects, self.max_objects):
+            object_prim_path = self.imported_objects_prim_path + f"_{i}"
+            prim = stage.GetPrimAtPath(object_prim_path)
+            if not prim.IsValid():
+                continue
+                
+            # Move far away and hide
+            hidden_position = np.array([0, 0, -10.0])
+            try:
+                rigid_prim = RigidPrim(object_prim_path)
+                rigid_prim.initialize() # Ensure it's initialized
+                rigid_prim.set_world_poses(positions=np.array([hidden_position]))
+                rigid_prim.set_visibilities(visibilities=np.array([False]))
+                # print(f"DEBUG: Hidden object {i}")
+            except Exception as e:
+                print(f"Error hiding object {i}: {e}")
+            
+        # print("DEBUG: Exiting post_reset")
         return
 
     def set_robot(self) -> UR5eHandeye:
@@ -325,7 +410,8 @@ class UR5ePickPlace(PickPlace):
         joints_state = self._robot.get_joints_state()
         end_effector_position, _ = self._robot.end_effector.get_local_pose()
         rgb_image, depth_image = self.get_rgb_depth_images(self.camera)
-        pointcloud = self.pointcloud_camera.get_pointcloud()
+        rgb_image, depth_image = self.get_rgb_depth_images(self.camera)
+        pointcloud = self.camera.get_pointcloud()
         # Display the pointcloud for debugging
 
         height_map = self.get_height_map(
@@ -337,7 +423,7 @@ class UR5ePickPlace(PickPlace):
         )
 
         if goal_object_name is not None:
-            goal_mask = self.get_semantic_mask(self.camera, goal_object_name)
+            goal_mask = self.get_semantic_mask(self.mask_camera, goal_object_name)
         observation_dict = dict()
 
         if goal_object_name is not None:
@@ -372,12 +458,12 @@ class UR5ePickPlace(PickPlace):
         self.camera = Camera(
             prim_path="/World/OverheadCamera",  # Unique prim path
             frequency=20,
-            resolution=(540, 540),
+            resolution=(128, 128),
             position=overhead_position,
             orientation=overhead_orientation,
         )
         self.camera.initialize()
-        APERTURE_SIZE = 0.5
+        APERTURE_SIZE = 0.7 # Increased to cover 0.6m workspace
         # Set orthographic projection
         # Note: You may see "Unknown projection type, defaulting to pinhole" warnings from Hydra.
         # This is a rendering warning only - the camera sensor correctly uses orthographic projection.
@@ -394,44 +480,36 @@ class UR5ePickPlace(PickPlace):
         self.camera.add_pointcloud_to_frame()
         self.camera.add_distance_to_image_plane_to_frame()
         self.camera.add_distance_to_camera_to_frame()
-        self.camera.add_instance_segmentation_to_frame()
-        self.camera.add_instance_id_segmentation_to_frame()
-        self.camera.add_semantic_segmentation_to_frame()
-        self.camera.add_bounding_box_2d_loose_to_frame()
-        self.camera.add_bounding_box_2d_tight_to_frame()
+        # self.camera.add_instance_segmentation_to_frame() # Moved to MaskCamera
+        # self.camera.add_instance_id_segmentation_to_frame() # Moved to MaskCamera
+        # self.camera.add_semantic_segmentation_to_frame() # Moved to MaskCamera
+        # self.camera.add_bounding_box_2d_loose_to_frame() # Unused
+        # self.camera.add_bounding_box_2d_tight_to_frame() # Unused
 
-        # Create a second camera 3 meters above the first one, specifically for point cloud capture
-        pointcloud_camera_position = np.array(
-            [0.5, 0, 3.0]
-        )  # 3m above the original camera
-        pointcloud_camera_orientation = (
-            overhead_orientation  # Same orientation as the main camera
-        )
-
-        self.pointcloud_camera = Camera(
-            prim_path="/World/PointCloudCamera",  # Unique prim path
+        # Create a second camera specifically for mask extraction (as per user suggestion)
+        self.mask_camera = Camera(
+            prim_path="/World/MaskCamera",  # Unique prim path
             frequency=20,
-            resolution=(540, 540),
-            position=pointcloud_camera_position,
-            orientation=pointcloud_camera_orientation,
+            resolution=(128, 128),
+            position=overhead_position,
+            orientation=overhead_orientation,
         )
-        self.pointcloud_camera.initialize()
+        self.mask_camera.initialize()
+        
+        # Configure MaskCamera exactly like the main camera
+        self.mask_camera.set_projection_mode("orthographic")
+        self.mask_camera.set_focal_length(1.93)
+        self.mask_camera.set_focus_distance(4)
+        self.mask_camera.set_horizontal_aperture(APERTURE_SIZE)
+        self.mask_camera.set_vertical_aperture(APERTURE_SIZE)
+        self.mask_camera.set_clipping_range(0.01, 10000)
+        
+        # Add only segmentation annotators to this camera
+        self.mask_camera.add_instance_segmentation_to_frame()
+        self.mask_camera.add_instance_id_segmentation_to_frame()
+        self.mask_camera.add_semantic_segmentation_to_frame()
 
-        # Configure the point cloud camera
-        PC_APERTURE_SIZE = 0.5
-        self.pointcloud_camera.set_projection_mode("orthographic")
-        self.pointcloud_camera.set_focal_length(1.93)
-        self.pointcloud_camera.set_focus_distance(4)
-        self.pointcloud_camera.set_horizontal_aperture(PC_APERTURE_SIZE)
-        self.pointcloud_camera.set_vertical_aperture(PC_APERTURE_SIZE)
-        self.pointcloud_camera.set_clipping_range(0.01, 10000)
-
-        # Only add point cloud processing to this camera
-        self.pointcloud_camera.add_pointcloud_to_frame()
-        self.pointcloud_camera.add_distance_to_image_plane_to_frame()
-        self.pointcloud_camera.add_distance_to_camera_to_frame()
-
-        return self.camera, self.pointcloud_camera
+        return self.camera, self.mask_camera
 
     def get_camera_ortho(self):
         """Get the orthographic camera."""
@@ -439,7 +517,7 @@ class UR5ePickPlace(PickPlace):
 
     def get_camera_pointcloud(self):
         """Get the point cloud camera."""
-        return self.pointcloud_camera
+        return self.camera # We use the main camera for point clouds now
 
     def get_semantic_mask(self, camera: Camera, goal: str = None):
         """Generate a semantic mask from the camera's instance segmentation data.
@@ -452,10 +530,18 @@ class UR5ePickPlace(PickPlace):
             np.ndarray: The semantic mask image.
         """
         # Get instance segmentation data using the new API
-        instance_segmentation_data = camera.get_instance_segmentation()
+        current_frame = camera.get_current_frame()
+        
+        if "instance_segmentation" in current_frame and current_frame["instance_segmentation"] is not None:
+            instance_segmentation_data = current_frame["instance_segmentation"]
+        else:
+            # Fallback or error
+            # print(f"Error: 'instance_segmentation' not found or None. Keys: {current_frame.keys()}", flush=True)
+            return np.zeros((camera.get_resolution()[1], camera.get_resolution()[0]), dtype=np.uint8)
+
         instance_segmentation_image = instance_segmentation_data["data"]
         instance_segmentation_dict = instance_segmentation_data["info"]["idToSemantics"]
-        carb.log_warn(instance_segmentation_dict)
+        # carb.log_warn(instance_segmentation_dict)
 
         # Initialize the mask with zeros
         semantic_mask = np.zeros_like(instance_segmentation_image, dtype=np.uint8)
@@ -593,14 +679,14 @@ class UR5ePickPlace(PickPlace):
         Returns:
             float: The height at the specified position.
         """
-        self.heightmap_resolution = 0.001
+        self.heightmap_resolution = 0.005 # Coarser resolution for 128x128 point cloud
 
         # Get camera intrinsics and pose
         cam_intrinsics = camera.get_intrinsics_matrix()
         cam_position, cam_orientation = camera.get_local_pose()
-        carb.log_warn(
-            f"cam_position: {cam_position}, cam_orientation: {cam_orientation}"
-        )
+        # carb.log_warn(
+        #     f"cam_position: {cam_position}, cam_orientation: {cam_orientation}"
+        # )
 
         # Convert quaternion to rotation matrix
         rotation_matrix = R.from_quat(cam_orientation).as_matrix()
@@ -684,17 +770,18 @@ class UR5ePickPlace(PickPlace):
             # Only use the heightmap Z if the nearest point is reasonably close (within 1cm)
             if nearest_distance < 0.01:
                 z = heightmap[nearest_idx, 2]
-                carb.log_info(f"Found heightmap Z={z:.4f} at distance {nearest_distance*1000:.2f}mm from target XY")
+                # carb.log_info(f"Found heightmap Z={z:.4f} at distance {nearest_distance*1000:.2f}mm from target XY")
             else:
-                carb.log_warn(f"Nearest heightmap point is {nearest_distance*100:.2f}cm away, using default Z")
+                pass
+                # carb.log_warn(f"Nearest heightmap point is {nearest_distance*100:.2f}cm away, using default Z")
 
         # Create point in world space
         point_world = np.array([world_x, world_y, z])
 
         # Log for debugging
-        carb.log_warn(f"Camera position: {cam_position}")
-        carb.log_warn(f"Pixel coordinates (u,v): ({u}, {v})")
-        carb.log_warn(f"World coordinates: {point_world}")
+        # carb.log_warn(f"Camera position: {cam_position}")
+        # carb.log_warn(f"Pixel coordinates (u,v): ({u}, {v})")
+        # carb.log_warn(f"World coordinates: {point_world}")
 
         return point_world
     
