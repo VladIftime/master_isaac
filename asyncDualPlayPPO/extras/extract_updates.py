@@ -1,38 +1,41 @@
 import os
 
-log_file = '/home/vlad/IsaacLab/dual_arm_Isaacgym/asyncDualPlayPPO/logs/25_rot.out'
-output_file = '/home/vlad/IsaacLab/dual_arm_Isaacgym/asyncDualPlayPPO/logs/25_rot_updates_only.out'
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(script_dir)
+log_file = os.path.join(base_dir, 'logs', '25_rot.out')
+output_file = os.path.join(base_dir, 'logs', '25_rot_updates_only.out')
 
-inside_update = False
-current_block = []
-separator_count = 0
+state = 0
+block = []
 
 with open(log_file, 'r') as f_in, open(output_file, 'w') as f_out:
     for line in f_in:
-        # Check if line indicates a separator
-        if "============================================================" in line:
-            if separator_count == 0:
-                # Start of a new block
-                inside_update = True
-                current_block = [line]
-                separator_count = 1
-            elif separator_count == 1:
-                # Middle separator (after title)
-                current_block.append(line)
-                separator_count = 2
-            elif separator_count == 2:
-                # End of the entire block
-                current_block.append(line)
-                # Check if it was an update block
-                if any("UPDATE" in l for l in current_block):
-                    f_out.writelines(current_block)
-                    f_out.write("\n")
-                
-                # Reset for the next block
-                inside_update = False
-                current_block = []
-                separator_count = 0
-        elif inside_update:
-            current_block.append(line)
+        is_sep = "============================================================" in line
+        if state == 0:
+            if is_sep:
+                block = [line]
+                state = 1
+        elif state == 1:
+            if "UPDATE" in line and not is_sep:
+                block.append(line)
+                state = 2
+            else:
+                state = 1 if is_sep else 0
+                block = [line] if is_sep else []
+        elif state == 2:
+            if is_sep:
+                block.append(line)
+                state = 3
+            else:
+                state = 1 if is_sep else 0
+                block = [line] if is_sep else []
+        elif state == 3:
+            block.append(line)
+            if is_sep:
+                # End of block!
+                f_out.writelines(block)
+                f_out.write("\n")
+                state = 0
+                block = []
 
 print(f"Extraction complete! Saved to {output_file}")

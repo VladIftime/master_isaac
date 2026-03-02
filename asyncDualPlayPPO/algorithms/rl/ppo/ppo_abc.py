@@ -1,4 +1,5 @@
 from datetime import datetime
+import math
 import os
 import time
 
@@ -143,21 +144,24 @@ class PPOABC(PPO):
                     value_loss = torch.tensor(0.0, device=self.device)
                     entropy_mean = torch.tensor(0.0, device=self.device)
                 
-                # --- ABC Loss (Behavioral Cloning via NLL) ---
+                # --- ABC Loss (Behavioral Cloning via NLL with clamped sigma) ---
                 abc_loss_val = torch.tensor(0.0).to(self.device)
                 if self.abc_buffer is not None and self.abc_buffer.size > 0:
                     
                     abc_obs, abc_act, _ = self.abc_buffer.sample(abc_mini_batch_size)
                     
                     if abc_obs.shape[0] > 0:
-                        # Evaluate under current policy
-                        # Evaluate under current policy to get predicted action mean (mu)
-                        _, _, _, abc_mu, _ = self.actor_critic.evaluate(abc_obs, None, abc_act)
+                        # Get predicted mean from actor
+                        abc_mu = self.actor_critic.actor(abc_obs)
                         
-                        # Use Mean Squared Error (MSE) instead of NLL for Behavioral Cloning
-                        # NLL can explode if the policy variance (sigma) collapses.
-                        # MSE directly minimizes the distance between predicted and target actions.
-                        abc_loss_val = F.mse_loss(abc_mu, abc_act)
+                        # Get sigma with safety clamp to prevent variance collapse
+                        # Without this clamp, sigma -> 0 causes log_prob -> -inf and NLL -> +inf
+                        abc_sigma = torch.clamp(self.actor_critic.log_std.exp(), min=1e-3)
+                        
+                        # NLL for independent Gaussian per action dimension:
+                        # -log p(a|mu,sigma) = 0.5*((a-mu)/sigma)^2 + log(sigma) + 0.5*log(2*pi)
+                        nll = 0.5 * ((abc_act - abc_mu) / abc_sigma) ** 2 + torch.log(abc_sigma) + 0.5 * math.log(2 * math.pi)
+                        abc_loss_val = nll.sum(dim=-1).mean()  # sum over action dims, mean over batch
                     
                     mean_abc_loss += abc_loss_val.item()
 
