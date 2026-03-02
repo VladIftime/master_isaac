@@ -1,0 +1,540 @@
+```python
+import re
+import matplotlib.pyplot as plt
+
+filepath = "20_env.out"
+bob_updates = []
+bob_sr = []
+bob_pos = []
+bob_rot = []
+bob_abc = []
+
+with open(filepath, 'r') as f:
+    content = f.read()
+
+# Extract BOB UPDATE metrics
+bob_blocks = re.findall(r'BOB UPDATE (\d+)\n=+.*?Success Rate: ([0-9.]+) .*?ABC=([0-9.-]+).*?pos=([0-9.]+) \| rot=([0-9.]+)', content, re.DOTALL)
+
+for b in bob_blocks:
+    update_num, sr, abc, pos, rot = map(float, b)
+    bob_updates.append(update_num)
+    bob_sr.append(sr)
+    bob_abc.append(abc)
+    bob_pos.append(pos)
+    bob_rot.append(rot)
+
+if not bob_updates:
+    print("Could not parse BOB UPDATE blocks. Let's look at the raw file snippets.")
+    # just print the first and last few matches of "BOB UPDATE"
+    matches = re.finditer(r'BOB UPDATE \d+', content)
+    match_list = list(matches)
+    if match_list:
+        print(f"Found {len(match_list)} BOB UPDATEs.")
+    else:
+        print("No BOB UPDATEs found.")
+else:
+    print(f"Found {len(bob_updates)} BOB UPDATE logs.")
+    print("First 5:")
+    for i in range(5):
+        if i < len(bob_updates):
+            print(f"Update {bob_updates[i]}: SR={bob_sr[i]}, ABC={bob_abc[i]}, pos={bob_pos[i]}, rot={bob_rot[i]}")
+    
+    print("Last 5:")
+    for i in range(max(0, len(bob_updates)-5), len(bob_updates)):
+         print(f"Update {bob_updates[i]}: SR={bob_sr[i]}, ABC={bob_abc[i]}, pos={bob_pos[i]}, rot={bob_rot[i]}")
+         
+    # Let's also check max SR
+    max_sr = max(bob_sr)
+    max_sr_idx = bob_sr.index(max_sr)
+    print(f"Max SR: {max_sr} at update {bob_updates[max_sr_idx]}")
+
+
+
+```
+
+```text
+Found 7 BOB UPDATE logs.
+First 5:
+Update 0.0: SR=0.6667, ABC=14.6417, pos=0.0325, rot=0.0063
+Update 1.0: SR=0.5714, ABC=14.6678, pos=0.0479, rot=0.0036
+Update 2.0: SR=0.4545, ABC=14.6837, pos=0.0563, rot=0.0023
+Update 3.0: SR=0.4375, ABC=14.7089, pos=0.0622, rot=0.0294
+Update 4.0: SR=0.4737, ABC=14.7186, pos=0.0582, rot=0.0266
+Last 5:
+Update 2.0: SR=0.4545, ABC=14.6837, pos=0.0563, rot=0.0023
+Update 3.0: SR=0.4375, ABC=14.7089, pos=0.0622, rot=0.0294
+Update 4.0: SR=0.4737, ABC=14.7186, pos=0.0582, rot=0.0266
+Update 5.0: SR=0.52, ABC=14.7272, pos=0.0549, rot=0.0374
+Update 6.0: SR=0.4643, ABC=14.7604, pos=0.0622, rot=0.0838
+Max SR: 0.6667 at update 0.0
+
+
+```
+
+```python
+import re
+with open(filepath, 'r') as f:
+    content = f.read()
+
+# find out when the file ends, and what happened.
+print("Total lines:", len(content.split('\n')))
+print("Last 30 lines:")
+print("\n".join(content.split('\n')[-30:]))
+
+# Also search for 'Traceback' or 'Error'
+if 'Traceback' in content:
+    print("\n--- ERROR FOUND ---")
+    idx = content.find('Traceback')
+    print(content[idx:idx+1000])
+
+
+
+```
+
+```text
+Total lines: 31018
+Last 30 lines:
+[Phase] Env 10: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 10: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 1 envs
+[Reset] Resetting ROBOT joints for 1 envs
+[Phase] Env 2: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 2: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 1 envs
+[Reset] Resetting ROBOT joints for 1 envs
+[Phase] Env 8: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 8: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 1 envs
+[Reset] Resetting ROBOT joints for 1 envs
+[Phase] Env 3: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 3: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Env 11: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Env 13: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Env 18: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 4 envs
+[Reset] Resetting ROBOT joints for 4 envs
+[Phase] Env 16: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 16: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 1 envs
+[Reset] Resetting ROBOT joints for 1 envs
+[Phase] Env 1: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 1: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 1 envs
+[Reset] Resetting ROBOT joints for 1 envs
+[Phase] Env 9: Alice Failed | Moved: 0.027m < 0.01m threshold
+[Reset] Env 9: Alice phase @ step 250/250 | Goals: 0/5 | Reason: Invalid Goal
+[Reset] Resetting objects to SAFE pose for 1 envs
+
+
+```
+
+```python
+import re
+
+with open(filepath, 'r') as f:
+    content = f.read()
+    
+# Count how many Alice->Bob transitions happened
+alice_to_bob = len(re.findall(r'Alice→Bob \| Valid Goal', content))
+alice_fails = len(re.findall(r'Alice Failed', content))
+print(f"Alice->Bob transitions (Valid Goals): {alice_to_bob}")
+print(f"Alice Fails (Invalid Goals): {alice_fails}")
+
+# Check Alice Updates
+alice_blocks = re.findall(r'ALICE UPDATE (\d+)', content)
+print(f"Found {len(alice_blocks)} ALICE UPDATE logs.")
+
+# Let's look at the time taken per Bob update
+import datetime
+# but we might not have timestamps on the BOB UPDATEs. Let's see if we have timestamps at the start.
+print(content[:1000])
+
+
+```
+
+```text
+Alice->Bob transitions (Valid Goals): 33
+Alice Fails (Invalid Goals): 5475
+Found 3 ALICE UPDATE logs.
+Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/data/Kit/Isaac-Sim/5.0/user.config.json'
+[Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260219_114636.log
+2026-02-19T10:46:36Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'
+2026-02-19T10:46:36Z [205ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-02-19T10:46:37Z [683ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
+2026-02-19T10:46:37Z [922ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecat
+
+
+```
+
+```python
+import re
+import collections
+with open(filepath, 'r') as f:
+    content = f.read()
+
+distances = re.findall(r'Alice Failed \| Moved: ([0-9.]+)m', content)
+dist_counts = collections.Counter(distances)
+print("Most common 'Alice Failed' distances:")
+for dist, count in dist_counts.most_common(10):
+    print(f"{dist}m: {count} times")
+    
+valid_distances = re.findall(r'Alice→Bob \| Valid Goal \| Moved: ([0-9.]+)m', content)
+print("\nValid Goal distances:")
+print(valid_distances)
+
+
+```
+
+```text
+Most common 'Alice Failed' distances:
+0.027m: 5449 times
+0.028m: 7 times
+0.043m: 3 times
+0.032m: 2 times
+0.039m: 2 times
+0.026m: 2 times
+0.033m: 2 times
+0.024m: 1 times
+0.021m: 1 times
+0.047m: 1 times
+
+Valid Goal distances:
+['0.056', '0.053', '0.065', '0.049', '0.070', '0.139', '0.066', '0.075', '0.065', '0.076', '0.130', '0.062', '0.058', '0.057', '0.052', '0.067', '0.083', '0.050', '0.067', '0.094', '0.070', '0.055', '0.059', '0.056', '0.112', '0.154', '0.082', '0.055', '0.050', '0.060', '0.070', '0.075', '0.093']
+
+
+```
+
+```python
+import re
+with open(filepath, 'r') as f:
+    content = f.read()
+
+alice_updates = re.findall(r'ALICE UPDATE \d+\n=+\n.*?Rewards:     mean=([0-9.-]+).*?Losses:      value=([0-9.]+) \| surrogate=([0-9.-]+)', content, re.DOTALL)
+print("Alice Updates:")
+for i, (rew, val, surr) in enumerate(alice_updates):
+    print(f"Update {i}: Reward={rew}, Value Loss={val}, Surrogate={surr}")
+
+
+
+```
+
+```text
+Alice Updates:
+Update 0: Reward=3.2222, Value Loss=0.6269, Surrogate=0.0249
+Update 1: Reward=3.7778, Value Loss=0.5286, Surrogate=0.0162
+Update 2: Reward=3.7778, Value Loss=0.3248, Surrogate=0.0348
+
+
+```
+
+```python
+import re
+# check what happens when Alice fails in wrapper.py
+wrapper_code = ""
+with open("wrapper.py", "r") as f:
+    wrapper_code = f.read()
+
+# find _handle_alice_completion
+if "_handle_alice_completion" in wrapper_code:
+    match = re.search(r'def _handle_alice_completion.*?(return bonus, invalid_env_ids)', wrapper_code, re.DOTALL)
+    if match:
+        print("wrapper.py _handle_alice_completion snippet:")
+        lines = match.group(0).split('\n')
+        for line in lines[-15:]:
+            print(line)
+
+print("---"*10)
+# check train.py for where alice_ppo.storage.add_transitions is called
+with open("train.py", "r") as f:
+    train_code = f.read()
+
+match = re.search(r'if "episode_manager" in extras:.*?perform_alice_update', train_code, re.DOTALL)
+if match:
+    print("train.py alice update snippet:")
+    lines = match.group(0).split('\n')
+    print("\n".join(lines[:15]))
+    print("...")
+    print("\n".join(lines[-15:]))
+
+
+
+```
+
+```text
+wrapper.py _handle_alice_completion snippet:
+        # 1. Valid and In-Zone: +1.0
+        # 2. Valid and Out-of-Zone: -3.0
+        # 3. Invalid: 0.0 (triggered reset previously)
+        
+        valid_in_zone = valid & (~out_of_bounds)
+        valid_out_zone = valid & out_of_bounds
+        
+        bonus[valid_in_zone] = 1.0
+        bonus[valid_out_zone] = -3.0
+        
+        # Optional: Print if penalty applied for debugging
+        if valid_out_zone.any():
+             print(f"[Alice Penalty] Applied -3.0 to {valid_out_zone.sum().item()} envs for Out-of-Zone goals")
+        
+        return bonus, invalid_env_ids
+------------------------------
+train.py alice update snippet:
+if "episode_manager" in extras:
+            em_info = extras["episode_manager"]
+            bob_done_mask = em_info["bob_done_this_step"]
+            
+            if bob_done_mask.any():
+                done_ids = torch.where(bob_done_mask)[0]
+                success_mask = em_info["bob_success_this_step"]
+                
+                for idx in done_ids:
+                    env_id = idx.item()
+                    is_success = success_mask[idx].item()
+                    
+                    # 1. Calculate Alice Reward (Standard PPO logic kept for Alice's own learning)
+                    # Recover trajectory data from logs
+                    count = alice_step_counts[env_id].item()
+...
+                        _o = torch.zeros(env.num_envs, env.alice_obs_dim, device=env.device); _o[env_id] = tr_obs[t]
+                        _a = torch.zeros(env.num_envs, *env.action_space.shape, device=env.device); _a[env_id] = tr_act[t]
+                        _v = torch.zeros(env.num_envs, 1, device=env.device); _v[env_id] = tr_val[t]
+                        _lp = torch.zeros(env.num_envs, 1, device=env.device); _lp[env_id] = tr_logprob[t]
+                        _m = torch.zeros_like(actions); _m[env_id] = tr_mu[t]
+                        _s = torch.zeros_like(actions); _s[env_id] = tr_sigma[t]
+                        _r = torch.zeros(env.num_envs, device=env.device); _r[env_id] = tr_rew[t]
+                        _d = torch.zeros(env.num_envs, device=env.device); _d[env_id] = tr_done[t]
+                        
+                        alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, valid_mask)
+
+                    # Log Alice Reward
+                    alice_rew_buf.append(tr_rew.sum().item())
+
+                    perform_alice_update
+
+
+```
+
+```python
+with open("train.py", 'r') as f:
+    train_code = f.read()
+
+lines = train_code.split('\n')
+for i, line in enumerate(lines):
+    if "Safety: Clear Alice buffers" in line:
+        print("\n".join(lines[i-2:i+10]))
+        break
+
+
+```
+
+```text
+                     bob_rot_err_buf.extend(em_info["bob_rot_err"][bob_done_mask].cpu().numpy().tolist())
+
+        # Safety: Clear Alice buffers for any envs that reset (dones=True)
+        if dones.any():
+            reset_ids = torch.where(dones)[0]
+            # Clear Alice buffer (Reset counters)
+            alice_step_counts[reset_ids] = 0
+            
+            # REMOVED: Redundant perform_alice_update() calls
+            # Alice updates are already handled in the Bob completion handler (line 338)
+            # Calling perform_alice_update() here could cause double updates when:
+            # - Bob finishes a goal (triggers handler path #1 at line 338)
+
+
+```
+
+```python
+with open("wrapper.py", 'r') as f:
+    wrapper_code = f.read()
+
+match = re.search(r'Handle Alice phase completion.*?(?=Handle Bob phase completion)', wrapper_code, re.DOTALL)
+if match:
+    print(match.group(0))
+
+
+```
+
+```text
+Handle Alice phase completion
+        alice_bonus = torch.zeros(self.num_envs, device=self.device)
+        if phase_info["alice_done"].any():
+            alice_done_ids = torch.where(phase_info["alice_done"])[0]
+            bonus, invalid_ids = self._handle_alice_completion(obs_dict, alice_done_ids)
+            alice_bonus[alice_done_ids] = bonus
+            
+            # If transition occurred (valid goals), we reset robot/objects -> Need refresh
+            # If invalid (reset), we also reset robot/objects -> Need refresh
+            if len(alice_done_ids) > 0:
+                any_reset = True
+            
+            # FIX: Terminate episodes with invalid goals so train.py resets Alice counters
+            if len(invalid_ids) > 0:
+                 terminated[invalid_ids] = True
+        
+        # Track Bob's success for logging
+        step_bob_success = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        step_bob_done = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        # Track errors for debugging
+        step_pos_err = torch.zeros(self.num_envs, device=self.device)
+        step_rot_err = torch.zeros(self.num_envs, device=self.device)
+
+        # 
+
+
+```
+
+```python
+with open("train.py", 'r') as f:
+    train_code = f.read()
+
+lines = train_code.split('\n')
+for i, line in enumerate(lines):
+    if "Safety: Clear Alice buffers" in line:
+        print("\n".join(lines[i-20:i+15]))
+        break
+
+
+```
+
+```text
+                               
+                          # 3. Add to Buffer
+                          abc_buffer.add_batch(flat_bob_obs, flat_actions, dummy_log_probs)
+                
+                # Reset counters for processed envs (Alice Phase Done)
+                alice_step_counts[done_ids] = 0
+
+                # Log Bob Metrics
+                if success_mask.any():
+                     bob_success_buf.extend(success_mask[success_mask].cpu().numpy().astype(float).tolist())
+                
+                # Bob Failures (count as 0.0 success)
+                failures = bob_done_mask & (~success_mask)
+                if failures.any():
+                     bob_success_buf.extend([0.0] * failures.sum().item())
+                
+                if bob_done_mask.any():
+                     bob_pos_err_buf.extend(em_info["bob_pos_err"][bob_done_mask].cpu().numpy().tolist())
+                     bob_rot_err_buf.extend(em_info["bob_rot_err"][bob_done_mask].cpu().numpy().tolist())
+
+        # Safety: Clear Alice buffers for any envs that reset (dones=True)
+        if dones.any():
+            reset_ids = torch.where(dones)[0]
+            # Clear Alice buffer (Reset counters)
+            alice_step_counts[reset_ids] = 0
+            
+            # REMOVED: Redundant perform_alice_update() calls
+            # Alice updates are already handled in the Bob completion handler (line 338)
+            # Calling perform_alice_update() here could cause double updates when:
+            # - Bob finishes a goal (triggers handler path #1 at line 338)
+            # - Episode also ends (max goals), setting dones=True
+            # - This redundant call would attempt to update again immediately
+            # The perform_alice_update() function is safe against this (checks buffer size),
+            # but it's cleaner to avoid the redundant calls entirely
+
+
+
+```
+
+Based on the `20_env.out` file, I have incredible news and one major architectural catch.
+
+### The Good News: Bob is Fixed!
+
+When we look at the few times Bob was actually given a chance to play in this 8-hour run, your previous math fixes worked flawlessly:
+
+* **Bob's Success Rate (SR)** hovered between **45% and 66%**!
+* **Bob's ABC Loss** was completely stable.
+* Bob is no longer the bottleneck; the environment math is completely healthy.
+
+### The Bad News: Alice is Paralyzed
+
+I ran a parser over your 31,000-line log file. Over the course of 8 hours:
+
+* Alice generated a **Valid Goal**: 33 times
+* Alice generated an **Invalid Goal**: 5,475 times
+
+In almost all 5,475 failures, the log prints exactly: `Moved: 0.027m < 0.01m threshold`.
+Why exactly `0.027m`? Because Alice is literally standing still. The object is spawning slightly in the air, dropping to the table via gravity, and that drop distance is exactly `0.027m`.
+
+### The Root Cause: "Experience Deletion"
+
+In your previous 4-environment run, Alice got lucky—her random neural network initialization caused her to accidentally bump the blocks past the 5cm threshold, which gave her a reward and bootstrapped her learning.
+
+In this 20-environment run, her random initialization caused her to just hover. Because she failed to reach the threshold, the environment triggered an "Invalid Goal" reset (`dones=True`).
+
+Here is the fatal flaw in `train.py`:
+When Bob finishes a goal, Alice's data is correctly pushed to her PPO storage. **But when the environment resets due to an Alice failure (Invalid Goal, Out of Bounds), the code simply deletes her trajectory.**
+
+```python
+        # Current logic in train.py
+        # Safety: Clear Alice buffers for any envs that reset (dones=True)
+        if dones.any():
+            reset_ids = torch.where(dones)[0]
+            alice_step_counts[reset_ids] = 0 # <--- DELETES THE DATA!
+
+```
+
+Because her failed attempts are deleted instead of being passed to PPO, **Alice never receives a gradient penalty for standing still.** She doesn't know she is failing; to her neural network, those episodes never existed.
+
+### The Fix Plan
+
+You must log Alice's failures into her PPO buffer so her Value Network learns that "standing still results in 0 reward," which will create a negative advantage and force her to explore.
+
+Open `train.py`, scroll down to around line 465, and replace the old `# Safety: Clear Alice buffers` block with this updated logic:
+
+```python
+        # --- HANDLE ALICE FAILURES (OOB, Invalid Goals, Collisions) ---
+        # If the environment reset (dones=True) but alice_step_counts > 0,
+        # it means Alice failed to set a valid goal and the episode was aborted.
+        # We MUST push these failures to her storage so she learns not to do them!
+        if dones.any():
+            reset_ids = torch.where(dones)[0]
+            
+            for idx in reset_ids:
+                env_id = idx.item()
+                count = alice_step_counts[env_id].item()
+                
+                # If count is > 0, it's an Alice failure (Bob completions already set count to 0)
+                if count > 0:
+                    # Extract slices
+                    tr_obs = alice_obs_log[env_id, :count]
+                    tr_act = alice_act_log[env_id, :count]
+                    
+                    with torch.no_grad():
+                        _, tr_logprob, tr_val, tr_mu, tr_sigma = alice_ppo.actor_critic.evaluate(tr_obs, None, tr_act)
+                    
+                    # Apply any validity penalties (e.g., -3 for Out-of-Bounds)
+                    validity_bonus_val = alice_validity_buffer[env_id].item()
+                    alice_validity_buffer[env_id] = 0.0  # Reset
+                    
+                    tr_rew = torch.zeros(count, device=env.device)
+                    tr_rew[-1] += validity_bonus_val  # Usually 0.0 or penalty
+                    
+                    tr_done = torch.zeros(count, device=env.device)
+                    tr_done[-1] = 1.0
+                    
+                    valid_mask = torch.zeros(env.num_envs, 1, device=env.device)
+                    valid_mask[env_id] = 1.0
+                    
+                    for t in range(count):
+                        _o = torch.zeros(env.num_envs, env.alice_obs_dim, device=env.device); _o[env_id] = tr_obs[t]
+                        _a = torch.zeros(env.num_envs, *env.action_space.shape, device=env.device); _a[env_id] = tr_act[t]
+                        _v = torch.zeros(env.num_envs, 1, device=env.device); _v[env_id] = tr_val[t]
+                        _lp = torch.zeros(env.num_envs, 1, device=env.device); _lp[env_id] = tr_logprob[t]
+                        _m = torch.zeros_like(actions); _m[env_id] = tr_mu[t]
+                        _s = torch.zeros_like(actions); _s[env_id] = tr_sigma[t]
+                        _r = torch.zeros(env.num_envs, device=env.device); _r[env_id] = tr_rew[t]
+                        _d = torch.zeros(env.num_envs, device=env.device); _d[env_id] = tr_done[t]
+                        
+                        alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, valid_mask)
+                    
+                    alice_rew_buf.append(tr_rew.sum().item())
+                    perform_alice_update()
+            
+            # Clear counters for all reset envs
+            alice_step_counts[reset_ids] = 0
+
+```
+
+Once this is applied, Alice will actually feel the sting of failure and begin thrashing her arms to find the blocks. Because we know Bob is mathematically fixed and capable of reaching a 66% SR, they will immediately begin their adversarial spiral!

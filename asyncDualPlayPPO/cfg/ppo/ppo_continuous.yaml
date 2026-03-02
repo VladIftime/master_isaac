@@ -1,0 +1,28 @@
+params:
+  learn:
+    optim_stepsize: 3.0e-4
+    schedule: fixed
+    desired_kl: 0.016
+    init_noise_std: 0.8
+    nsteps: 2048 # Increased to accommodate buffered replay
+    
+    # PPO params
+    cliprange: 0.2
+    noptepochs: 5
+    nminibatches: 4
+    
+    ent_coef: 0.01
+    gamma: 0.998
+    lam: 0.95
+    max_grad_norm: 1.0
+    value_loss_coef: 1.0
+    
+    # ABC
+    abc_coef: 0.5
+    abc_clip_param: 0.2
+    abc_batch_size: 2048  # Fixed batch size for ABC updates (independent of num_envs)
+    
+  policy:
+    pi_hid_sizes: [512, 256, 128]
+    vf_hid_sizes: [512, 256, 128]
+    activation: elu

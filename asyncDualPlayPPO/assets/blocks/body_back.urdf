@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="body_back.urdf">
+    <!-- Combined Robot Body Link -->
+    <link name="baseLink">
+        <!-- Robot Back Body Visual -->
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <mesh filename="robot_body_back.dae" scale="0.0113 0.0120 0.01055"/>
+            </geometry>
+        </visual>
+    </link>
+</robot>
