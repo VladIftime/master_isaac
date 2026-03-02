@@ -57,7 +57,7 @@ def alice_reward(
 def bob_reward(
     env: ManagerBasedRLEnv,
     object_cfg: SceneEntityCfg = SceneEntityCfg("target_object"),
-    pos_threshold: float = 0.04,
+    pos_threshold: float = 0.05,
     rot_threshold: float = 0.2,
 ) -> torch.Tensor:
     """

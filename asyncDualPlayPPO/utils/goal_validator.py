@@ -15,7 +15,7 @@ def validate_goal(
     goal_state: torch.Tensor,
     table_bounds: dict,
     placement_bounds: dict,
-    pos_threshold: float = 0.04,
+    pos_threshold: float = 0.05,
     rot_threshold: float = 0.2,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """

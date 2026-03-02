@@ -34,7 +34,7 @@ class EpisodeManager:
         alice_timesteps: int = 100,  # Reduced from 250 for better temporal credit assignment
         bob_timesteps: int = 600,
         max_goals_per_episode: int = 5,
-        pos_threshold: float = 0.02,  # Reduced from 0.04 to prevent instant wins
+        pos_threshold: float = 0.05,  # Aligned across all files (5cm)
         rot_threshold: float = 0.2,
     ):
         self.num_envs = num_envs
@@ -68,12 +68,12 @@ class EpisodeManager:
         print(f"  Success thresholds: pos={pos_threshold:.3f}m, rot={rot_threshold:.3f}rad")
         
         # CRITICAL VALIDATION: Prevent instant win bug
-        # Alice's movement_threshold (in goal_validator.py) must be LARGER than Bob's pos_threshold
-        # Current: movement_threshold=0.05m (5cm) > pos_threshold=0.02m (2cm) ✓ (2.5x margin)
+        # Alice's movement_threshold (wrapper: pos_threshold + 0.01) must be LARGER than Bob's pos_threshold
+        # Current: Alice must move > 0.06m (6cm) | Bob succeeds at < 0.05m (5cm) ✓ (1cm safety margin)
         # If this is violated, Bob wins instantly without moving!
-        if pos_threshold >= 0.05:  # Updated check for new 5cm threshold
-            print(f"[WARNING] pos_threshold ({pos_threshold}) may cause instant wins!")
-            print(f"  Ensure pos_threshold < movement_threshold (0.05m in goal_validator.py)")
+        if pos_threshold >= 0.1:  # Sanity check: threshold too large = too easy
+            print(f"[WARNING] pos_threshold ({pos_threshold}) is very large - goals may be too easy!")
+            print(f"  Consider a smaller value (e.g., 0.05m)")
         
     def get_phase(self, env_ids: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Get current phase for specified environments"""

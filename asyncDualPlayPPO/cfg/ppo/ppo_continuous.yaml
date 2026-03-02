@@ -11,7 +11,7 @@ params:
     noptepochs: 5
     nminibatches: 4
     
-    ent_coef: 0.01
+    ent_coef: 0.05
     gamma: 0.998
     lam: 0.95
     max_grad_norm: 1.0

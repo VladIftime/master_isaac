@@ -2,3 +2,4 @@
 *.log
 *.pt
 *.out
+runs/
