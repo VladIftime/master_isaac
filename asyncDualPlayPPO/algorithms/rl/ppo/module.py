@@ -6,122 +6,109 @@ from torch.distributions import MultivariateNormal
 
 
 class ActorCritic(nn.Module):
+    """
+    Diagonal-Gaussian actor-critic network for continuous action spaces.
+
+    The actor and critic share no weights.  Action noise is learned as a
+    global log-standard-deviation parameter (not input-dependent), matching
+    the standard PPO setup used for continuous locomotion and manipulation.
+    """
 
     def __init__(self, obs_shape, states_shape, actions_shape, initial_std, model_cfg, asymmetric=False):
-        super(ActorCritic, self).__init__()
+        super().__init__()
 
         self.asymmetric = asymmetric
 
         if model_cfg is None:
-            actor_hidden_dim = [256, 256, 256]
+            actor_hidden_dim  = [256, 256, 256]
             critic_hidden_dim = [256, 256, 256]
-            activation = get_activation("selu")
+            activation        = get_activation("selu")
         else:
-            actor_hidden_dim = model_cfg['pi_hid_sizes']
-            critic_hidden_dim = model_cfg['vf_hid_sizes']
-            activation = get_activation(model_cfg['activation'])
+            actor_hidden_dim  = model_cfg["pi_hid_sizes"]
+            critic_hidden_dim = model_cfg["vf_hid_sizes"]
+            activation        = get_activation(model_cfg["activation"])
 
-        # Policy
-        actor_layers = []
-        actor_layers.append(nn.Linear(*obs_shape, actor_hidden_dim[0]))
-        actor_layers.append(activation)
-        for l in range(len(actor_hidden_dim)):
-            if l == len(actor_hidden_dim) - 1:
-                actor_layers.append(nn.Linear(actor_hidden_dim[l], *actions_shape))
-            else:
-                actor_layers.append(nn.Linear(actor_hidden_dim[l], actor_hidden_dim[l + 1]))
-                actor_layers.append(activation)
-        self.actor = nn.Sequential(*actor_layers)
-
-        # Value function
-        critic_layers = []
-        if self.asymmetric:
-            critic_layers.append(nn.Linear(*states_shape, critic_hidden_dim[0]))
-        else:
-            critic_layers.append(nn.Linear(*obs_shape, critic_hidden_dim[0]))
-        critic_layers.append(activation)
-        for l in range(len(critic_hidden_dim)):
-            if l == len(critic_hidden_dim) - 1:
-                critic_layers.append(nn.Linear(critic_hidden_dim[l], 1))
-            else:
-                critic_layers.append(nn.Linear(critic_hidden_dim[l], critic_hidden_dim[l + 1]))
-                critic_layers.append(activation)
-        self.critic = nn.Sequential(*critic_layers)
+        self.actor  = _build_mlp(*obs_shape, actor_hidden_dim, *actions_shape, activation)
+        critic_in   = states_shape[0] if asymmetric else obs_shape[0]
+        self.critic = _build_mlp(critic_in, critic_hidden_dim, 1, activation)
 
         print(self.actor)
         print(self.critic)
 
-        # Action noise
         self.log_std = nn.Parameter(np.log(initial_std) * torch.ones(*actions_shape))
 
-        # Initialize the weights like in stable baselines
-        actor_weights = [np.sqrt(2)] * len(actor_hidden_dim)
-        actor_weights.append(0.01)
-        critic_weights = [np.sqrt(2)] * len(critic_hidden_dim)
-        critic_weights.append(1.0)
-        self.init_weights(self.actor, actor_weights)
-        self.init_weights(self.critic, critic_weights)
-
-    @staticmethod
-    def init_weights(sequential, scales):
-        [torch.nn.init.orthogonal_(module.weight, gain=scales[idx]) for idx, module in
-         enumerate(mod for mod in sequential if isinstance(mod, nn.Linear))]
+        actor_scales  = [np.sqrt(2)] * len(actor_hidden_dim)  + [0.01]
+        critic_scales = [np.sqrt(2)] * len(critic_hidden_dim) + [1.0]
+        _init_weights(self.actor,  actor_scales)
+        _init_weights(self.critic, critic_scales)
 
     def forward(self):
         raise NotImplementedError
 
     def act(self, observations, states):
+        """Sample an action from the current policy."""
         actions_mean = self.actor(observations)
-
-        covariance = torch.diag(self.log_std.exp() * self.log_std.exp())
+        covariance   = torch.diag(self.log_std.exp() * self.log_std.exp())
         distribution = MultivariateNormal(actions_mean, scale_tril=covariance)
 
-        actions = distribution.sample()
+        actions          = distribution.sample()
         actions_log_prob = distribution.log_prob(actions)
 
-        if self.asymmetric:
-            value = self.critic(states)
-        else:
-            value = self.critic(observations)
+        value = self.critic(states if self.asymmetric else observations)
 
-        return actions.detach(), actions_log_prob.detach(), value.detach(), actions_mean.detach(), self.log_std.repeat(actions_mean.shape[0], 1).detach()
+        return (
+            actions.detach(),
+            actions_log_prob.detach(),
+            value.detach(),
+            actions_mean.detach(),
+            self.log_std.repeat(actions_mean.shape[0], 1).detach(),
+        )
 
     def act_inference(self, observations):
-        actions_mean = self.actor(observations)
-        return actions_mean
+        """Deterministic action for evaluation (no sampling)."""
+        return self.actor(observations)
 
     def evaluate(self, observations, states, actions):
+        """Evaluate log-probabilities and entropy of given actions under the current policy."""
         actions_mean = self.actor(observations)
-
-        covariance = torch.diag(self.log_std.exp() * self.log_std.exp())
+        covariance   = torch.diag(self.log_std.exp() * self.log_std.exp())
         distribution = MultivariateNormal(actions_mean, scale_tril=covariance)
 
         actions_log_prob = distribution.log_prob(actions)
-        entropy = distribution.entropy()
-
-        if self.asymmetric:
-            value = self.critic(states)
-        else:
-            value = self.critic(observations)
+        entropy          = distribution.entropy()
+        value            = self.critic(states if self.asymmetric else observations)
 
         return actions_log_prob, entropy, value, actions_mean, self.log_std.repeat(actions_mean.shape[0], 1)
 
 
+def _build_mlp(in_dim, hidden_dims, out_dim, activation):
+    """Build a feedforward network with the given hidden layer structure."""
+    layers = [nn.Linear(in_dim, hidden_dims[0]), activation]
+    for i in range(len(hidden_dims)):
+        out = out_dim if i == len(hidden_dims) - 1 else hidden_dims[i + 1]
+        layers.append(nn.Linear(hidden_dims[i], out))
+        if i < len(hidden_dims) - 1:
+            layers.append(activation)
+    return nn.Sequential(*layers)
+
+
+def _init_weights(sequential, scales):
+    """Orthogonal weight initialisation with per-layer gain scaling."""
+    for idx, module in enumerate(m for m in sequential if isinstance(m, nn.Linear)):
+        torch.nn.init.orthogonal_(module.weight, gain=scales[idx])
+
+
 def get_activation(act_name):
-    if act_name == "elu":
-        return nn.ELU()
-    elif act_name == "selu":
-        return nn.SELU()
-    elif act_name == "relu":
-        return nn.ReLU()
-    elif act_name == "crelu":
-        return nn.ReLU()
-    elif act_name == "lrelu":
-        return nn.LeakyReLU()
-    elif act_name == "tanh":
-        return nn.Tanh()
-    elif act_name == "sigmoid":
-        return nn.Sigmoid()
-    else:
-        print("invalid activation function!")
-        return None
+    """Return the nn.Module activation corresponding to act_name."""
+    activations = {
+        "elu":     nn.ELU(),
+        "selu":    nn.SELU(),
+        "relu":    nn.ReLU(),
+        "crelu":   nn.ReLU(),
+        "lrelu":   nn.LeakyReLU(),
+        "tanh":    nn.Tanh(),
+        "sigmoid": nn.Sigmoid(),
+    }
+    if act_name not in activations:
+        raise ValueError(f"Unknown activation function: '{act_name}'. Choose from {list(activations)}")
+    return activations[act_name]
