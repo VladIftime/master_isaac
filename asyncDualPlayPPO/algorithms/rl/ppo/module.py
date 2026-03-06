@@ -98,7 +98,31 @@ def _init_weights(sequential, scales):
         torch.nn.init.orthogonal_(module.weight, gain=scales[idx])
 
 
+class InverseDynamicsModel(nn.Module):
+    """
+    Predicts the action that caused a transition from obs_t to obs_{t+1}.
+
+    Trained on Bob's own rollout data so it learns Bob's kinematics, not
+    Alice's.  During BCO relabelling, Alice's object-state trajectory is fed
+    through this model to produce kinematically correct Bob actions.
+    """
+
+    def __init__(self, obs_shape: tuple, actions_shape: tuple):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(obs_shape[0] * 2, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, actions_shape[0]),
+        )
+
+    def forward(self, obs_t: torch.Tensor, obs_tplus1: torch.Tensor) -> torch.Tensor:
+        return self.network(torch.cat([obs_t, obs_tplus1], dim=-1))
+
+
 def get_activation(act_name):
+
     """Return the nn.Module activation corresponding to act_name."""
     activations = {
         "elu":     nn.ELU(),

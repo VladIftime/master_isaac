@@ -1,20 +1,28 @@
 """
-PPOABC — PPO with Asymmetric Behavioral Cloning loss.
+PPOBCO — PPO with Behavioral Cloning from Observation (BCO).
 
-Extends PPO.update() with an additional NLL loss term that pulls Bob's policy
-towards Alice's demonstrations stored in a GPUDemonstrationBuffer.  The ABC
-term is gated by abc_coef; set it to 0.0 to train standard PPO.
+Replaces the broken NLL-ABC loss with an Inverse Dynamics Model (IDM) approach:
+
+1. The IDM is trained each update step on Bob's own sequential rollout data
+   (obs_t → obs_{t+1} → act_t) so it learns Bob's kinematics.
+2. In train.py, Alice's successful state trajectories are fed through the IDM to
+   produce kinematically correct Bob actions that are stored in the demo buffer.
+3. The demo buffer is used here for a standard Behavioral Cloning (Huber) loss,
+   which is now safe because the demonstrations are Bob's own actions.
+
+Set abc_coef to 0.0 to disable BCO and run standard PPO.
 """
-
-import math
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 
 from .ppo import PPO
+from .module import InverseDynamicsModel
 
 
-class PPOABC(PPO):
+class PPOBCO(PPO):
     def __init__(
         self,
         vec_env,
@@ -37,9 +45,14 @@ class PPOABC(PPO):
             self.num_mini_batches = max(4, batch_size // 2048)
             self.mini_batch_size  = batch_size // self.num_mini_batches
 
-        self.abc_coef       = cfg_train["learn"].get("abc_coef",       0.5)
-        self.abc_clip_param = cfg_train["learn"].get("abc_clip_param", 0.2)
+        self.abc_coef       = cfg_train["learn"].get("abc_coef",       0.05)
         self.abc_batch_size = cfg_train["learn"].get("abc_batch_size", 2048)
+
+        self.idm = InverseDynamicsModel(
+            vec_env.observation_space.shape,
+            vec_env.action_space.shape,
+        ).to(self.device)
+        self.idm_optimizer = optim.Adam(self.idm.parameters(), lr=3e-4)
 
         self.abc_buffer = None
 
@@ -50,9 +63,28 @@ class PPOABC(PPO):
     def update(self):
         mean_value_loss     = 0
         mean_surrogate_loss = 0
-        mean_abc_loss       = 0
+        mean_bc_loss        = 0
+        mean_idm_loss       = 0
 
-        # Keep the ABC mini-batch size independent of the (potentially large) PPO rollout batch.
+        # --- IDM training on Bob's sequential rollout data ---
+        # Temporal order matters here so we use the raw storage (not mini-batch shuffling).
+        # We train for 3 epochs before the PPO epoch loop so that the IDM is up to date
+        # when train.py calls bob_ppo.idm() for action relabelling after this update.
+        obs_rollout = self.storage.observations   # (nsteps, num_envs, obs_dim)
+        act_rollout = self.storage.actions        # (nsteps, num_envs, act_dim)
+        obs_t      = obs_rollout[:-1].view(-1, self.observation_space.shape[0])
+        obs_tplus1 = obs_rollout[1:].view(-1, self.observation_space.shape[0])
+        act_t      = act_rollout[:-1].view(-1, self.action_space.shape[0])
+
+        for _ in range(3):
+            predicted_actions = self.idm(obs_t, obs_tplus1)
+            idm_loss = F.mse_loss(predicted_actions, act_t)
+            self.idm_optimizer.zero_grad()
+            idm_loss.backward()
+            self.idm_optimizer.step()
+        mean_idm_loss = idm_loss.item()
+
+        # --- PPO + BCO update ---
         abc_batch = min(self.abc_batch_size, self.abc_buffer.size if self.abc_buffer else self.abc_batch_size)
 
         batch = self.storage.mini_batch_generator(self.num_mini_batches)
@@ -60,14 +92,14 @@ class PPOABC(PPO):
             for indices in batch:
                 obs_batch    = self.storage.observations.view(-1, *self.storage.observations.size()[2:])[indices]
                 states_batch = self.storage.states.view(-1, *self.storage.states.size()[2:])[indices] if self.asymmetric else None
-                actions_batch               = self.storage.actions.view(-1, self.storage.actions.size(-1))[indices]
-                target_values_batch         = self.storage.values.view(-1, 1)[indices]
-                returns_batch               = self.storage.returns.view(-1, 1)[indices]
-                old_actions_log_prob_batch  = self.storage.actions_log_prob.view(-1, 1)[indices]
-                advantages_batch            = self.storage.advantages.view(-1, 1)[indices]
-                old_mu_batch                = self.storage.mu.view(-1, self.storage.actions.size(-1))[indices]
-                old_sigma_batch             = self.storage.sigma.view(-1, self.storage.actions.size(-1))[indices]
-                masks_batch                 = self.storage.masks.view(-1, 1)[indices]
+                actions_batch              = self.storage.actions.view(-1, self.storage.actions.size(-1))[indices]
+                target_values_batch        = self.storage.values.view(-1, 1)[indices]
+                returns_batch              = self.storage.returns.view(-1, 1)[indices]
+                old_actions_log_prob_batch = self.storage.actions_log_prob.view(-1, 1)[indices]
+                advantages_batch           = self.storage.advantages.view(-1, 1)[indices]
+                old_mu_batch               = self.storage.mu.view(-1, self.storage.actions.size(-1))[indices]
+                old_sigma_batch            = self.storage.sigma.view(-1, self.storage.actions.size(-1))[indices]
+                masks_batch                = self.storage.masks.view(-1, 1)[indices]
 
                 actions_log_prob_batch, entropy_batch, value_batch, mu_batch, sigma_batch = self.actor_critic.evaluate(
                     obs_batch, states_batch, actions_batch
@@ -110,18 +142,17 @@ class PPOABC(PPO):
                     value_loss     = torch.tensor(0.0, device=self.device)
                     entropy_mean   = torch.tensor(0.0, device=self.device)
 
-                abc_loss = torch.tensor(0.0, device=self.device)
+                bc_loss = torch.tensor(0.0, device=self.device)
                 if self.abc_buffer is not None and self.abc_buffer.size > 0:
-                    abc_obs, abc_act, _ = self.abc_buffer.sample(abc_batch)
-                    if abc_obs.shape[0] > 0:
-                        abc_mu    = self.actor_critic.actor(abc_obs)
-                        # Clamp sigma to prevent variance collapse (sigma→0 ⟹ NLL→∞).
-                        abc_sigma = torch.clamp(self.actor_critic.log_std.exp(), min=1e-3)
-                        nll       = 0.5 * ((abc_act - abc_mu) / abc_sigma) ** 2 + torch.log(abc_sigma) + 0.5 * math.log(2 * math.pi)
-                        abc_loss  = nll.sum(dim=-1).mean()
-                    mean_abc_loss += abc_loss.item()
+                    bc_obs, bc_act, _ = self.abc_buffer.sample(abc_batch)
+                    if bc_obs.shape[0] > 0:
+                        predicted = self.actor_critic.actor(bc_obs)
+                        # Smooth L1 (Huber) is more robust than MSE for IDM-inferred targets,
+                        # which are good-but-not-perfect approximations of Bob's true actions.
+                        bc_loss = F.smooth_l1_loss(predicted, bc_act)
+                    mean_bc_loss += bc_loss.item()
 
-                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_mean + self.abc_coef * abc_loss
+                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_mean + self.abc_coef * bc_loss
                 self.optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
@@ -133,6 +164,6 @@ class PPOABC(PPO):
         num_updates          = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss     /= num_updates
         mean_surrogate_loss /= num_updates
-        mean_abc_loss       /= num_updates
+        mean_bc_loss        /= num_updates
 
-        return mean_value_loss, mean_surrogate_loss, mean_abc_loss
+        return mean_value_loss, mean_surrogate_loss, mean_bc_loss, mean_idm_loss

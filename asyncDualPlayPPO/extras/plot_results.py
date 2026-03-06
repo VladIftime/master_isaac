@@ -2,7 +2,7 @@ import re
 import matplotlib.pyplot as plt
 import os
 
-log_file = '/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/logs/25_rot_NLL.out'
+log_file = '/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/logs/25_rot_NLL_dense_updates_only.out'
 
 alice_iters = []
 alice_rewards = []
@@ -122,6 +122,6 @@ axs[2, 1].legend()
 axs[2, 1].grid(True)
 
 plt.tight_layout()
-output_path = '/home/vlad/IsaacLab/dual_arm_Isaacgym/asyncDualPlayPPO/logs/training_plots_25_rot.png'
+output_path = '/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/logs/plots/training_plots_25_rot_NLL.png'
 plt.savefig(output_path)
 print(f"Plots saved to {output_path}")
