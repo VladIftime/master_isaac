@@ -271,13 +271,18 @@ class AsyncDualPlayEnvWrapper:
             success, pos_err, rot_err = self._check_bob_success(obs_dict, completion_ids)
             step_pos_err[completion_ids] = pos_err
             step_rot_err[completion_ids] = rot_err
+            
+            # IMPORTANT: Capture step/goal counts BEFORE transition resets them to 0
+            completion_steps = self.episode_manager.phase_step[completion_ids].clone()
+            completion_goals = self.episode_manager.goal_count[completion_ids].clone()
+            
             # Transition to next phase (or reset episode)
             self._handle_bob_success_transition(completion_ids)
             
-            # Log detailed completion info
+            # Log detailed completion info (using pre-transition values)
             for idx, env_id in enumerate(completion_ids):
-                steps = self.episode_manager.phase_step[env_id].item() if env_id < len(self.episode_manager.phase_step) else 0
-                goal_num = self.episode_manager.goal_count[env_id].item() if env_id < len(self.episode_manager.goal_count) else 0
+                steps = completion_steps[idx].item()
+                goal_num = completion_goals[idx].item()
                 print(f"[BobComplete] Env {env_id.item()}: Goal {goal_num}/5 @ step {steps}/600 | err: pos={pos_err[idx]:.4f} rot={rot_err[idx]:.4f}")
             
             # FIX: Only terminate if they CANNOT continue (Game Over)

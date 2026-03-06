@@ -18,7 +18,8 @@ params:
     value_loss_coef: 1.0
     
     # ABC
-    abc_coef: 0.5
+    # Reduced from 0.5 → 0.005: at end of prior run ABC≈86 dominated RL≈0.7 by 100×
+    abc_coef: 0.005
     abc_clip_param: 0.2
     abc_batch_size: 2048  # Fixed batch size for ABC updates (independent of num_envs)
     

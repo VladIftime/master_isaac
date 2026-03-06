@@ -2,8 +2,8 @@ import os
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(script_dir)
-log_file = os.path.join(base_dir, 'logs', '25_rot.out')
-output_file = os.path.join(base_dir, 'logs', '25_rot_updates_only.out')
+log_file = os.path.join(base_dir, 'logs', '25_rot_NLL_dense.out')
+output_file = os.path.join(base_dir, 'logs', '25_rot_NLL_dense_updates_only.out')
 
 state = 0
 block = []

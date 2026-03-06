@@ -2,7 +2,7 @@ import re
 import matplotlib.pyplot as plt
 import os
 
-log_file = '/home/vlad/IsaacLab/dual_arm_Isaacgym/asyncDualPlayPPO/logs/25_rot.out'
+log_file = '/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/logs/25_rot_NLL.out'
 
 alice_iters = []
 alice_rewards = []

@@ -24,5 +24,7 @@ max_goals_per_episode: 5
 #
 # Recommendation: Keep use_dense_bob_rewards=false for pure ASP implementation.
 # Only enable if Bob completely fails to learn after extended training.
-use_dense_bob_rewards: false
-dense_reward_weight: 0.0
+# Enabled temporarily: Bob's sparse reward mean was ~0.001, too weak for RL signal.
+# Disable once Bob's success rate recovers above ~25%.
+use_dense_bob_rewards: true
+dense_reward_weight: 0.1
