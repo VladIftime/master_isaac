@@ -1,4 +1,4 @@
 from .ppo import PPO
-from .ppo_abc import PPOBCO
+from .ppo_bco import PPOBCO
 from .module import ActorCritic
 from .storage import RolloutStorage

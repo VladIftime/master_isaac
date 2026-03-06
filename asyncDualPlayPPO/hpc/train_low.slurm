@@ -1,49 +1,62 @@
 #!/bin/bash
-#SBATCH --job-name=dense_low
+#SBATCH --job-name=adp_bco_low
 #SBATCH --time=01:00:00
 #SBATCH --partition=gpushort
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --output=slurm-%j-dense_low_2048_1h.out
+#SBATCH --output=slurm-%j-bco_low.out
 
-# Load Apptainer
-# Apptainer is pre-installed on this system, no module load needed
-# module load local_apptainer || module load Apptainer
+# ── I/O config ──────────────────────────────────────────────────────────────
+# Write checkpoints and TensorBoard logs to the node's fast local scratch,
+# not to the NFS home directory.  Large .pt files on NFS cause 30-60s stalls
+# every few updates.  At the end of the job, rsync the results back home.
+LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
+mkdir -p "$LOCAL_RUNS"
+# ────────────────────────────────────────────────────────────────────────────
 
+# ── Env scaling ──────────────────────────────────────────────────────────────
+# Buffer budget: keep total transitions ≈ 131 072 (fits on an A100 with room).
+#   num_envs=1024 → nsteps = 131072 / 1024 = 128
+# num_envs is passed on the command line; nsteps is set via --nsteps override.
+NUM_ENVS=1024
+NSTEPS=128
+# ────────────────────────────────────────────────────────────────────────────
 
-# Config
-SIF_IMAGE="isaac-lab.sif" # Ensure this image matches your Isaac Lab version
+SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
 
-echo "[INFO] Job ID: $SLURM_JOB_ID"
-echo "[INFO] Node: $SLURMD_NODENAME"
-echo "[INFO] Root: $PROJECT_ROOT"
+echo "[INFO] Job ID:        $SLURM_JOB_ID"
+echo "[INFO] Node:          $SLURMD_NODENAME"
+echo "[INFO] Project root:  $PROJECT_ROOT"
+echo "[INFO] Local runs:    $LOCAL_RUNS"
+echo "[INFO] Buffer size:   ${NUM_ENVS} envs × ${NSTEPS} steps = $(( NUM_ENVS * NSTEPS )) transitions"
 
-# Check for image
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found!"
-    echo "[INFO] Please pull the image: apptainer pull isaac-lab.sif docker://nvcr.io/nvidia/isaac-lab:2.3.0"
+    echo "[INFO]  Pull it with: apptainer pull isaac-lab.sif docker://nvcr.io/nvidia/isaac-lab:2.3.0"
     exit 1
 fi
 
-# Run Container
-# We utilize the --bind flags to mount:
-# 1. The project directory to /workspace/isaaclab/user_project
-# 2. The logs directory to persist data
-# 3. .cache to speed up shader compilation
-# 4. .isaac_cache to provide writable directories for Isaac Sim internal data
 apptainer exec --nv \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project \
-    --bind "$PROJECT_ROOT/runs":/workspace/isaaclab/logs \
+    --bind "$LOCAL_RUNS":/workspace/isaaclab/logs \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
     "$SIF_IMAGE" \
     /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train.py \
-    --num_envs 1024 \
+    --num_envs "$NUM_ENVS" \
+    --nsteps   "$NSTEPS" \
     --max_iterations 5000 \
-    --exp_name "hpc_ppo_low" \
+    --exp_name "hpc_bco_low" \
     --save_interval 500 \
-    --headless | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+    --headless \
+    | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
+               -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+
+# ── Sync results back to NFS ─────────────────────────────────────────────────
+echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
+rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/"
+echo "[INFO] Sync complete."

@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--exp_name", type=str, default="async_dual_play_ppo")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num_envs", type=int, default=64)
+    parser.add_argument("--nsteps", type=int, default=None, help="Override rollout steps per env (to prevent OOM on high num_envs)")
     parser.add_argument("--max_iterations", type=int, default=1000)
     parser.add_argument("--save_interval", type=int, default=50)
     parser.add_argument("--chkpt_alice", type=str, default=None)
@@ -78,6 +79,10 @@ def main():
     task_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/task/AsyncDualPlay.yaml")
     ppo_cfg_path  = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
     ppo_cfg = load_cfg(ppo_cfg_path)
+    
+    if args.nsteps is not None:
+        print(f"[Config] Overriding nsteps: {ppo_cfg['params']['learn']['nsteps']} -> {args.nsteps}")
+        ppo_cfg["params"]["learn"]["nsteps"] = args.nsteps
 
     env_cfg = AsyncDualPlayEnvCfg()
     env_cfg.scene.num_envs = args.num_envs
@@ -132,6 +137,7 @@ def main():
         sampler="sequential",
         log_dir=f"runs/{args.exp_name}/bob",
         asymmetric=False,
+        idm_obs_dim=env.alice_obs_dim,
     )
     abc_buffer = GPUDemonstrationBuffer(
         capacity=100000,

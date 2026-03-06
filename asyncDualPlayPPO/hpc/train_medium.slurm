@@ -1,41 +1,59 @@
 #!/bin/bash
-#SBATCH --job-name=dense_med
+#SBATCH --job-name=adp_bco_med
 #SBATCH --time=12:00:00
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=48G
-#SBATCH --output=slurm-%j-dense_med_4096.out
+#SBATCH --output=slurm-%j-bco_med.out
 
+# ── I/O config ──────────────────────────────────────────────────────────────
+# Write checkpoints and TensorBoard logs to the node's fast local scratch.
+LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
+mkdir -p "$LOCAL_RUNS"
+# ────────────────────────────────────────────────────────────────────────────
 
-# Load Apptainer
-# Apptainer is pre-installed on this system, no module load needed
-# module load local_apptainer || module load Apptainer
+# ── Env scaling ──────────────────────────────────────────────────────────────
+# Buffer budget: keep total transitions ≈ 131 072.
+#   num_envs=2048 → nsteps = 131072 / 2048 = 64
+NUM_ENVS=2048
+NSTEPS=64
+# ────────────────────────────────────────────────────────────────────────────
 
-# Config
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
 
-echo "[INFO] Job ID: $SLURM_JOB_ID"
-echo "[INFO] Node: $SLURMD_NODENAME"
+echo "[INFO] Job ID:        $SLURM_JOB_ID"
+echo "[INFO] Node:          $SLURMD_NODENAME"
+echo "[INFO] Project root:  $PROJECT_ROOT"
+echo "[INFO] Local runs:    $LOCAL_RUNS"
+echo "[INFO] Buffer size:   ${NUM_ENVS} envs × ${NSTEPS} steps = $(( NUM_ENVS * NSTEPS )) transitions"
 
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found!"
+    echo "[INFO]  Pull it with: apptainer pull isaac-lab.sif docker://nvcr.io/nvidia/isaac-lab:2.3.0"
     exit 1
 fi
 
-# Medium profile: 4096 environments, 12 hours
 apptainer exec --nv \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project \
-    --bind "$PROJECT_ROOT/runs":/workspace/isaaclab/logs \
+    --bind "$LOCAL_RUNS":/workspace/isaaclab/logs \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
     "$SIF_IMAGE" \
     /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train.py \
-    --num_envs 2048 \
+    --num_envs "$NUM_ENVS" \
+    --nsteps   "$NSTEPS" \
     --max_iterations 50000 \
-    --exp_name "hpc_ppo_med" \
+    --exp_name "hpc_bco_med" \
     --save_interval 1000 \
-    --headless | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+    --headless \
+    | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
+               -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+
+# ── Sync results back to NFS ─────────────────────────────────────────────────
+echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
+rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/"
+echo "[INFO] Sync complete."
