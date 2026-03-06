@@ -26,8 +26,6 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, Urdf
 from isaaclab.utils import configclass
 
 from . import terminations
-from . import events
-from . import bounded_ik
 import isaaclab.envs.mdp as mdp
 from isaaclab.envs.mdp.actions.rmpflow_actions_cfg import RMPFlowActionCfg
 from isaaclab.controllers.rmp_flow import RmpFlowControllerCfg
@@ -410,8 +408,7 @@ class ObservationsCfg:
 @configclass
 class EventCfg:
     """Configuration for events."""
-    reset_all            = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
-    reset_fixed_objects  = EventTerm(func=events.reset_objects_to_fixed_safe_pose, mode="reset")
+    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 
 @configclass
