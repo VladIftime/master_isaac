@@ -40,11 +40,11 @@ class AsyncDualPlayObservationsCfg:
     class AlicePolicyCfg(ObsGroup):
         """Alice's observations — no goal information."""
 
-        joint_pos = ObsTerm(
-            func=observations.robot_joint_positions,
+        ee_pose = ObsTerm(
+            func=observations.ee_poses,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["left_.*"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["right_.*"]),
+                "left_ee_cfg":  SceneEntityCfg("robot", body_names="left_wrist_3_link"),
+                "right_ee_cfg": SceneEntityCfg("robot", body_names="right_wrist_3_link"),
             },
         )
         gripper_pos = ObsTerm(
@@ -83,11 +83,11 @@ class AsyncDualPlayObservationsCfg:
     class BobPolicyCfg(ObsGroup):
         """Bob's observations — extends Alice's with goal state and distance to goal."""
 
-        joint_pos = ObsTerm(
-            func=observations.robot_joint_positions,
+        ee_pose = ObsTerm(
+            func=observations.ee_poses,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["left_.*"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["right_.*"]),
+                "left_ee_cfg":  SceneEntityCfg("robot", body_names="left_wrist_3_link"),
+                "right_ee_cfg": SceneEntityCfg("robot", body_names="right_wrist_3_link"),
             },
         )
         gripper_pos = ObsTerm(

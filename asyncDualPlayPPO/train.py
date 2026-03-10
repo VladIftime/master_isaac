@@ -67,8 +67,7 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
-    from asyncDualPlayPPO.algorithms.rl.ppo import PPO, PPOBCO
-    from asyncDualPlayPPO.buffers import GPUDemonstrationBuffer
+    from asyncDualPlayPPO.algorithms.rl.ppo import PPO
     # Import reward constants so train.py stays in sync with rewards.py.
     # Do not hardcode reward values here — change them in rewards.py instead.
     from asyncDualPlayPPO.tasks.utils.rewards import (
@@ -132,22 +131,27 @@ def main():
         alice_ppo.actor_critic.parameters(), lr=alice_ppo.learning_rate
     )
 
-    bob_ppo = PPOBCO(
+    bob_ppo = PPO(
         vec_env=env,
         cfg_train=ppo_cfg["params"],
         device=env.device,
         sampler="sequential",
         log_dir=f"runs/{args.exp_name}/bob",
         asymmetric=False,
-        idm_obs_dim=env.alice_obs_dim,
     )
-    abc_buffer = GPUDemonstrationBuffer(
-        capacity=100000,
-        obs_shape=env.bob_observation_space.shape,
-        action_shape=alice_ppo.action_space.shape,
-        device=env.device,
+    bob_ppo.observation_space = env.bob_observation_space
+    bob_ppo.state_space = bob_ppo.observation_space
+    bob_ppo.actor_critic = bob_ppo.actor_critic.__class__(
+        bob_ppo.observation_space.shape,
+        bob_ppo.state_space.shape,
+        bob_ppo.action_space.shape,
+        bob_ppo.init_noise_std,
+        bob_ppo.model_cfg,
+        asymmetric=False,
+    ).to(env.device)
+    bob_ppo.optimizer = torch.optim.Adam(
+        bob_ppo.actor_critic.parameters(), lr=bob_ppo.learning_rate
     )
-    bob_ppo.set_abc_buffer(abc_buffer)
 
     # --- Pre-allocated trajectory buffers for Alice ---
     alice_obs_log    = torch.zeros((args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device)
@@ -158,7 +162,6 @@ def main():
     alice_updates = 0
     bob_updates   = 0
     max_alice_bob_ratio = args.max_alice_bob_ratio
-    abc_coef = ppo_cfg["params"]["learn"].get("abc_coef", 0.0)
 
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
@@ -322,38 +325,6 @@ def main():
                     alice_rew_buf.append(tr_rew.sum().item())
                     perform_alice_update()
 
-                # BCO: use the IDM to translate Alice's state trajectory into
-                # kinematically correct Bob actions, bypassing the left/right arm mismatch.
-                alice_wins = bob_done_mask & (~success_mask)
-                win_ids    = torch.where(alice_wins)[0]
-                if len(win_ids) > 0:
-                    achieved_goals = em_info["goal_states"][win_ids]
-                    batch_obs, batch_act, batch_goals = [], [], []
-
-                    for idx in win_ids:
-                        c = alice_step_counts[idx].item()
-                        if c < 2:  # need at least (obs_t, obs_{t+1}) pairs
-                            continue
-                        obs_seq = alice_obs_log[idx, :c]
-                        g = achieved_goals[torch.where(win_ids == idx)[0][0]]
-
-                        obs_t      = obs_seq[:-1]
-                        obs_tplus1 = obs_seq[1:]
-                        with torch.no_grad():
-                            inferred_bob_actions = bob_ppo.idm(obs_t, obs_tplus1)
-
-                        batch_obs.append(obs_t)
-                        batch_act.append(inferred_bob_actions)
-                        batch_goals.append(g.unsqueeze(0).expand(c - 1, -1))
-
-                    if batch_obs:
-                        flat_alice_obs = torch.cat(batch_obs,   dim=0)
-                        flat_actions   = torch.cat(batch_act,   dim=0)
-                        flat_goals     = torch.cat(batch_goals, dim=0)
-                        flat_bob_obs   = env.construct_bob_observation(flat_alice_obs, flat_goals)
-                        dummy_log_probs = torch.zeros((flat_bob_obs.shape[0], 1), device=env.device)
-                        abc_buffer.add_batch(flat_bob_obs, flat_actions, dummy_log_probs)
-
                 alice_step_counts[done_ids] = 0
 
                 bob_success_buf.extend(success_mask[success_mask].cpu().numpy().astype(float).tolist())
@@ -370,7 +341,7 @@ def main():
             with torch.no_grad():
                 _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(obs, None)
             bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
-            loss_val, loss_surr, loss_bc, loss_idm = bob_ppo.update()
+            loss_val, loss_surr = bob_ppo.update()
             bob_ppo.storage.clear()
 
             mean_bob_rew     = np.mean(bob_rew_buf)     if bob_rew_buf     else 0.0
@@ -380,8 +351,6 @@ def main():
 
             writer.add_scalar("Loss/Bob/Value",       loss_val,         bob_updates)
             writer.add_scalar("Loss/Bob/Surrogate",   loss_surr,        bob_updates)
-            writer.add_scalar("Loss/Bob/BC",          loss_bc,          bob_updates)
-            writer.add_scalar("Loss/Bob/IDM",         loss_idm,         bob_updates)
             writer.add_scalar("Reward/Bob",           mean_bob_rew,     bob_updates)
             writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
             writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err,     bob_updates)
@@ -390,18 +359,12 @@ def main():
             print(f"\n{'='*60}\nBOB UPDATE {bob_updates}\n{'='*60}")
             print(f"  Success Rate: {bob_success_rate:.4f} ({len(bob_success_buf)} eps)")
             print(f"  Rewards:      mean={mean_bob_rew:.4f}")
-            if abc_coef == 0.0:
-                print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f} | BC=off | IDM=off")
-            else:
-                print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f} | BC={loss_bc:.4f} | IDM={loss_idm:.4f}")
+            print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f}")
             print(f"  Errors:       pos={mean_pos_err:.4f} | rot={mean_rot_err:.4f}")
             print(f"  Alice/Bob:    {alice_updates}/{bob_updates} updates (ratio cap={max_alice_bob_ratio})\n{'='*60}\n")
 
             if bob_updates % 10 == 0:
-                if abc_coef == 0.0:
-                    print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f} | BC=off | IDM=off")
-                else:
-                    print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f} | BC_Loss={loss_bc:.4f} | IDM_Loss={loss_idm:.4f}")
+                print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f}")
 
             if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
                 bob_ppo.save(os.path.join(bob_ppo.log_dir,   f"model_{bob_updates+1}.pt"))

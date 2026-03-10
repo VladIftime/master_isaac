@@ -3,3 +3,4 @@
 *.pt
 *.out
 runs/
+*.pyc

@@ -319,6 +319,7 @@ class ActionsCfg:
         ),
         articulation_prim_expr="/World/envs/env_.*/RobotUnified",
         scale=1.0,
+        use_relative_mode=True,
     )
 
     right_arm_action = RMPFlowActionCfg(
@@ -334,6 +335,7 @@ class ActionsCfg:
         ),
         articulation_prim_expr="/World/envs/env_.*/RobotUnified",
         scale=1.0,
+        use_relative_mode=True,
     )
 
     # Gripper joints are driven explicitly (including mimic knuckles) because the

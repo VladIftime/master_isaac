@@ -48,8 +48,9 @@ class ActorCritic(nn.Module):
     def act(self, observations, states):
         """Sample an action from the current policy."""
         actions_mean = self.actor(observations)
-        covariance   = torch.diag(self.log_std.exp() * self.log_std.exp())
-        distribution = MultivariateNormal(actions_mean, scale_tril=covariance)
+        # scale_tril = Cholesky factor: diag(std), NOT diag(std²)
+        scale_tril   = torch.diag(self.log_std.exp())
+        distribution = MultivariateNormal(actions_mean, scale_tril=scale_tril)
 
         actions          = distribution.sample()
         actions_log_prob = distribution.log_prob(actions)
@@ -71,8 +72,9 @@ class ActorCritic(nn.Module):
     def evaluate(self, observations, states, actions):
         """Evaluate log-probabilities and entropy of given actions under the current policy."""
         actions_mean = self.actor(observations)
-        covariance   = torch.diag(self.log_std.exp() * self.log_std.exp())
-        distribution = MultivariateNormal(actions_mean, scale_tril=covariance)
+        # scale_tril = Cholesky factor: diag(std), NOT diag(std²)
+        scale_tril   = torch.diag(self.log_std.exp())
+        distribution = MultivariateNormal(actions_mean, scale_tril=scale_tril)
 
         actions_log_prob = distribution.log_prob(actions)
         entropy          = distribution.entropy()

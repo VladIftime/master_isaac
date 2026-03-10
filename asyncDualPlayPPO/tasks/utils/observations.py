@@ -40,6 +40,34 @@ def robot_joint_positions(
     ], dim=-1)
 
 
+def ee_poses(
+    env: ManagerBasedRLEnv,
+    left_ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="left_wrist_3_link"),
+    right_ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="right_wrist_3_link"),
+) -> torch.Tensor:
+    """
+    End-effector poses (position + quaternion) for both arms.
+
+    Positions are returned in environment-local coordinates (relative to
+    env_origins) so they are comparable across parallel environments.
+
+    Returns:
+        (num_envs, 14) — [left_pos(3), left_quat(4), right_pos(3), right_quat(4)]
+    """
+    robot = env.scene[left_ee_cfg.name]
+
+    left_ids, _ = robot.find_bodies(left_ee_cfg.body_names)
+    right_ids, _ = env.scene[right_ee_cfg.name].find_bodies(right_ee_cfg.body_names)
+
+    left_pos = robot.data.body_pos_w[:, left_ids[0]] - env.scene.env_origins
+    left_quat = robot.data.body_quat_w[:, left_ids[0]]
+
+    right_pos = env.scene[right_ee_cfg.name].data.body_pos_w[:, right_ids[0]] - env.scene.env_origins
+    right_quat = env.scene[right_ee_cfg.name].data.body_quat_w[:, right_ids[0]]
+
+    return torch.cat([left_pos, left_quat, right_pos, right_quat], dim=-1)
+
+
 def gripper_positions(
     env: ManagerBasedRLEnv,
     left_arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),

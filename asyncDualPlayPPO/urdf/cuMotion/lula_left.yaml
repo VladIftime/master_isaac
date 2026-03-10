@@ -124,3 +124,10 @@ collision_spheres:
       "radius": 0.09
     - "center": [-0.114, 0.001, 0.137]
       "radius": 0
+
+world_collision:
+  - name: "table"
+    type: "box"
+    frame: "world"
+    center: [0.6, 0.0, -0.05]
+    size: [2.0, 2.0, 0.1]

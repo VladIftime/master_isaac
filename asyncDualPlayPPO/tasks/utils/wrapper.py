@@ -65,14 +65,14 @@ class AsyncDualPlayEnvWrapper:
         # Attach manager to env so reward functions can access it
         self.env.episode_manager = self.episode_manager
         
-        # Robot state dimensions (12 joints + 2 grippers)
-        self.robot_state_dim = 14
+        # Robot state dimensions (EE poses: 7 per arm × 2 + 2 grippers)
+        self.robot_state_dim = 16
         
         # Observation space sizes (2 objects: target_object and cube)
-        # Alice: 12 (joints) + 2 (grippers) + 2 * 17 (objects) = 48
-        self.alice_obs_dim = 48
-        # Bob: Alice (48) + Goals (2*7=14) + Distances (2*2=4) = 66
-        self.bob_obs_dim = 66
+        # Alice: 14 (EE poses) + 2 (grippers) + 2 * 17 (objects) = 50
+        self.alice_obs_dim = 50
+        # Bob: Alice (50) + Goals (2*7=14) + Distances (2*2=4) = 68
+        self.bob_obs_dim = 68
         
         # Create separate observation spaces
         self.alice_observation_space = gym.spaces.Box(
@@ -110,8 +110,9 @@ class AsyncDualPlayEnvWrapper:
             "y_range": (0.3, 0.9),
         }
         
-        print(f"[AsyncDualPlayEnvWrapper] Initialized")
+        print(f"[AsyncDualPlayEnvWrapper] Initialized (task-space mode)")
         print(f"  Alice obs: {self.alice_obs_dim}, Bob obs: {self.bob_obs_dim}")
+        print(f"  Robot state: {self.robot_state_dim} (EE poses 7×2 + grippers 2)")
         
     @property
     def num_envs(self):
@@ -669,16 +670,14 @@ class AsyncDualPlayEnvWrapper:
         """Get Alice's observations (no goal info)"""
         from isaaclab.managers import SceneEntityCfg
 
-        # 1. Robot joints (12)
-        # FIX: Explicitly specify which joints belong to left vs right arm
-        joints = observations.robot_joint_positions(
+        # 1. End-effector poses (14 = 7 per arm)
+        ee = observations.ee_poses(
             self.env,
-            left_arm_cfg=SceneEntityCfg("robot", joint_names=["left_.*"]),
-            right_arm_cfg=SceneEntityCfg("robot", joint_names=["right_.*"])
+            left_ee_cfg=SceneEntityCfg("robot", body_names="left_wrist_3_link"),
+            right_ee_cfg=SceneEntityCfg("robot", body_names="right_wrist_3_link"),
         )
         
         # 2. Grippers (2)
-        # FIX: Explicitly specify the gripper finger joints
         grippers = observations.gripper_positions(
             self.env,
             left_arm_cfg=SceneEntityCfg("robot", joint_names=["lgripper_finger_joint"]),
@@ -688,8 +687,8 @@ class AsyncDualPlayEnvWrapper:
         # 3. Objects (2 * 17 = 34) - target_object and cube
         obj_states = self._extract_object_states(obs_dict)
         
-        # Concatenate: (num_envs, 12 + 2 + 34) = (num_envs, 48)
-        return torch.cat([joints, grippers, obj_states], dim=-1)
+        # Concatenate: (num_envs, 14 + 2 + 34) = (num_envs, 50)
+        return torch.cat([ee, grippers, obj_states], dim=-1)
     
     def construct_bob_observation(self, alice_obs: torch.Tensor, goal_states: torch.Tensor) -> torch.Tensor:
         """
