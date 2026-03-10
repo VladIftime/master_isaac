@@ -17,9 +17,10 @@ params:
     max_grad_norm: 1.0
     value_loss_coef: 1.0
     
-    # BCO (Behavioral Cloning from Observation)
-    # Now safe to use: demo buffer is filled with IDM-inferred Bob actions, not Alice's left-arm actions.
-    abc_coef: 0.05
+    # BCO (Behavioral Cloning from Observation) — DISABLED
+    # IDM produces garbage actions for out-of-distribution Alice trajectories, poisoning the BC buffer.
+    # Set to 0.0 to run standard PPO without behavioral cloning.
+    abc_coef: 0.0
     abc_clip_param: 0.2
     abc_batch_size: 2048  # Fixed batch size for ABC updates (independent of num_envs)
     

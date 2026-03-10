@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=adp_bco_low
+#SBATCH --job-name=adp_low
 #SBATCH --time=01:00:00
 #SBATCH --partition=gpushort
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --output=slurm-%j-bco_low.out
+#SBATCH --output=slurm-%j-low.out
 
 # ── I/O config ──────────────────────────────────────────────────────────────
 # Write checkpoints and TensorBoard logs to the node's fast local scratch,
@@ -17,7 +17,7 @@ mkdir -p "$LOCAL_RUNS"
 
 # ── Env scaling ──────────────────────────────────────────────────────────────
 # Buffer budget: keep total transitions ≈ 131 072 (fits on an A100 with room).
-#   num_envs=1024 → nsteps = 131072 / 1024 = 128
+#   num_envs=512 → nsteps = 131072 / 512 = 256
 # num_envs is passed on the command line; nsteps is set via --nsteps override.
 NUM_ENVS=512
 NSTEPS=256
@@ -51,7 +51,8 @@ apptainer exec --nv \
     --num_envs "$NUM_ENVS" \
     --nsteps   "$NSTEPS" \
     --max_iterations 5000 \
-    --exp_name "hpc_bco_low" \
+    --exp_name "hpc_low" \
+    --max_alice_bob_ratio 5 \
     --save_interval 500 \
     --headless \
     | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \

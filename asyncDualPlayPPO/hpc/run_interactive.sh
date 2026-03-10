@@ -56,7 +56,8 @@ apptainer exec --nv \
     --num_envs "$NUM_ENVS" \
     --nsteps   "$NSTEPS" \
     --max_iterations 5000 \
-    --exp_name "hpc_bco_interactive" \
+    --exp_name "hpc_interactive" \
+    --max_alice_bob_ratio 5 \
     --save_interval 500 \
     --headless
 

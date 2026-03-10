@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=adp_bco_med
+#SBATCH --job-name=adp_med
 #SBATCH --time=12:00:00
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=48G
-#SBATCH --output=slurm-%j-bco_med.out
+#SBATCH --mem=32G
+#SBATCH --output=slurm-%j-med.out
 
 # ── I/O config ──────────────────────────────────────────────────────────────
 # Write checkpoints and TensorBoard logs to the node's fast local scratch.
@@ -48,7 +48,8 @@ apptainer exec --nv \
     --num_envs "$NUM_ENVS" \
     --nsteps   "$NSTEPS" \
     --max_iterations 50000 \
-    --exp_name "hpc_bco_med" \
+    --exp_name "hpc_med" \
+    --max_alice_bob_ratio 5 \
     --save_interval 1000 \
     --headless \
     | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \

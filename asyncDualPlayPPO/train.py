@@ -46,6 +46,8 @@ def main():
     parser.add_argument("--nsteps", type=int, default=None, help="Override rollout steps per env (to prevent OOM on high num_envs)")
     parser.add_argument("--max_iterations", type=int, default=1000)
     parser.add_argument("--save_interval", type=int, default=50)
+    parser.add_argument("--max_alice_bob_ratio", type=int, default=5,
+                        help="Max Alice PPO updates per Bob update (prevents non-stationarity)")
     parser.add_argument("--chkpt_alice", type=str, default=None)
     parser.add_argument("--chkpt_bob", type=str, default=None)
     parser.add_argument(
@@ -155,6 +157,8 @@ def main():
 
     alice_updates = 0
     bob_updates   = 0
+    max_alice_bob_ratio = args.max_alice_bob_ratio
+    abc_coef = ppo_cfg["params"]["learn"].get("abc_coef", 0.0)
 
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
@@ -177,6 +181,11 @@ def main():
             return
 
         nonlocal alice_updates
+
+        # Gate: don't let Alice outpace Bob too much
+        if alice_updates >= (bob_updates + 1) * max_alice_bob_ratio:
+            return  # Alice waits for Bob to catch up
+
         dummy_val = torch.zeros(env.num_envs, 1, device=env.device)
         alice_ppo.storage.compute_returns(dummy_val, alice_ppo.gamma, alice_ppo.lam)
         loss_val, loss_surr = alice_ppo.update()
@@ -381,11 +390,18 @@ def main():
             print(f"\n{'='*60}\nBOB UPDATE {bob_updates}\n{'='*60}")
             print(f"  Success Rate: {bob_success_rate:.4f} ({len(bob_success_buf)} eps)")
             print(f"  Rewards:      mean={mean_bob_rew:.4f}")
-            print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f} | BC={loss_bc:.4f} | IDM={loss_idm:.4f}")
-            print(f"  Errors:       pos={mean_pos_err:.4f} | rot={mean_rot_err:.4f}\n{'='*60}\n")
+            if abc_coef == 0.0:
+                print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f} | BC=off | IDM=off")
+            else:
+                print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f} | BC={loss_bc:.4f} | IDM={loss_idm:.4f}")
+            print(f"  Errors:       pos={mean_pos_err:.4f} | rot={mean_rot_err:.4f}")
+            print(f"  Alice/Bob:    {alice_updates}/{bob_updates} updates (ratio cap={max_alice_bob_ratio})\n{'='*60}\n")
 
             if bob_updates % 10 == 0:
-                print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f} | BC_Loss={loss_bc:.4f} | IDM_Loss={loss_idm:.4f}")
+                if abc_coef == 0.0:
+                    print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f} | BC=off | IDM=off")
+                else:
+                    print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f} | BC_Loss={loss_bc:.4f} | IDM_Loss={loss_idm:.4f}")
 
             if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
                 bob_ppo.save(os.path.join(bob_ppo.log_dir,   f"model_{bob_updates+1}.pt"))
