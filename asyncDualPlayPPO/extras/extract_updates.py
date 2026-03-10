@@ -2,8 +2,10 @@ import os
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(script_dir)
-log_file = os.path.join(base_dir, 'logs', '25_rot_NLL_dense.out')
-output_file = os.path.join(base_dir, 'logs', '25_rot_NLL_dense_updates_only.out')
+name_of_file = 'slurm-27623781-bco_med'
+name_of_output= name_of_file + '_updates'
+log_file = os.path.join(base_dir, 'logs', name_of_file+'.out')
+output_file = os.path.join(base_dir, 'logs', name_of_output+'.out')
 
 state = 0
 block = []

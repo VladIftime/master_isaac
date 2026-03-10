@@ -1,0 +1,31 @@
+#usda 1.0
+(
+    doc ="""Generated from node description file OgnMultisequence.ogn
+Contains templates for node types found in that file."""
+)
+
+def OmniGraph "TestGraph"
+{
+    token evaluator:type = "push"
+    int2 fileFormatVersion = (1, 3)
+    token flatCacheBacking = "Shared"
+    token pipelineStage = "pipelineStageSimulation"
+
+    def OmniGraphNode "Template_omni_graph_action_Multisequence" (
+        docs="""Outputs an execution pulse along each of its N outputs in sequence. For every single input execution pulse, each and every output will be exclusively enabled in order. 'Output 0' is provided by default. To add more to the sequence add new output attributes with indexed unique names, such as 'outputs:output1', 'outputs:output2', etc."""
+    )
+    {
+        token node:type = "omni.graph.action.Multisequence"
+        int node:typeVersion = 2
+
+        # 1 attribute
+        custom uint inputs:execIn (
+            docs="""Signal to the graph that this node is ready to be executed."""
+        )
+
+        # 1 attribute
+        custom uint outputs:output0 (
+            docs="""Signal to the graph that execution can continue downstream."""
+        )
+    }
+}

@@ -1,0 +1,46 @@
+#usda 1.0
+(
+    doc ="""Generated from node description file OgnRationalTimeSyncGate.ogn
+Contains templates for node types found in that file."""
+)
+
+def OmniGraph "TestGraph"
+{
+    token evaluator:type = "push"
+    int2 fileFormatVersion = (1, 3)
+    token flatCacheBacking = "Shared"
+    token pipelineStage = "pipelineStageSimulation"
+
+    def OmniGraphNode "Template_omni_graph_action_RationalTimeSyncGate" (
+        docs="""Activate the downstream graphs after all of the input signals have been triggered with the same synchronization value. An internal count is maintained that resets whenever a new synchronization value is encountered. If the count reaches a number equal to the number of 'Execute In' inputs then the 'Execute Out' activation signals to the downstream graph that it is ready to be executed.
+The synchronization value is expressed as a rational number, conceptually equal to 'Sync Numerator' / 'Sync Denominator', although a zero denominator is accepted because the division is not actually performed. The comparison is made between two rational values by first reducing them by their greatest common denominators and then comparing numerator and denominator individually.
+This means, for example, that 1/2 and 3/6 will be considered the same, but 1/0 and 2/0 will not since they cannot be reduced."""
+    )
+    {
+        token node:type = "omni.graph.action.RationalTimeSyncGate"
+        int node:typeVersion = 2
+
+        # 3 attributes
+        custom uint inputs:execIn (
+            docs="""Signal to the graph that this node is ready to be executed."""
+        )
+        custom uint64 inputs:rationalTimeDenominator = 0 (
+            docs="""Denominator of the synchronization time."""
+        )
+        custom int64 inputs:rationalTimeNumerator = 0 (
+            docs="""Numerator of the synchronization time."""
+        )
+
+        # 3 attributes
+        custom uint outputs:execOut (
+            docs="""After all 'Execute In' connections have been activated at the same rational time, signal
+            to the graph that execution can continue downstream."""
+        )
+        custom uint64 outputs:rationalTimeDenominator (
+            docs="""Denominator of the synchronization time, whether 'Execute Out' was activated or not."""
+        )
+        custom int64 outputs:rationalTimeNumerator (
+            docs="""Numerator of the synchronization time, whether 'Execute Out' was activated or not."""
+        )
+    }
+}

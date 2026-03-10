@@ -44,7 +44,8 @@ echo "[INFO] Local runs:    $LOCAL_RUNS"
 echo "[INFO] Buffer size:   ${NUM_ENVS} envs × ${NSTEPS} steps = $(( NUM_ENVS * NSTEPS )) transitions"
 
 apptainer exec --nv \
-    --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project \
+    --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
+    --bind "$LOCAL_RUNS":"$PROJECT_ROOT/runs" \
     --bind "$LOCAL_RUNS":/workspace/isaaclab/logs \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \

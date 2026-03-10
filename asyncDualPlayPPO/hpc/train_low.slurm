@@ -19,8 +19,8 @@ mkdir -p "$LOCAL_RUNS"
 # Buffer budget: keep total transitions ≈ 131 072 (fits on an A100 with room).
 #   num_envs=1024 → nsteps = 131072 / 1024 = 128
 # num_envs is passed on the command line; nsteps is set via --nsteps override.
-NUM_ENVS=1024
-NSTEPS=128
+NUM_ENVS=512
+NSTEPS=256
 # ────────────────────────────────────────────────────────────────────────────
 
 SIF_IMAGE="isaac-lab.sif"
@@ -39,7 +39,8 @@ if [ ! -f "$SIF_IMAGE" ]; then
 fi
 
 apptainer exec --nv \
-    --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project \
+    --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
+    --bind "$LOCAL_RUNS":"$PROJECT_ROOT/runs" \
     --bind "$LOCAL_RUNS":/workspace/isaaclab/logs \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
