@@ -184,6 +184,7 @@ def main():
 
         # Gate: don't let Alice outpace Bob too much
         if alice_updates >= (bob_updates + 1) * max_alice_bob_ratio:
+            alice_ppo.storage.clear()  # Discard data to prevent buffer overflow
             return  # Alice waits for Bob to catch up
 
         dummy_val = torch.zeros(env.num_envs, 1, device=env.device)

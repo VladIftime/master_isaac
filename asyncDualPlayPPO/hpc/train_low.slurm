@@ -17,10 +17,10 @@ mkdir -p "$LOCAL_RUNS"
 
 # ── Env scaling ──────────────────────────────────────────────────────────────
 # Buffer budget: keep total transitions ≈ 131 072 (fits on an A100 with room).
-#   num_envs=512 → nsteps = 131072 / 512 = 256
+#   num_envs=256 → nsteps = 131072 / 256 = 512
 # num_envs is passed on the command line; nsteps is set via --nsteps override.
-NUM_ENVS=512
-NSTEPS=256
+NUM_ENVS=256
+NSTEPS=512
 # ────────────────────────────────────────────────────────────────────────────
 
 SIF_IMAGE="isaac-lab.sif"
