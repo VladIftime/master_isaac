@@ -70,7 +70,19 @@ class RolloutStorage:
             self.returns[step] = advantage + self.values[step]
 
         self.advantages = self.returns - self.values
-        self.advantages = (self.advantages - self.advantages.mean()) / (self.advantages.std() + 1e-8)
+
+        # Normalize advantages using ONLY valid (mask=1) entries.
+        # Alice's buffer is ~95% zero-padding; including those zeros in
+        # the normalization makes std tiny → valid advantages explode.
+        valid = self.masks.bool().squeeze(-1)  # (T, N)
+        if valid.any():
+            valid_adv = self.advantages[valid]
+            adv_mean = valid_adv.mean()
+            adv_std  = valid_adv.std() + 1e-8
+        else:
+            adv_mean = self.advantages.mean()
+            adv_std  = self.advantages.std() + 1e-8
+        self.advantages = (self.advantages - adv_mean) / adv_std
 
     def get_statistics(self):
         done         = self.dones.cpu()

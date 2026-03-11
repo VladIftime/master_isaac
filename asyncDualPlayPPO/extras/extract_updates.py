@@ -2,7 +2,7 @@ import os
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(script_dir)
-name_of_file = '25_rot_bco'
+name_of_file = 'slurm-27711534-med'
 name_of_output= name_of_file + '_updates'
 log_file = os.path.join(base_dir, 'logs', name_of_file+'.out')
 output_file = os.path.join(base_dir, 'logs', name_of_output+'.out')
