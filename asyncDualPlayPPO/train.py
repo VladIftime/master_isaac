@@ -74,6 +74,7 @@ def main():
         ALICE_BOB_FAIL_REWARD,
         ALICE_BOB_SUCCESS_REWARD,
         ALICE_VALID_GOAL_BONUS,
+        ALICE_INVALID_GOAL_PENALTY,
     )
 
     # --- Environment ---
@@ -275,44 +276,52 @@ def main():
 
         if "episode_manager" in extras:
             em_info = extras["episode_manager"]
+            
+            # Identify which environments need Alice's PPO buffer updated
             bob_done_mask = em_info["bob_done_this_step"]
-
-            if bob_done_mask.any():
-                done_ids     = torch.where(bob_done_mask)[0]
-                success_mask = em_info["bob_success_this_step"]
-
-                for idx in done_ids:
-                    env_id     = idx.item()
-                    is_success = success_mask[idx].item()
-                    count      = alice_step_counts[env_id].item()
+            alice_failed_mask = extras.get("alice_failed_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+            
+            alice_eval_mask = alice_failed_mask | bob_done_mask
+            if alice_eval_mask.any():
+                eval_ids = torch.where(alice_eval_mask)[0]
+                bob_success_mask = em_info["bob_success_this_step"]
+                
+                for idx in eval_ids:
+                    env_id = idx.item()
+                    count = min(alice_step_counts[env_id].item(), max_alice_steps)
                     if count == 0:
                         continue
-
+                        
                     tr_obs = alice_obs_log[env_id, :count]
                     tr_act = alice_act_log[env_id, :count]
                     with torch.no_grad():
-                        _, tr_logprob, tr_val, tr_mu, tr_sigma = alice_ppo.actor_critic.evaluate(
-                            tr_obs, None, tr_act
-                        )
-
-                    # Outcome reward: defined in rewards.py — do not hardcode here.
-                    alice_reward = ALICE_BOB_SUCCESS_REWARD if is_success else ALICE_BOB_FAIL_REWARD
+                        _, tr_logprob, tr_val, tr_mu, tr_sigma = alice_ppo.actor_critic.evaluate(tr_obs, None, tr_act)
+                    
+                    # Determine exact outcome reward based on how the phase ended
+                    if alice_failed_mask[env_id]:
+                        alice_reward = ALICE_INVALID_GOAL_PENALTY
+                        reason = "Invalid Goal"
+                    else:
+                        is_success = bob_success_mask[idx].item()
+                        alice_reward = ALICE_BOB_SUCCESS_REWARD if is_success else ALICE_BOB_FAIL_REWARD
+                        reason = "Bob Succeeded" if is_success else "Bob Failed"
+                        
                     validity_bonus = alice_validity_buffer[env_id].item()
                     alice_validity_buffer[env_id] = 0.0
-
-                    if alice_reward > 0:
-                        print(f"[Alice Reward] Env {env_id}: +{alice_reward} | Bob Failed")
+                    
+                    if alice_reward != 0 and not alice_failed_mask[env_id]:
+                        print(f"[Alice Reward] Env {env_id}: {alice_reward:+.1f} | {reason}")
                     if validity_bonus != 0:
-                        print(f"[Alice Reward] Env {env_id}: +{validity_bonus} | Valid Goal")
-
-                    tr_rew       = torch.zeros(count, device=env.device)
-                    tr_rew[-1]  += alice_reward + validity_bonus
-                    tr_done      = torch.zeros(count, device=env.device)
-                    tr_done[-1]  = 1.0
-
+                        print(f"[Alice Reward] Env {env_id}: {validity_bonus:+.1f} | Goal Validity/OOB")
+                        
+                    tr_rew = torch.zeros(count, device=env.device)
+                    tr_rew[-1] += alice_reward + validity_bonus
+                    tr_done = torch.zeros(count, device=env.device)
+                    tr_done[-1] = 1.0
+                    
                     valid_mask = torch.zeros(env.num_envs, 1, device=env.device)
                     valid_mask[env_id] = 1.0
-
+                    
                     for t in range(count):
                         _o  = torch.zeros(env.num_envs, env.alice_obs_dim, device=env.device); _o[env_id]  = tr_obs[t]
                         _a  = torch.zeros(env.num_envs, *env.action_space.shape, device=env.device); _a[env_id]  = tr_act[t]
@@ -323,14 +332,17 @@ def main():
                         _r  = torch.zeros(env.num_envs, device=env.device); _r[env_id]  = tr_rew[t]
                         _d  = torch.zeros(env.num_envs, device=env.device); _d[env_id]  = tr_done[t]
                         alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, valid_mask)
-
+                    
                     alice_rew_buf.append(tr_rew.sum().item())
                     perform_alice_update()
+                    
+                alice_step_counts[eval_ids] = 0
 
-                alice_step_counts[done_ids] = 0
-
-                bob_success_buf.extend(success_mask[success_mask].cpu().numpy().astype(float).tolist())
-                bob_success_buf.extend([0.0] * (bob_done_mask & ~success_mask).sum().item())
+            # Bob metric logging
+            if bob_done_mask.any():
+                bob_success_mask = em_info["bob_success_this_step"]
+                bob_success_buf.extend(bob_success_mask[bob_success_mask].cpu().numpy().astype(float).tolist())
+                bob_success_buf.extend([0.0] * (bob_done_mask & ~bob_success_mask).sum().item())
                 bob_pos_err_buf.extend(em_info["bob_pos_err"][bob_done_mask].cpu().numpy().tolist())
                 bob_rot_err_buf.extend(em_info["bob_rot_err"][bob_done_mask].cpu().numpy().tolist())
 

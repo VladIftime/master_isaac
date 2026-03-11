@@ -219,9 +219,15 @@ class AsyncDualPlayEnvWrapper:
             if len(alice_done_ids) > 0:
                 any_reset = True
             
-            # FIX: Terminate episodes with invalid goals so train.py resets Alice counters
             if len(invalid_ids) > 0:
                  terminated[invalid_ids] = True
+                 # FIX: Force EpisodeManager to reset these failed environments
+                 # so they don't leak phase steps into the next timestep.
+                 self.episode_manager.reset_episode(invalid_ids, reason="Invalid Goal")
+                 
+            # Add early flag to extras so train.py knows Alice failed
+            extras["alice_failed_this_step"] = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+            extras["alice_failed_this_step"][invalid_ids] = True
         
         # Track Bob's success for logging
         step_bob_success = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
