@@ -4,3 +4,5 @@
 *.out
 runs/
 *.pyc
+__pycache__/
+*.sif
