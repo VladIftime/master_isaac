@@ -3,9 +3,10 @@ params:
     optim_stepsize: 3.0e-4
     schedule: fixed
     desired_kl: 0.016
-    # Task-space exploration: 0.15 gives ±15 cm position and ±8.6° rotation deltas.
-    # Too low (0.05) → all envs produce near-identical actions; too high (0.8) → RMPflow clamping.
-    init_noise_std: 0.15
+    # init_noise_std: 1.0 ensures PPO gradients are mathematically stable (scale 1.0).
+    # Physical scaling (e.g. 5cm exploration) is now handled in wrapper.py to prevent 
+    # the 1/sigma^2 gradient explosion.
+    init_noise_std: 1.0
     nsteps: 2048
 
     # PPO params

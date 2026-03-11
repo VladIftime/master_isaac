@@ -1,3 +1,6 @@
+130,129,124,125,70,75,76,77,78,59,58,54,50,49,48,45,43,39,38,30,29,28,21
+
+
 Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/data/Kit/Isaac-Sim/5.0/user.config.json'
 [Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260219_114636.log
 2026-02-19T10:46:36Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'

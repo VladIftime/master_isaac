@@ -145,8 +145,18 @@ class AsyncDualPlayEnvWrapper:
             truncated: Episode truncation flags
             info: Additional info including phase transitions
         """
+        # ----------------------------------------------------------------------
+        # ACTION SCALING (As per 'fix imple.md')
+        # We decouple PPO's mathematical variance (std=1.0) from physical 
+        # exploration (5cm). Scale delta Cartesian poses by 0.05.
+        # Dims 0:6 = Left Arm, Dims 7:13 = Right Arm. Grippers (6, 13) unscaled.
+        # ----------------------------------------------------------------------
+        scaled_action = action.clone()
+        scaled_action[:, 0:6] *= 0.05
+        scaled_action[:, 7:13] *= 0.05
+        
         # Step base environment (expect 5-tuple)
-        obs_dict, rewards, terminated, truncated, extras = self.env.step(action)
+        obs_dict, rewards, terminated, truncated, extras = self.env.step(scaled_action)
         
 
         

@@ -286,16 +286,19 @@ def main():
                 eval_ids = torch.where(alice_eval_mask)[0]
                 bob_success_mask = em_info["bob_success_this_step"]
                 
+                # First pass: precalculate lengths and outcome rewards
+                max_count = 0
+                env_counts = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+                env_rewards = torch.zeros(env.num_envs, device=env.device)
+                
                 for idx in eval_ids:
                     env_id = idx.item()
                     count = min(alice_step_counts[env_id].item(), max_alice_steps)
                     if count == 0:
                         continue
                         
-                    tr_obs = alice_obs_log[env_id, :count]
-                    tr_act = alice_act_log[env_id, :count]
-                    with torch.no_grad():
-                        _, tr_logprob, tr_val, tr_mu, tr_sigma = alice_ppo.actor_critic.evaluate(tr_obs, None, tr_act)
+                    env_counts[env_id] = count
+                    max_count = max(max_count, count)
                     
                     # Determine exact outcome reward based on how the phase ended
                     if alice_failed_mask[env_id]:
@@ -309,31 +312,41 @@ def main():
                     validity_bonus = alice_validity_buffer[env_id].item()
                     alice_validity_buffer[env_id] = 0.0
                     
-                    if alice_reward != 0 and not alice_failed_mask[env_id]:
-                        print(f"[Alice Reward] Env {env_id}: {alice_reward:+.1f} | {reason}")
-                    if validity_bonus != 0:
-                        print(f"[Alice Reward] Env {env_id}: {validity_bonus:+.1f} | Goal Validity/OOB")
+                    env_rewards[env_id] = alice_reward + validity_bonus
+                    alice_rew_buf.append(env_rewards[env_id].item())
+                
+                # Second pass: densely insert transitions in parallel across environments up to max_count
+                if max_count > 0:
+                    for t in range(max_count):
+                        # Mask for environments that are still active at time t
+                        active_mask = (env_counts > t).float().unsqueeze(1)  # [num_envs, 1]
                         
-                    tr_rew = torch.zeros(count, device=env.device)
-                    tr_rew[-1] += alice_reward + validity_bonus
-                    tr_done = torch.zeros(count, device=env.device)
-                    tr_done[-1] = 1.0
-                    
-                    valid_mask = torch.zeros(env.num_envs, 1, device=env.device)
-                    valid_mask[env_id] = 1.0
-                    
-                    for t in range(count):
-                        _o  = torch.zeros(env.num_envs, env.alice_obs_dim, device=env.device); _o[env_id]  = tr_obs[t]
-                        _a  = torch.zeros(env.num_envs, *env.action_space.shape, device=env.device); _a[env_id]  = tr_act[t]
-                        _v  = torch.zeros(env.num_envs, 1, device=env.device); _v[env_id]  = tr_val[t]
-                        _lp = torch.zeros(env.num_envs, 1, device=env.device); _lp[env_id] = tr_logprob[t]
-                        _m  = torch.zeros_like(actions); _m[env_id]  = tr_mu[t]
-                        _s  = torch.zeros_like(actions); _s[env_id]  = tr_sigma[t]
-                        _r  = torch.zeros(env.num_envs, device=env.device); _r[env_id]  = tr_rew[t]
-                        _d  = torch.zeros(env.num_envs, device=env.device); _d[env_id]  = tr_done[t]
-                        alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, valid_mask)
-                    
-                    alice_rew_buf.append(tr_rew.sum().item())
+                        _o = torch.zeros((env.num_envs, env.alice_obs_dim), device=env.device)
+                        _a = torch.zeros((env.num_envs, *env.action_space.shape), device=env.device)
+                        _r = torch.zeros((env.num_envs,), device=env.device)
+                        _d = torch.zeros((env.num_envs,), device=env.device)
+                        
+                        active_ids = torch.where(env_counts > t)[0]
+                        if len(active_ids) > 0:
+                            _o[active_ids] = alice_obs_log[active_ids, t]
+                            _a[active_ids] = alice_act_log[active_ids, t]
+                            
+                            # Reward and done flag only given on the exact target step
+                            is_last_step = (env_counts == (t + 1))
+                            last_step_ids = torch.where(is_last_step)[0]
+                            if len(last_step_ids) > 0:
+                                _r[last_step_ids] = env_rewards[last_step_ids]
+                                _d[last_step_ids] = 1.0
+                                
+                            with torch.no_grad():
+                                _lp, _, _v, _m, _s = alice_ppo.actor_critic.evaluate(_o, None, _a)
+                            
+                            # Zero out unused values/logprobs for cleanliness
+                            _v = _v.view(-1, 1) * active_mask
+                            _lp = _lp.view(-1, 1) * active_mask
+                            
+                            alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, active_mask)
+                            
                     perform_alice_update()
                     
                 alice_step_counts[eval_ids] = 0

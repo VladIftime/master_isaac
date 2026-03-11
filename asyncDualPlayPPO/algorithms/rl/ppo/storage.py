@@ -82,7 +82,13 @@ class RolloutStorage:
         else:
             adv_mean = self.advantages.mean()
             adv_std  = self.advantages.std() + 1e-8
+            
         self.advantages = (self.advantages - adv_mean) / adv_std
+        
+        # CRITICAL FIX: Zero out advantages for invalid/padded entries!
+        # Otherwise, the normalization shifts the 0.0 advantages of padded entries 
+        # to (0 - mean)/std, which causes massive surrogate loss explosions.
+        self.advantages[~valid] = 0.0
 
     def get_statistics(self):
         done         = self.dones.cpu()
