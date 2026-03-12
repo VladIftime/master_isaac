@@ -108,6 +108,7 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
             enabled_self_collisions=True,
             solver_position_iteration_count=8,
             solver_velocity_iteration_count=0,
+            fix_root_link=True,
         ),
         activate_contact_sensors=True,
     ),
