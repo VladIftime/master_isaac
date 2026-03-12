@@ -60,6 +60,7 @@ class EpisodeManager:
         self.bob_ever_failed = torch.zeros(num_envs, dtype=torch.bool, device=device)  # Has Bob failed at any point in episode?
         self.prev_obj_success: Optional[torch.Tensor] = None  # Tracks per-object success for rewards
         self.completion_given = torch.zeros(num_envs, dtype=torch.bool, device=device)  # Tracks if +5 bonus was given
+        self.max_contact_force = torch.zeros(num_envs, device=device)  # Track contact forces for Safe-State HER
         
         print(f"[EpisodeManager] Initialized for {num_envs} envs")
         print(f"  Alice timesteps: {alice_timesteps}")
@@ -122,6 +123,7 @@ class EpisodeManager:
         self.goal_count[env_ids] += 1
         # Reset reward tracking for fresh Bob phase
         self.completion_given[env_ids] = False
+        self.max_contact_force[env_ids] = 0.0
         if self.prev_obj_success is not None:
             self.prev_obj_success[env_ids] = False
     
@@ -155,6 +157,7 @@ class EpisodeManager:
         self.bob_success[env_ids] = False
         self.bob_ever_failed[env_ids] = False  # Reset episode-level failure tracking
         self.completion_given[env_ids] = False
+        self.max_contact_force[env_ids] = 0.0
         if self.prev_obj_success is not None:
              self.prev_obj_success[env_ids] = False
     

@@ -88,6 +88,7 @@ class PPO:
             self.device,
             sampler,
         )
+        self.demo_buffer = None
 
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=self.learning_rate)
 
@@ -264,6 +265,31 @@ class PPO:
                 old_mu_batch                = self.storage.mu.view(-1, self.storage.actions.size(-1))[indices]
                 old_sigma_batch             = self.storage.sigma.view(-1, self.storage.actions.size(-1))[indices]
                 masks_batch                 = self.storage.masks.view(-1, 1)[indices]
+
+                # --- PHASE 4: Inject Safe-State HER Demonstrations ---
+                if getattr(self, "demo_buffer", None) is not None:
+                    # e.g., mix 25% demonstrations into the mini-batch size
+                    demo_batch_size = max(1, self.mini_batch_size // 4)
+                    demo_batch = self.demo_buffer.sample(demo_batch_size)
+                    
+                    if demo_batch is not None:
+                        d_obs, d_states, d_acts, d_vals, d_ret, d_lp, d_adv, d_mu, d_sig = demo_batch
+                        # Concatenate demo components with the rollout batch
+                        obs_batch = torch.cat([obs_batch, d_obs], dim=0)
+                        if self.asymmetric and states_batch is not None and d_states is not None:
+                            states_batch = torch.cat([states_batch, d_states], dim=0)
+                        actions_batch = torch.cat([actions_batch, d_acts], dim=0)
+                        target_values_batch = torch.cat([target_values_batch, d_vals], dim=0)
+                        returns_batch = torch.cat([returns_batch, d_ret], dim=0)
+                        old_actions_log_prob_batch = torch.cat([old_actions_log_prob_batch, d_lp], dim=0)
+                        advantages_batch = torch.cat([advantages_batch, d_adv], dim=0)
+                        old_mu_batch = torch.cat([old_mu_batch, d_mu], dim=0)
+                        old_sigma_batch = torch.cat([old_sigma_batch, d_sig], dim=0)
+                        
+                        # Add valid masks for the inserted demonstration steps
+                        demo_masks = torch.ones(demo_batch_size, 1, device=self.device)
+                        masks_batch = torch.cat([masks_batch, demo_masks], dim=0)
+                # --------------------------------------------------------
 
                 actions_log_prob_batch, entropy_batch, value_batch, mu_batch, sigma_batch = self.actor_critic.evaluate(
                     obs_batch, states_batch, actions_batch

@@ -92,7 +92,24 @@ def validate_goal(
     
     any_outside_placement = torch.any(~(x_in_placement & y_in_placement), dim=1)  # (batch,)
     
-    # Goal is valid if: at least one object moved AND all objects on table
-    valid = any_moved & all_on_table
+    # 4. Check stability: objects must be nearly stationary
+    if state_dim >= 13:
+        # Extract linear and angular velocities (assuming standard 13+ dim layout)
+        lin_vel = goal[:, :, 7:10]
+        ang_vel = goal[:, :, 10:13]
+        
+        # Max absolute velocity for each object in each env
+        max_lin = torch.max(torch.abs(lin_vel), dim=-1)[0]
+        max_ang = torch.max(torch.abs(ang_vel), dim=-1)[0]
+        
+        # Both linear and angular must be below threshold
+        obj_stable = (max_lin < 0.05) & (max_ang < 0.1)
+        all_stable = torch.all(obj_stable, dim=1)
+    else:
+        # If we don't have velocity info, assume stable
+        all_stable = torch.ones(batch_size, dtype=torch.bool, device=initial_state.device)
+    
+    # Goal is valid if: at least one object moved, all objects on table, AND state is stable
+    valid = any_moved & all_on_table & all_stable
     
     return valid, any_outside_placement

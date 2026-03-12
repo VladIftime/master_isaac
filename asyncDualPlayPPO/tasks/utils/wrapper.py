@@ -42,8 +42,8 @@ class AsyncDualPlayEnvWrapper:
     def __init__(
         self,
         env: ManagerBasedRLEnv,
-        alice_timesteps: int = 250,
-        bob_timesteps: int = 600,
+        alice_timesteps: int = 400,
+        bob_timesteps: int = 800,
         max_goals_per_episode: int = 5,
         num_objects: int = 2,  # target_object and cube
         device: str = "cuda",
@@ -145,6 +145,21 @@ class AsyncDualPlayEnvWrapper:
             truncated: Episode truncation flags
             info: Additional info including phase transitions
         """
+        # --- PHASE 2: NULL-SPACE POSTURE INJECTION ---
+        is_bob_active = self.episode_manager.is_bob_phase()
+        if hasattr(self, "alice_final_posture_left") and is_bob_active.any():
+            bob_ids = torch.where(is_bob_active)[0].cpu().numpy()
+            left_ctrl = self.env.action_manager._terms["left_arm_action"]._rmpflow_controller
+            right_ctrl = self.env.action_manager._terms["right_arm_action"]._rmpflow_controller
+            
+            left_posture_np = self.alice_final_posture_left.cpu().numpy()
+            right_posture_np = self.alice_final_posture_right.cpu().numpy()
+            
+            for i in bob_ids:
+                left_ctrl.articulation_policies[i].get_motion_policy().set_cspace_target(left_posture_np[i])
+                right_ctrl.articulation_policies[i].get_motion_policy().set_cspace_target(right_posture_np[i])
+        # ---------------------------------------------
+        
         # ----------------------------------------------------------------------
         # ACTION SCALING (As per 'fix imple.md')
         # We decouple PPO's mathematical variance (std=1.0) from physical 
@@ -191,13 +206,17 @@ class AsyncDualPlayEnvWrapper:
                 objects_oob = objects_oob_val > 0.5
             
             # Log each environment with its specific reason
+            # Note: envs with invalid Alice goals will be reset later with a more specific
+            # reason — skip them here to avoid a duplicate log at step 0.
             for env_id in reset_ids:
                 if robot_oob[env_id]:
-                   reason = "Robot out of bounds"
+                    reason = "Robot out of bounds"
                 elif objects_oob[env_id]:
                     reason = "Objects out of bounds"
                 else:
-                    reason = "Episode timeout/Other"
+                    # Skip here — Alice timeout envs are re-reset below with the
+                    # "Invalid Goal" reason once the goal validator has run.
+                    continue
                 
                 # Reset with specific reason
                 self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
@@ -221,6 +240,26 @@ class AsyncDualPlayEnvWrapper:
         alice_bonus = torch.zeros(self.num_envs, device=self.device)
         if phase_info["alice_done"].any():
             alice_done_ids = torch.where(phase_info["alice_done"])[0]
+            
+            # --- PHASE 2: NULL-SPACE POSTURE INJECTION ---
+            # Save Alice's final arm joints BEFORE resetting to inject as Bob's RMPFlow posture target
+            robot = self.env.scene["robot"]
+            
+            # Left and right arm RMPflow action terms
+            left_term = self.env.action_manager._terms["left_arm_action"]
+            right_term = self.env.action_manager._terms["right_arm_action"]
+            
+            # Initialize storage if doesn't exist
+            if not hasattr(self, "alice_final_posture_left"):
+                self.alice_final_posture_left = torch.zeros((self.num_envs, len(left_term._joint_ids)), device=self.device)
+                self.alice_final_posture_right = torch.zeros((self.num_envs, len(right_term._joint_ids)), device=self.device)
+            
+            # Store exact joint positions for the arms (ignoring grippers)
+            if len(alice_done_ids) > 0:
+                self.alice_final_posture_left[alice_done_ids] = robot.data.joint_pos[alice_done_ids][:, left_term._joint_ids]
+                self.alice_final_posture_right[alice_done_ids] = robot.data.joint_pos[alice_done_ids][:, right_term._joint_ids]
+            # -----------------------------------------------
+            
             bonus, invalid_ids = self._handle_alice_completion(obs_dict, alice_done_ids)
             alice_bonus[alice_done_ids] = bonus
             
@@ -231,9 +270,8 @@ class AsyncDualPlayEnvWrapper:
             
             if len(invalid_ids) > 0:
                  terminated[invalid_ids] = True
-                 # FIX: Force EpisodeManager to reset these failed environments
-                 # so they don't leak phase steps into the next timestep.
-                 self.episode_manager.reset_episode(invalid_ids, reason="Invalid Goal")
+                 # NOTE: reset_episode is already called inside _handle_alice_completion
+                 # for invalid goals (line ~550). Do NOT call it again here.
                  
             # Add early flag to extras so train.py knows Alice failed
             extras["alice_failed_this_step"] = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
@@ -271,7 +309,7 @@ class AsyncDualPlayEnvWrapper:
         # Compute rewards for current phase (using PRE-TRANSITION phase state)
         # BUG FIX: MUST use the refreshed obs_dict here so Bob doesn't evaluate his success
         # based on Alice's end-state (stale obs_dict) where the objects perfectly match the goal!
-        current_rewards, bob_achieved_completion = self._get_current_rewards(obs_dict, rewards, is_alice_before, is_bob_before)
+        current_rewards, bob_achieved_completion = self._get_current_rewards(obs_dict, rewards, is_alice_before, is_bob_before, action)
         
         # Handle Bob's EARLY SUCCESS: Per rewards.txt, Bob's turn ends immediately on completion
         if bob_achieved_completion.any():
@@ -330,6 +368,25 @@ class AsyncDualPlayEnvWrapper:
         # Add Alice Bonus (Valid Goal)
         current_rewards += alice_bonus
         
+        # --- PHASE 4: Update Max Contact Force for Bob ---
+        if hasattr(self.env.scene, "sensors"):
+            bob_mask = self.episode_manager.is_bob_phase()
+            if bob_mask.any():
+                forces = []
+                if "contact_forces_left" in self.env.scene.sensors:
+                    left_f = self.env.scene.sensors["contact_forces_left"].data.net_forces_w
+                    forces.append(torch.max(torch.norm(left_f, dim=-1), dim=-1)[0])
+                if "contact_forces_right" in self.env.scene.sensors:
+                    right_f = self.env.scene.sensors["contact_forces_right"].data.net_forces_w
+                    forces.append(torch.max(torch.norm(right_f, dim=-1), dim=-1)[0])
+                
+                if forces:
+                    max_forces = torch.max(torch.stack(forces, dim=0), dim=0)[0]
+                    updated_forces = torch.where(bob_mask,
+                                                 torch.max(self.episode_manager.max_contact_force, max_forces),
+                                                 self.episode_manager.max_contact_force)
+                    self.episode_manager.max_contact_force = updated_forces
+                    
         # Add phase info to extras
         extras["alice_validity_bonus"] = alice_bonus.clone()  # Expose bonus for train.py to use
         extras["episode_manager"] = {
@@ -343,14 +400,17 @@ class AsyncDualPlayEnvWrapper:
             # FIX: Ensure goal_valid is captured even if reset clears it
             "goal_valid": self.episode_manager.goal_valid.clone(), 
             "goal_states": self.episode_manager.goal_states.clone() if self.episode_manager.goal_states is not None else torch.zeros((self.num_envs, 14), device=self.device),  # Required for ABC logic
+            "max_contact_force": self.episode_manager.max_contact_force.clone(),
         }
         
         # Also expose flattened extras for direct access by rewards
         extras["goal_valid"] = self.episode_manager.goal_valid.clone()
         extras["bob_success"] = self.episode_manager.bob_success.clone()
         
+        # --- PHASE 2: Save previous actions for smoothing ---
+        self.previous_actions = action.clone()
+        
         return current_obs, current_rewards, terminated, truncated, extras
-
     
     def _handle_alice_completion(self, obs_dict: Dict, env_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Handle completion of Alice's phase"""
@@ -465,6 +525,16 @@ class AsyncDualPlayEnvWrapper:
                 env_ids=valid_env_ids
             )
             
+            # --- RESET ROBOT TO INITIAL POSE FOR BOB ---
+            # Explicit Physics Reset: the environment is asynchronous, so Bob must start 
+            # exactly at the neutral pose, not tangled up where Alice left off.
+            reset_robot_joints(self.env, valid_env_ids)
+            
+            # Optional: Clear forces or step physics if Isaac Sim complains about OOB contacts
+            # self.env.sim.step()
+                        
+            # Mark phase transition info
+            self.episode_manager.bob_success_this_step[env_ids] = False         
             # --- RESET ROBOT TO DEFAULT POSE ---
             # Bob must start from the standard initial configuration
             print(f"[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for {len(valid_env_ids)} envs")
@@ -795,7 +865,7 @@ class AsyncDualPlayEnvWrapper:
         return obs
     
     def _get_current_rewards(self, obs_dict: Dict, base_rewards: torch.Tensor, 
-                              is_alice: torch.Tensor, is_bob: torch.Tensor) -> torch.Tensor:
+                              is_alice: torch.Tensor, is_bob: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         """Get rewards based on the phase state at START of step (before transitions).
         
         Args:
@@ -829,14 +899,14 @@ class AsyncDualPlayEnvWrapper:
         
         # Bob: Compute sparse rewards directly (bypasses dt-scaling)
         if is_bob.any():
-            bob_rewards, achieved_completion = self._compute_bob_sparse_rewards(obs_dict)
+            bob_rewards, achieved_completion = self._compute_bob_sparse_rewards(obs_dict, action)
             rewards[is_bob] = bob_rewards[is_bob]
             bob_achieved_completion[is_bob] = achieved_completion[is_bob]
         
         return rewards, bob_achieved_completion
     
-    def _compute_bob_sparse_rewards(self, obs_dict: Dict) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute Bob's sparse rewards without dt-scaling.
+    def _compute_bob_sparse_rewards(self, obs_dict: Dict, action: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute Bob's sparse rewards without dt-scaling, combined with dense and smoothing shaping.
         
         IMPORTANT: This implementation follows the Asymmetric Self-Play (ASP) paper's
         philosophy of SPARSE REWARDS ONLY. No dense distance-based rewards are used.
@@ -951,12 +1021,32 @@ class AsyncDualPlayEnvWrapper:
         
         rewards = step_rewards + completion_bonus
         
+        # --- PHASE 2: Dense Reward Shaping ---
+        # R_dense = -Delta_pos - Delta_rot
+        max_pos_dist, _ = torch.max(pos_dists, dim=1)
+        max_rot_dist, _ = torch.max(rot_dists, dim=1)
+        r_dense = -(max_pos_dist + max_rot_dist)
+        
+        # --- PHASE 2: Action Smoothing ---
+        # R_smooth = -\lambda ||a_t - a_{t-1}||^2
+        r_smooth = torch.zeros_like(rewards)
+        if hasattr(self, "previous_actions") and self.previous_actions is not None:
+            # sum over action dimensions
+            action_diff_sq = torch.sum((action - self.previous_actions)**2, dim=-1)
+            r_smooth = -0.05 * action_diff_sq
+            
+        # Retrieve alpha, default to 0.0 if not yet set by train.py
+        alpha = getattr(self, "bob_dense_reward_alpha", 0.0)
+            
+        # Total Bob Reward
+        total_rewards = rewards + (alpha * r_dense) + r_smooth
+        
         
         # Update state for next step
         self.episode_manager.prev_obj_success = obj_success.clone()
         
         # Return rewards and which envs just achieved completion
-        return rewards, should_give_completion
+        return total_rewards, should_give_completion
     
     def close(self):
         """Close wrapped environment"""

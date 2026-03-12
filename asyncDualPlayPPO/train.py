@@ -68,6 +68,7 @@ def main():
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
     from asyncDualPlayPPO.algorithms.rl.ppo import PPO
+    from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
     # Import reward constants so train.py stays in sync with rewards.py.
     # Do not hardcode reward values here — change them in rewards.py instead.
     from asyncDualPlayPPO.tasks.utils.rewards import (
@@ -153,6 +154,13 @@ def main():
     bob_ppo.optimizer = torch.optim.Adam(
         bob_ppo.actor_critic.parameters(), lr=bob_ppo.learning_rate
     )
+    bob_ppo.demo_buffer = GPUDemonstrationBuffer(
+        capacity=100000,
+        obs_shape=env.bob_observation_space.shape,
+        states_shape=env.bob_observation_space.shape,
+        actions_shape=env.action_space.shape,
+        device=env.device,
+    )
 
     # --- Pre-allocated trajectory buffers for Alice ---
     alice_obs_log    = torch.zeros((args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device)
@@ -210,12 +218,71 @@ def main():
         alice_rew_buf.clear()
         alice_updates += 1
 
+    def perform_bob_update(current_obs):
+        """Run a PPO update for Bob when his rollout buffer is full."""
+        if bob_ppo.storage.step < ppo_cfg["params"]["learn"]["nsteps"]:
+            return current_obs
+            
+        nonlocal bob_updates, best_bob_success_rate
+        with torch.no_grad():
+            _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_obs, None)
+        bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
+        loss_val, loss_surr = bob_ppo.update()
+        bob_ppo.storage.clear()
+
+        mean_bob_rew     = np.mean(bob_rew_buf)     if bob_rew_buf     else 0.0
+        bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
+        mean_pos_err     = np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0
+        mean_rot_err     = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0
+
+        writer.add_scalar("Loss/Bob/Value",       loss_val,         bob_updates)
+        writer.add_scalar("Loss/Bob/Surrogate",   loss_surr,        bob_updates)
+        writer.add_scalar("Reward/Bob",           mean_bob_rew,     bob_updates)
+        writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
+        writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err,     bob_updates)
+        writer.add_scalar("Metrics/Bob/RotError",    mean_rot_err,     bob_updates)
+
+        print(f"\n{'='*60}\nBOB UPDATE {bob_updates}\n{'='*60}")
+        print(f"  Success Rate: {bob_success_rate:.4f} ({len(bob_success_buf)} eps)")
+        print(f"  Rewards:      mean={mean_bob_rew:.4f}")
+        print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f}")
+        print(f"  Errors:       pos={mean_pos_err:.4f} | rot={mean_rot_err:.4f}")
+        print(f"  Alice/Bob:    {alice_updates}/{bob_updates} updates (ratio cap={max_alice_bob_ratio})\n{'='*60}\n")
+
+        if bob_updates % 10 == 0:
+            print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f}")
+
+        if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
+            bob_ppo.save(os.path.join(bob_ppo.log_dir,   f"model_{bob_updates+1}.pt"))
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
+            print("  ✓ Saved checkpoints")
+
+        if bob_success_rate > best_bob_success_rate:
+            best_bob_success_rate = bob_success_rate
+            bob_ppo.save(os.path.join(bob_ppo.log_dir,   "model_best.pt"))
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
+            print(f"  ★ New Best SR: {best_bob_success_rate:.2f}")
+
+        bob_rew_buf.clear()
+        bob_success_buf.clear()
+        bob_pos_err_buf.clear()
+        bob_rot_err_buf.clear()
+        
+        bob_updates += 1
+        return current_obs
+
     print("Initializing environment (suppressing URDF/Lula warnings)...")
     with SuppressAllOutput():
         obs = env.reset()[0]
     print("Environment initialized. Starting training loop...")
 
     while bob_updates < args.max_iterations:
+
+        # --- PHASE 2: ALPHA ANNEALING ---
+        # Decay alpha linearly from 1.0 to 0.0 over the course of training
+        alpha = max(0.0, 1.0 - (bob_updates / args.max_iterations))
+        env.bob_dense_reward_alpha = alpha
+        # --------------------------------
 
         is_alice = env.episode_manager.is_alice_phase()
         is_bob   = env.episode_manager.is_bob_phase()
@@ -242,6 +309,63 @@ def main():
             curr_bonus = extras["alice_validity_bonus"]
             mask = curr_bonus != 0
             alice_validity_buffer[mask] = curr_bonus[mask]
+            
+            # --- HINDSIGHT GOAL INJECTION ---
+            # Inject successful Alice trajectories into Bob's PPO buffer as demonstrations
+            alice_success_mask = curr_bonus == 1.0 # ALICE_VALID_GOAL_BONUS
+            if alice_success_mask.any():
+                success_ids = torch.where(alice_success_mask)[0]
+                goal_states = env.episode_manager.goal_states
+                
+                hgi_count = 0
+                for idx in success_ids:
+                    env_id = idx.item()
+                    s_count = min(alice_step_counts[env_id].item(), max_alice_steps)
+                    if s_count == 0: continue
+                    
+                    a_obs = alice_obs_log[env_id, :s_count]
+                    a_acts = alice_act_log[env_id, :s_count]
+                    
+                    _o = torch.zeros((s_count, env.bob_obs_dim), device=env.device)
+                    _r = torch.zeros((s_count,), device=env.device)
+                    _d = torch.zeros((s_count,), device=env.device)
+                    
+                    # Construct Bob's obs (robot arm/objects states + HGI goals)
+                    goal_state = goal_states[env_id].unsqueeze(0).expand(s_count, -1)
+                    b_obs = env.construct_bob_observation(a_obs, goal_state)
+                    _o[:] = b_obs
+                    
+                    # Reward Injection: Give Bob's completion reward (+5) on the very last step.
+                    _r[-1] = 5.0
+                    _d[-1] = 1.0
+                    
+                    # Evaluate under Bob's current policy
+                    with torch.no_grad():
+                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, a_acts)
+                        
+                    # Compute offline GAE returns and advantages for the trajectory
+                    _ret = torch.zeros((s_count,), device=env.device)
+                    _adv = torch.zeros((s_count,), device=env.device)
+                    
+                    adv = 0.0
+                    gamma = bob_ppo.gamma
+                    lam = bob_ppo.lam
+                    
+                    for step in reversed(range(s_count)):
+                        next_val = 0.0 if step == s_count - 1 else _v[step + 1].item()
+                        next_not_done = 0.0 if step == s_count - 1 else 1.0
+                        delta = _r[step] + gamma * next_val * next_not_done - _v[step].item()
+                        adv = delta + gamma * lam * next_not_done * adv
+                        _adv[step] = adv
+                        _ret[step] = adv + _v[step].item()
+                        
+                    # Add to offline demo buffer (does not crash or prematurely sync RolloutStorage)
+                    none_states = torch.zeros((s_count, *env.bob_observation_space.shape), device=env.device)
+                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, a_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv)
+                    hgi_count += s_count
+                    
+                if hgi_count > 0:
+                    print(f"  [HGI] Added {hgi_count} steps into Bob's Demonstration Buffer!")
 
         if len(alice_indices) > 0:
             steps = torch.clamp(alice_step_counts[alice_indices], max=max_alice_steps - 1)
@@ -268,6 +392,49 @@ def main():
             _sigma = torch.zeros_like(actions); _sigma[bob_indices]  = b_sigma
 
             bob_ppo.storage.add_transitions(_obs, _obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
+
+            # --- PHASE 4: Safe-State Filtered HER (Retroactive Relabeling) ---
+            if "episode_manager" in extras:
+                em_info = extras["episode_manager"]
+                bob_done_mask = em_info["bob_done_this_step"]
+                
+                if bob_done_mask.any():
+                    bob_success_mask = em_info["bob_success_this_step"]
+                    max_forces = em_info.get("max_contact_force", torch.zeros(env.num_envs, device=env.device))
+                    
+                    # Safe failure: Bob failed (timed out or reached max goals) but didn't crash
+                    THRESHOLD = 50.0  # Safe physical threshold
+                    is_safe_failure = bob_done_mask & (~bob_success_mask) & (max_forces < THRESHOLD)
+                    
+                    safe_failure_ids = torch.where(is_safe_failure)[0]
+                    if len(safe_failure_ids) > 0 and "bob_achieved_states" in em_info:
+                        achieved_states = em_info["bob_achieved_states"]
+                        relabel_count = 0
+                        # Relabel all transitions currently sitting in Bob's storage buffer for this environment
+                        for eid in safe_failure_ids:
+                            eid_int = eid.item()
+                            achieved = achieved_states[eid_int].clone()
+                            
+                            # Get the active transitions for this environment in the current buffer
+                            buffer_masks = bob_ppo.storage.masks[:, eid_int, 0]
+                            valid_steps = torch.where(buffer_masks > 0)[0]
+                            
+                            if len(valid_steps) > 0:
+                                for t in valid_steps:
+                                    # Copy Alice's observations (robot arm/objects states)
+                                    a_obs = bob_ppo.storage.observations[t, eid_int, :env.unwrapped.alice_obs_dim].unsqueeze(0)
+                                    # Overwrite the goal with Bob's achieved state and implicitly recompute distance features
+                                    b_obs = env.unwrapped.construct_bob_observation(a_obs, achieved.unsqueeze(0))
+                                    bob_ppo.storage.observations[t, eid_int] = b_obs[0]
+                                
+                                # Give +1.0 success reward to the very last valid step in Bob's buffer
+                                last_step = valid_steps[-1]
+                                bob_ppo.storage.rewards[last_step, eid_int] = 1.0
+                                relabel_count += 1
+                        
+                        if relabel_count > 0:
+                            print(f"  [HER] Relabeled {relabel_count} safe-failure Bob trajectories!")
+            # ----------------------------------------------------------------
 
             bob_step_rewards = rewards[bob_indices]
             bob_rew_buf.extend(bob_step_rewards.cpu().numpy().tolist())
@@ -363,48 +530,7 @@ def main():
             alice_step_counts[torch.where(dones)[0]] = 0
 
         obs = next_obs
-
-        if bob_ppo.storage.step >= ppo_cfg["params"]["learn"]["nsteps"]:
-            with torch.no_grad():
-                _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(obs, None)
-            bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
-            loss_val, loss_surr = bob_ppo.update()
-            bob_ppo.storage.clear()
-
-            mean_bob_rew     = np.mean(bob_rew_buf)     if bob_rew_buf     else 0.0
-            bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
-            mean_pos_err     = np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0
-            mean_rot_err     = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0
-
-            writer.add_scalar("Loss/Bob/Value",       loss_val,         bob_updates)
-            writer.add_scalar("Loss/Bob/Surrogate",   loss_surr,        bob_updates)
-            writer.add_scalar("Reward/Bob",           mean_bob_rew,     bob_updates)
-            writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
-            writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err,     bob_updates)
-            writer.add_scalar("Metrics/Bob/RotError",    mean_rot_err,     bob_updates)
-
-            print(f"\n{'='*60}\nBOB UPDATE {bob_updates}\n{'='*60}")
-            print(f"  Success Rate: {bob_success_rate:.4f} ({len(bob_success_buf)} eps)")
-            print(f"  Rewards:      mean={mean_bob_rew:.4f}")
-            print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f}")
-            print(f"  Errors:       pos={mean_pos_err:.4f} | rot={mean_rot_err:.4f}")
-            print(f"  Alice/Bob:    {alice_updates}/{bob_updates} updates (ratio cap={max_alice_bob_ratio})\n{'='*60}\n")
-
-            if bob_updates % 10 == 0:
-                print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f}")
-
-            if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
-                bob_ppo.save(os.path.join(bob_ppo.log_dir,   f"model_{bob_updates+1}.pt"))
-                alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
-                print("  ✓ Saved checkpoints")
-
-            if bob_success_rate > best_bob_success_rate:
-                best_bob_success_rate = bob_success_rate
-                bob_ppo.save(os.path.join(bob_ppo.log_dir,   "model_best.pt"))
-                alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
-                print(f"  ★ New Best SR: {best_bob_success_rate:.2f}")
-
-            bob_updates += 1
+        obs = perform_bob_update(obs)
 
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir,     "model_final.pt"))

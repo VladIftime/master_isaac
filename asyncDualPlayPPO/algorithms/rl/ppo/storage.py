@@ -115,3 +115,100 @@ class RolloutStorage:
             subset = SubsetRandomSampler(range(batch_size))
 
         return BatchSampler(subset, mini_batch_size, drop_last=True)
+
+class GPUDemonstrationBuffer:
+    def __init__(self, capacity, obs_shape, states_shape, actions_shape, device="cpu"):
+        self.capacity = capacity
+        self.device = device
+        
+        self.observations    = torch.zeros(capacity, *obs_shape,    device=device)
+        self.states          = torch.zeros(capacity, *states_shape, device=device)
+        self.actions         = torch.zeros(capacity, *actions_shape, device=device)
+        self.rewards         = torch.zeros(capacity, 1,             device=device)
+        self.dones           = torch.zeros(capacity, 1,             device=device).byte()
+        self.values          = torch.zeros(capacity, 1,             device=device)
+        self.actions_log_prob = torch.zeros(capacity, 1,             device=device)
+        self.mu              = torch.zeros(capacity, *actions_shape, device=device)
+        self.sigma           = torch.zeros(capacity, *actions_shape, device=device)
+        self.returns         = torch.zeros(capacity, 1,             device=device)
+        self.advantages      = torch.zeros(capacity, 1,             device=device)
+        
+        self.step = 0
+        self.full = False
+
+    def add_trajectory(self, obs, states, acts, rews, dones, vals, log_probs, mus, sigmas, ret, adv):
+        """Add a full trajectory or sequence of steps"""
+        n = obs.size(0)
+        if n == 0:
+            return
+            
+        if self.step + n > self.capacity:
+            end = self.capacity
+            size = self.capacity - self.step
+            
+            self.observations[self.step:end].copy_(obs[:size])
+            if states is not None: self.states[self.step:end].copy_(states[:size])
+            self.actions[self.step:end].copy_(acts[:size])
+            self.rewards[self.step:end].copy_(rews[:size].view(-1,1))
+            self.dones[self.step:end].copy_(dones[:size].view(-1,1))
+            self.values[self.step:end].copy_(vals[:size].view(-1,1))
+            self.actions_log_prob[self.step:end].copy_(log_probs[:size].view(-1,1))
+            self.mu[self.step:end].copy_(mus[:size])
+            self.sigma[self.step:end].copy_(sigmas[:size])
+            self.returns[self.step:end].copy_(ret[:size].view(-1,1))
+            self.advantages[self.step:end].copy_(adv[:size].view(-1,1))
+            
+            self.step = 0
+            self.full = True
+            
+            # Wrap around
+            rem = n - size
+            if rem > 0:
+                self.observations[:rem].copy_(obs[size:])
+                if states is not None: self.states[:rem].copy_(states[size:])
+                self.actions[:rem].copy_(acts[size:])
+                self.rewards[:rem].copy_(rews[size:].view(-1,1))
+                self.dones[:rem].copy_(dones[size:].view(-1,1))
+                self.values[:rem].copy_(vals[size:].view(-1,1))
+                self.actions_log_prob[:rem].copy_(log_probs[size:].view(-1,1))
+                self.mu[:rem].copy_(mus[size:])
+                self.sigma[:rem].copy_(sigmas[size:])
+                self.returns[:rem].copy_(ret[size:].view(-1,1))
+                self.advantages[:rem].copy_(adv[size:].view(-1,1))
+                self.step = rem
+        else:
+            self.observations[self.step:self.step+n].copy_(obs)
+            if states is not None: self.states[self.step:self.step+n].copy_(states)
+            self.actions[self.step:self.step+n].copy_(acts)
+            self.rewards[self.step:self.step+n].copy_(rews.view(-1,1))
+            self.dones[self.step:self.step+n].copy_(dones.view(-1,1))
+            self.values[self.step:self.step+n].copy_(vals.view(-1,1))
+            self.actions_log_prob[self.step:self.step+n].copy_(log_probs.view(-1,1))
+            self.mu[self.step:self.step+n].copy_(mus)
+            self.sigma[self.step:self.step+n].copy_(sigmas)
+            self.returns[self.step:self.step+n].copy_(ret.view(-1,1))
+            self.advantages[self.step:self.step+n].copy_(adv.view(-1,1))
+            self.step += n
+            if self.step == self.capacity:
+                self.step = 0
+                self.full = True
+
+    def sample(self, batch_size):
+        if self.step == 0 and not self.full:
+            return None
+        max_idx = self.capacity if self.full else self.step
+        indices = torch.randint(0, max_idx, (batch_size,), device=self.device)
+        
+        states = self.states[indices] if self.states is not None else None
+        
+        return (
+            self.observations[indices],
+            states,
+            self.actions[indices],
+            self.values[indices],
+            self.returns[indices],
+            self.actions_log_prob[indices],
+            self.advantages[indices],
+            self.mu[indices],
+            self.sigma[indices]
+        )

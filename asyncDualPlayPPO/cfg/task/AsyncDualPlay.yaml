@@ -11,8 +11,8 @@ episode_length: 3250
 is_deterministic: False
 
 # Args for the python config
-alice_timesteps: 250
-bob_timesteps: 600
+alice_timesteps: 400
+bob_timesteps: 800
 max_goals_per_episode: 5
 
 # Reward Configuration (ASP Paper Alignment)
