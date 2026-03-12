@@ -20,7 +20,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import CameraCfg, ContactSensorCfg, patterns
+from isaaclab.sensors import ContactSensorCfg, patterns
 from isaaclab.sim import SimulationCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UrdfFileCfg, UsdFileCfg
 from isaaclab.utils import configclass
@@ -101,15 +101,8 @@ UR5e_CFG = ArticulationCfg(
 )
 
 UR5e_Dual_CFG = UR5e_CFG.replace(
-    spawn=UrdfFileCfg(
-        asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/dual_arm_robot_no_gripper_col.urdf",
-        fix_base=True,
-        joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
-            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
-                stiffness=1000.0,
-                damping=50.0,
-            ),
-        ),
+    spawn=UsdFileCfg(
+        usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/dual_arm_robot_no_gripper_col.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True,
@@ -209,12 +202,10 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     target_object = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/TargetObject",
         init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UrdfFileCfg(
-            asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/concave.urdf",
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/concave.usd",
             scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            fix_base=False,
-            joint_drive=None,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.2, 0.2)),
         ),
     )
@@ -222,12 +213,10 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     cube = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.15, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UrdfFileCfg(
-            asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.urdf",
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
             scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            fix_base=False,
-            joint_drive=None,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.6, 1.0)),
         ),
     )
@@ -235,12 +224,10 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     cylinder = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cylinder",
         init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UrdfFileCfg(
-            asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.urdf",
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
             scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            fix_base=False,
-            joint_drive=None,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 1.0, 0.4)),
         ),
     )
@@ -248,12 +235,10 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     rect = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Rect",
         init_state=RigidObjectCfg.InitialStateCfg(pos=[0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UrdfFileCfg(
-            asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.urdf",
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
             scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            fix_base=False,
-            joint_drive=None,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
         ),
     )
@@ -261,29 +246,12 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     triangle = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Triangle",
         init_state=RigidObjectCfg.InitialStateCfg(pos=[0.2, 0.6, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UrdfFileCfg(
-            asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.urdf",
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
             scale=(1.0, 1.0, 1.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            fix_base=False,
-            joint_drive=None,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.8)),
         ),
-    )
-
-    camera = CameraCfg(
-        prim_path="{ENV_REGEX_NS}/Camera",
-        update_period=0.1,
-        height=224,
-        width=224,
-        data_types=["rgb"],
-        spawn=sim_utils.PinholeCameraCfg(
-            focal_length=20.1,
-            focus_distance=400.0,
-            horizontal_aperture=20.955,
-            clipping_range=(0.1, 5.0),
-        ),
-        offset=CameraCfg.OffsetCfg(pos=(0.0, 0.3, 2.8), rot=(0.5, 0.5, 0.5, 0.5), convention="ros"),
     )
 
     plane = AssetBaseCfg(
@@ -452,5 +420,6 @@ class ReachDualArmEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation          = 2
         self.episode_length_s    = 20.0
         self.sim.dt              = 0.01
+        self.sim.use_fabric      = True
         self.sim.render_interval = self.decimation
-        self.reset_settle_steps  = 200
+        self.reset_settle_steps  = 5   # was 200; 200 settle steps × 2048 envs costs ~15 min
