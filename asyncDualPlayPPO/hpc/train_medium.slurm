@@ -52,6 +52,7 @@ apptainer exec --nv \
     --max_alice_bob_ratio 5 \
     --save_interval 1000 \
     --headless \
+    --arm_config rotated
     | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
                -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
 
