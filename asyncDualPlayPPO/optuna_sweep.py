@@ -58,7 +58,7 @@ parser.add_argument("--n_trials", type=int, default=50, help="Number of Optuna t
 parser.add_argument("--trial_iters", type=int, default=50, help="Bob updates per trial")
 parser.add_argument("--study_name", type=str, default="asp_sweep")
 parser.add_argument("--db_path", type=str, default=None, help="SQLite path for persistent study (e.g. sqlite:///sweep.db)")
-parser.add_argument("--arm_config", type=str, default="default", choices=["default", "rotated"])
+parser.add_argument("--arm_config", type=str, default="rotated", choices=["default", "rotated"])
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 
