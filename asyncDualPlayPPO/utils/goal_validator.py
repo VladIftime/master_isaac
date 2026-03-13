@@ -103,7 +103,8 @@ def validate_goal(
         max_ang = torch.max(torch.abs(ang_vel), dim=-1)[0]
         
         # Both linear and angular must be below threshold
-        obj_stable = (max_lin < 0.05) & (max_ang < 0.1)
+        # Relaxed from 0.05/0.1 to 0.5/0.5 to account for PhysX jitter
+        obj_stable = (max_lin < 0.5) & (max_ang < 0.5)
         all_stable = torch.all(obj_stable, dim=1)
     else:
         # If we don't have velocity info, assume stable
@@ -111,5 +112,16 @@ def validate_goal(
     
     # Goal is valid if: at least one object moved, all objects on table, AND state is stable
     valid = any_moved & all_on_table & all_stable
+    
+    # Debug logging for validation failures
+    if not valid.all():
+        num_unstable = (~all_stable).sum().item()
+        num_not_moved = (~any_moved).sum().item()
+        num_off_table = (~all_on_table).sum().item()
+        
+        print(f"--- VALIDATION FAILURES (Batch: {batch_size}) ---")
+        if num_not_moved > 0: print(f"  Not Moved (Dist too low): {num_not_moved}")
+        if num_unstable > 0:  print(f"  Unstable (Vel too high): {num_unstable}")
+        if num_off_table > 0:  print(f"  Off Table: {num_off_table}")
     
     return valid, any_outside_placement

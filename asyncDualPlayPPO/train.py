@@ -323,8 +323,9 @@ def main():
                     s_count = min(alice_step_counts[env_id].item(), max_alice_steps)
                     if s_count == 0: continue
                     
-                    a_obs = alice_obs_log[env_id, :s_count]
-                    a_acts = alice_act_log[env_id, :s_count]
+                    # USE NEW VARIABLE NAMES TO AVOID SHADOWING
+                    demo_obs = alice_obs_log[env_id, :s_count]
+                    demo_acts = alice_act_log[env_id, :s_count]
                     
                     _o = torch.zeros((s_count, env.bob_obs_dim), device=env.device)
                     _r = torch.zeros((s_count,), device=env.device)
@@ -332,7 +333,7 @@ def main():
                     
                     # Construct Bob's obs (robot arm/objects states + HGI goals)
                     goal_state = goal_states[env_id].unsqueeze(0).expand(s_count, -1)
-                    b_obs = env.construct_bob_observation(a_obs, goal_state)
+                    b_obs = env.construct_bob_observation(demo_obs, goal_state)
                     _o[:] = b_obs
                     
                     # Reward Injection: Give Bob's completion reward (+5) on the very last step.
@@ -341,7 +342,7 @@ def main():
                     
                     # Evaluate under Bob's current policy
                     with torch.no_grad():
-                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, a_acts)
+                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, demo_acts)
                         
                     # Compute offline GAE returns and advantages for the trajectory
                     _ret = torch.zeros((s_count,), device=env.device)
@@ -361,7 +362,7 @@ def main():
                         
                     # Add to offline demo buffer (does not crash or prematurely sync RolloutStorage)
                     none_states = torch.zeros((s_count, *env.bob_observation_space.shape), device=env.device)
-                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, a_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv)
+                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, demo_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv)
                     hgi_count += s_count
                     
                 if hgi_count > 0:
@@ -370,7 +371,7 @@ def main():
         if len(alice_indices) > 0:
             steps = torch.clamp(alice_step_counts[alice_indices], max=max_alice_steps - 1)
             alice_obs_log[alice_indices, steps]  = alice_obs
-            alice_act_log[alice_indices, steps]  = a_acts
+            alice_act_log[alice_indices, steps]  = a_acts.clone()
             alice_step_counts[alice_indices] += 1
 
         if len(bob_indices) > 0:

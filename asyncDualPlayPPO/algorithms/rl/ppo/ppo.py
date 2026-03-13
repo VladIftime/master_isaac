@@ -268,8 +268,8 @@ class PPO:
 
                 # --- PHASE 4: Inject Safe-State HER Demonstrations ---
                 if getattr(self, "demo_buffer", None) is not None:
-                    # e.g., mix 25% demonstrations into the mini-batch size
-                    demo_batch_size = max(1, self.mini_batch_size // 4)
+                    ratio = getattr(self, "demo_batch_ratio", 0.25)
+                    demo_batch_size = max(1, int(self.mini_batch_size * ratio))
                     demo_batch = self.demo_buffer.sample(demo_batch_size)
                     
                     if demo_batch is not None:

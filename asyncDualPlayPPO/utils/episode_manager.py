@@ -34,8 +34,8 @@ class EpisodeManager:
         alice_timesteps: int = 100,  # Reduced from 250 for better temporal credit assignment
         bob_timesteps: int = 600,
         max_goals_per_episode: int = 5,
-        pos_threshold: float = 0.05,  # Aligned across all files (5cm)
-        rot_threshold: float = 0.2,
+        pos_threshold: float = 0.01,
+        rot_threshold: float = 0.1,
     ):
         self.num_envs = num_envs
         self.device = device

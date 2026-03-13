@@ -960,8 +960,8 @@ class AsyncDualPlayEnvWrapper:
         rot_dists = dists[..., 1]
         
         # Success thresholds
-        pos_threshold = self.episode_manager.pos_threshold  # 0.04
-        rot_threshold = self.episode_manager.rot_threshold  # 0.2
+        pos_threshold = self.episode_manager.pos_threshold
+        rot_threshold = self.episode_manager.rot_threshold
         
         # Per-object success check
         obj_success = (pos_dists < pos_threshold) & (rot_dists < rot_threshold)
