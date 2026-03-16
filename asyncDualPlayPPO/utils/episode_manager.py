@@ -36,6 +36,7 @@ class EpisodeManager:
         max_goals_per_episode: int = 5,
         pos_threshold: float = 0.01,
         rot_threshold: float = 0.1,
+        min_goal_dist: float = 0.001,  # Minimum distance Alice must move an object (near-zero = always valid)
     ):
         self.num_envs = num_envs
         self.device = device
@@ -44,6 +45,7 @@ class EpisodeManager:
         self.max_goals = max_goals_per_episode
         self.pos_threshold = pos_threshold
         self.rot_threshold = rot_threshold
+        self.min_goal_dist = min_goal_dist  # Decoupled from pos_threshold
         
         # State tracking
         self.current_phase = torch.zeros(num_envs, dtype=torch.int32, device=device)  # 0 = Alice, 1 = Bob

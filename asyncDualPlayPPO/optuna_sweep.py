@@ -6,6 +6,7 @@ Architecture:
   - Each Optuna trial re-instantiates only the PPO agents (cheap).
   - EpisodeManager thresholds are patched dynamically per trial.
   - Pruning kills bad trials early via trial.report().
+  - Max-steps bailout prevents infinite loops on dead trials.
 
 Usage:
   python optuna_sweep.py --num_envs 64 --n_trials 50 --trial_iters 50 --headless
@@ -51,11 +52,25 @@ def load_cfg(path):
         return yaml.safe_load(f)
 
 
+def auto_nsteps(num_envs: int) -> int:
+    """Auto-calculate nsteps so the rollout buffer fills in a reasonable time.
+    
+    Target: ~32K transitions per rollout (num_envs * nsteps).
+    With 64 envs: nsteps=512, with 512 envs: nsteps=64, with 16 envs: nsteps=2048.
+    Clamped to [32, 2048].
+    """
+    target_transitions = 32768  # 32K transitions per rollout
+    nsteps = max(32, min(2048, target_transitions // num_envs))
+    return nsteps
+
+
 # ─── Global argument parsing & launcher ───────────────────────────────────────
 parser = argparse.ArgumentParser(description="Optuna HPO Sweep for Async Dual Play PPO")
 parser.add_argument("--num_envs", type=int, default=64)
 parser.add_argument("--n_trials", type=int, default=50, help="Number of Optuna trials")
 parser.add_argument("--trial_iters", type=int, default=50, help="Bob updates per trial")
+parser.add_argument("--max_steps_per_trial", type=int, default=500000,
+                    help="Max env steps before force-terminating a trial (escape hatch)")
 parser.add_argument("--study_name", type=str, default="asp_sweep")
 parser.add_argument("--db_path", type=str, default=None, help="SQLite path for persistent study (e.g. sqlite:///sweep.db)")
 parser.add_argument("--arm_config", type=str, default="rotated", choices=["default", "rotated"])
@@ -83,9 +98,15 @@ from asyncDualPlayPPO.tasks.utils.rewards import (
     ALICE_INVALID_GOAL_PENALTY,
 )
 
+# ─── Auto-calculate nsteps ───────────────────────────────────────────────────
+computed_nsteps = auto_nsteps(args.num_envs)
+print(f"[Optuna] Auto nsteps: {computed_nsteps} (target ~32K transitions with {args.num_envs} envs)")
+
 # ─── Create environment ONCE ─────────────────────────────────────────────────
 ppo_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
 base_ppo_cfg = load_cfg(ppo_cfg_path)
+# Override nsteps with auto-calculated value
+base_ppo_cfg["params"]["learn"]["nsteps"] = computed_nsteps
 
 env_cfg = AsyncDualPlayEnvCfg()
 env_cfg.scene.num_envs = args.num_envs
@@ -97,7 +118,7 @@ if args.arm_config == "rotated":
 print("[Optuna] Creating environment (once)...")
 base_env = ManagerBasedRLEnv(cfg=env_cfg)
 env = AsyncDualPlayEnvWrapper(env=base_env, device=base_env.device, arm_config=args.arm_config)
-print(f"[Optuna] Environment ready: {args.num_envs} envs")
+print(f"[Optuna] Environment ready: {args.num_envs} envs, nsteps={computed_nsteps}")
 
 
 # ─── Optuna Objective ────────────────────────────────────────────────────────
@@ -105,12 +126,14 @@ def objective(trial: optuna.Trial) -> float:
     """Run a short training budget and return Bob's success rate."""
 
     # ── 1. Suggest Hyperparameters ──────────────────────────────────────────
-    # Category 1: Curriculum Gatekeepers
-    pos_threshold = trial.suggest_float("pos_threshold", 0.02, 0.15)
+    # Category 1: Curriculum Gatekeepers (DECOUPLED)
+    # min_goal_dist: how far Alice must move an object (low = easy goals for early training)
+    min_goal_dist = trial.suggest_float("min_goal_dist", 0.001, 0.05)
     rot_threshold = trial.suggest_float("rot_threshold", 0.05, 0.50)
 
     # Category 2: Reward Shaping
     alpha_decay_steps = trial.suggest_int("alpha_decay_steps", 100, 1000)
+    # bob_completion_radius: how close Bob must get to Alice's goal to succeed
     bob_completion_radius = trial.suggest_float("bob_completion_radius", 0.01, 0.05)
 
     # Category 3: PPO Exploration
@@ -124,19 +147,23 @@ def objective(trial: optuna.Trial) -> float:
     print(f"\n{'='*60}")
     print(f"TRIAL {trial.number}")
     print(f"{'='*60}")
-    print(f"  pos_threshold:       {pos_threshold:.4f}")
-    print(f"  rot_threshold:       {rot_threshold:.4f}")
+    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice validation)")
+    print(f"  rot_threshold:       {rot_threshold:.4f} rad")
     print(f"  alpha_decay_steps:   {alpha_decay_steps}")
-    print(f"  bob_completion:      {bob_completion_radius:.4f}")
+    print(f"  bob_completion:      {bob_completion_radius:.4f} m (Bob success)")
     print(f"  learning_rate:       {lr:.6f}")
     print(f"  entropy_coef:        {entropy_coef:.6f}")
     print(f"  clip_param:          {clip_param:.3f}")
     print(f"  demo_batch_ratio:    {demo_batch_ratio:.3f}")
+    print(f"  nsteps(auto):        {computed_nsteps}")
+    print(f"  max_steps_bailout:   {args.max_steps_per_trial}")
     print(f"{'='*60}\n")
 
     # ── 2. Dynamically Inject into Living Environment ───────────────────────
-    env.episode_manager.pos_threshold = bob_completion_radius
+    # SINGLE SOURCE: EpisodeManager owns all thresholds
+    env.episode_manager.pos_threshold = bob_completion_radius  # Bob's success radius
     env.episode_manager.rot_threshold = rot_threshold
+    env.episode_manager.min_goal_dist = min_goal_dist  # Alice's validation threshold (decoupled!)
 
     # ── 3. Build PPO config for this trial ──────────────────────────────────
     ppo_cfg = copy.deepcopy(base_ppo_cfg)
@@ -210,6 +237,7 @@ def objective(trial: optuna.Trial) -> float:
     bob_ppo.demo_batch_ratio = demo_batch_ratio
 
     # ── 5. Pre-allocate Trajectory Buffers ──────────────────────────────────
+    nsteps = computed_nsteps
     alice_obs_log = torch.zeros((args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device)
     alice_act_log = torch.zeros((args.num_envs, max_alice_steps, *env.action_space.shape), device=env.device)
     alice_step_counts = torch.zeros(args.num_envs, dtype=torch.long, device=env.device)
@@ -217,9 +245,9 @@ def objective(trial: optuna.Trial) -> float:
 
     alice_updates = 0
     bob_updates = 0
+    total_env_steps = 0  # Escape hatch counter
     max_alice_bob_ratio = 5
 
-    nsteps = ppo_cfg["params"]["learn"]["nsteps"]
     rollout_length = nsteps * args.num_envs
     alice_rew_buf = deque(maxlen=rollout_length)
     bob_rew_buf = deque(maxlen=rollout_length)
@@ -231,7 +259,7 @@ def objective(trial: optuna.Trial) -> float:
     with SuppressAllOutput():
         obs = env.reset()[0]
 
-    # ── 7. Training Loop (Short Budget) ─────────────────────────────────────
+    # ── 7. Training Loop (Short Budget with Escape Hatch) ───────────────────
     def perform_alice_update():
         nonlocal alice_updates
         if alice_ppo.storage.step < nsteps:
@@ -258,7 +286,7 @@ def objective(trial: optuna.Trial) -> float:
         bob_ppo.storage.clear()
 
         bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
-        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: SR={bob_success_rate:.4f}")
+        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: SR={bob_success_rate:.4f} (steps={total_env_steps})")
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -275,6 +303,12 @@ def objective(trial: optuna.Trial) -> float:
         return current_obs
 
     while bob_updates < args.trial_iters:
+        # ── ESCAPE HATCH: bail out if trial is stuck ────────────────────
+        total_env_steps += 1
+        if total_env_steps > args.max_steps_per_trial:
+            print(f"  [Trial {trial.number}] BAILOUT: {total_env_steps} steps, only {bob_updates} Bob updates. Pruning.")
+            raise optuna.exceptions.TrialPruned()
+
         # Alpha annealing (uses trial-specific alpha_decay_steps)
         alpha = max(0.0, 1.0 - (bob_updates / alpha_decay_steps))
         env.bob_dense_reward_alpha = alpha
@@ -467,7 +501,7 @@ def objective(trial: optuna.Trial) -> float:
 
     # ── 8. Return Final Metric ──────────────────────────────────────────────
     final_sr = np.mean(bob_success_buf) if bob_success_buf else 0.0
-    print(f"\n[Trial {trial.number}] FINAL Bob Success Rate: {final_sr:.4f}\n")
+    print(f"\n[Trial {trial.number}] FINAL Bob Success Rate: {final_sr:.4f} ({total_env_steps} env steps)\n")
     return final_sr
 
 
@@ -487,6 +521,8 @@ def main():
     print(f"  Trials: {args.n_trials}")
     print(f"  Budget per trial: {args.trial_iters} Bob updates")
     print(f"  Envs: {args.num_envs}")
+    print(f"  nsteps (auto): {computed_nsteps}")
+    print(f"  Max steps/trial: {args.max_steps_per_trial}")
     print(f"{'='*60}\n")
 
     study.optimize(objective, n_trials=args.n_trials)

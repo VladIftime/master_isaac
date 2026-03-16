@@ -417,13 +417,12 @@ class AsyncDualPlayEnvWrapper:
         # Extract current object states as goals
         goal_state = self._extract_object_states(obs_dict)
         
-        # Validate goals using EpisodeManager thresholds + Safety Buffer
-        # Alice must move MORE than Bob's success threshold to avoid instant wins from physics jitter
+        # Use dedicated min_goal_dist from EpisodeManager (decoupled from Bob's completion radius)
+        # This is the minimum distance Alice must move an object for the goal to count.
+        # For early training, set to near-zero (0.001m) to prevent deadlock.
         initial_state = self.episode_manager.initial_states
-        
-        # Add buffer: pos + 1cm, rot + 0.05 rad
-        alice_pos_req = self.episode_manager.pos_threshold + 0.01
-        alice_rot_req = self.episode_manager.rot_threshold + 0.05
+        alice_pos_req = self.episode_manager.min_goal_dist
+        alice_rot_req = self.episode_manager.rot_threshold * 0.5  # More lenient than Bob's check
         
         valid, out_of_bounds = validate_goal(
             initial_state[env_ids],
