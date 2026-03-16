@@ -126,15 +126,16 @@ def objective(trial: optuna.Trial) -> float:
     """Run a short training budget and return Bob's success rate."""
 
     # ── 1. Suggest Hyperparameters ──────────────────────────────────────────
-    # Category 1: Curriculum Gatekeepers (DECOUPLED)
-    # min_goal_dist: how far Alice must move an object (low = easy goals for early training)
-    min_goal_dist = trial.suggest_float("min_goal_dist", 0.001, 0.05)
+    # Category 1: Curriculum Gatekeepers
+    # bob_completion_radius: how close Bob must get to Alice's goal to succeed
+    bob_completion_radius = trial.suggest_float("bob_completion_radius", 0.01, 0.05)
+    # goal_margin: multiplier ensuring Alice must move object FURTHER than Bob's success zone
+    goal_margin = trial.suggest_float("goal_margin", 1.5, 3.0)
+    min_goal_dist = bob_completion_radius * goal_margin
     rot_threshold = trial.suggest_float("rot_threshold", 0.05, 0.50)
 
     # Category 2: Reward Shaping
     alpha_decay_steps = trial.suggest_int("alpha_decay_steps", 100, 1000)
-    # bob_completion_radius: how close Bob must get to Alice's goal to succeed
-    bob_completion_radius = trial.suggest_float("bob_completion_radius", 0.01, 0.05)
 
     # Category 3: PPO Exploration
     lr = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
@@ -147,10 +148,11 @@ def objective(trial: optuna.Trial) -> float:
     print(f"\n{'='*60}")
     print(f"TRIAL {trial.number}")
     print(f"{'='*60}")
-    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice validation)")
+    print(f"  bob_completion:      {bob_completion_radius:.4f} m (Bob success)")
+    print(f"  goal_margin:         {goal_margin:.2f}x")
+    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (= completion × margin, Alice validation)")
     print(f"  rot_threshold:       {rot_threshold:.4f} rad")
     print(f"  alpha_decay_steps:   {alpha_decay_steps}")
-    print(f"  bob_completion:      {bob_completion_radius:.4f} m (Bob success)")
     print(f"  learning_rate:       {lr:.6f}")
     print(f"  entropy_coef:        {entropy_coef:.6f}")
     print(f"  clip_param:          {clip_param:.3f}")
