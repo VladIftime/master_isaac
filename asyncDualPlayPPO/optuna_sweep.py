@@ -147,21 +147,21 @@ def objective(trial: optuna.Trial) -> float:
     # Category 4: HGI Dynamics
     demo_batch_ratio = trial.suggest_float("demo_batch_ratio", 0.1, 0.5)
 
-    print(f"\n{'='*60}")
-    print(f"TRIAL {trial.number}")
-    print(f"{'='*60}")
-    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice must move this far)")
-    print(f"  goal_margin:         {goal_margin:.2f}x")
-    print(f"  bob_completion:      {bob_completion_radius:.4f} m (= goal_dist ÷ margin, Bob success)")
-    print(f"  rot_threshold:       {rot_threshold:.4f} rad")
-    print(f"  alpha_decay_steps:   {alpha_decay_steps}")
-    print(f"  learning_rate:       {lr:.6f}")
-    print(f"  entropy_coef:        {entropy_coef:.6f}")
-    print(f"  clip_param:          {clip_param:.3f}")
-    print(f"  demo_batch_ratio:    {demo_batch_ratio:.3f}")
-    print(f"  nsteps(auto):        {computed_nsteps}")
-    print(f"  max_steps_bailout:   {args.max_steps_per_trial}")
-    print(f"{'='*60}\n")
+    print(f"\n{'='*60}", flush=True)
+    print(f"TRIAL {trial.number}", flush=True)
+    print(f"{'='*60}", flush=True)
+    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice must move this far)", flush=True)
+    print(f"  goal_margin:         {goal_margin:.2f}x", flush=True)
+    print(f"  bob_completion:      {bob_completion_radius:.4f} m (= goal_dist ÷ margin, Bob success)", flush=True)
+    print(f"  rot_threshold:       {rot_threshold:.4f} rad", flush=True)
+    print(f"  alpha_decay_steps:   {alpha_decay_steps}", flush=True)
+    print(f"  learning_rate:       {lr:.6f}", flush=True)
+    print(f"  entropy_coef:        {entropy_coef:.6f}", flush=True)
+    print(f"  clip_param:          {clip_param:.3f}", flush=True)
+    print(f"  demo_batch_ratio:    {demo_batch_ratio:.3f}", flush=True)
+    print(f"  nsteps(auto):        {computed_nsteps}", flush=True)
+    print(f"  max_steps_bailout:   {args.max_steps_per_trial}", flush=True)
+    print(f"{'='*60}\n", flush=True)
 
     # ── 2. Dynamically Inject into Living Environment ───────────────────────
     # SINGLE SOURCE: EpisodeManager owns all thresholds
@@ -244,8 +244,8 @@ def objective(trial: optuna.Trial) -> float:
     nsteps = computed_nsteps
     alice_obs_log = torch.zeros((args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device)
     alice_act_log = torch.zeros((args.num_envs, max_alice_steps, *env.action_space.shape), device=env.device)
+    alice_rew_log = torch.zeros((args.num_envs, max_alice_steps), device=env.device)
     alice_step_counts = torch.zeros(args.num_envs, dtype=torch.long, device=env.device)
-    alice_validity_buffer = torch.zeros(args.num_envs, device=env.device)
 
     alice_updates = 0
     alice_total_goals = 0
@@ -287,14 +287,14 @@ def objective(trial: optuna.Trial) -> float:
         alice_updates += 1
         
         validity_rate = (alice_valid_goals / alice_total_goals) if alice_total_goals > 0 else 0.0
-        print(f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f} (Bob @ {bob_ppo.storage.step}/{nsteps})")
+        print(f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f} (Bob @ {bob_ppo.storage.step}/{nsteps})", flush=True)
 
     def perform_bob_update(current_obs):
         nonlocal bob_updates
         if bob_ppo.storage.step < nsteps:
             # Progress log for Bob (every 100 steps)
             if bob_ppo.storage.step > 0 and bob_ppo.storage.step % 100 == 0:
-                 print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}")
+                 print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}", flush=True)
             return current_obs
         
         with torch.no_grad():
@@ -304,7 +304,7 @@ def objective(trial: optuna.Trial) -> float:
         bob_ppo.storage.clear()
 
         bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
-        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, SR={bob_success_rate:.4f} (steps={total_env_steps})")
+        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, SR={bob_success_rate:.4f} (steps={total_env_steps})", flush=True)
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -353,12 +353,11 @@ def objective(trial: optuna.Trial) -> float:
         next_obs, rewards, dones, truncated, extras = env.step(actions)
 
         # ── Hindsight Goal Injection ────────────────────────────────────
-        if "alice_validity_bonus" in extras:
-            curr_bonus = extras["alice_validity_bonus"]
-            mask = curr_bonus != 0
-            alice_validity_buffer[mask] = curr_bonus[mask]
-
-            alice_success_mask = curr_bonus == 1.0
+        if "episode_manager" in extras:
+            # We still need goal_valid for HGI logic
+            curr_validity = extras.get("goal_valid", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+            
+            alice_success_mask = curr_validity
             if alice_success_mask.any():
                 success_ids = torch.where(alice_success_mask)[0]
                 goal_states = env.episode_manager.goal_states
@@ -411,6 +410,7 @@ def objective(trial: optuna.Trial) -> float:
             steps = torch.clamp(alice_step_counts[alice_indices], max=max_alice_steps - 1)
             alice_obs_log[alice_indices, steps] = alice_obs
             alice_act_log[alice_indices, steps] = a_acts.clone()
+            alice_rew_log[alice_indices, steps] = rewards[alice_indices]
             alice_step_counts[alice_indices] += 1
 
         # ── Store Bob transitions ───────────────────────────────────────
@@ -466,16 +466,10 @@ def objective(trial: optuna.Trial) -> float:
                     env_counts[env_id] = count
                     max_count = max(max_count, count)
 
-                    if alice_failed_mask[env_id]:
-                        alice_reward = ALICE_INVALID_GOAL_PENALTY
-                    else:
-                        is_success = bob_success_mask[idx].item()
-                        alice_reward = ALICE_BOB_SUCCESS_REWARD if is_success else ALICE_BOB_FAIL_REWARD
-
-                    validity_bonus = alice_validity_buffer[env_id].item()
-                    alice_validity_buffer[env_id] = 0.0
-                    env_rewards_buf[env_id] = alice_reward + validity_bonus
-                    alice_rew_buf.append(env_rewards_buf[env_id].item())
+                    # Unified Reward: Validation Bonus + Outcome Penalty/Reward
+                    alice_reward = extras.get("alice_total_reward", torch.zeros(env.num_envs, device=env.device))[env_id].item()
+                    env_rewards_buf[env_id] = alice_reward
+                    alice_rew_buf.append(alice_reward)
 
                 if max_count > 0:
                     for t in range(max_count):
@@ -490,9 +484,12 @@ def objective(trial: optuna.Trial) -> float:
                             _o[active_ids] = alice_obs_log[active_ids, t]
                             _a[active_ids] = alice_act_log[active_ids, t]
 
+                            _r[active_ids] = alice_rew_log[active_ids, t]
+
                             is_last_step = (env_counts == (t + 1))
                             last_step_ids = torch.where(is_last_step)[0]
                             if len(last_step_ids) > 0:
+                                # Overwrite last step reward with end-of-phase reward (outcome + val)
                                 _r[last_step_ids] = env_rewards_buf[last_step_ids]
                                 _d[last_step_ids] = 1.0
 

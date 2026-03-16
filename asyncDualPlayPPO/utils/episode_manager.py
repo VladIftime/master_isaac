@@ -65,11 +65,11 @@ class EpisodeManager:
         self.max_contact_force = torch.zeros(num_envs, device=device)  # Track contact forces for Safe-State HER
         self.bob_success_this_step = torch.zeros(num_envs, dtype=torch.bool, device=device)
         
-        print(f"[EpisodeManager] Initialized for {num_envs} envs")
-        print(f"  Alice timesteps: {alice_timesteps}")
-        print(f"  Bob timesteps: {bob_timesteps}")
-        print(f"  Max goals per episode: {self.max_goals}")
-        print(f"  Success thresholds: pos={pos_threshold:.3f}m, rot={rot_threshold:.3f}rad")
+        print(f"[EpisodeManager] Initialized for {num_envs} envs", flush=True)
+        print(f"  Alice timesteps: {alice_timesteps}", flush=True)
+        print(f"  Bob timesteps: {bob_timesteps}", flush=True)
+        print(f"  Max goals per episode: {self.max_goals}", flush=True)
+        print(f"  Success thresholds: pos={pos_threshold:.3f}m, rot={rot_threshold:.3f}rad", flush=True)
         
         # CRITICAL VALIDATION: Prevent instant win bug
         # Alice's movement_threshold (wrapper: pos_threshold + 0.01) must be LARGER than Bob's pos_threshold
@@ -119,7 +119,7 @@ class EpisodeManager:
         for env_id in env_ids:
             steps = self.phase_step[env_id].item()
             goal_num = self.goal_count[env_id].item() + 1
-            print(f"[Phase] Env {env_id.item()}: Alice→Bob | Goal {goal_num}/5 | Alice completed {steps}/{self.alice_timesteps} steps")
+            print(f"[Phase] Env {env_id.item()}: Alice→Bob | Goal {goal_num}/5 | Alice completed {steps}/{self.alice_timesteps} steps", flush=True)
         
         self.current_phase[env_ids] = Phase.BOB.value
         self.phase_step[env_ids] = 0
@@ -138,7 +138,7 @@ class EpisodeManager:
             goal_num = self.goal_count[env_id].item()
             success = self.bob_success[env_id].item()
             status = "SUCCESS" if success else "FAILURE"
-            print(f"[Phase] Env {env_id.item()}: Bob→Alice | Goal {goal_num}/5 {status} | Bob used {steps}/{self.bob_timesteps} steps")
+            print(f"[Phase] Env {env_id.item()}: Bob→Alice | Goal {goal_num}/5 {status} | Bob used {steps}/{self.bob_timesteps} steps", flush=True)
         
         self.current_phase[env_ids] = Phase.ALICE.value
         self.phase_step[env_ids] = 0
@@ -151,7 +151,7 @@ class EpisodeManager:
             steps = self.phase_step[env_id].item()
             goals = self.goal_count[env_id].item()
             max_steps = self.alice_timesteps if phase_name == "Alice" else self.bob_timesteps
-            print(f"[Reset] Env {env_id.item()}: {phase_name} phase @ step {steps}/{max_steps} | Goals: {goals}/5 | Reason: {reason}")
+            print(f"[Reset] Env {env_id.item()}: {phase_name} phase @ step {steps}/{max_steps} | Goals: {goals}/5 | Reason: {reason}", flush=True)
         
         self.current_phase[env_ids] = Phase.ALICE.value
         self.phase_step[env_ids] = 0

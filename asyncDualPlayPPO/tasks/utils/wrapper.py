@@ -98,8 +98,7 @@ class AsyncDualPlayEnvWrapper:
         else:
             self.action_space = env.action_space
 
-        
-        # Table and placement bounds for goal validation
+              # Table and placement bounds for goal validation
         self.table_bounds = {
             "x_range": (-1.0, 1.0),
             "y_range": (-0.5, 1.5),
@@ -109,6 +108,9 @@ class AsyncDualPlayEnvWrapper:
             "x_range": (-0.6, 0.6),
             "y_range": (0.3, 0.9),
         }
+
+        # Buffer to hold Alice's rewards until her cycle ends (either Alice failed or Bob finished)
+        self.delayed_alice_reward = torch.zeros(env.num_envs, device=self.device)
         
         print(f"[AsyncDualPlayEnvWrapper] Initialized (task-space mode)")
         print(f"  Alice obs: {self.alice_obs_dim}, Bob obs: {self.bob_obs_dim}")
@@ -125,6 +127,7 @@ class AsyncDualPlayEnvWrapper:
         # Reset episode manager
         env_ids = torch.arange(self.num_envs, device=self.device)
         self.episode_manager.reset_episode(env_ids, reason="Global Manual Reset")
+        self.delayed_alice_reward[env_ids] = 0.0
         
         # Extract and store initial object states
         initial_state = self._extract_object_states(obs_dict)
@@ -160,127 +163,104 @@ class AsyncDualPlayEnvWrapper:
                 right_ctrl.articulation_policies[i].get_motion_policy().set_cspace_target(right_posture_np[i])
         # ---------------------------------------------
         
-        # ----------------------------------------------------------------------
-        # ACTION SCALING (As per 'fix imple.md')
-        # We decouple PPO's mathematical variance (std=1.0) from physical 
-        # exploration (5cm). Scale delta Cartesian poses by 0.05.
-        # Dims 0:6 = Left Arm, Dims 7:13 = Right Arm. Grippers (6, 13) unscaled.
-        # ----------------------------------------------------------------------
+        # ACTION SCALING
         scaled_action = action.clone()
         scaled_action[:, 0:6] *= 0.05
         scaled_action[:, 7:13] *= 0.05
         
-        # Step base environment (expect 5-tuple)
+        # Step base environment
         obs_dict, rewards, terminated, truncated, extras = self.env.step(scaled_action)
         
-
-        
         # Sync EpisodeManager with Env Resets
-        # If base env terminated/truncated, it auto-resets. We must align EpisodeManager.
         dones = terminated | truncated
         if dones.any():
             reset_ids = torch.where(dones)[0]
-            
-            # Determine specific termination reason for each environment
-            # Check extras for termination info
             term_log = extras.get("log", {})
-            
-            # Use actual key names from IsaacLab's termination manager
-            # The values might be scalars (floats) or tensors, so we need to handle both
             robot_oob_val = term_log.get("Episode_Termination/robot_through_table", 0.0)
             objects_oob_val = term_log.get("Episode_Termination/objects_off_table", 0.0)
             
-            # Convert to boolean tensors if needed
-            if isinstance(robot_oob_val, (int, float)):
-                robot_oob = torch.zeros_like(dones, dtype=torch.bool)
-                if robot_oob_val > 0.5:
-                    robot_oob[:] = True
-            else:
-                robot_oob = robot_oob_val > 0.5
-                
-            if isinstance(objects_oob_val, (int, float)):
-                objects_oob = torch.zeros_like(dones, dtype=torch.bool)
-                if objects_oob_val > 0.5:
-                    objects_oob[:] = True
-            else:
-                objects_oob = objects_oob_val > 0.5
+            # Convert to boolean tensors
+            robot_oob = (robot_oob_val > 0.5) if torch.is_tensor(robot_oob_val) else (torch.tensor(robot_oob_val, device=self.device) > 0.5)
+            objects_oob = (objects_oob_val > 0.5) if torch.is_tensor(objects_oob_val) else (torch.tensor(objects_oob_val, device=self.device) > 0.5)
             
-            # Log each environment with its specific reason
-            # Note: envs with invalid Alice goals will be reset later with a more specific
-            # reason — skip them here to avoid a duplicate log at step 0.
+            # Track which Alice failed early
+            is_alice = self.episode_manager.is_alice_phase()
+
             for env_id in reset_ids:
+                reason = "Unknown"
                 if robot_oob[env_id]:
-                    reason = "Robot out of bounds"
+                    reason = "Robot through table"
                 elif objects_oob[env_id]:
-                    reason = "Objects out of bounds"
+                    reason = "Objects off table"
                 else:
-                    # Skip here — Alice timeout envs are re-reset below with the
-                    # "Invalid Goal" reason once the goal validator has run.
+                    # Likely timeout or other reset
                     continue
                 
-                # Reset with specific reason
+                # If Alice fails early, we MUST signal this so she trains on the failure
+                if is_alice[env_id]:
+                    # Initialize extras if needed (though it's usually initialized later, we can't easily here)
+                    # We'll set a temporary attribute and pick it up later in step()
+                    if not hasattr(self, "_early_alice_failures"):
+                        self._early_alice_failures = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+                    self._early_alice_failures[env_id] = True
+                    # Alice gets a penalty for failing early
+                    self.delayed_alice_reward[env_id] = -3.0
+                    print(f"[Reset] Env {env_id.item()}: Alice FAILED early ({reason}) | Penalty: -3.0", flush=True)
+
                 self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
         
-        # NOTE: rewards from base env are dt-scaled by RewardManager.compute()
-        # The dt-compensation (×50) is applied in _get_current_rewards() for Alice only.
-        # Bob's rewards are computed separately without dt-scaling.
-        
-        # IMPORTANT: Capture phase state BEFORE transitions for correct reward assignment
+        # Capture phase state BEFORE transitions
         is_alice_before = self.episode_manager.is_alice_phase().clone()
         is_bob_before = self.episode_manager.is_bob_phase().clone()
         
         # Advance episode manager
         phase_info = self.episode_manager.step()
-        
-        
-        # Track if ANY environment was reset during phase transition logic
         any_reset = False
         
+        # Prepare extras for Alice's total reward
+        extras["alice_total_reward"] = torch.zeros(self.num_envs, device=self.device)
+        extras["alice_failed_this_step"] = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        
+        # Pull in early failures if any
+        if hasattr(self, "_early_alice_failures"):
+            extras["alice_failed_this_step"] |= self._early_alice_failures
+            extras["alice_total_reward"] += torch.where(self._early_alice_failures, self.delayed_alice_reward, torch.zeros_like(self.delayed_alice_reward))
+            # DON'T CLEAR YET - we need to clear it after return or at start of next step
+            # Actually, clearing here is fine as we'll populate the final extras now
+            early_fail_ids = torch.where(self._early_alice_failures)[0]
+            if len(early_fail_ids) > 0:
+                self.delayed_alice_reward[early_fail_ids] = 0.0
+            self._early_alice_failures.fill_(False)
+
         # Handle Alice phase completion
-        alice_bonus = torch.zeros(self.num_envs, device=self.device)
         if phase_info["alice_done"].any():
             alice_done_ids = torch.where(phase_info["alice_done"])[0]
             
-            # --- PHASE 2: NULL-SPACE POSTURE INJECTION ---
-            # Save Alice's final arm joints BEFORE resetting to inject as Bob's RMPFlow posture target
+            # Save final joints for RMPFlow target
             robot = self.env.scene["robot"]
-            
-            # Left and right arm RMPflow action terms
             left_term = self.env.action_manager._terms["left_arm_action"]
             right_term = self.env.action_manager._terms["right_arm_action"]
             
-            # Initialize storage if doesn't exist
             if not hasattr(self, "alice_final_posture_left"):
                 self.alice_final_posture_left = torch.zeros((self.num_envs, len(left_term._joint_ids)), device=self.device)
                 self.alice_final_posture_right = torch.zeros((self.num_envs, len(right_term._joint_ids)), device=self.device)
             
-            # Store exact joint positions for the arms (ignoring grippers)
-            if len(alice_done_ids) > 0:
-                self.alice_final_posture_left[alice_done_ids] = robot.data.joint_pos[alice_done_ids][:, left_term._joint_ids]
-                self.alice_final_posture_right[alice_done_ids] = robot.data.joint_pos[alice_done_ids][:, right_term._joint_ids]
-            # -----------------------------------------------
+            self.alice_final_posture_left[alice_done_ids] = robot.data.joint_pos[alice_done_ids][:, left_term._joint_ids]
+            self.alice_final_posture_right[alice_done_ids] = robot.data.joint_pos[alice_done_ids][:, right_term._joint_ids]
             
-            bonus, invalid_ids = self._handle_alice_completion(obs_dict, alice_done_ids)
-            alice_bonus[alice_done_ids] = bonus
-            
-            # If transition occurred (valid goals), we reset robot/objects -> Need refresh
-            # If invalid (reset), we also reset robot/objects -> Need refresh
-            if len(alice_done_ids) > 0:
-                any_reset = True
+            valid, invalid_ids = self._handle_alice_completion(obs_dict, alice_done_ids)
             
             if len(invalid_ids) > 0:
-                 terminated[invalid_ids] = True
-                 # NOTE: reset_episode is already called inside _handle_alice_completion
-                 # for invalid goals (line ~550). Do NOT call it again here.
-                 
-            # Add early flag to extras so train.py knows Alice failed
-            extras["alice_failed_this_step"] = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-            extras["alice_failed_this_step"][invalid_ids] = True
+                  extras["alice_total_reward"][invalid_ids] = self.delayed_alice_reward[invalid_ids]
+                  extras["alice_failed_this_step"][invalid_ids] = True
+                  terminated[invalid_ids] = True
+                  self.delayed_alice_reward[invalid_ids] = 0.0
+
+            any_reset = True
         
-        # Track Bob's success for logging
+        # Track Bob's success
         step_bob_success = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         step_bob_done = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
-        # Track errors for debugging
         step_pos_err = torch.zeros(self.num_envs, device=self.device)
         step_rot_err = torch.zeros(self.num_envs, device=self.device)
 
@@ -293,82 +273,54 @@ class AsyncDualPlayEnvWrapper:
             step_pos_err[bob_done_ids] = pos_err
             step_rot_err[bob_done_ids] = rot_err
             
-            if len(bob_done_ids) > 0:
-                any_reset = True
+            extras["alice_total_reward"][bob_done_ids] = self.delayed_alice_reward[bob_done_ids]
+            self.delayed_alice_reward[bob_done_ids] = 0.0 
+            any_reset = True
         
-        # CRITICAL FIX: Stale Observations
-        # If we reset robot/objects in handle_completion, the obs_dict from env.step()
-        # contains the PRE-RESET state (Alice's end state).
-        # We must recompute observations to reflect the reset state (Robot at Home).
         if any_reset:
             obs_dict = self.env.observation_manager.compute()
         
-        # Get observations for current phase (using REFRESHED obs_dict)
         current_obs = self._get_current_observations(obs_dict)
-        
-        # Compute rewards for current phase (using PRE-TRANSITION phase state)
-        # BUG FIX: MUST use the refreshed obs_dict here so Bob doesn't evaluate his success
-        # based on Alice's end-state (stale obs_dict) where the objects perfectly match the goal!
         current_rewards, bob_achieved_completion = self._get_current_rewards(obs_dict, rewards, is_alice_before, is_bob_before, action)
         
-        # Handle Bob's EARLY SUCCESS: Per rewards.txt, Bob's turn ends immediately on completion
+        # Handle Bob's EARLY SUCCESS
         if bob_achieved_completion.any():
             completion_ids = torch.where(bob_achieved_completion)[0]
-            # Mark as successful early completion
             self.episode_manager.bob_success[completion_ids] = True
             step_bob_success[completion_ids] = True
             step_bob_done[completion_ids] = True
-            
-            # Mark completion as given in manager (prevent double counting)
             self.episode_manager.completion_given[completion_ids] = True
             
-            # Get final error metrics for these envs
             success, pos_err, rot_err = self._check_bob_success(obs_dict, completion_ids)
             step_pos_err[completion_ids] = pos_err
             step_rot_err[completion_ids] = rot_err
             
-            # IMPORTANT: Capture step/goal counts BEFORE transition resets them to 0
             completion_steps = self.episode_manager.phase_step[completion_ids].clone()
             completion_goals = self.episode_manager.goal_count[completion_ids].clone()
             
-            # Transition to next phase (or reset episode)
             self._handle_bob_success_transition(completion_ids)
             
-            # Log detailed completion info (using pre-transition values)
+            extras["alice_total_reward"][completion_ids] = self.delayed_alice_reward[completion_ids]
+            self.delayed_alice_reward[completion_ids] = 0.0
+
             for idx, env_id in enumerate(completion_ids):
-                steps = completion_steps[idx].item()
-                goal_num = completion_goals[idx].item()
-                print(f"[BobComplete] Env {env_id.item()}: Goal {goal_num}/5 @ step {steps}/600 | err: pos={pos_err[idx]:.4f} rot={rot_err[idx]:.4f}")
+                print(f"[BobComplete] Env {env_id.item()}: Goal {completion_goals[idx].item()}/5 @ step {completion_steps[idx].item()}/600")
             
-            # FIX: Only terminate if they CANNOT continue (Game Over)
-            # Check if they can actually continue to the next goal
             can_continue = (self.episode_manager.goal_count[completion_ids] < self.episode_manager.max_goals)
-            # Only set terminated=True for envs that cannot continue (reached max goals)
             terminated[completion_ids] = ~can_continue
-            
-            # Early success implies reset/transition occurred
-            if len(completion_ids) > 0:
-                any_reset = True
+            any_reset = True
         
-        # --- FINAL OBSERVATION REFRESH & INITIAL STATE UPDATE ---
-        # If ANY transition happened (including early success), we MUST refresh obs
-        # and update Alice's initial_states so she doesn't get free "Valid" rewards.
         if any_reset:
             obs_dict = self.env.observation_manager.compute()
             current_obs = self._get_current_observations(obs_dict)
             
-            # Snapshot initial states for envs that just started Alice's phase
             new_alice_mask = self.episode_manager.is_alice_phase() & (self.episode_manager.phase_step == 0)
             if new_alice_mask.any() and self.episode_manager.initial_states is not None:
                 new_alice_ids = torch.where(new_alice_mask)[0]
                 fresh_states = self._extract_object_states(obs_dict)
                 self.episode_manager.initial_states[new_alice_ids] = fresh_states[new_alice_ids].clone()
-        # ----------------------------------------------------------
         
-        # Add Alice Bonus (Valid Goal)
-        current_rewards += alice_bonus
-        
-        # --- PHASE 4: Update Max Contact Force for Bob ---
+        # Track contact forces
         if hasattr(self.env.scene, "sensors"):
             bob_mask = self.episode_manager.is_bob_phase()
             if bob_mask.any():
@@ -379,16 +331,10 @@ class AsyncDualPlayEnvWrapper:
                 if "contact_forces_right" in self.env.scene.sensors:
                     right_f = self.env.scene.sensors["contact_forces_right"].data.net_forces_w
                     forces.append(torch.max(torch.norm(right_f, dim=-1), dim=-1)[0])
-                
                 if forces:
-                    max_forces = torch.max(torch.stack(forces, dim=0), dim=0)[0]
-                    updated_forces = torch.where(bob_mask,
-                                                 torch.max(self.episode_manager.max_contact_force, max_forces),
-                                                 self.episode_manager.max_contact_force)
-                    self.episode_manager.max_contact_force = updated_forces
+                    max_f = torch.max(torch.stack(forces, dim=0), dim=0)[0]
+                    self.episode_manager.max_contact_force = torch.where(bob_mask, torch.max(self.episode_manager.max_contact_force, max_f), self.episode_manager.max_contact_force)
                     
-        # Add phase info to extras
-        extras["alice_validity_bonus"] = alice_bonus.clone()  # Expose bonus for train.py to use
         extras["episode_manager"] = {
             "phase": self.episode_manager.current_phase.clone(),
             "goal_count": self.episode_manager.goal_count.clone(),
@@ -397,34 +343,26 @@ class AsyncDualPlayEnvWrapper:
             "bob_done_this_step": step_bob_done,
             "bob_pos_err": step_pos_err,
             "bob_rot_err": step_rot_err,
-            # FIX: Ensure goal_valid is captured even if reset clears it
             "goal_valid": self.episode_manager.goal_valid.clone(), 
-            "goal_states": self.episode_manager.goal_states.clone() if self.episode_manager.goal_states is not None else torch.zeros((self.num_envs, 14), device=self.device),  # Required for ABC logic
+            "goal_states": self.episode_manager.goal_states.clone() if self.episode_manager.goal_states is not None else torch.zeros((self.num_envs, 14), device=self.device),
             "max_contact_force": self.episode_manager.max_contact_force.clone(),
         }
         
-        # Also expose flattened extras for direct access by rewards
         extras["goal_valid"] = self.episode_manager.goal_valid.clone()
         extras["bob_success"] = self.episode_manager.bob_success.clone()
-        
-        # --- PHASE 2: Save previous actions for smoothing ---
         self.previous_actions = action.clone()
         
         return current_obs, current_rewards, terminated, truncated, extras
     
     def _handle_alice_completion(self, obs_dict: Dict, env_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Handle completion of Alice's phase"""
-        # Extract current object states as goals
         goal_state = self._extract_object_states(obs_dict)
-        
-        # Use dedicated min_goal_dist from EpisodeManager (decoupled from Bob's completion radius)
-        # This is the minimum distance Alice must move an object for the goal to count.
-        # For early training, set to near-zero (0.001m) to prevent deadlock.
         initial_state = self.episode_manager.initial_states
         alice_pos_req = self.episode_manager.min_goal_dist
-        alice_rot_req = self.episode_manager.rot_threshold * 0.5  # More lenient than Bob's check
+        alice_rot_req = self.episode_manager.rot_threshold * 0.5
         
-        valid, out_of_bounds = validate_goal(
+        # New Validator Return: (valid, reward, reason)
+        valid, val_reward, reasons = validate_goal(
             initial_state[env_ids],
             goal_state[env_ids],
             self.table_bounds,
@@ -433,213 +371,92 @@ class AsyncDualPlayEnvWrapper:
             rot_threshold=alice_rot_req
         )
         
-        # --- HEARTBEAT LOG: Alice→Bob Transition ---
-        # Calculate distance moved for logging (position only for brief log)
-        start_pos = initial_state[env_ids][:, 0:3]  # First object position
+        # Store immediate validation reward (+1.0, -3.0, or 0.0)
+        self.delayed_alice_reward[env_ids] = val_reward
+        
+        # Snapshot for logs
+        start_pos = initial_state[env_ids][:, 0:3] 
         final_pos = goal_state[env_ids][:, 0:3]
         dist_moved = torch.norm(final_pos - start_pos, dim=-1)
         
-        # Log first valid transition (avoid spam)
-        if valid.any():
-            first_valid_idx = env_ids[valid][0].item()
-            first_dist = dist_moved[valid][0].item()
-            status = "Out-of-Zone" if out_of_bounds[valid][0] else "Valid"
-            print(f"[Phase] Env {first_valid_idx}: Alice→Bob | {status} Goal | Moved: {first_dist:.3f}m")
+        for i, env_id in enumerate(env_ids):
+            print(f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | Moved: {dist_moved[i]:.3f}m", flush=True)
         
-        # Log invalid goals (movement too small or off table)
-        if (~valid).any():
-            first_invalid_idx = env_ids[~valid][0].item()
-            # If off table
-            invalid_pos = final_pos[~valid][0] # (3,)
-            x_on = (invalid_pos[0] >= self.table_bounds["x_range"][0]) and (invalid_pos[0] <= self.table_bounds["x_range"][1])
-            y_on = (invalid_pos[1] >= self.table_bounds["y_range"][0]) and (invalid_pos[1] <= self.table_bounds["y_range"][1])
-            z_on = (invalid_pos[2] >= self.table_bounds["z_min"])
-            
-            if not (x_on and y_on and z_on):
-                 print(f"[Phase] Env {first_invalid_idx}: Alice Failed | Object off table")
-            else:
-                 first_invalid_dist = dist_moved[~valid][0].item()
-                 print(f"[Phase] Env {first_invalid_idx}: Alice Failed | Moved: {first_invalid_dist:.3f}m. Thresholds: pos > {alice_pos_req:.3f}m OR rot > {alice_rot_req:.3f}rad")
-        # ---
-
-        
-        # Store goal states - slice to 7 dims (Pos+Rot) for Bob
-        # goal_state is (N, 34) -> (N, 2, 17) -> slice -> (N, 2, 7) -> (N, 14)
+        # Transition/Storage logic
         goal_state_storage = goal_state.view(-1, 2, 17)[:, :, :7].reshape(-1, 14)
         self.episode_manager.store_goal_state(goal_state_storage, env_ids)
         self.episode_manager.mark_goal_valid(env_ids, valid)
         
-        # Transition valid goals to Bob phase
-        # FIX: Only transition if goal is valid AND in-zone!
-        # If out-of-bounds, Alice gets penalty (below) and episode resets.
-        successful_goal = valid & (~out_of_bounds)
+        # In this implementation, OOB goals (val_reward == -3.0) are considered INVALID for transition
+        # This aligns with Step 1: "if oob -> return False, -3.0"
+        successful_goal = valid
         valid_env_ids = env_ids[successful_goal]
         if len(valid_env_ids) > 0:
             self.episode_manager.transition_to_bob(valid_env_ids)
             
-            # --- RESET OBJECTS FOR BOB (FIXED) ---
-            # Reset objects to initial state so Bob starts from same place as Alice
-            # initial_states: (num_envs, 34) [obj1_state(17), obj2_state(17)]
-            # We assume extraction order was target_object then cube
-            # 
-            # CRITICAL FIX: Positions are stored in LOCAL coordinates (relative to env_origins)
-            # but write_root_pose_to_sim expects GLOBAL coordinates. We must add env_origins!
-            
+            # Reset objects to start states for Bob
             start_states = self.episode_manager.initial_states[valid_env_ids]
-            
-            # Get Environment Origins for these specific envs
             env_origins = self.env.scene.env_origins[valid_env_ids]
             
-            # Object 1: target_object
-            # Indices 0:7 (Pos+Rot still at start of 17-dim vector)
-            pos1_local = start_states[:, 0:3]
-            pos1_global = pos1_local + env_origins  # Convert LOCAL -> GLOBAL
-            quat1 = start_states[:, 3:7]
+            pos1_global = start_states[:, 0:3] + env_origins
+            self.env.scene['target_object'].write_root_pose_to_sim(torch.cat([pos1_global, start_states[:, 3:7]], dim=-1), env_ids=valid_env_ids)
+            self.env.scene['target_object'].write_root_velocity_to_sim(torch.zeros(len(valid_env_ids), 6, device=self.device), env_ids=valid_env_ids)
             
-            self.env.scene['target_object'].write_root_pose_to_sim(
-                torch.cat([pos1_global, quat1], dim=-1), 
-                env_ids=valid_env_ids
-            )
-            # Stop velocity (proper shape: 6D for linear + angular)
-            self.env.scene['target_object'].write_root_velocity_to_sim(
-                torch.zeros(len(valid_env_ids), 6, device=self.device), 
-                env_ids=valid_env_ids
-            )
+            pos2_global = start_states[:, 17:20] + env_origins
+            self.env.scene['cube'].write_root_pose_to_sim(torch.cat([pos2_global, start_states[:, 20:24]], dim=-1), env_ids=valid_env_ids)
+            self.env.scene['cube'].write_root_velocity_to_sim(torch.zeros(len(valid_env_ids), 6, device=self.device), env_ids=valid_env_ids)
             
-            # Object 2: cube
-            # Indices 17:24 (Start of second object's 17-dim vector)
-            # Was 7:14 when dim was 7. Now it is Start+17.
-            OFFSET = 17
-            pos2_local = start_states[:, OFFSET:OFFSET+3]
-            pos2_global = pos2_local + env_origins  # Convert LOCAL -> GLOBAL
-            quat2 = start_states[:, OFFSET+3:OFFSET+7]
-            
-            self.env.scene['cube'].write_root_pose_to_sim(
-                torch.cat([pos2_global, quat2], dim=-1), 
-                env_ids=valid_env_ids
-            )
-            # Stop velocity (proper shape: 6D for linear + angular)
-            self.env.scene['cube'].write_root_velocity_to_sim(
-                torch.zeros(len(valid_env_ids), 6, device=self.device), 
-                env_ids=valid_env_ids
-            )
-            
-            # --- RESET ROBOT TO INITIAL POSE FOR BOB ---
-            # Explicit Physics Reset: the environment is asynchronous, so Bob must start 
-            # exactly at the neutral pose, not tangled up where Alice left off.
             reset_robot_joints(self.env, valid_env_ids)
-            
-            # Optional: Clear forces or step physics if Isaac Sim complains about OOB contacts
-            # self.env.sim.step()
-                        
-            # Mark phase transition info
-            self.episode_manager.bob_success_this_step[env_ids] = False         
-            # --- RESET ROBOT TO DEFAULT POSE ---
-            # Bob must start from the standard initial configuration
-            print(f"[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for {len(valid_env_ids)} envs")
-            reset_robot_joints(self.env, valid_env_ids)
-            
-            # CRITICAL FIX: IsaacLab buffer must be written to actual physics sim BEFORE next observation is computed!
+            print(f"[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for {len(valid_env_ids)} envs", flush=True)
             self.env.scene.write_data_to_sim()
         
-        # Reset invalid goals (including out-of-bounds)
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
-            self.episode_manager.reset_episode(invalid_env_ids, reason="Invalid Goal")
-            # Also reset base environment for these
-
+            self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Error")
             reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
-            
-            # CRITICAL FIX: IsaacLab buffer must be written to actual physics sim
             self.env.scene.write_data_to_sim()
             
-        # Return bonus rewards (0 for now, as Alice reward is now adversarial and computed in train.py)
-        # bonus = torch.zeros_like(env_ids, dtype=torch.float)
-        # bonus = torch.where(valid, torch.ones_like(bonus), torch.zeros_like(bonus))
-        
-        # FIX: Incentivize Alice to find valid goals as per paper (+1 for valid)
-        # AND Apply -3.0 penalty if valid but out-of-zone
-        bonus = torch.zeros_like(env_ids, dtype=torch.float)
-        
-        # 1. Valid and In-Zone: +1.0
-        # 2. Valid and Out-of-Zone: -3.0 (0.0 if rotated)
-        # 3. Invalid: 0.0 (triggered reset previously) or 0.0 if rotated
-        
-        valid_in_zone = valid & (~out_of_bounds)
-        valid_out_zone = valid & out_of_bounds
-        invalid_goals = ~valid
-        
-        bonus[valid_in_zone] = 1.0
-        bonus[valid_out_zone] = -3.0
-        
-        # --- HEARTBEAT LOG: Alice Rewards ---
-        for idx in torch.where(valid_in_zone)[0]:
-            print(f"[Alice Reward] Env {idx.item()}: +1.0 | Valid Goal Setup")
-            
-        for idx in torch.where(valid_out_zone)[0]:
-            print(f"[Alice Reward] Env {idx.item()}: -3.0 | Out-of-Zone Penalty")
-        # ---
-        
-        return bonus, invalid_env_ids
+        return valid, invalid_env_ids
     
     
     def _handle_bob_completion(self, obs_dict: Dict, env_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Handle completion of Bob's phase"""
-        # Check if Bob succeeded
+        # --- 1. Success check ---
         success, pos_err, rot_err = self._check_bob_success(obs_dict, env_ids)
         self.episode_manager.mark_bob_success(env_ids, success)
 
-        # --- HEARTBEAT LOG: Bob Completion ---
+        # --- 2. Alice Outcome Reward (+5 if Bob fails, 0 if he succeeds) ---
+        outcome_rewards = torch.where(success, 
+                                     torch.tensor(reward_utils.ALICE_BOB_SUCCESS_REWARD, device=self.device), 
+                                     torch.tensor(reward_utils.ALICE_BOB_FAIL_REWARD, device=self.device))
+        self.delayed_alice_reward[env_ids] += outcome_rewards
+
+        # --- 3. Logging ---
         if len(env_ids) > 0:
             first_env = env_ids[0].item()
             steps_used = self.episode_manager.phase_step[first_env].item()
-            bob_max_steps = self.episode_manager.bob_timesteps
-            is_success = success[0].item()
-            status = "SUCCESS" if is_success else "FAILURE"
-            print(f"[Phase] Env {first_env}: Bob {status} | Steps: {steps_used}/{bob_max_steps}")
-        # ---
-
+            status = "SUCCESS" if success[0].item() else "FAILURE"
+            print(f"[Phase] Env {first_env}: Bob {status} | Steps: {steps_used}/800 | Alice Outcome Reward: {outcome_rewards[0].item():.1f}", flush=True)
         
-        # Determine what to do next per paper Algorithm 2:
-        # "if bob_succeeded is True then ... end if"
-        # Once Bob fails, remaining goals in the episode are SKIPPED (bob attempts = 0)
-        # Bob can only continue if:
-        # 1. He hasn't failed yet in this episode (!bob_ever_failed)
-        # 2. Current goal attempt was successful (~success means failed, so we need success=False to have failed)
-        # 3. Haven't reached max goals yet
-        
-        # Wait, logic should be: continue if goal_count < max AND Bob hasn't EVER failed
-        # But if Bob just succeeded on current goal, we CAN continue (he didn't fail)
-        # If Bob just failed on current goal, we should stop (even if it's the first goal)
-        
-        # Correct logic per paper:
-        # can_continue = (goal_count < max_goals) AND (haven't failed yet OR just succeeded)
-        # Simplified: can_continue = (goal_count < max_goals) AND NOT(ever_failed)
-        # Since bob_ever_failed is updated in mark_bob_success, it already includes current failure
-        
+        # --- 4. Transition Logic ---
         can_continue = (self.episode_manager.goal_count[env_ids] < self.episode_manager.max_goals) & ~self.episode_manager.bob_ever_failed[env_ids]
         
-        # Environments that can continue get new Alice phase
+        # Bob -> Alice (next goal)
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
             print(f"[Phase] Bob->Alice Transition for {len(continue_ids)} envs")
             self.episode_manager.transition_to_alice(continue_ids)
-            # FIX: Ensure Alice starts from clean state too!
             reset_objects_to_fixed_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
         
-        # Others reset (either succeeded, failed, or reached max goals)
+        # Episode End (Bob failed or max goals)
         reset_ids = env_ids[~can_continue]
         if len(reset_ids) > 0:
-            # Determine reason for clarity
             succeeded = self.episode_manager.bob_success[reset_ids]
-            if succeeded.any():
-                self.episode_manager.reset_episode(reset_ids[succeeded], reason="Bob Succeeded")
-            if (~succeeded).any():
-                self.episode_manager.reset_episode(reset_ids[~succeeded], reason="Bob Failed (or Max Goals)")
-            # Reset base environment
-
+            reason = "Bob Succeeded" if succeeded.any() else "Bob Failed (or Max Goals)"
+            self.episode_manager.reset_episode(reset_ids, reason=reason)
+            
             reset_objects_to_fixed_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
 
