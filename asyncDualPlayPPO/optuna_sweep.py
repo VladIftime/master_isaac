@@ -127,11 +127,13 @@ def objective(trial: optuna.Trial) -> float:
 
     # ── 1. Suggest Hyperparameters ──────────────────────────────────────────
     # Category 1: Curriculum Gatekeepers
-    # bob_completion_radius: how close Bob must get to Alice's goal to succeed
-    bob_completion_radius = trial.suggest_float("bob_completion_radius", 0.01, 0.05)
-    # goal_margin: multiplier ensuring Alice must move object FURTHER than Bob's success zone
+    # CONSTRAINT: min_goal_dist > bob_completion_radius (so Bob can't win by standing still)
+    # AND: min_goal_dist <= 0.025m (what random untrained Alice can actually achieve)
+    #
+    # Approach: anchor on min_goal_dist, derive bob_completion_radius as a fraction.
+    min_goal_dist = trial.suggest_float("min_goal_dist", 0.005, 0.025)
     goal_margin = trial.suggest_float("goal_margin", 1.5, 3.0)
-    min_goal_dist = bob_completion_radius * goal_margin
+    bob_completion_radius = trial.suggest_float("bob_completion_radius", 0.001, 0.005)
     rot_threshold = trial.suggest_float("rot_threshold", 0.05, 0.50)
 
     # Category 2: Reward Shaping
@@ -148,9 +150,9 @@ def objective(trial: optuna.Trial) -> float:
     print(f"\n{'='*60}")
     print(f"TRIAL {trial.number}")
     print(f"{'='*60}")
-    print(f"  bob_completion:      {bob_completion_radius:.4f} m (Bob success)")
+    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice must move this far)")
     print(f"  goal_margin:         {goal_margin:.2f}x")
-    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (= completion × margin, Alice validation)")
+    print(f"  bob_completion:      {bob_completion_radius:.4f} m (= goal_dist ÷ margin, Bob success)")
     print(f"  rot_threshold:       {rot_threshold:.4f} rad")
     print(f"  alpha_decay_steps:   {alpha_decay_steps}")
     print(f"  learning_rate:       {lr:.6f}")
@@ -246,6 +248,8 @@ def objective(trial: optuna.Trial) -> float:
     alice_validity_buffer = torch.zeros(args.num_envs, device=env.device)
 
     alice_updates = 0
+    alice_total_goals = 0
+    alice_valid_goals = 0
     bob_updates = 0
     total_env_steps = 0  # Escape hatch counter
     max_alice_bob_ratio = 5
@@ -267,28 +271,40 @@ def objective(trial: optuna.Trial) -> float:
         if alice_ppo.storage.step < nsteps:
             return
         if alice_updates >= (bob_updates + 1) * max_alice_bob_ratio:
+            if alice_updates % 10 == 0: # Only log occasionally to avoid spam
+                print(f"  [Trial {trial.number}] Alice Throttled: {alice_updates} updates (Waiting for Bob Update {bob_updates+1})")
             alice_ppo.storage.clear()
             alice_rew_buf.clear()
             return
+        
+        # Compute returns before update
         dummy_val = torch.zeros(env.num_envs, 1, device=env.device)
         alice_ppo.storage.compute_returns(dummy_val, alice_ppo.gamma, alice_ppo.lam)
-        alice_ppo.update()
+        
+        val_loss, surr_loss = alice_ppo.update()
         alice_ppo.storage.clear()
         alice_rew_buf.clear()
         alice_updates += 1
+        
+        validity_rate = (alice_valid_goals / alice_total_goals) if alice_total_goals > 0 else 0.0
+        print(f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f} (Bob @ {bob_ppo.storage.step}/{nsteps})")
 
     def perform_bob_update(current_obs):
         nonlocal bob_updates
         if bob_ppo.storage.step < nsteps:
+            # Progress log for Bob (every 100 steps)
+            if bob_ppo.storage.step > 0 and bob_ppo.storage.step % 100 == 0:
+                 print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}")
             return current_obs
+        
         with torch.no_grad():
             _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_obs, None)
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
-        bob_ppo.update()
+        val_loss, surr_loss = bob_ppo.update()
         bob_ppo.storage.clear()
 
         bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
-        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: SR={bob_success_rate:.4f} (steps={total_env_steps})")
+        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, SR={bob_success_rate:.4f} (steps={total_env_steps})")
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -431,7 +447,12 @@ def objective(trial: optuna.Trial) -> float:
             alice_eval_mask = alice_failed_mask | bob_done_mask
             if alice_eval_mask.any():
                 eval_ids = torch.where(alice_eval_mask)[0]
+                bob_done_mask = em_info["bob_done_this_step"]
                 bob_success_mask = em_info["bob_success_this_step"]
+
+                # Update Alice validity counters
+                alice_total_goals += len(eval_ids)
+                alice_valid_goals += bob_done_mask.sum().item()
 
                 max_count = 0
                 env_counts = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
