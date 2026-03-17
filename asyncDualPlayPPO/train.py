@@ -275,7 +275,7 @@ def main():
         
         # Reset all envs to Alice phase at start of iteration
         # In a strict 1-to-1 setup, we reset everybody.
-        env.episode_manager.reset_episode(torch.arange(env.num_envs, device=env.device))
+        env.episode_manager.reset_episode(torch.arange(env.num_envs, device=env.device), reason="Iteration Start")
         
         # Use wrapper's reset/step returned obs or re-compute and slice
         obs_dict = env.env.observation_manager.compute()

@@ -159,11 +159,9 @@ class AsyncDualPlayEnvWrapper:
             truncated: Episode truncation flags
             info: Additional info including phase transitions
         """
-        # Action scaling (arm 7, gripper 1)
+        # Action scaling for RMPFlow (use_relative_mode=True):
+        # Now handled in reach_dual_arm_env_cfg.py via scale=(0.015, 0.05)
         scaled_action = action.clone()
-        scaled_action[:, 0:6] *= 0.05  # Scale arm velocities (arm joints 0-6 are arm, 6 is often gripper if simplified)
-        # However, RMPFlow usually takes 6D or 7D. 
-        # For UR5e, it's 6 arm joints + gripper.
         
         # Step base environment
         obs_dict, rewards, terminated, truncated, extras = self.env.step(scaled_action)
@@ -172,25 +170,24 @@ class AsyncDualPlayEnvWrapper:
         dones = terminated | truncated
         if dones.any():
             reset_ids = torch.where(dones)[0]
-            term_log = extras.get("log", {})
-            robot_oob_val = term_log.get("Episode_Termination/robot_through_table", 0.0)
-            objects_oob_val = term_log.get("Episode_Termination/objects_off_table", 0.0)
             
-            # Convert to boolean tensors
-            robot_oob = (robot_oob_val > 0.5) if torch.is_tensor(robot_oob_val) else (torch.tensor(robot_oob_val, device=self.device) > 0.5)
-            objects_oob = (objects_oob_val > 0.5) if torch.is_tensor(objects_oob_val) else (torch.tensor(objects_oob_val, device=self.device) > 0.5)
-            
-            # Track which Alice failed early
+            # NOTE: extras["log"] contains aggregated scalar means for TensorBoard,
+            # NOT per-env tensors. We use `terminated[env_id]` as the OOB proxy:
+            # terminated=True means physics termination (OOB/collision),
+            # truncated=True (without terminated) means timeout — no Alice penalty.
             is_alice = self.episode_manager.is_alice_phase()
 
+            # the active boolean tensors for each termination condition.
+            term_dones = self.env.termination_manager.term_dones
+            
             for env_id in reset_ids:
-                reason = "Unknown"
-                if robot_oob[env_id]:
-                    reason = "Robot through table"
-                elif objects_oob[env_id]:
-                    reason = "Objects off table"
-                else:
+                # Skip timeout resets — only penalize hard terminations
+                if not terminated[env_id]:
                     continue
+                
+                # Determine specific reason from term_dones
+                reasons = [name for name, val in term_dones.items() if val[env_id]]
+                reason = " | ".join(reasons) if reasons else "OOB/Termination"
                 
                 if is_alice[env_id]:
                     if not hasattr(self, "_early_alice_failures"):
@@ -387,7 +384,7 @@ class AsyncDualPlayEnvWrapper:
         
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
-            self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Error")
+            self.episode_manager.reset_episode(invalid_env_ids, reason="Bob Goal Invalid/Timeout")
             reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.env.scene.write_data_to_sim()
@@ -457,7 +454,7 @@ class AsyncDualPlayEnvWrapper:
         # Others reset (reached max goals with success)
         reset_ids = env_ids[~can_continue]
         if len(reset_ids) > 0:
-            self.episode_manager.reset_episode(reset_ids, reason="Max Goals Reached")
+            self.episode_manager.reset_episode(reset_ids, reason="Episode Complete")
 
             reset_objects_to_fixed_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)

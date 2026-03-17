@@ -58,7 +58,7 @@ UR5e_CFG = ArticulationCfg(
                 damping=50.0,
             ),
         ),
-        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True,
             solver_position_iteration_count=8,
@@ -89,17 +89,14 @@ UR5e_CFG = ArticulationCfg(
             damping=200.0,
         ),
         "gripper": ImplicitActuatorCfg(
-            joint_names_expr=["finger_joint", ".*inner_finger_joint"],
-            stiffness=1e6,
-            damping=80.0,
+            joint_names_expr=["finger_joint"],
+            stiffness=500.0,
+            damping=100.0,
         ),
-        # Knuckle joints mimic finger_joint (multiplier=+1). They MUST have
-        # real stiffness so they actively track the target position;
-        # stiffness=0 leaves them as passive dampers that flop around.
-        "knuckle_mimics": ImplicitActuatorCfg(
-            joint_names_expr=[".*knuckle_joint"],
-            stiffness=1e6,
-            damping=80.0,
+        "manual_mimics": ImplicitActuatorCfg(
+            joint_names_expr=[".*knuckle_joint", ".*inner_finger_joint"],
+            stiffness=500.0,
+            damping=20.0,
         ),
     },
 )
@@ -226,6 +223,38 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
     )
 
+    cylinder = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Cylinder",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
+            scale=(1.0, 1.0, 1.0),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 1.0, 0.4)),
+        ),
+    )
+
+    rect = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Rect",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
+            scale=(1.0, 1.0, 1.0),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
+        ),
+    )
+
+    triangle = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Triangle",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.2, 0.6, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        spawn=UsdFileCfg(
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
+            scale=(1.0, 1.0, 1.0),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.8)),
+        ),
+    )
 
     plane = AssetBaseCfg(
         prim_path="/World/GroundPlane",
@@ -245,8 +274,12 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
 @configclass
 class ActionsCfg:
-    """Action specifications for the MDP."""
+    """Action specifications for the MDP.
 
+    Total action dim = left_arm(6) + right_arm(6) + grippers(2) = 14.
+    Arm actions are EE Cartesian deltas (use_relative_mode=True).
+    Gripper actions are binary (open/close threshold on the raw network output).
+    """
     arm_action = RMPFlowActionCfg(
         asset_name="robot",
         joint_names=["shoulder_.*", "elbow_.*", "wrist_.*"],
@@ -256,10 +289,10 @@ class ActionsCfg:
             urdf_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/urdf/ur_robotics/ur5e/ur5e_robotiq_140.urdf",
             collision_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/lula_left.yaml",
             frame_name="wrist_3_link",
-            evaluations_per_frame=1.0,
+            evaluations_per_frame=12.0,
         ),
         articulation_prim_expr="/World/envs/env_.*/RobotUnified",
-        scale=1.0,
+        scale=[0.05, 0.05, 0.05, 0.05, 0.05, 0.05],
         use_relative_mode=True,
     )
 
@@ -283,11 +316,11 @@ class ActionsCfg:
         },
         close_command_expr={
             "finger_joint": 0.8,
-            "left_inner_knuckle_joint": 0.8,   # mimic ×+1
-            "left_inner_finger_joint": -0.8,    # mimic ×-1
-            "right_outer_knuckle_joint": 0.8,   # mimic ×+1
-            "right_inner_knuckle_joint": 0.8,   # mimic ×+1
-            "right_inner_finger_joint": -0.8,   # mimic ×-1
+            "left_inner_knuckle_joint": 0.8,
+            "left_inner_finger_joint": -0.8,
+            "right_outer_knuckle_joint": 0.8,
+            "right_inner_knuckle_joint": 0.8,
+            "right_inner_finger_joint": -0.8,
         },
     )
 
