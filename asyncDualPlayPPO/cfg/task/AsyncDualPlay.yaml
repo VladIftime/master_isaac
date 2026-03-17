@@ -26,5 +26,5 @@ max_goals_per_episode: 5
 # Only enable if Bob completely fails to learn after extended training.
 # Enabled temporarily: Bob's sparse reward mean was ~0.001, too weak for RL signal.
 # Disable once Bob's success rate recovers above ~25%.
-use_dense_bob_rewards: true
+use_dense_bob_rewards: false
 dense_reward_weight: 0.1

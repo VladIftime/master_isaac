@@ -228,6 +228,9 @@ def main():
         with torch.no_grad():
             _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_bob_obs, None)
         
+        # Dynamic ABC weight decay: 0.1 -> 0.01 over max_iterations
+        bob_ppo.abc_coef = max(0.01, 0.1 * (1.0 - (bob_updates / args.max_iterations)))
+        
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
         loss_val, loss_surr, loss_abc, _ = bob_ppo.update()
         bob_ppo.storage.clear()
@@ -268,13 +271,20 @@ def main():
         obs = env.reset()[0]
     print("Environment initialized. Starting training loop...")
 
+    # Target max timesteps from env configuration
+    target_alice_timesteps = env.episode_manager.alice_timesteps
+
     while bob_updates < args.max_iterations:
         
+        # --- 0. CURRICULUM UPDATE ---
+        # Slowly increase Alice's horizon so Bob isn't overwhelmed with max-distance goals at iteration 0
+        curriculum_steps = min(target_alice_timesteps, 25 + int(bob_updates * (target_alice_timesteps / 200.0)))
+        env.episode_manager.alice_timesteps = curriculum_steps
+
         # --- 1. ALICE ROLLOUT PHASE ---
         alice_ppo.storage.clear()
         
         # Reset all envs to Alice phase at start of iteration
-        # In a strict 1-to-1 setup, we reset everybody.
         env.episode_manager.reset_episode(torch.arange(env.num_envs, device=env.device), reason="Iteration Start")
         
         # Use wrapper's reset/step returned obs or re-compute and slice
@@ -325,6 +335,17 @@ def main():
             )
             current_alice_obs = next_alice_obs
 
+        # --- 1.5 SETTLE PHYSICS ---
+        # Run 20 zero-action steps to let objects stop sliding/bouncing before extracting the goal
+        for _ in range(20):
+            settle_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+            env.step(settle_acts)
+            
+        # Manually overwrite the goal states to the newly settled states
+        obs_dict = env.env.observation_manager.compute()
+        settled_goal_states = env._extract_object_states(obs_dict)
+        env.episode_manager.store_goal_state(settled_goal_states, torch.arange(env.num_envs, device=env.device))
+        
         # Alice Phase Done. Goal states extracted by wrapper during transition.
         goal_states = env.episode_manager.goal_states
         
@@ -398,13 +419,20 @@ def main():
                 )
 
         # --- 4. ALICE REWARD ASSIGNMENT & UPDATE ---
-        # Alice Reward: she gets 1.0 if Bob failed, 0.0 if he succeeded.
-        alice_outcome_rewards = torch.where(bob_success, torch.tensor(0.0, device=env.device), torch.tensor(1.0, device=env.device))
+        # Alice Reward: she gets ALICE_BOB_FAIL_REWARD if Bob failed AND the goal was valid
+        alice_outcome_rewards = torch.where(
+            ~bob_success & goal_valid, 
+            torch.tensor(ALICE_BOB_FAIL_REWARD, device=env.device, dtype=torch.float32), 
+            torch.tensor(0.0, device=env.device, dtype=torch.float32)
+        )
         
         # Inject outcome reward into Alice's last storage step
         if alice_ppo.storage.step > 0:
             last_idx = alice_ppo.storage.step - 1
             alice_ppo.storage.rewards[last_idx].copy_(alice_outcome_rewards.view(-1, 1))
+            # FIX: Prevent GAE bleeding by forcing the terminal state to be 'done'
+            alice_ppo.storage.dones[last_idx].fill_(1.0)
+            
             alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
         # Metrics for the iteration
@@ -412,7 +440,13 @@ def main():
         bob_success_buf.append(current_sr)
         
         # Perform Updates
-        perform_alice_update()
+        # Freeze Alice if Bob is struggling (< 10% SR) to let him catch up
+        if current_sr >= 0.10 or bob_updates < 10:
+            perform_alice_update()
+        else:
+            print(f"  [Alice Update] Skipped. Bob SR ({current_sr:.2f}) < 0.10. Letting Bob catch up.", flush=True)
+            alice_ppo.storage.clear()
+            
         perform_bob_update(current_bob_obs)
 
         # Logging

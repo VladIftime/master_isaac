@@ -178,6 +178,6 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation          = 2
-        self.episode_length_s    = 65.0  # Alice(250) + 5 × Bob(600) steps at dt=0.01, decimation=2
+        self.episode_length_s    = 10000.0  # Extremely high value to prevent internal IsaacLab forced timeouts
         self.sim.dt              = 0.01
         self.sim.render_interval = self.decimation
