@@ -278,7 +278,7 @@ def main():
         
         # --- 0. CURRICULUM UPDATE ---
         # Slowly increase Alice's horizon so Bob isn't overwhelmed with max-distance goals at iteration 0
-        curriculum_steps = min(target_alice_timesteps, 25 + int(bob_updates * (target_alice_timesteps / 200.0)))
+        curriculum_steps = min(target_alice_timesteps, 100 + int(bob_updates * (target_alice_timesteps / 200.0)))
         env.episode_manager.alice_timesteps = curriculum_steps
 
         # --- 1. ALICE ROLLOUT PHASE ---

@@ -329,8 +329,8 @@ class AsyncDualPlayEnvWrapper:
         """Handle completion of Alice's phase"""
         goal_state = self._extract_object_states(obs_dict)
         initial_state = self.episode_manager.initial_states
-        alice_pos_req = 0.08 # MUST BE > 0.05. Alice MUST move it 8cm to get a reward.
-        alice_rot_req = 0.25 # MUST BE > 0.10.
+        alice_pos_req = 0.04 # Threshold for Alice to get reward. 0.04m (4cm)
+        alice_rot_req = 0.10 # Reduced for easier exploration.
         
         # New Validator Return: (valid, reward, reason)
         valid, val_reward, reasons = validate_goal(
