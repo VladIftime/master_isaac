@@ -1,104 +1,92 @@
-You have hit a classic Python "Variable Shadowing" bug!
+How to Fix the Code & Implement Early Pruning
 
-Your RL math and PyTorch logic are completely fine. The crash is happening because you accidentally reused the variable name `a_acts` inside your Hindsight Goal Injection (HGI) loop, which overwrote the current step's actions.
+To fix this, you need to (1) patch the logger so it only prints once per threshold, and (2) add an aggressive early pruner inside your while loop to kill trials where Alice is starving Bob of data.
+Fix 1: Stop the Log Spam
 
-### The Exact Cause
+Update your perform_bob_update function so it tracks the last logged step:
+Python
 
-1. At the start of the step, Alice decides her actions for the 10 environments:
-`a_acts = ...` *(Shape: `[10, 13]`)*
-2. Then, the HGI loop runs because Alice finally reached a valid goal! Inside that loop, you extract her historical trajectory to inject into Bob's buffer using the exact same variable names:
-`a_acts = alice_act_log[env_id, :s_count]` *(Shape: `[399, 13]` - this is the 399 steps she took to reach the goal)*
-3. When the code reaches line 373 to log the *current* step, it tries to save `a_acts`. But because it was overwritten by the HGI loop, it tries to cram a `[399, 13]` tensor into a `[10, 13]` slot, causing the crash.
+def perform_bob_update(current_obs):
+    nonlocal bob_updates
+    
+    # Initialize a tracker if it doesn't exist
+    if not hasattr(perform_bob_update, "last_logged_step"):
+        perform_bob_update.last_logged_step = -1
 
-### The Fix
+    if bob_ppo.storage.step < nsteps:
+        # Only print ONCE per 100 steps
+        if bob_ppo.storage.step > 0 and bob_ppo.storage.step % 100 == 0:
+            if perform_bob_update.last_logged_step != bob_ppo.storage.step:
+                print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}", flush=True)
+                perform_bob_update.last_logged_step = bob_ppo.storage.step
+        return current_obs
+    
+    # ... [rest of your update code] ...
 
-You just need to rename the variables inside the Hindsight Goal Injection block so they don't overwrite the current step's variables.
+Fix 2: Use Optuna for "Starvation Pruning"
 
-Open `train.py` and find the HGI block (around **line 317**). Change `a_obs` and `a_acts` to `demo_obs` and `demo_acts`.
+Right now, you wait 500,000 steps to bail out. That takes way too long. Add an intermediate check inside your main while bob_updates < args.trial_iters: loop. If tens of thousands of environment steps have passed and Bob's buffer is still empty, Alice has collapsed. Prune it immediately.
 
-**Change this section:**
+Add this block right under your existing escape hatch:
+Python
 
-```python
-                hgi_count = 0
-                for idx in success_ids:
-                    env_id = idx.item()
-                    s_count = min(alice_step_counts[env_id].item(), max_alice_steps)
-                    if s_count == 0: continue
-                    
-                    a_obs = alice_obs_log[env_id, :s_count]   # <--- RENAME THESE
-                    a_acts = alice_act_log[env_id, :s_count]  # <--- RENAME THESE
-                    
-                    _o = torch.zeros((s_count, env.bob_obs_dim), device=env.device)
-                    # ... (skipping some lines) ...
-                    
-                    # Construct Bob's obs
-                    goal_state = goal_states[env_id].unsqueeze(0).expand(s_count, -1)
-                    b_obs = env.construct_bob_observation(a_obs, goal_state) # <--- UPDATE HERE
-                    _o[:] = b_obs
-                    
-                    # ...
-                    
-                    # Evaluate under Bob's current policy
-                    with torch.no_grad():
-                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, a_acts) # <--- UPDATE HERE
-                        
-                    # ... (skipping GAE math) ...
-                        
-                    # Add to offline demo buffer
-                    none_states = torch.zeros((s_count, *env.bob_state_space.shape), device=env.device)
-                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, a_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv) # <--- UPDATE HERE
+    while bob_updates < args.trial_iters:
+        # ── Existing ESCAPE HATCH ────────────────────
+        total_env_steps += 1
+        if total_env_steps > args.max_steps_per_trial:
+            print(f"  [Trial {trial.number}] BAILOUT: {total_env_steps} steps. Pruning.")
+            raise optuna.exceptions.TrialPruned()
 
-```
+        # ── NEW: Early Starvation Pruning ────────────
+        # Every 20,000 environment steps, check if Bob is getting data.
+        # If Bob hasn't even completed 1 update and his buffer is barely filling, Alice is failing.
+        if total_env_steps % 20000 == 0:
+            if bob_updates == 0 and bob_ppo.storage.step < (computed_nsteps * 0.5):
+                print(f"  [Trial {trial.number}] EARLY PRUNE: Bob is starved. Alice's valid goal rate is likely 0.")
+                raise optuna.exceptions.TrialPruned()
+        
+        # ... [rest of your while loop] ...
 
-**To this:**
+Fix 3: Let Optuna Prune based on Alice's Competence
 
-```python
-                hgi_count = 0
-                for idx in success_ids:
-                    env_id = idx.item()
-                    s_count = min(alice_step_counts[env_id].item(), max_alice_steps)
-                    if s_count == 0: continue
-                    
-                    # USE NEW VARIABLE NAMES TO AVOID SHADOWING
-                    demo_obs = alice_obs_log[env_id, :s_count]
-                    demo_acts = alice_act_log[env_id, :s_count]
-                    
-                    _o = torch.zeros((s_count, env.bob_obs_dim), device=env.device)
-                    _r = torch.zeros((s_count,), device=env.device)
-                    _d = torch.zeros((s_count,), device=env.device)
-                    
-                    # Construct Bob's obs
-                    goal_state = goal_states[env_id].unsqueeze(0).expand(s_count, -1)
-                    b_obs = env.construct_bob_observation(demo_obs, goal_state)  # UPDATED
-                    _o[:] = b_obs
-                    
-                    _r[-1] = 5.0
-                    _d[-1] = 1.0
-                    
-                    # Evaluate under Bob's current policy
-                    with torch.no_grad():
-                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, demo_acts)  # UPDATED
-                        
-                    _ret = torch.zeros((s_count,), device=env.device)
-                    _adv = torch.zeros((s_count,), device=env.device)
-                    
-                    adv = 0.0
-                    gamma = bob_ppo.gamma
-                    lam = bob_ppo.lam
-                    
-                    for step in reversed(range(s_count)):
-                        next_val = 0.0 if step == s_count - 1 else _v[step + 1].item()
-                        next_not_done = 0.0 if step == s_count - 1 else 1.0
-                        delta = _r[step] + gamma * next_val * next_not_done - _v[step].item()
-                        adv = delta + gamma * lam * next_not_done * adv
-                        _adv[step] = adv
-                        _ret[step] = adv + _v[step].item()
-                        
-                    # Add to offline demo buffer
-                    none_states = torch.zeros((s_count, *env.bob_state_space.shape), device=env.device)
-                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, demo_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv)  # UPDATED
-                    hgi_count += s_count
+Optuna's trial.report() checks for pruning at the end of an epoch. Currently, you only report Bob's success rate after Bob updates. Since Bob isn't updating, the pruner never triggers.
 
-```
+You can hijack Alice's update cycle to report intermediate metrics. Inside perform_alice_update(), report Alice's valid goal rate. If it drops to 0.0 after a few updates, prune the trial:
+Python
 
-Make those 5 quick renames, and your code will breeze right past this line! The fact that you hit this bug means your Hindsight Goal Injection is successfully triggering, which is fantastic news for the training run.
+        # Inside perform_alice_update(), right after alice_updates += 1
+        validity_rate = (alice_valid_goals / alice_total_goals) if alice_total_goals > 0 else 0.0
+        print(f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f}")
+        
+        # Report Alice's validity rate to Optuna as an intermediate step
+        # Using a negative step index to distinguish it from Bob's updates
+        trial.report(validity_rate, step=-alice_updates) 
+        if trial.should_prune():
+            print(f"  [Trial {trial.number}] Pruning due to poor Alice Validity Rate.")
+            raise optuna.exceptions.TrialPruned()
+
+With these three fixes, your console will remain clean, and Optuna will aggressively skip any hyperparameter configurations that cause Alice to generate impossible tasks, allowing it to quickly find combinations where Bob can actually learn.
+
+How to use this data for Optuna
+
+Since Bob completing tasks in 4 steps is a major trigger for this bug, you should use Optuna to actively penalize or prune trials where Bob's episodes are abnormally short.
+
+You can add this check into your perform_bob_update() or your training loop:
+Python
+
+# Calculate Bob's average episode length
+avg_bob_steps = total_bob_steps_this_phase / max(1, successful_bob_episodes)
+
+# If Bob is finishing in < 10 steps consistently, the task is either 
+# trivially easy, or there is a collision/reset bug triggering early termination.
+if avg_bob_steps < 10 and total_env_steps > 50000:
+    print(f"  [Trial {trial.number}] PRUNING: Bob is terminating too early (Avg {avg_bob_steps} steps).")
+    raise optuna.exceptions.TrialPruned()
+
+Summary of Action Items:
+
+    Apply the Logger fix from the previous response to stop the console from spamming Bob Storage: 100/512.
+
+    Apply the early pruning hatch so Optuna immediately skips hyperparameters that cause Alice to generate impossible tasks.
+
+    Check your reward/termination logic for Bob. Terminating in 4 steps suggests Bob might be spawning directly on top of the goal or triggering an early-abort penalty (like a collision) almost immediately.

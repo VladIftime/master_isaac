@@ -252,7 +252,14 @@ def objective(trial: optuna.Trial) -> float:
     alice_valid_goals = 0
     bob_updates = 0
     total_env_steps = 0  # Escape hatch counter
+    
+    # -- NEW: Trackers for Short Episode Pruning --
+    total_bob_steps_episodes = 0
+    total_bob_episodes_count = 0
     max_alice_bob_ratio = 5
+
+    # -- NEW: Shared report counter for Optuna --
+    report_idx = 0
 
     rollout_length = nsteps * args.num_envs
     alice_rew_buf = deque(maxlen=rollout_length)
@@ -272,7 +279,7 @@ def objective(trial: optuna.Trial) -> float:
             return
         if alice_updates >= (bob_updates + 1) * max_alice_bob_ratio:
             if alice_updates % 10 == 0: # Only log occasionally to avoid spam
-                print(f"  [Trial {trial.number}] Alice Throttled: {alice_updates} updates (Waiting for Bob Update {bob_updates+1})")
+                print(f"  [Trial {trial.number}] Alice Throttled: {alice_updates} updates (Waiting for Bob Update {bob_updates+1})", flush=True)
             alice_ppo.storage.clear()
             alice_rew_buf.clear()
             return
@@ -289,12 +296,28 @@ def objective(trial: optuna.Trial) -> float:
         validity_rate = (alice_valid_goals / alice_total_goals) if alice_total_goals > 0 else 0.0
         print(f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f} (Bob @ {bob_ppo.storage.step}/{nsteps})", flush=True)
 
+        # -- NEW: Alice Competence Pruning --
+        # Report Alice's validity rate to Optuna as an intermediate step
+        nonlocal report_idx
+        report_idx += 1
+        trial.report(validity_rate, step=report_idx) 
+        if trial.should_prune():
+            print(f"  [Trial {trial.number}] Pruning due to poor Alice Validity Rate ({validity_rate:.2f}).")
+            raise optuna.exceptions.TrialPruned()
+
     def perform_bob_update(current_obs):
         nonlocal bob_updates
+        
+        # Initialize a tracker if it doesn't exist
+        if not hasattr(perform_bob_update, "last_logged_step"):
+            perform_bob_update.last_logged_step = -1
+
         if bob_ppo.storage.step < nsteps:
-            # Progress log for Bob (every 100 steps)
+            # Only print ONCE per 100 steps
             if bob_ppo.storage.step > 0 and bob_ppo.storage.step % 100 == 0:
-                 print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}", flush=True)
+                if perform_bob_update.last_logged_step != bob_ppo.storage.step:
+                    print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}", flush=True)
+                    perform_bob_update.last_logged_step = bob_ppo.storage.step
             return current_obs
         
         with torch.no_grad():
@@ -314,18 +337,35 @@ def objective(trial: optuna.Trial) -> float:
         bob_updates += 1
 
         # Report to Optuna for pruning
-        trial.report(bob_success_rate, bob_updates)
+        nonlocal report_idx
+        report_idx += 1
+        trial.report(bob_success_rate, report_idx)
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
 
         return current_obs
 
     while bob_updates < args.trial_iters:
-        # ── ESCAPE HATCH: bail out if trial is stuck ────────────────────
+        # ── ESCAPE HATCH ──────────────────────────────
         total_env_steps += 1
         if total_env_steps > args.max_steps_per_trial:
             print(f"  [Trial {trial.number}] BAILOUT: {total_env_steps} steps, only {bob_updates} Bob updates. Pruning.")
             raise optuna.exceptions.TrialPruned()
+
+        # ── NEW: Early Starvation Pruning ────────────
+        # Every 20,000 environment steps, check if Bob is getting data.
+        if total_env_steps % 20000 == 0:
+            if bob_updates == 0 and bob_ppo.storage.step < (computed_nsteps * 0.5):
+                print(f"  [Trial {trial.number}] EARLY PRUNE: Bob is starved ({bob_ppo.storage.step}/{nsteps} buffer). Alice's valid goal rate is likely 0.")
+                raise optuna.exceptions.TrialPruned()
+        
+        # ── NEW: Short Episode Pruning ───────────────
+        # If Bob is finishing episodes too quickly after some warmup, it's likely a bug or trivial task.
+        if total_env_steps > 50000 and total_env_steps % 1000 == 0:
+             avg_bob_steps = total_bob_steps_episodes / max(1, total_bob_episodes_count)
+             if total_bob_episodes_count > 10 and avg_bob_steps < 10:
+                 print(f"  [Trial {trial.number}] PRUNING: Bob is terminating too early (Avg {avg_bob_steps:.1f} steps over {total_bob_episodes_count} episodes).")
+                 raise optuna.exceptions.TrialPruned()
 
         # Alpha annealing (uses trial-specific alpha_decay_steps)
         alpha = max(0.0, 1.0 - (bob_updates / alpha_decay_steps))
@@ -507,6 +547,10 @@ def objective(trial: optuna.Trial) -> float:
 
             # Bob success metric logging
             if bob_done_mask.any():
+                done_ids = torch.where(bob_done_mask)[0]
+                total_bob_episodes_count += len(done_ids)
+                total_bob_steps_episodes += env.episode_manager.phase_step[done_ids].sum().item()
+
                 bob_success_mask_log = em_info["bob_success_this_step"]
                 bob_success_buf.extend(bob_success_mask_log[bob_success_mask_log].cpu().numpy().astype(float).tolist())
                 bob_success_buf.extend([0.0] * (bob_done_mask & ~bob_success_mask_log).sum().item())
