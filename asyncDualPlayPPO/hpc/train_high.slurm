@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=adp_high
+#SBATCH --job-name=adp_a100_scale
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --output=slurm-%j-high.out
 
 # ── I/O config ──────────────────────────────────────────────────────────────
@@ -13,11 +13,13 @@ LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS"
 # ────────────────────────────────────────────────────────────────────────────
 
-# ── Env scaling ──────────────────────────────────────────────────────────────
-# Buffer budget: keep total transitions ≈ 131 072.
-#   num_envs=4096 → nsteps = 131072 / 4096 = 32
-NUM_ENVS=4096
-NSTEPS=32
+# ── Env scaling for A100 (40GB/80GB) ────────────────────────────────────────
+# We want to saturate the A100's compute while maintaining good PPO update frequency.
+# 8,192 environments is the sweet spot. 
+# 1024 steps ensures multiple full Alice/Bob episodes are completed before updating.
+# Buffer size: 8,192 * 1024 = 8,388,608 transitions per update.
+NUM_ENVS=8192
+NSTEPS=1024
 # ────────────────────────────────────────────────────────────────────────────
 
 SIF_IMAGE="isaac-lab.sif"
@@ -35,6 +37,11 @@ if [ ! -f "$SIF_IMAGE" ]; then
     exit 1
 fi
 
+# To reach the OpenAI paper scale of ~1.5 Billion steps:
+# 1,500,000,000 / 8,388,608 ≈ 180 iterations. 
+# We set max_iterations to 250 (approx. 2.1 Billion steps) to ensure it keeps 
+# training if the A100 crunches through it faster than expected within 24 hours.
+
 apptainer exec --nv \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$LOCAL_RUNS":"$PROJECT_ROOT/runs" \
@@ -47,16 +54,5 @@ apptainer exec --nv \
     /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train.py \
     --num_envs "$NUM_ENVS" \
     --nsteps   "$NSTEPS" \
-    --max_iterations 100000 \
-    --exp_name "hpc_high" \
-    --max_alice_bob_ratio 5 \
-    --save_interval 2000 \
-    --headless \
-    --arm_config rotated\
-    | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
-               -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
-
-# ── Sync results back to NFS ─────────────────────────────────────────────────
-echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
-rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/"
-echo "[INFO] Sync complete."
+    --max_iterations 250 \
+    --exp_name "hpc_a100_run_1.5B_steps"

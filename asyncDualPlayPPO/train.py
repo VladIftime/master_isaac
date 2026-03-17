@@ -67,7 +67,8 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
-    from asyncDualPlayPPO.algorithms.rl.ppo import PPO
+    from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
+    from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
     # Import reward constants so train.py stays in sync with rewards.py.
     # Do not hardcode reward values here — change them in rewards.py instead.
@@ -133,7 +134,7 @@ def main():
         alice_ppo.actor_critic.parameters(), lr=alice_ppo.learning_rate
     )
 
-    bob_ppo = PPO(
+    bob_ppo = PPOABC(
         vec_env=env,
         cfg_train=ppo_cfg["params"],
         device=env.device,
@@ -154,7 +155,20 @@ def main():
     bob_ppo.optimizer = torch.optim.Adam(
         bob_ppo.actor_critic.parameters(), lr=bob_ppo.learning_rate
     )
-    bob_ppo.demo_buffer = GPUDemonstrationBuffer(
+    
+    # Re-initialize Bob's standard PPO storage for 56 dims
+    bob_ppo.storage = bob_ppo.storage.__class__(
+        bob_ppo.vec_env.num_envs,
+        bob_ppo.num_transitions_per_env,
+        bob_ppo.observation_space.shape,
+        bob_ppo.state_space.shape,
+        bob_ppo.action_space.shape,
+        bob_ppo.device,
+        "sequential",
+    )
+    
+    # ABC Buffer for Alice's successful demonstrations
+    bob_ppo.abc_buffer = GPUDemonstrationBuffer(
         capacity=100000,
         obs_shape=env.bob_observation_space.shape,
         states_shape=env.bob_observation_space.shape,
@@ -162,12 +176,7 @@ def main():
         device=env.device,
     )
 
-    # --- Pre-allocated trajectory buffers for Alice ---
-    alice_obs_log    = torch.zeros((args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device)
-    alice_act_log    = torch.zeros((args.num_envs, max_alice_steps, *env.action_space.shape), device=env.device)
-    alice_step_counts = torch.zeros(args.num_envs, dtype=torch.long, device=env.device)
-    alice_validity_buffer = torch.zeros(args.num_envs, device=env.device)
-
+    # --- Agents ---
     alice_updates = 0
     bob_updates   = 0
     max_alice_bob_ratio = args.max_alice_bob_ratio
@@ -175,11 +184,11 @@ def main():
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
     rollout_length = ppo_cfg["params"]["learn"]["nsteps"] * args.num_envs
-    alice_rew_buf  = deque(maxlen=rollout_length)
-    bob_rew_buf    = deque(maxlen=rollout_length)
-    bob_success_buf = deque(maxlen=rollout_length)
-    bob_pos_err_buf = deque(maxlen=rollout_length)
-    bob_rot_err_buf = deque(maxlen=rollout_length)
+    alice_rew_buf    = deque(maxlen=rollout_length)
+    bob_rew_buf      = deque(maxlen=rollout_length)
+    bob_success_buf  = deque(maxlen=rollout_length)
+    bob_pos_err_buf  = deque(maxlen=rollout_length)
+    bob_rot_err_buf  = deque(maxlen=rollout_length)
 
     best_bob_success_rate = -1.0
 
@@ -188,21 +197,16 @@ def main():
     print(f"  tensorboard --logdir {run_dir}\n{'='*80}\n")
 
     def perform_alice_update():
-        """Run a PPO update for Alice when her rollout buffer is full."""
-        if alice_ppo.storage.step < ppo_cfg["params"]["learn"]["nsteps"]:
-            return
-
+        """Run a PPO update for Alice after her rollout is complete."""
         nonlocal alice_updates
-
-        # Gate: don't let Alice outpace Bob too much
-        if alice_updates >= (bob_updates + 1) * max_alice_bob_ratio:
-            alice_ppo.storage.clear()
-            alice_rew_buf.clear()
-            return  # Alice waits for Bob to catch up
+        
+        # In sequential mode, storage.step MUST be exactly num_transitions_per_env
+        if alice_ppo.storage.step < alice_ppo.storage.num_transitions_per_env:
+             return
 
         dummy_val = torch.zeros(env.num_envs, 1, device=env.device)
         alice_ppo.storage.compute_returns(dummy_val, alice_ppo.gamma, alice_ppo.lam)
-        loss_val, loss_surr = alice_ppo.update()
+        loss_val, loss_surr, _, _ = alice_ppo.update()
         alice_ppo.storage.clear()
 
         mean_alice_rew = np.mean(alice_rew_buf) if alice_rew_buf else 0.0
@@ -210,24 +214,22 @@ def main():
         writer.add_scalar("Loss/Alice/Surrogate", loss_surr,      alice_updates)
         writer.add_scalar("Reward/Alice",         mean_alice_rew, alice_updates)
 
-        print(f"\n{'='*60}\nALICE UPDATE {alice_updates}\n{'='*60}")
-        print(f"  Rewards:     mean={mean_alice_rew:.4f} | min={0.0:.4f} | max={0.0:.4f}")
-        print(f"  Losses:      value={loss_val:.4f} | surrogate={loss_surr:.4f}")
-        print(f"  Outcomes:    {len(alice_rew_buf)} episodes buffered\n{'='*60}\n")
-
+        print(f"  [Alice Update {alice_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_alice_rew:.4f}", flush=True)
         alice_rew_buf.clear()
         alice_updates += 1
 
-    def perform_bob_update(current_obs):
-        """Run a PPO update for Bob when his rollout buffer is full."""
-        if bob_ppo.storage.step < ppo_cfg["params"]["learn"]["nsteps"]:
-            return current_obs
-            
+    def perform_bob_update(current_bob_obs):
+        """Run a PPO + ABC update for Bob after his rollout is complete."""
         nonlocal bob_updates, best_bob_success_rate
+        
+        if bob_ppo.storage.step < bob_ppo.storage.num_transitions_per_env:
+            return
+            
         with torch.no_grad():
-            _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_obs, None)
+            _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_bob_obs, None)
+        
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
-        loss_val, loss_surr = bob_ppo.update()
+        loss_val, loss_surr, loss_abc, _ = bob_ppo.update()
         bob_ppo.storage.clear()
 
         mean_bob_rew     = np.mean(bob_rew_buf)     if bob_rew_buf     else 0.0
@@ -237,31 +239,22 @@ def main():
 
         writer.add_scalar("Loss/Bob/Value",       loss_val,         bob_updates)
         writer.add_scalar("Loss/Bob/Surrogate",   loss_surr,        bob_updates)
+        writer.add_scalar("Loss/Bob/ABC",         loss_abc,         bob_updates)
         writer.add_scalar("Reward/Bob",           mean_bob_rew,     bob_updates)
         writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
         writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err,     bob_updates)
         writer.add_scalar("Metrics/Bob/RotError",    mean_rot_err,     bob_updates)
 
-        print(f"\n{'='*60}\nBOB UPDATE {bob_updates}\n{'='*60}")
-        print(f"  Success Rate: {bob_success_rate:.4f} ({len(bob_success_buf)} eps)")
-        print(f"  Rewards:      mean={mean_bob_rew:.4f}")
-        print(f"  Losses:       value={loss_val:.4f} | surrogate={loss_surr:.4f}")
-        print(f"  Errors:       pos={mean_pos_err:.4f} | rot={mean_rot_err:.4f}")
-        print(f"  Alice/Bob:    {alice_updates}/{bob_updates} updates (ratio cap={max_alice_bob_ratio})\n{'='*60}\n")
-
-        if bob_updates % 10 == 0:
-            print(f"[Summary] Iter {bob_updates}: SR={bob_success_rate:.2f}")
+        print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | ABC Loss: {loss_abc:.4f} | SR: {bob_success_rate:.4f}", flush=True)
 
         if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
             bob_ppo.save(os.path.join(bob_ppo.log_dir,   f"model_{bob_updates+1}.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
-            print("  ✓ Saved checkpoints")
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
             bob_ppo.save(os.path.join(bob_ppo.log_dir,   "model_best.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
-            print(f"  ★ New Best SR: {best_bob_success_rate:.2f}")
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -269,7 +262,6 @@ def main():
         bob_rot_err_buf.clear()
         
         bob_updates += 1
-        return current_obs
 
     print("Initializing environment (suppressing URDF/Lula warnings)...")
     with SuppressAllOutput():
@@ -277,261 +269,155 @@ def main():
     print("Environment initialized. Starting training loop...")
 
     while bob_updates < args.max_iterations:
+        
+        # --- 1. ALICE ROLLOUT PHASE ---
+        alice_ppo.storage.clear()
+        
+        # Reset all envs to Alice phase at start of iteration
+        # In a strict 1-to-1 setup, we reset everybody.
+        env.episode_manager.reset_episode(torch.arange(env.num_envs, device=env.device))
+        
+        # Use wrapper's reset/step returned obs or re-compute and slice
+        obs_dict = env.env.observation_manager.compute()
+        obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
+        current_alice_obs = obs[:, :env.alice_obs_dim]
+        
+        # Collect S0 for ABC 
+        env.episode_manager.store_initial_state(env._extract_object_states(obs_dict))
+        
+        # Pre-allocate iteration buffers for ABC 
+        alice_traj_obs = [] # list of (num_envs, obs_dim)
+        alice_traj_act = [] # list of (num_envs, act_dim)
 
-        # --- PHASE 2: ALPHA ANNEALING ---
-        # Decay alpha linearly from 1.0 to 0.0 over the course of training
-        alpha = max(0.0, 1.0 - (bob_updates / args.max_iterations))
-        env.bob_dense_reward_alpha = alpha
-        # --------------------------------
-
-        is_alice = env.episode_manager.is_alice_phase()
-        is_bob   = env.episode_manager.is_bob_phase()
-
-        actions = torch.zeros(env.num_envs, *env.action_space.shape, device=env.device)
-
-        alice_indices = torch.where(is_alice)[0]
-        if len(alice_indices) > 0:
-            alice_obs = obs[alice_indices, :env.alice_obs_dim]
-            with torch.no_grad():
-                a_acts, a_logprob, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(alice_obs, None)
-            actions[alice_indices] = a_acts
-
-        bob_indices = torch.where(is_bob)[0]
-        if len(bob_indices) > 0:
-            bob_obs = obs[bob_indices]
-            with torch.no_grad():
-                b_acts, b_logprob, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(bob_obs, None)
-            actions[bob_indices] = b_acts
-
-        next_obs, rewards, dones, truncated, extras = env.step(actions)
-
-        if "alice_validity_bonus" in extras:
-            curr_bonus = extras["alice_validity_bonus"]
-            mask = curr_bonus != 0
-            alice_validity_buffer[mask] = curr_bonus[mask]
+        for t in range(env.episode_manager.alice_timesteps):
+            # Capture where we are in alice phase
+            is_alice = env.episode_manager.is_alice_phase()
+            alice_indices = torch.where(is_alice)[0]
             
-            # --- HINDSIGHT GOAL INJECTION ---
-            # Inject successful Alice trajectories into Bob's PPO buffer as demonstrations
-            alice_success_mask = curr_bonus == 1.0 # ALICE_VALID_GOAL_BONUS
-            if alice_success_mask.any():
-                success_ids = torch.where(alice_success_mask)[0]
-                goal_states = env.episode_manager.goal_states
-                
-                hgi_count = 0
-                for idx in success_ids:
-                    env_id = idx.item()
-                    s_count = min(alice_step_counts[env_id].item(), max_alice_steps)
-                    if s_count == 0: continue
-                    
-                    # USE NEW VARIABLE NAMES TO AVOID SHADOWING
-                    demo_obs = alice_obs_log[env_id, :s_count]
-                    demo_acts = alice_act_log[env_id, :s_count]
-                    
-                    _o = torch.zeros((s_count, env.bob_obs_dim), device=env.device)
-                    _r = torch.zeros((s_count,), device=env.device)
-                    _d = torch.zeros((s_count,), device=env.device)
-                    
-                    # Construct Bob's obs (robot arm/objects states + HGI goals)
-                    goal_state = goal_states[env_id].unsqueeze(0).expand(s_count, -1)
-                    b_obs = env.construct_bob_observation(demo_obs, goal_state)
-                    _o[:] = b_obs
-                    
-                    # Reward Injection: Give Bob's completion reward (+5) on the very last step.
-                    _r[-1] = 5.0
-                    _d[-1] = 1.0
-                    
-                    # Evaluate under Bob's current policy
-                    with torch.no_grad():
-                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, demo_acts)
-                        
-                    # Compute offline GAE returns and advantages for the trajectory
-                    _ret = torch.zeros((s_count,), device=env.device)
-                    _adv = torch.zeros((s_count,), device=env.device)
-                    
-                    adv = 0.0
-                    gamma = bob_ppo.gamma
-                    lam = bob_ppo.lam
-                    
-                    for step in reversed(range(s_count)):
-                        next_val = 0.0 if step == s_count - 1 else _v[step + 1].item()
-                        next_not_done = 0.0 if step == s_count - 1 else 1.0
-                        delta = _r[step] + gamma * next_val * next_not_done - _v[step].item()
-                        adv = delta + gamma * lam * next_not_done * adv
-                        _adv[step] = adv
-                        _ret[step] = adv + _v[step].item()
-                        
-                    # Add to offline demo buffer (does not crash or prematurely sync RolloutStorage)
-                    none_states = torch.zeros((s_count, *env.bob_observation_space.shape), device=env.device)
-                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, demo_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv)
-                    hgi_count += s_count
-                    
-                if hgi_count > 0:
-                    print(f"  [HGI] Added {hgi_count} steps into Bob's Demonstration Buffer!")
+            if len(alice_indices) == 0:
+                break
 
-        if len(alice_indices) > 0:
-            steps = torch.clamp(alice_step_counts[alice_indices], max=max_alice_steps - 1)
-            alice_obs_log[alice_indices, steps]  = alice_obs
-            alice_act_log[alice_indices, steps]  = a_acts.clone()
-            alice_step_counts[alice_indices] += 1
+            with torch.no_grad():
+                # Slice Alice dims (38)
+                a_acts_active, a_logprob_active, a_val_active, a_mu_active, a_sigma_active = alice_ppo.actor_critic.act(current_alice_obs[alice_indices], None)
+            
+            alice_traj_obs.append(current_alice_obs.clone())
+            
+            # Action mapping
+            a_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+            a_acts[alice_indices] = a_acts_active
+            alice_traj_act.append(a_acts.clone())
+            
+            obs_full, rewards, dones, truncated, extras = env.step(a_acts)
+            
+            # Storage masking
+            a_masks = torch.zeros(env.num_envs, 1, device=env.device)
+            a_masks[alice_indices[~dones[alice_indices]]] = 1.0
 
-        if len(bob_indices) > 0:
-            bob_done_this_step = extras.get("episode_manager", {}).get(
-                "bob_done_this_step",
-                torch.zeros(env.num_envs, dtype=torch.bool, device=env.device),
+            # Store transitions for Alice (38 dims)
+            next_alice_obs = obs_full[:, :env.alice_obs_dim]
+            alice_ppo.storage.add_transitions(
+                current_alice_obs, next_alice_obs, a_acts, rewards, dones, 
+                torch.zeros(env.num_envs, 1, device=env.device), # dummy values for Alice
+                torch.zeros(env.num_envs, 1, device=env.device), # dummy logprobs
+                torch.zeros_like(a_acts), torch.zeros_like(a_acts), # mus, sigmas
+                a_masks
             )
-            ended_for_bob = dones[bob_indices] | bob_done_this_step[bob_indices]
+            current_alice_obs = next_alice_obs
+
+        # Alice Phase Done. Goal states extracted by wrapper during transition.
+        goal_states = env.episode_manager.goal_states
+        
+        # --- 2. BOB ROLLOUT PHASE ---
+        bob_ppo.storage.clear()
+        
+        # Env already reset to S0 by wrapper during transition
+        obs_dict = env.env.observation_manager.compute()
+        obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
+        current_bob_obs = obs[:, env.alice_obs_dim:]
+        
+        for t in range(env.episode_manager.bob_timesteps):
+            is_bob = env.episode_manager.is_bob_phase()
+            bob_indices = torch.where(is_bob)[0]
+            if len(bob_indices) == 0: break
+
+            # Slice Bob dims (56)
+            bob_obs_active = current_bob_obs[bob_indices]
+            with torch.no_grad():
+                b_acts_active, b_logprob_active, b_val_active, b_mu_active, b_sigma_active = bob_ppo.actor_critic.act(bob_obs_active, None)
+            
+            b_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+            b_acts[bob_indices] = b_acts_active
+            obs_full, rewards, dones, truncated, extras = env.step(b_acts)
+            
+            bob_done_this_step = extras.get("bob_done_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+            ended_for_bob = dones | bob_done_this_step
             b_masks = torch.zeros(env.num_envs, 1, device=env.device)
-            b_masks[bob_indices[~ended_for_bob]] = 1.0
-
-            _obs   = torch.zeros_like(obs);     _obs[bob_indices]    = obs[bob_indices]
-            _acts  = torch.zeros_like(actions); _acts[bob_indices]   = b_acts
-            _rew   = torch.zeros(env.num_envs, device=env.device)
-            _rew[bob_indices] = rewards[bob_indices]
-            _val   = torch.zeros(env.num_envs, 1, device=env.device); _val[bob_indices]    = b_val
-            _lp    = torch.zeros(env.num_envs, 1, device=env.device); _lp[bob_indices]     = b_logprob.unsqueeze(1)
-            _mu    = torch.zeros_like(actions); _mu[bob_indices]     = b_mu
-            _sigma = torch.zeros_like(actions); _sigma[bob_indices]  = b_sigma
-
-            bob_ppo.storage.add_transitions(_obs, _obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
-
-            # --- PHASE 4: Safe-State Filtered HER (Retroactive Relabeling) ---
-            if "episode_manager" in extras:
-                em_info = extras["episode_manager"]
-                bob_done_mask = em_info["bob_done_this_step"]
-                
-                if bob_done_mask.any():
-                    bob_success_mask = em_info["bob_success_this_step"]
-                    max_forces = em_info.get("max_contact_force", torch.zeros(env.num_envs, device=env.device))
-                    
-                    # Safe failure: Bob failed (timed out or reached max goals) but didn't crash
-                    THRESHOLD = 50.0  # Safe physical threshold
-                    is_safe_failure = bob_done_mask & (~bob_success_mask) & (max_forces < THRESHOLD)
-                    
-                    safe_failure_ids = torch.where(is_safe_failure)[0]
-                    if len(safe_failure_ids) > 0 and "bob_achieved_states" in em_info:
-                        achieved_states = em_info["bob_achieved_states"]
-                        relabel_count = 0
-                        # Relabel all transitions currently sitting in Bob's storage buffer for this environment
-                        for eid in safe_failure_ids:
-                            eid_int = eid.item()
-                            achieved = achieved_states[eid_int].clone()
-                            
-                            # Get the active transitions for this environment in the current buffer
-                            buffer_masks = bob_ppo.storage.masks[:, eid_int, 0]
-                            valid_steps = torch.where(buffer_masks > 0)[0]
-                            
-                            if len(valid_steps) > 0:
-                                for t in valid_steps:
-                                    # Copy Alice's observations (robot arm/objects states)
-                                    a_obs = bob_ppo.storage.observations[t, eid_int, :env.unwrapped.alice_obs_dim].unsqueeze(0)
-                                    # Overwrite the goal with Bob's achieved state and implicitly recompute distance features
-                                    b_obs = env.unwrapped.construct_bob_observation(a_obs, achieved.unsqueeze(0))
-                                    bob_ppo.storage.observations[t, eid_int] = b_obs[0]
-                                
-                                # Give +1.0 success reward to the very last valid step in Bob's buffer
-                                last_step = valid_steps[-1]
-                                bob_ppo.storage.rewards[last_step, eid_int] = 1.0
-                                relabel_count += 1
-                        
-                        if relabel_count > 0:
-                            print(f"  [HER] Relabeled {relabel_count} safe-failure Bob trajectories!")
-            # ----------------------------------------------------------------
-
-            bob_step_rewards = rewards[bob_indices]
-            bob_rew_buf.extend(bob_step_rewards.cpu().numpy().tolist())
-            for ri in bob_step_rewards[bob_step_rewards != 0]:
-                print(f"[Bob Reward] {ri.item():+.1f}")
-
-        if "episode_manager" in extras:
-            em_info = extras["episode_manager"]
+            b_masks[bob_indices[~ended_for_bob[bob_indices]]] = 1.0
             
-            # Identify which environments need Alice's PPO buffer updated
-            bob_done_mask = em_info["bob_done_this_step"]
-            alice_failed_mask = extras.get("alice_failed_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
-            
-            alice_eval_mask = alice_failed_mask | bob_done_mask
-            if alice_eval_mask.any():
-                eval_ids = torch.where(alice_eval_mask)[0]
-                bob_success_mask = em_info["bob_success_this_step"]
-                
-                # First pass: precalculate lengths and outcome rewards
-                max_count = 0
-                env_counts = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
-                env_rewards = torch.zeros(env.num_envs, device=env.device)
-                
-                for idx in eval_ids:
-                    env_id = idx.item()
-                    count = min(alice_step_counts[env_id].item(), max_alice_steps)
-                    if count == 0:
-                        continue
-                        
-                    env_counts[env_id] = count
-                    max_count = max(max_count, count)
-                    
-                    # Determine exact outcome reward based on how the phase ended
-                    if alice_failed_mask[env_id]:
-                        alice_reward = ALICE_INVALID_GOAL_PENALTY
-                        reason = "Invalid Goal"
-                    else:
-                        is_success = bob_success_mask[idx].item()
-                        alice_reward = ALICE_BOB_SUCCESS_REWARD if is_success else ALICE_BOB_FAIL_REWARD
-                        reason = "Bob Succeeded" if is_success else "Bob Failed"
-                        
-                    validity_bonus = alice_validity_buffer[env_id].item()
-                    alice_validity_buffer[env_id] = 0.0
-                    
-                    env_rewards[env_id] = alice_reward + validity_bonus
-                    alice_rew_buf.append(env_rewards[env_id].item())
-                
-                # Second pass: densely insert transitions in parallel across environments up to max_count
-                if max_count > 0:
-                    for t in range(max_count):
-                        # Mask for environments that are still active at time t
-                        active_mask = (env_counts > t).float().unsqueeze(1)  # [num_envs, 1]
-                        
-                        _o = torch.zeros((env.num_envs, env.alice_obs_dim), device=env.device)
-                        _a = torch.zeros((env.num_envs, *env.action_space.shape), device=env.device)
-                        _r = torch.zeros((env.num_envs,), device=env.device)
-                        _d = torch.zeros((env.num_envs,), device=env.device)
-                        
-                        active_ids = torch.where(env_counts > t)[0]
-                        if len(active_ids) > 0:
-                            _o[active_ids] = alice_obs_log[active_ids, t]
-                            _a[active_ids] = alice_act_log[active_ids, t]
-                            
-                            # Reward and done flag only given on the exact target step
-                            is_last_step = (env_counts == (t + 1))
-                            last_step_ids = torch.where(is_last_step)[0]
-                            if len(last_step_ids) > 0:
-                                _r[last_step_ids] = env_rewards[last_step_ids]
-                                _d[last_step_ids] = 1.0
-                                
-                            with torch.no_grad():
-                                _lp, _, _v, _m, _s = alice_ppo.actor_critic.evaluate(_o, None, _a)
-                            
-                            # Zero out unused values/logprobs for cleanliness
-                            _v = _v.view(-1, 1) * active_mask
-                            _lp = _lp.view(-1, 1) * active_mask
-                            
-                            alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, active_mask)
-                            
-                    perform_alice_update()
-                    
-                alice_step_counts[eval_ids] = 0
+            # Storage-ready tensors
+            _obs = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device); _obs[bob_indices] = bob_obs_active
+            _next_obs = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device); _next_obs[bob_indices] = obs_full[bob_indices, env.alice_obs_dim:]
+            _acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device); _acts[bob_indices] = b_acts_active
+            _rew = torch.zeros(env.num_envs, device=env.device); _rew[bob_indices] = rewards[bob_indices]
+            _val = torch.zeros(env.num_envs, 1, device=env.device); _val[bob_indices] = b_val_active
+            _lp = torch.zeros(env.num_envs, 1, device=env.device); _lp[bob_indices] = b_logprob_active.unsqueeze(1)
+            _mu = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device); _mu[bob_indices] = b_mu_active
+            _sigma = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device); _sigma[bob_indices] = b_sigma_active
 
-            # Bob metric logging
-            if bob_done_mask.any():
-                bob_success_mask = em_info["bob_success_this_step"]
-                bob_success_buf.extend(bob_success_mask[bob_success_mask].cpu().numpy().astype(float).tolist())
-                bob_success_buf.extend([0.0] * (bob_done_mask & ~bob_success_mask).sum().item())
-                bob_pos_err_buf.extend(em_info["bob_pos_err"][bob_done_mask].cpu().numpy().tolist())
-                bob_rot_err_buf.extend(em_info["bob_rot_err"][bob_done_mask].cpu().numpy().tolist())
+            bob_ppo.storage.add_transitions(_obs, _next_obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
+            current_bob_obs = obs_full[:, env.alice_obs_dim:]
+            bob_rew_buf.extend(rewards.cpu().numpy().tolist())
 
-        if dones.any():
-            alice_step_counts[torch.where(dones)[0]] = 0
+        # --- 3. ALICE BEHAVIORAL CLONING (ABC) BUFFER PUSH ---
+        goal_valid = env.episode_manager.goal_valid
+        bob_success = env.episode_manager.bob_success
+        
+        if goal_valid.any():
+            valid_ids = torch.where(goal_valid)[0]
+            for env_id in valid_ids:
+                eid = env_id.item()
+                # Construct demo trajectory
+                # traj_obs is a list of (num_envs, obs_dim) tensors
+                traj_o = torch.stack([alice_traj_obs[step][eid] for step in range(len(alice_traj_obs))])
+                traj_a = torch.stack([alice_traj_act[step][eid] for step in range(len(alice_traj_act))])
+                
+                # Goal for this env
+                g = goal_states[eid].unsqueeze(0).expand(len(traj_o), -1)
+                
+                # Bob-compatible obs: robot (8) + objects (30) + goal (14) + dist (4) = 56
+                bc_obs = env.construct_bob_observation(traj_o, g)
+                
+                # Add to ABC buffer for supervised learning
+                bob_ppo.abc_buffer.add_trajectory(
+                    bc_obs, bc_obs, traj_a, 
+                    torch.zeros(len(traj_o), device=env.device), torch.zeros(len(traj_o), device=env.device).byte(),
+                    torch.zeros(len(traj_o), device=env.device), torch.zeros(len(traj_o), 1, device=env.device),
+                    torch.zeros_like(traj_a), torch.zeros_like(traj_a),
+                    torch.zeros(len(traj_o), 1, device=env.device), torch.zeros(len(traj_o), 1, device=env.device)
+                )
 
-        obs = next_obs
-        obs = perform_bob_update(obs)
+        # --- 4. ALICE REWARD ASSIGNMENT & UPDATE ---
+        # Alice Reward: she gets 1.0 if Bob failed, 0.0 if he succeeded.
+        alice_outcome_rewards = torch.where(bob_success, torch.tensor(0.0, device=env.device), torch.tensor(1.0, device=env.device))
+        
+        # Inject outcome reward into Alice's last storage step
+        if alice_ppo.storage.step > 0:
+            last_idx = alice_ppo.storage.step - 1
+            alice_ppo.storage.rewards[last_idx].copy_(alice_outcome_rewards.view(-1, 1))
+            alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
+
+        # Metrics for the iteration
+        current_sr = bob_success.float().mean().item()
+        bob_success_buf.append(current_sr)
+        
+        # Perform Updates
+        perform_alice_update()
+        perform_bob_update(current_bob_obs)
+
+        # Logging
+        if bob_updates % 1 == 0:
+             print(f"Iteration {bob_updates}: SR={current_sr:.2f} | ABC Buffer: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'}", flush=True)
 
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir,     "model_final.pt"))

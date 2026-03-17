@@ -258,9 +258,6 @@ def objective(trial: optuna.Trial) -> float:
     total_bob_episodes_count = 0
     max_alice_bob_ratio = 5
 
-    # -- NEW: Shared report counter for Optuna --
-    report_idx = 0
-
     rollout_length = nsteps * args.num_envs
     alice_rew_buf = deque(maxlen=rollout_length)
     bob_rew_buf = deque(maxlen=rollout_length)
@@ -298,9 +295,8 @@ def objective(trial: optuna.Trial) -> float:
 
         # -- NEW: Alice Competence Pruning --
         # Report Alice's validity rate to Optuna as an intermediate step
-        nonlocal report_idx
-        report_idx += 1
-        trial.report(validity_rate, step=report_idx) 
+        # Using a negative step index to distinguish it from Bob's updates
+        trial.report(validity_rate, step=-alice_updates) 
         if trial.should_prune():
             print(f"  [Trial {trial.number}] Pruning due to poor Alice Validity Rate ({validity_rate:.2f}).")
             raise optuna.exceptions.TrialPruned()
@@ -337,9 +333,7 @@ def objective(trial: optuna.Trial) -> float:
         bob_updates += 1
 
         # Report to Optuna for pruning
-        nonlocal report_idx
-        report_idx += 1
-        trial.report(bob_success_rate, report_idx)
+        trial.report(bob_success_rate, bob_updates)
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
 

@@ -32,7 +32,7 @@ class EpisodeManager:
         num_envs: int,
         device: str,
         alice_timesteps: int = 100,  # Reduced from 250 for better temporal credit assignment
-        bob_timesteps: int = 600,
+        bob_timesteps: int = 200,
         max_goals_per_episode: int = 5,
         pos_threshold: float = 0.01,
         rot_threshold: float = 0.1,

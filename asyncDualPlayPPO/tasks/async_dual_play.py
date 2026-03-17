@@ -43,35 +43,29 @@ class AsyncDualPlayObservationsCfg:
         ee_pose = ObsTerm(
             func=observations.ee_poses,
             params={
-                "left_ee_cfg":  SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_ee_cfg": SceneEntityCfg("robot", body_names="right_wrist_3_link"),
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
             },
         )
         gripper_pos = ObsTerm(
             func=observations.gripper_positions,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["lgripper_finger_joint"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["rgripper_finger_joint"]),
+                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
         object_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("target_object"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg":  SceneEntityCfg("target_object"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": SceneEntityCfg("contact_forces"),
             },
         )
         cube_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("cube"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg":  SceneEntityCfg("cube"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": SceneEntityCfg("contact_forces"),
             },
         )
 
@@ -86,35 +80,29 @@ class AsyncDualPlayObservationsCfg:
         ee_pose = ObsTerm(
             func=observations.ee_poses,
             params={
-                "left_ee_cfg":  SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_ee_cfg": SceneEntityCfg("robot", body_names="right_wrist_3_link"),
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
             },
         )
         gripper_pos = ObsTerm(
             func=observations.gripper_positions,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["lgripper_finger_joint"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["rgripper_finger_joint"]),
+                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
         object_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("target_object"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg":  SceneEntityCfg("target_object"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": SceneEntityCfg("contact_forces"),
             },
         )
         cube_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("cube"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg":  SceneEntityCfg("cube"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": SceneEntityCfg("contact_forces"),
             },
         )
         goal_state = ObsTerm(
@@ -175,13 +163,8 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
         triangle = None
         camera   = None
 
-        contact_forces_left = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/RobotUnified/lgripper_.*finger.*",
-            history_length=3,
-            track_air_time=False,
-        )
-        contact_forces_right = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/RobotUnified/rgripper_.*finger.*",
+        contact_forces = ContactSensorCfg(
+            prim_path="{ENV_REGEX_NS}/RobotUnified/.*finger.*",
             history_length=3,
             track_air_time=False,
         )

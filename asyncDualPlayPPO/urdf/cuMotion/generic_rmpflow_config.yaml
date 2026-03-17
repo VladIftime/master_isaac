@@ -1,4 +1,4 @@
-# rmpflow_config_left.yaml
+# generic_rmpflow_config.yaml
 api_version: 1.0
 joint_limit_buffers: [.01, .01, .01, .01, .01, .01]
 
@@ -9,15 +9,6 @@ rmp_params:
         damping_gain: 50.
         robust_position_term_thresh: .5
         inertia: 1.
-    
-    # NOTE: "canonical_resolve" is commented out because it causes the
-    # "yaml-cpp: bad conversion" / "invalid node" crash in this version of Lula.
-    # The collision stability is handled by the 'body_cylinders' section below instead.
-    # canonical_resolve:
-    #     max_acceleration_norm: 50.
-    #     projection_tolerance: .01
-    #     verbose: false
-
     cspace_trajectory_rmp:
         p_gain: 80.
         d_gain: 10.
@@ -78,28 +69,18 @@ canonical_resolve:
     max_acceleration_norm: 50.
     projection_tolerance: .01
     verbose: false
-# -----------------------------------------------------------
-# COLLISION CONFIGURATION
-# -----------------------------------------------------------
+
 body_cylinders:
-    # 1. Main Central Pillar
-    - name: body_base_link
+    - name: base_link
       pt1: [0, 0, 0.7]
       pt2: [0, 0, 0.0]
       radius: 0.22
 
-    # 2. Arm Base & Shoulder (Extended Height)
-    - name: base_link_inertia
-      pt1: [0, 0, 0.25] # Increased from 0.15 to cover the shoulder joint
-      pt2: [0, 0, 0.0]
-      radius: 0.13
-
-# ACTIVE COLLISION CHECKERS
 body_collision_controllers:
   - name: upper_arm_link
-    radius: 0.05 # Reduced from 0.08 to avoid overlap when rotated
+    radius: 0.05
   - name: forearm_link
-    radius: 0.05 # Reduced from 0.07 to avoid overlap when rotated
+    radius: 0.05
   - name: wrist_1_link
     radius: 0.06
   - name: wrist_2_link
@@ -107,4 +88,4 @@ body_collision_controllers:
   - name: wrist_3_link
     radius: 0.05
   - name: robotiq_arg2f_base_link
-    radius: 0.1 # Increased from 0.05 to account for finger spread
+    radius: 0.1

@@ -44,6 +44,8 @@ def validate_goal(
     # Infer state dim and number of objects
     if total_dims % 17 == 0:
         state_dim = 17
+    elif total_dims % 15 == 0:
+        state_dim = 15
     elif total_dims % 13 == 0:
         state_dim = 13
     elif total_dims % 7 == 0:

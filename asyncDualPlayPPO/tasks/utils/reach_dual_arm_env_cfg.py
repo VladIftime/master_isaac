@@ -58,7 +58,7 @@ UR5e_CFG = ArticulationCfg(
                 damping=50.0,
             ),
         ),
-        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True,
             solver_position_iteration_count=8,
@@ -75,7 +75,10 @@ UR5e_CFG = ArticulationCfg(
             "wrist_2_joint":             -1.57,
             "wrist_3_joint":              0.0,
             "finger_joint":               0.0,
+            "left_inner_knuckle_joint":   0.0,
             "left_inner_finger_joint":    0.0,
+            "right_outer_knuckle_joint":  0.0,
+            "right_inner_knuckle_joint":  0.0,
             "right_inner_finger_joint":   0.0,
         },
     ),
@@ -90,12 +93,13 @@ UR5e_CFG = ArticulationCfg(
             stiffness=1e6,
             damping=80.0,
         ),
-        # Robotiq grippers have 12 joints: 6 arm + 3 finger + 3 knuckle (mimics).
-        # Passive actuators are needed to avoid the "not all actuators configured" warning.
-        "passive_mimics": ImplicitActuatorCfg(
+        # Knuckle joints mimic finger_joint (multiplier=+1). They MUST have
+        # real stiffness so they actively track the target position;
+        # stiffness=0 leaves them as passive dampers that flop around.
+        "knuckle_mimics": ImplicitActuatorCfg(
             joint_names_expr=[".*knuckle_joint"],
-            stiffness=0.0,
-            damping=10.0,
+            stiffness=1e6,
+            damping=80.0,
         ),
     },
 )
@@ -176,11 +180,11 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
 class ReachDualArmSceneCfg(InteractiveSceneCfg):
     """Configuration for the dual-arm reach scene."""
 
-    robot: ArticulationCfg = UR5e_Dual_CFG.replace(
+    robot: ArticulationCfg = UR5e_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotUnified",
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.0),
-            joint_pos=UR5e_Dual_CFG.init_state.joint_pos,
+            joint_pos=UR5e_CFG.init_state.joint_pos,
         ),
     )
 
@@ -222,38 +226,6 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    cylinder = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Cylinder",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UsdFileCfg(
-            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-            scale=(1.0, 1.0, 1.0),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 1.0, 0.4)),
-        ),
-    )
-
-    rect = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Rect",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UsdFileCfg(
-            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
-            scale=(1.0, 1.0, 1.0),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
-        ),
-    )
-
-    triangle = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Triangle",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.2, 0.6, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
-        spawn=UsdFileCfg(
-            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
-            scale=(1.0, 1.0, 1.0),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.8)),
-        ),
-    )
 
     plane = AssetBaseCfg(
         prim_path="/World/GroundPlane",
@@ -275,85 +247,47 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    left_arm_action = RMPFlowActionCfg(
+    arm_action = RMPFlowActionCfg(
         asset_name="robot",
-        joint_names=["left_shoulder_.*", "left_elbow_.*", "left_wrist_.*"],
-        body_name="left_wrist_3_link",
+        joint_names=["shoulder_.*", "elbow_.*", "wrist_.*"],
+        body_name="wrist_3_link",
         controller=RmpFlowControllerCfg(
             config_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/rmpflow_config_left.yaml",
-            urdf_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/dual_arm_robot.urdf",
+            urdf_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/urdf/ur_robotics/ur5e/ur5e_robotiq_140.urdf",
             collision_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/lula_left.yaml",
-            frame_name="left_wrist_3_link",
-            evaluations_per_frame=12.0,
+            frame_name="wrist_3_link",
+            evaluations_per_frame=1.0,
         ),
         articulation_prim_expr="/World/envs/env_.*/RobotUnified",
         scale=1.0,
         use_relative_mode=True,
     )
 
-    right_arm_action = RMPFlowActionCfg(
-        asset_name="robot",
-        joint_names=["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"],
-        body_name="right_wrist_3_link",
-        controller=RmpFlowControllerCfg(
-            config_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/rmpflow_config_right.yaml",
-            urdf_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/dual_arm_robot.urdf",
-            collision_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/lula_right.yaml",
-            frame_name="right_wrist_3_link",
-            evaluations_per_frame=12.0,
-        ),
-        articulation_prim_expr="/World/envs/env_.*/RobotUnified",
-        scale=1.0,
-        use_relative_mode=True,
-    )
-
-    # Gripper joints are driven explicitly (including mimic knuckles) because the
-    # Robotiq 140 mimic mechanism is not modelled in the URDF — all joints must
-    # receive a direct position target.  Knuckle signs follow the physical linkage:
-    # inner_knuckle and outer_knuckle rotate in the opposite direction to finger_joint.
     gripper_action = mdp.BinaryJointPositionActionCfg(
         asset_name="robot",
         joint_names=[
-            "lgripper_finger_joint",
-            "rgripper_finger_joint",
-            "lgripper_left_inner_knuckle_joint",
-            "lgripper_left_inner_finger_joint",
-            "lgripper_right_outer_knuckle_joint",
-            "lgripper_right_inner_knuckle_joint",
-            "lgripper_right_inner_finger_joint",
-            "rgripper_left_inner_knuckle_joint",
-            "rgripper_left_inner_finger_joint",
-            "rgripper_right_outer_knuckle_joint",
-            "rgripper_right_inner_knuckle_joint",
-            "rgripper_right_inner_finger_joint",
+            "finger_joint",
+            "left_inner_knuckle_joint",
+            "left_inner_finger_joint",
+            "right_outer_knuckle_joint",
+            "right_inner_knuckle_joint",
+            "right_inner_finger_joint",
         ],
         open_command_expr={
-            "lgripper_finger_joint": 0.0,
-            "rgripper_finger_joint": 0.0,
-            "lgripper_left_inner_knuckle_joint":  0.0,
-            "lgripper_left_inner_finger_joint":   0.0,
-            "lgripper_right_outer_knuckle_joint": 0.0,
-            "lgripper_right_inner_knuckle_joint": 0.0,
-            "lgripper_right_inner_finger_joint":  0.0,
-            "rgripper_left_inner_knuckle_joint":  0.0,
-            "rgripper_left_inner_finger_joint":   0.0,
-            "rgripper_right_outer_knuckle_joint": 0.0,
-            "rgripper_right_inner_knuckle_joint": 0.0,
-            "rgripper_right_inner_finger_joint":  0.0,
+            "finger_joint": 0.0,
+            "left_inner_knuckle_joint": 0.0,
+            "left_inner_finger_joint": 0.0,
+            "right_outer_knuckle_joint": 0.0,
+            "right_inner_knuckle_joint": 0.0,
+            "right_inner_finger_joint": 0.0,
         },
         close_command_expr={
-            "lgripper_finger_joint":  0.8,
-            "rgripper_finger_joint":  0.8,
-            "lgripper_left_inner_knuckle_joint":  -0.8,
-            "lgripper_left_inner_finger_joint":    0.8,
-            "lgripper_right_outer_knuckle_joint": -0.8,
-            "lgripper_right_inner_knuckle_joint": -0.8,
-            "lgripper_right_inner_finger_joint":   0.8,
-            "rgripper_left_inner_knuckle_joint":  -0.8,
-            "rgripper_left_inner_finger_joint":    0.8,
-            "rgripper_right_outer_knuckle_joint": -0.8,
-            "rgripper_right_inner_knuckle_joint": -0.8,
-            "rgripper_right_inner_finger_joint":   0.8,
+            "finger_joint": 0.8,
+            "left_inner_knuckle_joint": 0.8,   # mimic ×+1
+            "left_inner_finger_joint": -0.8,    # mimic ×-1
+            "right_outer_knuckle_joint": 0.8,   # mimic ×+1
+            "right_inner_knuckle_joint": 0.8,   # mimic ×+1
+            "right_inner_finger_joint": -0.8,   # mimic ×-1
         },
     )
 
@@ -365,9 +299,8 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for the policy group."""
-        joint_pos_left  = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=["left_.*"])})
-        joint_pos_right = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=["right_.*"])})
-        object_pos      = ObsTerm(func=mdp.root_pos_w, params={"asset_cfg": SceneEntityCfg("target_object")})
+        joint_pos  = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
+        object_pos = ObsTerm(func=mdp.root_pos_w, params={"asset_cfg": SceneEntityCfg("target_object")})
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -389,8 +322,7 @@ class TerminationsCfg:
     robot_through_table = DoneTerm(
         func=terminations.robot_out_of_bounds,
         params={
-            "asset_cfg_left":  SceneEntityCfg("robot", body_names=["left_.*"]),
-            "asset_cfg_right": SceneEntityCfg("robot", body_names=["right_.*"]),
+            "asset_cfg":  SceneEntityCfg("robot", body_names=["wrist_3_link"]),
             "table_z": 0.0,
             "margin":  -0.05,
             "x_range": (-0.8, 0.8),

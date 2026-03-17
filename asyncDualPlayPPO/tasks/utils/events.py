@@ -109,7 +109,7 @@ def reset_robot_joints(
     env_ids: torch.Tensor,
 ) -> None:
     """
-    Reset both arms to their default joint configuration.
+    Reset the robot arm to its default joint configuration.
 
     Args:
         env: The RL environment.
@@ -118,7 +118,7 @@ def reset_robot_joints(
     if len(env_ids) == 0:
         return
 
-    print(f"[Reset] Resetting robot joints for {len(env_ids)} envs")
+    print(f"[Reset] Resetting robot arm joints for {len(env_ids)} envs")
 
     try:
         robot = env.scene["robot"]

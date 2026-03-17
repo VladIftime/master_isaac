@@ -13,54 +13,35 @@ if TYPE_CHECKING:
 
 def robot_out_of_bounds(
     env: ManagerBasedRLEnv,
-    asset_cfg_left: SceneEntityCfg = SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-    asset_cfg_right: SceneEntityCfg = SceneEntityCfg("robot", body_names="right_wrist_3_link"),
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="wrist_3_link"),
     table_z: float = 0.0,
     margin: float = -0.05,
     x_range: tuple[float, float] = (-0.8, 0.8),
     y_range: tuple[float, float] = (-0.8, 0.8),
 ) -> torch.Tensor:
     """
-    Terminate when an end-effector leaves the safe workspace.
-
-    The z margin is intentionally negative so that light contact with the table
-    surface (Z ≈ 0) does not immediately terminate the episode — only genuine
-    table penetration (Z < margin) does.  The x/y bounds are intentionally wider
-    than the IK action limits so that natural wrist overshoot is absorbed before
-    triggering termination.
+    Terminate when the end-effector leaves the safe workspace.
 
     Args:
         env: The RL environment.
-        asset_cfg_left: Config for the left wrist link used as the end-effector proxy.
-        asset_cfg_right: Config for the right wrist link.
+        asset_cfg: Config for the wrist link used as the end-effector proxy.
         table_z: Table surface Z coordinate in the local frame.
         margin: Termination fires when ee_z < table_z + margin.
-        x_range: Safe local x-range for end-effectors.
-        y_range: Safe local y-range for end-effectors.
+        x_range: Safe local x-range for end-effector.
+        y_range: Safe local y-range for end-effector.
 
     Returns:
         Boolean tensor (num_envs,) — True where the episode should end.
     """
-    robot = env.scene[asset_cfg_left.name]
+    robot = env.scene[asset_cfg.name]
+    body_names = asset_cfg.body_names or "wrist_3_link"
+    body_ids, _ = robot.find_bodies(body_names)
 
-    left_body  = asset_cfg_left.body_names  or "left_wrist_3_link"
-    right_body = asset_cfg_right.body_names or "right_wrist_3_link"
+    ee_pos = robot.data.body_pos_w[:, body_ids[0], :] - env.scene.env_origins
 
-    left_ids,  _ = robot.find_bodies(left_body)
-    right_ids, _ = env.scene[asset_cfg_right.name].find_bodies(right_body)
-
-    left_ee  = robot.data.body_pos_w[:, left_ids[0],  :] - env.scene.env_origins
-    right_ee = env.scene[asset_cfg_right.name].data.body_pos_w[:, right_ids[0], :] - env.scene.env_origins
-
-    z_violation = (left_ee[:, 2] < table_z + margin) | (right_ee[:, 2] < table_z + margin)
-    x_violation = (
-        (left_ee[:, 0]  < x_range[0]) | (left_ee[:, 0]  > x_range[1]) |
-        (right_ee[:, 0] < x_range[0]) | (right_ee[:, 0] > x_range[1])
-    )
-    y_violation = (
-        (left_ee[:, 1]  < y_range[0]) | (left_ee[:, 1]  > y_range[1]) |
-        (right_ee[:, 1] < y_range[0]) | (right_ee[:, 1] > y_range[1])
-    )
+    z_violation = (ee_pos[:, 2] < table_z + margin)
+    x_violation = (ee_pos[:, 0] < x_range[0]) | (ee_pos[:, 0] > x_range[1])
+    y_violation = (ee_pos[:, 1] < y_range[0]) | (ee_pos[:, 1] > y_range[1])
 
     out_of_bounds = z_violation | x_violation | y_violation
 

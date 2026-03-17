@@ -12,120 +12,94 @@ from isaaclab.managers import SceneEntityCfg
 
 def robot_joint_positions(
     env: ManagerBasedRLEnv,
-    left_arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    right_arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
     """
-    Joint positions for both arms, concatenated.
+    Joint positions for the robot arm.
 
-    Both configs must specify joint_names to select the correct subset
-    of joints from the unified robot asset.
+    The config must specify joint_names to select the correct subset
+    of joints from the robot asset.
 
     Returns:
-        (num_envs, num_left_joints + num_right_joints)
+        (num_envs, num_joints)
     """
-    robot = env.scene[left_arm_cfg.name]
+    robot = env.scene[arm_cfg.name]
 
-    if left_arm_cfg.joint_names is None:
-        raise ValueError("robot_joint_positions: left_arm_cfg must specify joint_names")
-    if right_arm_cfg.joint_names is None:
-        raise ValueError("robot_joint_positions: right_arm_cfg must specify joint_names")
+    if arm_cfg.joint_names is None:
+        raise ValueError("robot_joint_positions: arm_cfg must specify joint_names")
 
-    left_ids, _ = robot.find_joints(left_arm_cfg.joint_names)
-    right_ids, _ = env.scene[right_arm_cfg.name].find_joints(right_arm_cfg.joint_names)
+    joint_ids, _ = robot.find_joints(arm_cfg.joint_names)
 
-    return torch.cat([
-        robot.data.joint_pos[:, left_ids],
-        env.scene[right_arm_cfg.name].data.joint_pos[:, right_ids],
-    ], dim=-1)
+    return robot.data.joint_pos[:, joint_ids]
 
 
 def ee_poses(
     env: ManagerBasedRLEnv,
-    left_ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-    right_ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="right_wrist_3_link"),
+    ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="wrist_3_link"),
 ) -> torch.Tensor:
     """
-    End-effector poses (position + quaternion) for both arms.
+    End-effector pose (position + quaternion) for the single arm.
 
     Positions are returned in environment-local coordinates (relative to
     env_origins) so they are comparable across parallel environments.
 
     Returns:
-        (num_envs, 14) — [left_pos(3), left_quat(4), right_pos(3), right_quat(4)]
+        (num_envs, 7) — [pos(3), quat(4)]
     """
-    robot = env.scene[left_ee_cfg.name]
+    robot = env.scene[ee_cfg.name]
+    body_ids, _ = robot.find_bodies(ee_cfg.body_names)
 
-    left_ids, _ = robot.find_bodies(left_ee_cfg.body_names)
-    right_ids, _ = env.scene[right_ee_cfg.name].find_bodies(right_ee_cfg.body_names)
+    pos = robot.data.body_pos_w[:, body_ids[0]] - env.scene.env_origins
+    quat = robot.data.body_quat_w[:, body_ids[0]]
 
-    left_pos = robot.data.body_pos_w[:, left_ids[0]] - env.scene.env_origins
-    left_quat = robot.data.body_quat_w[:, left_ids[0]]
-
-    right_pos = env.scene[right_ee_cfg.name].data.body_pos_w[:, right_ids[0]] - env.scene.env_origins
-    right_quat = env.scene[right_ee_cfg.name].data.body_quat_w[:, right_ids[0]]
-
-    return torch.cat([left_pos, left_quat, right_pos, right_quat], dim=-1)
+    return torch.cat([pos, quat], dim=-1)
 
 
 def gripper_positions(
     env: ManagerBasedRLEnv,
-    left_arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-    right_arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
     """
-    Gripper finger joint positions for both arms, concatenated.
+    Gripper finger joint position for the arm.
 
-    Both configs must specify joint_names pointing to the gripper finger joints.
+    The config must specify joint_names pointing to the gripper finger joint.
 
     Returns:
-        (num_envs, 2) — one value per gripper
+        (num_envs, 1) — finger joint position
     """
-    robot = env.scene[left_arm_cfg.name]
+    robot = env.scene[arm_cfg.name]
 
-    if left_arm_cfg.joint_names is None:
-        raise ValueError("gripper_positions: left_arm_cfg must specify joint_names")
-    if right_arm_cfg.joint_names is None:
-        raise ValueError("gripper_positions: right_arm_cfg must specify joint_names")
+    if arm_cfg.joint_names is None:
+        raise ValueError("gripper_positions: arm_cfg must specify joint_names")
 
-    left_ids, _ = robot.find_joints(left_arm_cfg.joint_names)
-    right_ids, _ = env.scene[right_arm_cfg.name].find_joints(right_arm_cfg.joint_names)
+    joint_ids, _ = robot.find_joints(arm_cfg.joint_names)
 
-    return torch.cat([
-        robot.data.joint_pos[:, left_ids],
-        env.scene[right_arm_cfg.name].data.joint_pos[:, right_ids],
-    ], dim=-1)
+    return robot.data.joint_pos[:, joint_ids]
 
 
 def object_states(
     env: ManagerBasedRLEnv,
     object_cfg: SceneEntityCfg = SceneEntityCfg("target_object"),
-    left_gripper_cfg: SceneEntityCfg = None,
-    right_gripper_cfg: SceneEntityCfg = None,
-    left_contact_cfg: SceneEntityCfg = None,
-    right_contact_cfg: SceneEntityCfg = None,
+    gripper_cfg: SceneEntityCfg = None,
+    contact_cfg: SceneEntityCfg = None,
 ) -> torch.Tensor:
     """
-    Full per-object state vector (17 dims per object instance).
+    Full per-object state vector (15 dims per object instance).
 
     Layout per instance:
-        pos(3) | quat(4) | lin_vel(3) | ang_vel(3) | dist_left(1) | dist_right(1) | contact_left(1) | contact_right(1)
+        pos(3) | quat(4) | lin_vel(3) | ang_vel(3) | dist(1) | contact(1)
 
-    Velocities are clamped to [-5, 5] m/s to prevent outlier values from
-    destabilising the network.  All positions are returned in environment-local
-    coordinates (i.e., relative to env_origins) so they are comparable across
-    parallel environments.
+    Velocities are clamped to [-5, 5] m/s. All positions are returned in 
+    environment-local coordinates (i.e., relative to env_origins).
 
     Args:
         env: The environment.
         object_cfg: Which object to query.
-        left_gripper_cfg: Body config for the left end-effector (for distance).
-        right_gripper_cfg: Body config for the right end-effector (for distance).
-        left_contact_cfg: Contact sensor for the left gripper.
-        right_contact_cfg: Contact sensor for the right gripper.
+        gripper_cfg: Body config for the end-effector (for distance).
+        contact_cfg: Contact sensor for the gripper.
 
     Returns:
-        (num_envs, num_instances * 17)
+        (num_envs, num_instances * 15)
     """
     obj = env.scene[object_cfg.name]
 
@@ -140,44 +114,31 @@ def object_states(
         lin_vel = lin_vel.unsqueeze(1)
         ang_vel = ang_vel.unsqueeze(1)
 
-    pos = pos - env.scene.env_origins.unsqueeze(1)
+    pos_local = pos - env.scene.env_origins.unsqueeze(1)
     batch_size, num_instances = pos.shape[:2]
 
-    dist_left  = torch.zeros(batch_size, num_instances, 1, device=env.device)
-    dist_right = torch.zeros(batch_size, num_instances, 1, device=env.device)
+    # Initialize distance and contact tensors
+    dist = torch.zeros(batch_size, num_instances, 1, device=env.device)
+    contact = torch.zeros(batch_size, num_instances, 1, device=env.device)
 
-    def gripper_distance(gripper_cfg) -> torch.Tensor:
-        """Return per-instance distance from object to a gripper end-effector."""
+    # Calculate distance to gripper if provided
+    if gripper_cfg is not None:
         robot = env.scene[gripper_cfg.name]
-        ids, _ = robot.find_bodies(gripper_cfg.body_names)
-        if not ids:
-            return torch.zeros(batch_size, num_instances, 1, device=env.device)
-        grip_pos_local = robot.data.body_pos_w[:, ids[0], :] - env.scene.env_origins
-        return torch.norm(pos - grip_pos_local.unsqueeze(1), dim=-1, keepdim=True)
+        body_ids, _ = robot.find_bodies(gripper_cfg.body_names)
+        if body_ids:
+            grip_pos_local = robot.data.body_pos_w[:, body_ids[0], :] - env.scene.env_origins
+            dist = torch.norm(pos_local - grip_pos_local.unsqueeze(1), dim=-1, keepdim=True)
 
-    if left_gripper_cfg is not None:
-        dist_left = gripper_distance(left_gripper_cfg)
-    if right_gripper_cfg is not None:
-        dist_right = gripper_distance(right_gripper_cfg)
+    # Calculate contact if sensor provided
+    if contact_cfg is not None and hasattr(env.scene, "sensors"):
+        if contact_cfg.name in env.scene.sensors:
+            sensor = env.scene.sensors[contact_cfg.name]
+            forces = torch.norm(sensor.data.net_forces_w, dim=-1)
+            # Contact if net force > 0.1N and object is close (< 0.25m)
+            has_contact = (forces.max(dim=1)[0] > 0.1).float().unsqueeze(1).unsqueeze(2)
+            contact = has_contact * (dist < 0.25).float()
 
-    contact_left  = torch.zeros(batch_size, num_instances, 1, device=env.device)
-    contact_right = torch.zeros(batch_size, num_instances, 1, device=env.device)
-
-    def gripper_contact(contact_cfg, dist) -> torch.Tensor:
-        """Return 1.0 where the gripper is both touching (force > 0.1 N) and close (< 0.25 m)."""
-        if contact_cfg.name not in env.scene.sensors:
-            return torch.zeros(batch_size, num_instances, 1, device=env.device)
-        sensor = env.scene.sensors[contact_cfg.name]
-        forces = torch.norm(sensor.data.net_forces_w, dim=-1)
-        has_contact = (forces.max(dim=1)[0] > 0.1).float().unsqueeze(1).unsqueeze(2)
-        return has_contact * (dist < 0.25).float()
-
-    if left_contact_cfg is not None and hasattr(env.scene, "sensors"):
-        contact_left = gripper_contact(left_contact_cfg, dist_left)
-    if right_contact_cfg is not None and hasattr(env.scene, "sensors"):
-        contact_right = gripper_contact(right_contact_cfg, dist_right)
-
-    state = torch.cat([pos, quat, lin_vel, ang_vel, dist_left, dist_right, contact_left, contact_right], dim=-1)
+    state = torch.cat([pos_local, quat, lin_vel, ang_vel, dist, contact], dim=-1)
     return state.view(batch_size, -1)
 
 
@@ -188,8 +149,8 @@ def goal_states(
     """
     Goal state for a specific object, as recorded by the episode manager.
 
-    Goal states are stored by the wrapper as [target_object(0:7), cube(7:14)].
-    Returns zeros during Alice's phase, when no goal has been set yet.
+    Goal states are stored as [target_object(0:7), cube(7:14)].
+    Returns zeros during Alice's phase.
 
     Returns:
         (num_envs, 7) — [pos(3), quat(4)] for the requested object
@@ -210,9 +171,9 @@ def goal_states(
         return env.extras["goal_state"]
 
     obj = env.scene[object_cfg.name]
-    pos = obj.data.root_pos_w
-    num_instances = 1 if pos.dim() == 2 else pos.shape[1]
-    return torch.zeros(pos.shape[0], num_instances * 7, device=env.device)
+    batch_size = obj.data.root_pos_w.shape[0]
+    num_instances = 1 if obj.data.root_pos_w.dim() == 2 else obj.data.root_pos_w.shape[1]
+    return torch.zeros(batch_size, num_instances * 7, device=env.device)
 
 
 def goal_distance(
@@ -222,10 +183,6 @@ def goal_distance(
     """
     Per-object distance from the current state to the goal state.
 
-    Rotation distance uses the geodesic approximation 1 − |q₁ · q₂|,
-    which is 0 when the orientations match and 1 when they are maximally
-    opposed.
-
     Returns:
         (num_envs, num_instances * 2) — [pos_dist, rot_dist] per instance
     """
@@ -233,9 +190,9 @@ def goal_distance(
     goal_flat = goal_states(env, object_cfg)
 
     batch_size = current_flat.shape[0]
-    num_instances = current_flat.shape[1] // 17
+    num_instances = current_flat.shape[1] // 15
 
-    current = current_flat.view(batch_size, num_instances, 17)[..., :7]
+    current = current_flat.view(batch_size, num_instances, 15)[..., :7]
     goal = goal_flat.view(batch_size, num_instances, 7)
 
     pos_dist = torch.norm(current[..., :3] - goal[..., :3], dim=-1, keepdim=True)

@@ -21,6 +21,10 @@ params:
     max_grad_norm: 1.0
     value_loss_coef: 1.0
 
+    # Alice Behavioral Cloning (ABC) params
+    abc_coef: 0.1
+    abc_batch_size: 2048
+
   policy:
     pi_hid_sizes: [512, 256, 128]
     vf_hid_sizes: [512, 256, 128]
