@@ -384,7 +384,7 @@ class AsyncDualPlayEnvWrapper:
         
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
-            self.episode_manager.reset_episode(invalid_env_ids, reason="Bob Goal Invalid/Timeout")
+            self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Invalid Goal")
             reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.env.scene.write_data_to_sim()
@@ -426,7 +426,7 @@ class AsyncDualPlayEnvWrapper:
         reset_ids = env_ids[~can_continue]
         if len(reset_ids) > 0:
             succeeded = self.episode_manager.bob_success[reset_ids]
-            reason = "Bob Succeeded" if succeeded.any() else "Bob Failed (or Max Goals)"
+            reason = "Bob Succeeded" if succeeded.any() else "Bob Failed"
             self.episode_manager.reset_episode(reset_ids, reason=reason)
             
             reset_objects_to_fixed_safe_pose(self.env, reset_ids)

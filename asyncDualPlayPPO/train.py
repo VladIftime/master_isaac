@@ -336,10 +336,11 @@ def main():
             current_alice_obs = next_alice_obs
 
         # --- 1.5 SETTLE PHYSICS ---
-        # Run 20 zero-action steps to let objects stop sliding/bouncing before extracting the goal
+        # Run 20 zero-action steps to let objects stop sliding/bouncing before extracting the goal.
+        # Use env.env (ManagerBasedRLEnv) directly to avoid advancing the EpisodeManager state.
         for _ in range(20):
             settle_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
-            env.step(settle_acts)
+            env.env.step(settle_acts)
             
         # Manually overwrite the goal states to the newly settled states
         obs_dict = env.env.observation_manager.compute()
