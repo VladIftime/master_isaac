@@ -203,7 +203,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     target_object = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/TargetObject",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/concave.usd",
             scale=(1.0, 1.0, 1.0),
@@ -214,7 +214,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     cube = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.15, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.15, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
             scale=(1.0, 1.0, 1.0),

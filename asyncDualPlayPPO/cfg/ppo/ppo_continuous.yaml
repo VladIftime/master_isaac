@@ -51,7 +51,7 @@ params:
     use_multicategorical: true
     num_cat_dims: 4       # X, Y, Z, Gripper
     num_bins: 11          # bins per dimension (paper uses 11)
-    max_delta_m: 2.0      # normalized delta fed to env (env scale=0.05 → 5 cm/step at bin 0/10)
+    max_delta_m: 3.0      # normalized delta fed to env (env scale=0.05 → 5 cm/step at bin 0/10)
 
     # Fix 4 — LSTM recurrent policy (paper uses LSTM; set true to enable)
     use_lstm: false

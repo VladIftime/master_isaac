@@ -57,6 +57,7 @@ def main():
         "--arm_config", type=str, default="default",
         choices=["default", "rotated"],
     )
+    parser.add_argument("--dummy_alice", action="store_true", help="Use dummy Alice wrapper")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -70,6 +71,7 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
+    from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import DummyAliceWrapper
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
@@ -137,7 +139,10 @@ def main():
         env_cfg.scene.robot.init_state.joint_pos["right_shoulder_pan_joint"] =  1.57
 
     base_env = ManagerBasedRLEnv(cfg=env_cfg)
-    env = AsyncDualPlayEnvWrapper(env=base_env, device=base_env.device, arm_config=args.arm_config)
+    if args.dummy_alice:
+        env = DummyAliceWrapper(env=base_env, device=base_env.device, alice_timesteps=100, bob_timesteps=200)
+    else:
+        env = AsyncDualPlayEnvWrapper(env=base_env, device=base_env.device, arm_config=args.arm_config)
 
     # --- Agents ---
     alice_ppo = PPO(
@@ -294,13 +299,16 @@ def main():
         """Run a PPO update for Alice after her rollout is complete."""
         nonlocal alice_updates
         
-        # In sequential mode, storage.step MUST be exactly num_transitions_per_env
-        if alice_ppo.storage.step < alice_ppo.storage.num_transitions_per_env:
-             return
+        # Update whenever Alice has collected any transitions this rollout.
+        # (Storage was intentionally oversized to alice_storage_size to avoid overflow;
+        #  do NOT compare against storage.num_transitions_per_env here.)
+        if alice_ppo.storage.step == 0:
+            return
 
         dummy_val = torch.zeros(env.num_envs, 1, device=env.device)
         alice_ppo.storage.compute_returns(dummy_val, alice_ppo.gamma, alice_ppo.lam)
-        loss_val, loss_surr, _, _ = alice_ppo.update()
+
+        loss_val, loss_surr = alice_ppo.update()
         alice_ppo.storage.clear()
 
         mean_alice_rew = np.mean(alice_rew_buf) if alice_rew_buf else 0.0
@@ -634,6 +642,16 @@ def main():
             bob_ppo.storage.add_transitions(_obs, _next_obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
             current_bob_obs = obs_full[:, env.alice_obs_dim:]
             bob_rew_buf.extend(rewards.cpu().numpy().tolist())
+
+            # Populate error buffers for TensorBoard (only for envs where Bob just finished)
+            ep_info = extras.get("episode_manager", {})
+            if ep_info:
+                pos_err = ep_info["bob_pos_err"]
+                rot_err = ep_info["bob_rot_err"]
+                finished_bob = torch.where(ep_info["bob_done_this_step"])[0]
+                if len(finished_bob) > 0:
+                    bob_pos_err_buf.extend(pos_err[finished_bob].cpu().numpy().tolist())
+                    bob_rot_err_buf.extend(rot_err[finished_bob].cpu().numpy().tolist())
 
         # --- 3. ALICE BEHAVIORAL CLONING (ABC) BUFFER PUSH ---
         goal_valid = env.episode_manager.goal_valid

@@ -186,7 +186,10 @@ class AsyncDualPlayEnvWrapper:
                     continue
                 
                 # Determine specific reason from term_dones
-                reasons = [name for name, val in term_dones.items() if val[env_id]]
+                if isinstance(term_dones, dict):
+                    reasons = [name for name, val in term_dones.items() if val[env_id]]
+                else:
+                    reasons = ["Terminated/Truncated"]
                 reason = " | ".join(reasons) if reasons else "OOB/Termination"
                 
                 if is_alice[env_id]:
@@ -350,8 +353,15 @@ class AsyncDualPlayEnvWrapper:
         final_pos = goal_state[env_ids][:, 0:3]
         dist_moved = torch.norm(final_pos - start_pos, dim=-1)
         
+        cube_start = initial_state[env_ids][:, 15:18]
+        cube_final = goal_state[env_ids][:, 15:18]
         for i, env_id in enumerate(env_ids):
-            print(f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | Moved: {dist_moved[i]:.3f}m", flush=True)
+            print(
+                f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | Moved: {dist_moved[i]:.3f}m"
+                f" | target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}"
+                f" | cube: {cube_start[i].tolist()} -> {cube_final[i].tolist()}",
+                flush=True
+            )
         
         # Transition/Storage logic
         # --- CHANGED: 17 changed to 15 to match Isaac Lab's actual object state output ---
@@ -373,12 +383,23 @@ class AsyncDualPlayEnvWrapper:
             pos1_global = start_states[:, 0:3] + env_origins
             self.env.scene['target_object'].write_root_pose_to_sim(torch.cat([pos1_global, start_states[:, 3:7]], dim=-1), env_ids=valid_env_ids)
             self.env.scene['target_object'].write_root_velocity_to_sim(torch.zeros(len(valid_env_ids), 6, device=self.device), env_ids=valid_env_ids)
-            
+
             pos2_global = start_states[:, 15:18] + env_origins
             self.env.scene['cube'].write_root_pose_to_sim(torch.cat([pos2_global, start_states[:, 18:22]], dim=-1), env_ids=valid_env_ids)
             self.env.scene['cube'].write_root_velocity_to_sim(torch.zeros(len(valid_env_ids), 6, device=self.device), env_ids=valid_env_ids)
-            
+
             reset_robot_joints(self.env, valid_env_ids)
+            for i, env_id in enumerate(valid_env_ids):
+                t_local = start_states[i, 0:3].tolist()
+                c_local = start_states[i, 15:18].tolist()
+                g_target = self.episode_manager.goal_states[env_id, 0:3].tolist()
+                g_cube   = self.episode_manager.goal_states[env_id, 7:10].tolist()
+                print(
+                    f"[Reset] Alice->Bob Env {env_id.item()}: "
+                    f"target reset to {t_local} | cube reset to {c_local} | "
+                    f"goals: target={g_target} cube={g_cube}",
+                    flush=True
+                )
             print(f"[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for {len(valid_env_ids)} envs", flush=True)
             self.env.scene.write_data_to_sim()
         
@@ -750,6 +771,23 @@ class AsyncDualPlayEnvWrapper:
         
         # Only allow completion if this is not the transition step (step 0)
         should_give_completion = all_success & completion_not_given & (bob_phase_steps > 0)
+
+        # Debug: log positions when completion fires
+        if should_give_completion.any():
+            comp_ids = torch.where(should_give_completion)[0]
+            for env_id in comp_ids:
+                t_pos  = pos_dists[env_id, 0].item()
+                c_pos  = pos_dists[env_id, 1].item()
+                t_curr = self.env.scene["target_object"].data.root_pos_w[env_id].tolist()
+                t_goal = self.episode_manager.goal_states[env_id, 0:3].tolist()
+                c_curr = self.env.scene["cube"].data.root_pos_w[env_id].tolist()
+                c_goal = self.episode_manager.goal_states[env_id, 7:10].tolist()
+                print(
+                    f"[BobSuccess] Env {env_id.item()} step={bob_phase_steps[env_id].item()}: "
+                    f"target dist={t_pos:.4f} (curr={[round(x,3) for x in t_curr]} goal={[round(x,3) for x in t_goal]}) | "
+                    f"cube dist={c_pos:.4f} (curr={[round(x,3) for x in c_curr]} goal={[round(x,3) for x in c_goal]})",
+                    flush=True
+                )
         
         completion_bonus = torch.where(
             should_give_completion,
