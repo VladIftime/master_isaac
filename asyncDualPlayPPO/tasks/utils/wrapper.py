@@ -412,7 +412,10 @@ class AsyncDualPlayEnvWrapper:
             print(f"[Phase] Env {first_env}: Bob {status} | Steps: {steps_used}/800 | Alice Outcome Reward: {outcome_rewards[0].item():.1f}", flush=True)
         
         # --- 4. Transition Logic ---
-        can_continue = (self.episode_manager.goal_count[env_ids] < self.episode_manager.max_goals) & ~self.episode_manager.bob_ever_failed[env_ids]
+        # Paper: Alice continues for all max_goals_per_episode goals even if Bob fails some.
+        # `bob_ever_failed` was preventing Alice from proposing further goals after the first failure,
+        # which starves Alice of reward signal and breaks the adversarial curriculum.
+        can_continue = self.episode_manager.goal_count[env_ids] < self.episode_manager.max_goals
         
         # Bob -> Alice (next goal)
         continue_ids = env_ids[can_continue]

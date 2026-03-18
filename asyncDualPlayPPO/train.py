@@ -73,6 +73,7 @@ def main():
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
+    from asyncDualPlayPPO.utils.historical_pool import HistoricalPolicyPool
     # Import reward constants so train.py stays in sync with rewards.py.
     # Do not hardcode reward values here — change them in rewards.py instead.
     from asyncDualPlayPPO.tasks.utils.rewards import (
@@ -86,10 +87,37 @@ def main():
     task_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/task/AsyncDualPlay.yaml")
     ppo_cfg_path  = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
     ppo_cfg = load_cfg(ppo_cfg_path)
-    
+
     if args.nsteps is not None:
         print(f"[Config] Overriding nsteps: {ppo_cfg['params']['learn']['nsteps']} -> {args.nsteps}")
         ppo_cfg["params"]["learn"]["nsteps"] = args.nsteps
+
+    # --- Multi-categorical action space config ---
+    _pol_cfg     = ppo_cfg["params"]["policy"]
+    use_mc       = _pol_cfg.get("use_multicategorical", False)
+    num_cat_dims = _pol_cfg.get("num_cat_dims", 4)
+    num_bins     = _pol_cfg.get("num_bins", 11)
+    max_delta_m  = _pol_cfg.get("max_delta_m", 0.05)
+    if use_mc:
+        print(f"[Config] Multi-categorical action space: {num_cat_dims} dims × {num_bins} bins "
+              f"(max delta {max_delta_m*100:.1f} cm, bin size {max_delta_m*100/(num_bins-1)*10:.1f} mm)")
+
+    def bins_to_env_action(bin_indices: "torch.Tensor") -> "torch.Tensor":
+        """
+        Convert policy bin indices (N, 4) → 7D RMPFlow+gripper env action.
+
+        Mapping: delta = (bin - center) / center * max_delta_m
+          - Dims 0-2 (X,Y,Z): go to arm_action positions 0-2
+          - Dims 3-5 (rotation): fixed at 0  ← orientation held constant by RMPFlow
+          - Dim 6 (Gripper): goes to BinaryJointPosition threshold (sign → open/close)
+        """
+        center     = (num_bins - 1) / 2.0
+        normalized = (bin_indices.float() - center) / center   # [-1, 1]
+        deltas     = normalized * max_delta_m                  # [-max_delta_m, +max_delta_m]
+        xyz        = deltas[:, :3]
+        gripper    = deltas[:, 3:4]
+        zeros3     = torch.zeros(bin_indices.shape[0], 3, device=bin_indices.device)
+        return torch.cat([xyz, zeros3, gripper], dim=-1)       # (N, 7)
 
     env_cfg = AsyncDualPlayEnvCfg()
     env_cfg.scene.num_envs = args.num_envs
@@ -113,6 +141,15 @@ def main():
     )
     alice_ppo.observation_space = env.alice_observation_space
     alice_ppo.state_space = alice_ppo.observation_space
+
+    # Override action space: policy operates on bin indices (4D), not the 7D env action
+    if use_mc:
+        import gymnasium as gym_mc
+        _mc_space = gym_mc.spaces.Box(low=0.0, high=float(num_bins - 1),
+                                       shape=(num_cat_dims,), dtype=np.float32)
+        alice_ppo.action_space = _mc_space
+        alice_ppo.desired_kl   = None   # adaptive KL meaningless for discrete
+
     alice_ppo.actor_critic = alice_ppo.actor_critic.__class__(
         alice_ppo.observation_space.shape,
         alice_ppo.state_space.shape,
@@ -147,6 +184,11 @@ def main():
     )
     bob_ppo.observation_space = env.bob_observation_space
     bob_ppo.state_space = bob_ppo.observation_space
+
+    if use_mc:
+        bob_ppo.action_space = _mc_space   # same 4D bin space as Alice
+        bob_ppo.desired_kl   = None
+
     bob_ppo.actor_critic = bob_ppo.actor_critic.__class__(
         bob_ppo.observation_space.shape,
         bob_ppo.state_space.shape,
@@ -171,13 +213,35 @@ def main():
     )
     
     # ABC Buffer for Alice's successful demonstrations
+    # actions_shape must match policy action dim (4D bin indices for MC, 7D for Gaussian)
+    _abc_act_shape = (num_cat_dims,) if use_mc else env.action_space.shape
     bob_ppo.abc_buffer = GPUDemonstrationBuffer(
         capacity=100000,
         obs_shape=env.bob_observation_space.shape,
         states_shape=env.bob_observation_space.shape,
-        actions_shape=env.action_space.shape,
+        actions_shape=_abc_act_shape,
         device=env.device,
     )
+
+    # --- LSTM hidden state management (Fix 4) ---
+    # act_with_hidden() is always used; for non-LSTM models it returns None hidden.
+    _use_lstm = alice_ppo.actor_critic.use_lstm
+    if _use_lstm:
+        _lsz = alice_ppo.actor_critic.lstm_hidden_size
+        alice_hidden = [torch.zeros(env.num_envs, _lsz, device=env.device),
+                        torch.zeros(env.num_envs, _lsz, device=env.device)]
+        bob_hidden   = [torch.zeros(env.num_envs, _lsz, device=env.device),
+                        torch.zeros(env.num_envs, _lsz, device=env.device)]
+    else:
+        alice_hidden = None
+        bob_hidden   = None
+
+    # --- Historical policy pool (Fix 6) ---
+    # Paper: 20% of rollout envs use a past Alice/Bob policy for stability.
+    alice_pool = HistoricalPolicyPool(max_size=5)
+    bob_pool   = HistoricalPolicyPool(max_size=5)
+    HIST_SAVE_INTERVAL = 50  # save snapshot every N bob_updates
+    HIST_FRAC          = 0.2  # fraction of envs using historical policy
 
     # --- Agents ---
     alice_updates = 0
@@ -243,8 +307,9 @@ def main():
         with torch.no_grad():
             _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_bob_obs, None)
         
-        # Dynamic ABC weight decay: 0.1 -> 0.01 over max_iterations
-        bob_ppo.abc_coef = max(0.01, 0.1 * (1.0 - (bob_updates / args.max_iterations)))
+        # Dynamic ABC weight decay: 0.5 -> 0.01 over max_iterations
+        _abc_coef_init = ppo_cfg["params"]["learn"].get("abc_coef", 0.5)
+        bob_ppo.abc_coef = max(0.01, _abc_coef_init * (1.0 - (bob_updates / args.max_iterations)))
         
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
         loss_val, loss_surr, loss_abc, _ = bob_ppo.update()
@@ -291,6 +356,21 @@ def main():
 
     while bob_updates < args.max_iterations:
         
+        # --- 0. SETUP: reset LSTM hidden states and snapshot policies ---
+        if alice_hidden is not None:
+            alice_hidden[0].zero_()
+            alice_hidden[1].zero_()
+        if bob_hidden is not None:
+            bob_hidden[0].zero_()
+            bob_hidden[1].zero_()
+
+        # Periodically snapshot current policies to historical pool (Fix 6)
+        if bob_updates > 0 and bob_updates % HIST_SAVE_INTERVAL == 0:
+            alice_pool.add(alice_ppo.actor_critic)
+            bob_pool.add(bob_ppo.actor_critic)
+            print(f"  [HistPool] Saved snapshot at iter {bob_updates} "
+                  f"(alice pool={alice_pool.size}, bob pool={bob_pool.size})", flush=True)
+
         # --- 0. CURRICULUM UPDATE ---
         # Slowly increase Alice's horizon so Bob isn't overwhelmed with max-distance goals at iteration 0
         curriculum_steps = min(target_alice_timesteps, 100 + int(bob_updates * (target_alice_timesteps / 200.0)))
@@ -314,39 +394,105 @@ def main():
         alice_traj_obs = [] # list of (num_envs, obs_dim)
         alice_traj_act = [] # list of (num_envs, act_dim)
 
+        # Sample a historical Alice policy for ~20% of envs (Fix 6)
+        hist_alice = alice_pool.sample_policy(alice_ppo.actor_critic, env.device) if alice_pool.size > 0 else None
+
         for t in range(env.episode_manager.alice_timesteps):
             # Capture where we are in alice phase
             is_alice = env.episode_manager.is_alice_phase()
             alice_indices = torch.where(is_alice)[0]
-            
+
             if len(alice_indices) == 0:
                 break
 
+            # Split active envs: hist_ids use saved policy, curr_ids use current
+            hist_ids, curr_ids = alice_pool.sample_env_subset(alice_indices, frac=HIST_FRAC)
+
             with torch.no_grad():
-                # Slice Alice dims (38)
-                a_acts_active, a_logprob_active, a_val_active, a_mu_active, a_sigma_active = alice_ppo.actor_critic.act(current_alice_obs[alice_indices], None)
-            
+                # Current Alice (majority)
+                h_in = (alice_hidden[0][curr_ids], alice_hidden[1][curr_ids]) if alice_hidden else None
+                a_acts_curr, a_logprob_curr, a_val_curr, a_mu_curr, a_sigma_curr, new_h = \
+                    alice_ppo.actor_critic.act_with_hidden(current_alice_obs[curr_ids], None, h_in)
+                if alice_hidden and new_h is not None:
+                    alice_hidden[0][curr_ids] = new_h[0]
+                    alice_hidden[1][curr_ids] = new_h[1]
+
+                # Historical Alice (minority, no grad tracking needed)
+                if len(hist_ids) > 0 and hist_alice is not None:
+                    a_acts_hist, a_logprob_hist, a_val_hist, a_mu_hist, a_sigma_hist, _ = \
+                        hist_alice.act_with_hidden(current_alice_obs[hist_ids], None, None)
+                else:
+                    # Fallback to current if no history yet
+                    hist_ids = torch.tensor([], dtype=torch.long, device=env.device)
+                    a_acts_hist = a_logprob_hist = a_val_hist = a_mu_hist = a_sigma_hist = None
+
+            # Policy action dim: 4 bin indices (MC) or 7 continuous (Gaussian)
+            _a_pdim = num_cat_dims if use_mc else env.action_space.shape[0]
+
+            # Merge curr + hist actions into full alice_indices tensors
+            a_acts_active    = torch.zeros((len(alice_indices), _a_pdim), device=env.device)
+            a_logprob_active = torch.zeros(len(alice_indices), device=env.device)
+            a_val_active     = torch.zeros(len(alice_indices), 1, device=env.device)
+            a_mu_active      = torch.zeros_like(a_acts_active)
+            a_sigma_active   = torch.zeros_like(a_acts_active)
+
+            curr_local = torch.searchsorted(alice_indices, curr_ids)
+            a_acts_active[curr_local]    = a_acts_curr
+            a_logprob_active[curr_local] = a_logprob_curr
+            a_val_active[curr_local]     = a_val_curr
+            a_mu_active[curr_local]      = a_mu_curr
+            a_sigma_active[curr_local]   = a_sigma_curr
+
+            if len(hist_ids) > 0 and a_acts_hist is not None:
+                hist_local = torch.searchsorted(alice_indices, hist_ids)
+                a_acts_active[hist_local]    = a_acts_hist
+                a_logprob_active[hist_local] = a_logprob_hist
+                a_val_active[hist_local]     = a_val_hist
+                a_mu_active[hist_local]      = a_mu_hist
+                a_sigma_active[hist_local]   = a_sigma_hist
+
             alice_traj_obs.append(current_alice_obs.clone())
-            
-            # Action mapping
-            a_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
-            a_acts[alice_indices] = a_acts_active
-            alice_traj_act.append(a_acts.clone())
-            
-            obs_full, rewards, dones, truncated, extras = env.step(a_acts)
-            
+
+            # Policy actions for storage/ABC (bin indices or continuous)
+            a_policy = torch.zeros((env.num_envs, _a_pdim), device=env.device)
+            a_policy[alice_indices] = a_acts_active
+            alice_traj_act.append(a_policy.clone())   # ABC buffer gets bin indices
+
+            # Full-env tensors for storage (non-active envs get zeros)
+            a_lp_full    = torch.zeros(env.num_envs, device=env.device)
+            a_val_full   = torch.zeros(env.num_envs, 1, device=env.device)
+            a_mu_full    = torch.zeros((env.num_envs, _a_pdim), device=env.device)
+            a_sigma_full = torch.zeros((env.num_envs, _a_pdim), device=env.device)
+            a_lp_full[alice_indices]    = a_logprob_active
+            a_val_full[alice_indices]   = a_val_active
+            a_mu_full[alice_indices]    = a_mu_active
+            a_sigma_full[alice_indices] = a_sigma_active
+
+            # 7D env action for RMPFlow: convert bins → deltas, zero-pad rotation
+            if use_mc:
+                a_env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+                a_env_full[alice_indices] = bins_to_env_action(a_acts_active)
+            else:
+                a_env_full = a_policy   # already 7D continuous
+
+            obs_full, rewards, dones, truncated, extras = env.step(a_env_full)
+
+            # Reset LSTM hidden state for envs that terminated (Fix 4)
+            if alice_hidden is not None:
+                done_alice = alice_indices[dones[alice_indices]]
+                if len(done_alice) > 0:
+                    alice_hidden[0][done_alice] = 0.0
+                    alice_hidden[1][done_alice] = 0.0
+
             # Storage masking
             a_masks = torch.zeros(env.num_envs, 1, device=env.device)
             a_masks[alice_indices[~dones[alice_indices]]] = 1.0
 
-            # Store transitions for Alice (38 dims)
+            # Store policy actions (bins) and real log_probs/values for PPO update
             next_alice_obs = obs_full[:, :env.alice_obs_dim]
             alice_ppo.storage.add_transitions(
-                current_alice_obs, next_alice_obs, a_acts, rewards, dones, 
-                torch.zeros(env.num_envs, 1, device=env.device), # dummy values for Alice
-                torch.zeros(env.num_envs, 1, device=env.device), # dummy logprobs
-                torch.zeros_like(a_acts), torch.zeros_like(a_acts), # mus, sigmas
-                a_masks
+                current_alice_obs, next_alice_obs, a_policy, rewards, dones,
+                a_val_full, a_lp_full, a_mu_full, a_sigma_full, a_masks
             )
             current_alice_obs = next_alice_obs
 
@@ -373,34 +519,92 @@ def main():
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_bob_obs = obs[:, env.alice_obs_dim:]
         
+        # Sample a historical Bob policy for ~20% of envs (Fix 6)
+        hist_bob = bob_pool.sample_policy(bob_ppo.actor_critic, env.device) if bob_pool.size > 0 else None
+
         for t in range(env.episode_manager.bob_timesteps):
             is_bob = env.episode_manager.is_bob_phase()
             bob_indices = torch.where(is_bob)[0]
             if len(bob_indices) == 0: break
 
-            # Slice Bob dims (56)
+            # Split active envs: hist_ids use saved policy, curr_ids use current (Fix 6)
+            hist_bids, curr_bids = bob_pool.sample_env_subset(bob_indices, frac=HIST_FRAC)
+
             bob_obs_active = current_bob_obs[bob_indices]
+
             with torch.no_grad():
-                b_acts_active, b_logprob_active, b_val_active, b_mu_active, b_sigma_active = bob_ppo.actor_critic.act(bob_obs_active, None)
-            
-            b_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
-            b_acts[bob_indices] = b_acts_active
-            obs_full, rewards, dones, truncated, extras = env.step(b_acts)
-            
+                # Current Bob (majority)
+                h_in = (bob_hidden[0][curr_bids], bob_hidden[1][curr_bids]) if bob_hidden else None
+                b_acts_curr, b_lp_curr, b_val_curr, b_mu_curr, b_sig_curr, new_bh = \
+                    bob_ppo.actor_critic.act_with_hidden(current_bob_obs[curr_bids], None, h_in)
+                if bob_hidden and new_bh is not None:
+                    bob_hidden[0][curr_bids] = new_bh[0]
+                    bob_hidden[1][curr_bids] = new_bh[1]
+
+                # Historical Bob (minority)
+                if len(hist_bids) > 0 and hist_bob is not None:
+                    b_acts_hist, b_lp_hist, b_val_hist, b_mu_hist, b_sig_hist, _ = \
+                        hist_bob.act_with_hidden(current_bob_obs[hist_bids], None, None)
+                else:
+                    hist_bids = torch.tensor([], dtype=torch.long, device=env.device)
+                    b_acts_hist = b_lp_hist = b_val_hist = b_mu_hist = b_sig_hist = None
+
+            # Policy action dim: 4 bin indices (MC) or 7 continuous (Gaussian)
+            _b_pdim = num_cat_dims if use_mc else env.action_space.shape[0]
+
+            # Merge curr + hist into full bob_indices tensors
+            b_acts_active    = torch.zeros((len(bob_indices), _b_pdim), device=env.device)
+            b_logprob_active = torch.zeros(len(bob_indices), device=env.device)
+            b_val_active     = torch.zeros(len(bob_indices), 1, device=env.device)
+            b_mu_active      = torch.zeros_like(b_acts_active)
+            b_sigma_active   = torch.zeros_like(b_acts_active)
+
+            curr_bloc = torch.searchsorted(bob_indices, curr_bids)
+            b_acts_active[curr_bloc]    = b_acts_curr
+            b_logprob_active[curr_bloc] = b_lp_curr
+            b_val_active[curr_bloc]     = b_val_curr
+            b_mu_active[curr_bloc]      = b_mu_curr
+            b_sigma_active[curr_bloc]   = b_sig_curr
+
+            if len(hist_bids) > 0 and b_acts_hist is not None:
+                hist_bloc = torch.searchsorted(bob_indices, hist_bids)
+                b_acts_active[hist_bloc]    = b_acts_hist
+                b_logprob_active[hist_bloc] = b_lp_hist
+                b_val_active[hist_bloc]     = b_val_hist
+                b_mu_active[hist_bloc]      = b_mu_hist
+                b_sigma_active[hist_bloc]   = b_sig_hist
+
+            # 7D env action for RMPFlow
+            if use_mc:
+                b_env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+                b_env_full[bob_indices] = bins_to_env_action(b_acts_active)
+            else:
+                b_env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+                b_env_full[bob_indices] = b_acts_active
+
+            obs_full, rewards, dones, truncated, extras = env.step(b_env_full)
+
             bob_done_this_step = extras.get("bob_done_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
             ended_for_bob = dones | bob_done_this_step
             b_masks = torch.zeros(env.num_envs, 1, device=env.device)
             b_masks[bob_indices[~ended_for_bob[bob_indices]]] = 1.0
-            
-            # Storage-ready tensors
-            _obs = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device); _obs[bob_indices] = bob_obs_active
-            _next_obs = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device); _next_obs[bob_indices] = obs_full[bob_indices, env.alice_obs_dim:]
-            _acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device); _acts[bob_indices] = b_acts_active
-            _rew = torch.zeros(env.num_envs, device=env.device); _rew[bob_indices] = rewards[bob_indices]
-            _val = torch.zeros(env.num_envs, 1, device=env.device); _val[bob_indices] = b_val_active
-            _lp = torch.zeros(env.num_envs, 1, device=env.device); _lp[bob_indices] = b_logprob_active.unsqueeze(1)
-            _mu = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device); _mu[bob_indices] = b_mu_active
-            _sigma = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device); _sigma[bob_indices] = b_sigma_active
+
+            # Storage-ready tensors — policy actions (bins) stored, not env actions
+            _obs     = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device);  _obs[bob_indices]     = bob_obs_active
+            _next_obs= torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device);  _next_obs[bob_indices]= obs_full[bob_indices, env.alice_obs_dim:]
+            _acts    = torch.zeros((env.num_envs, _b_pdim),          device=env.device);  _acts[bob_indices]    = b_acts_active
+            _rew     = torch.zeros(env.num_envs, device=env.device);                       _rew[bob_indices]     = rewards[bob_indices]
+            _val     = torch.zeros(env.num_envs, 1, device=env.device);                   _val[bob_indices]     = b_val_active
+            _lp      = torch.zeros(env.num_envs, 1, device=env.device);                   _lp[bob_indices]      = b_logprob_active.unsqueeze(1)
+            _mu      = torch.zeros((env.num_envs, _b_pdim),          device=env.device);  _mu[bob_indices]      = b_mu_active
+            _sigma   = torch.zeros((env.num_envs, _b_pdim),          device=env.device);  _sigma[bob_indices]   = b_sigma_active
+
+            # Reset LSTM hidden state for terminated envs (Fix 4)
+            if bob_hidden is not None:
+                done_bob = bob_indices[dones[bob_indices]]
+                if len(done_bob) > 0:
+                    bob_hidden[0][done_bob] = 0.0
+                    bob_hidden[1][done_bob] = 0.0
 
             bob_ppo.storage.add_transitions(_obs, _next_obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
             current_bob_obs = obs_full[:, env.alice_obs_dim:]
@@ -409,9 +613,12 @@ def main():
         # --- 3. ALICE BEHAVIORAL CLONING (ABC) BUFFER PUSH ---
         goal_valid = env.episode_manager.goal_valid
         bob_success = env.episode_manager.bob_success
-        
+
+        # Paper: ABC demos added ONLY when Bob failed (ξ=False).
+        # When Bob succeeds, Alice's trajectory is already learnable — no demo needed.
+        # Providing demos on success wastes buffer capacity and dilutes the BC signal.
         if goal_valid.any():
-            valid_ids = torch.where(goal_valid)[0]
+            valid_ids = torch.where(goal_valid & ~bob_success)[0]
             for env_id in valid_ids:
                 eid = env_id.item()
                 # Construct demo trajectory
@@ -425,11 +632,16 @@ def main():
                 # Bob-compatible obs: robot (8) + objects (30) + goal (14) + dist (4) = 56
                 bc_obs = env.construct_bob_observation(traj_o, g)
                 
-                # Add to ABC buffer for supervised learning
+                # Evaluate Bob's CURRENT policy on Alice's demo to get old_log_probs
+                # for PPO-style ratio clipping in ppo_abc.py (prevents stale-demo update explosion)
+                with torch.no_grad():
+                    old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(bc_obs, None, traj_a)
+
+                # Add to ABC buffer with old_log_probs for ratio clipping
                 bob_ppo.abc_buffer.add_trajectory(
-                    bc_obs, bc_obs, traj_a, 
+                    bc_obs, bc_obs, traj_a,
                     torch.zeros(len(traj_o), device=env.device), torch.zeros(len(traj_o), device=env.device).byte(),
-                    torch.zeros(len(traj_o), device=env.device), torch.zeros(len(traj_o), 1, device=env.device),
+                    torch.zeros(len(traj_o), device=env.device), old_lp.view(-1, 1),
                     torch.zeros_like(traj_a), torch.zeros_like(traj_a),
                     torch.zeros(len(traj_o), 1, device=env.device), torch.zeros(len(traj_o), 1, device=env.device)
                 )
@@ -451,8 +663,11 @@ def main():
             
             alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
-        # Metrics for the iteration
-        current_sr = bob_success.float().mean().item()
+        # Per-goal success rate: successes / goals_attempted across all envs this iteration
+        # (Paper metric: ξ tracks cumulative per-goal outcomes, not per-episode boolean)
+        total_attempted = env.episode_manager.goals_attempted.sum().item()
+        total_succeeded = env.episode_manager.goals_succeeded.sum().item()
+        current_sr = total_succeeded / max(1, total_attempted)
         bob_success_buf.append(current_sr)
         
         # Perform Updates

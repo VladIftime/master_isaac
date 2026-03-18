@@ -2,7 +2,10 @@ params:
   learn:
     optim_stepsize: 3.0e-4
     schedule: fixed
-    desired_kl: 0.016
+    # desired_kl is only valid for Gaussian policies.
+    # With use_multicategorical: true it must be null (set to null here and
+    # also disabled per-agent in train.py for safety).
+    desired_kl: null
     # init_noise_std: 1.0 ensures PPO gradients are mathematically stable (scale 1.0).
     # Physical scaling (e.g. 5cm exploration) is now handled in wrapper.py to prevent 
     # the 1/sigma^2 gradient explosion.
@@ -11,7 +14,7 @@ params:
 
     # PPO params
     cliprange: 0.2
-    noptepochs: 5
+    noptepochs: 3
     nminibatches: 4
 
     # Lowered to prevent entropy bonus from pushing large Cartesian deltas.
@@ -22,10 +25,36 @@ params:
     value_loss_coef: 1.0
 
     # Alice Behavioral Cloning (ABC) params
-    abc_coef: 0.1
+    # Paper uses β=0.5; was 0.1 which underweights BC signal
+    abc_coef: 0.5
     abc_batch_size: 2048
 
   policy:
     pi_hid_sizes: [512, 256, 128]
     vf_hid_sizes: [512, 256, 128]
     activation: elu
+
+    # --- Multi-categorical action space (paper approach) ---
+    # Actor outputs num_cat_dims × num_bins logits → MultiCategorical distribution.
+    # Policy action = 4 bin indices (X, Y, Z, Gripper).
+    # train.py converts bins → continuous deltas → zero-pads rotation → feeds RMPFlow.
+    #
+    # Bin layout (11 bins, max_delta_m = 0.05 m/step):
+    #   bin 0  → -0.05 m   (full negative)
+    #   bin 5  →  0.00 m   (no movement)
+    #   bin 10 → +0.05 m   (full positive)
+    #   resolution = 0.10 m / 10 bins = 1 cm per bin  ✓
+    use_multicategorical: true
+    num_cat_dims: 4       # X, Y, Z, Gripper
+    num_bins: 11          # bins per dimension (paper uses 11)
+    max_delta_m: 0.05     # per-step max translation delta (matches arm_action scale)
+
+    # Fix 4 — LSTM recurrent policy (paper uses LSTM; set true to enable)
+    use_lstm: false
+    lstm_hidden_size: 256
+
+    # Fix 7 — Permutation-invariant object encoder
+    use_pi_encoder: false
+    robot_state_dim: 8
+    pi_obj_dim: 15
+    pi_emb_dim: 512

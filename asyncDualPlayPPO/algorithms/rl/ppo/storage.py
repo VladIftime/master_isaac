@@ -136,6 +136,11 @@ class GPUDemonstrationBuffer:
         self.step = 0
         self.full = False
 
+    @property
+    def size(self) -> int:
+        """Number of valid entries currently in the buffer."""
+        return self.capacity if self.full else self.step
+
     def add_trajectory(self, obs, states, acts, rews, dones, vals, log_probs, mus, sigmas, ret, adv):
         """Add a full trajectory or sequence of steps"""
         n = obs.size(0)

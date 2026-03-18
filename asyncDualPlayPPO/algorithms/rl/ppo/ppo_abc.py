@@ -112,17 +112,22 @@ class PPOABC(PPO):
                     entropy_mean   = torch.tensor(0.0, device=self.device)
 
                 # --- ABC (Alice Behavioral Cloning) Loss ---
+                # Paper: apply PPO-style ratio clipping to the BC loss.
+                # ratio = π_Bob_current(a|s) / π_Bob_old(a|s)  (old = policy at demo-collection time)
+                # bc_loss = -min(ratio, clip(ratio, 1-ε, 1+ε)).mean()
+                # This prevents large BC updates from stale demonstrations.
                 bc_loss = torch.tensor(0.0, device=self.device)
                 if self.abc_buffer is not None and self.abc_buffer.size > 0:
                     sample = self.abc_buffer.sample(abc_batch_size)
                     if sample is not None:
                         bc_obs, bc_states, bc_act = sample[0], sample[1], sample[2]
+                        old_bc_log_probs = sample[5].squeeze(-1)  # stored at collection time
                         if bc_obs.shape[0] > 0:
-                            # Evaluate Bob's policy on Alice's trajectories
-                            # None for states as ABC demonstrations are environment-obs based
                             abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(bc_obs, None, bc_act)
-                            # Negative Log-Likelihood loss
-                            bc_loss = -abc_log_probs.mean()
+                            # PPO-style clipped BC loss (treat all demo advantages as +1)
+                            ratio = torch.exp(abc_log_probs - old_bc_log_probs)
+                            clipped = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param)
+                            bc_loss = -torch.min(ratio, clipped).mean()
                         mean_bc_loss += bc_loss.item()
 
                 loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_mean + self.abc_coef * bc_loss

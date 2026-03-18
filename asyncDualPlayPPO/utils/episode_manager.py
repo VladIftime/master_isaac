@@ -64,6 +64,10 @@ class EpisodeManager:
         self.completion_given = torch.zeros(num_envs, dtype=torch.bool, device=device)  # Tracks if +5 bonus was given
         self.max_contact_force = torch.zeros(num_envs, device=device)  # Track contact forces for Safe-State HER
         self.bob_success_this_step = torch.zeros(num_envs, dtype=torch.bool, device=device)
+
+        # Per-goal success rate tracking (paper metric: successes / goals_attempted across full episode)
+        self.goals_attempted = torch.zeros(num_envs, dtype=torch.int32, device=device)
+        self.goals_succeeded = torch.zeros(num_envs, dtype=torch.int32, device=device)
         
         print(f"[EpisodeManager] Initialized for {num_envs} envs", flush=True)
         print(f"  Alice timesteps: {alice_timesteps}", flush=True)
@@ -164,6 +168,8 @@ class EpisodeManager:
         self.max_contact_force[env_ids] = 0.0
         if self.prev_obj_success is not None:
              self.prev_obj_success[env_ids] = False
+        self.goals_attempted[env_ids] = 0
+        self.goals_succeeded[env_ids] = 0
     
     def store_initial_state(self, state: torch.Tensor):
         """Store initial state at start of episode"""
@@ -185,6 +191,9 @@ class EpisodeManager:
         # Track if Bob ever failed in this episode (for goal skipping logic)
         failed = ~success
         self.bob_ever_failed[env_ids] = self.bob_ever_failed[env_ids] | failed
+        # Per-goal counters for success-rate metric (paper: successes / goals_attempted)
+        self.goals_attempted[env_ids] += 1
+        self.goals_succeeded[env_ids] += success.int()
     
     def should_reset(self) -> torch.Tensor:
         """Check which environments should reset"""
