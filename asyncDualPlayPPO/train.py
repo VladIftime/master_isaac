@@ -1,6 +1,7 @@
 import isaaclab.app
 from isaaclab.app import AppLauncher
 
+import math
 import os
 import sys
 import yaml
@@ -46,8 +47,10 @@ def main():
     parser.add_argument("--nsteps", type=int, default=None, help="Override rollout steps per env (to prevent OOM on high num_envs)")
     parser.add_argument("--max_iterations", type=int, default=1000)
     parser.add_argument("--save_interval", type=int, default=50)
-    parser.add_argument("--max_alice_bob_ratio", type=int, default=5,
-                        help="Max Alice PPO updates per Bob update (prevents non-stationarity)")
+    parser.add_argument("--max_alice_bob_ratio", type=int, default=None,
+                        help="Max consecutive Bob-only updates before forcing an Alice update. "
+                             "Auto-computed as ceil(bob_timesteps / alice_timesteps) * max(1, 64 // num_envs) "
+                             "if not specified.")
     parser.add_argument("--chkpt_alice", type=str, default=None)
     parser.add_argument("--chkpt_bob", type=str, default=None)
     parser.add_argument(
@@ -179,7 +182,19 @@ def main():
     # --- Agents ---
     alice_updates = 0
     bob_updates   = 0
-    max_alice_bob_ratio = args.max_alice_bob_ratio
+    consecutive_alice_skips = 0
+
+    # Resolve max_alice_bob_ratio: if not provided, derive from episode timesteps and num_envs.
+    # bob_timesteps / alice_timesteps gives the base ratio (Bob needs proportionally more gradient steps).
+    # The num_envs factor scales it down: more envs → more samples per iteration → Bob catches up faster.
+    if args.max_alice_bob_ratio is None:
+        _bob_ts   = env.episode_manager.bob_timesteps
+        _alice_ts = env.episode_manager.alice_timesteps
+        max_alice_bob_ratio = max(2, math.ceil(_bob_ts / _alice_ts) * max(1, 64 // args.num_envs))
+        print(f"[Config] max_alice_bob_ratio auto-computed: {max_alice_bob_ratio} "
+              f"(bob_ts={_bob_ts}, alice_ts={_alice_ts}, num_envs={args.num_envs})")
+    else:
+        max_alice_bob_ratio = args.max_alice_bob_ratio
 
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
@@ -441,11 +456,19 @@ def main():
         bob_success_buf.append(current_sr)
         
         # Perform Updates
-        # Freeze Alice if Bob is struggling (< 10% SR) to let him catch up
-        if current_sr >= 0.10 or bob_updates < 10:
+        # Freeze Alice if Bob is struggling (< 10% SR), but force an Alice update after
+        # max_alice_bob_ratio consecutive skips to prevent Alice from going stale.
+        force_alice = consecutive_alice_skips >= max_alice_bob_ratio
+        if current_sr >= 0.10 or bob_updates < 10 or force_alice:
+            if force_alice and current_sr < 0.10:
+                print(f"  [Alice Update] Forced after {consecutive_alice_skips} skips "
+                      f"(ratio={max_alice_bob_ratio}). Bob SR={current_sr:.2f}", flush=True)
             perform_alice_update()
+            consecutive_alice_skips = 0
         else:
-            print(f"  [Alice Update] Skipped. Bob SR ({current_sr:.2f}) < 0.10. Letting Bob catch up.", flush=True)
+            consecutive_alice_skips += 1
+            print(f"  [Alice Update] Skipped ({consecutive_alice_skips}/{max_alice_bob_ratio}). "
+                  f"Bob SR ({current_sr:.2f}) < 0.10. Letting Bob catch up.", flush=True)
             alice_ppo.storage.clear()
             
         perform_bob_update(current_bob_obs)
