@@ -178,7 +178,7 @@ class AsyncDualPlayEnvWrapper:
             is_alice = self.episode_manager.is_alice_phase()
 
             # the active boolean tensors for each termination condition.
-            term_dones = self.env.termination_manager.term_dones
+            term_dones = self.env.termination_manager._term_dones
             
             for env_id in reset_ids:
                 # Skip timeout resets — only penalize hard terminations

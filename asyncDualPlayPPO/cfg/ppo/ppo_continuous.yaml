@@ -39,15 +39,19 @@ params:
     # Policy action = 4 bin indices (X, Y, Z, Gripper).
     # train.py converts bins → continuous deltas → zero-pads rotation → feeds RMPFlow.
     #
-    # Bin layout (11 bins, max_delta_m = 0.05 m/step):
-    #   bin 0  → -0.05 m   (full negative)
-    #   bin 5  →  0.00 m   (no movement)
-    #   bin 10 → +0.05 m   (full positive)
-    #   resolution = 0.10 m / 10 bins = 1 cm per bin  ✓
+    # Bin layout (11 bins, max_delta_m = 1.0):
+    #   Policy outputs [-1, +1] normalized deltas, env scale=0.05 → 5 cm/step max.
+    #   bin 0  → -1.0  (env: -0.05 m = -5 cm)
+    #   bin 5  →  0.0  (no movement)
+    #   bin 10 → +1.0  (env: +0.05 m = +5 cm)
+    #   resolution = 2.0 / 10 bins × 0.05 scale = 1 cm per bin  ✓
+    #
+    #   Gripper dim is mapped to sign(-1/0/+1) in bins_to_env_action, NOT a continuous delta,
+    #   to prevent rapid open/close oscillation with BinaryJointPositionActionCfg.
     use_multicategorical: true
     num_cat_dims: 4       # X, Y, Z, Gripper
     num_bins: 11          # bins per dimension (paper uses 11)
-    max_delta_m: 0.05     # per-step max translation delta (matches arm_action scale)
+    max_delta_m: 2.0      # normalized delta fed to env (env scale=0.05 → 5 cm/step at bin 0/10)
 
     # Fix 4 — LSTM recurrent policy (paper uses LSTM; set true to enable)
     use_lstm: false

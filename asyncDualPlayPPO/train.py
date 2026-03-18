@@ -102,22 +102,31 @@ def main():
         print(f"[Config] Multi-categorical action space: {num_cat_dims} dims × {num_bins} bins "
               f"(max delta {max_delta_m*100:.1f} cm, bin size {max_delta_m*100/(num_bins-1)*10:.1f} mm)")
 
-    def bins_to_env_action(bin_indices: "torch.Tensor") -> "torch.Tensor":
+    def bins_to_env_action(bin_indices: "torch.Tensor", gripper_state: "torch.Tensor") -> "torch.Tensor":
         """
         Convert policy bin indices (N, 4) → 7D RMPFlow+gripper env action.
 
-        Mapping: delta = (bin - center) / center * max_delta_m
-          - Dims 0-2 (X,Y,Z): go to arm_action positions 0-2
-          - Dims 3-5 (rotation): fixed at 0  ← orientation held constant by RMPFlow
-          - Dim 6 (Gripper): goes to BinaryJointPosition threshold (sign → open/close)
+        XYZ: delta = (bin - center) / center * max_delta_m
+          env scale=0.05 → 5 cm/step at max bin.
+
+        Gripper (sticky): only the outer bins trigger a state change.
+          Dead zone = center 3 bins (4/5/6) → keep previous gripper_state.
+          This prevents random-policy spassing at the start of training.
+          Threshold: bins 0-3 → close (-1), bins 4-6 → hold, bins 7-10 → open (+1)
         """
-        center     = (num_bins - 1) / 2.0
-        normalized = (bin_indices.float() - center) / center   # [-1, 1]
-        deltas     = normalized * max_delta_m                  # [-max_delta_m, +max_delta_m]
-        xyz        = deltas[:, :3]
-        gripper    = deltas[:, 3:4]
-        zeros3     = torch.zeros(bin_indices.shape[0], 3, device=bin_indices.device)
-        return torch.cat([xyz, zeros3, gripper], dim=-1)       # (N, 7)
+        center    = (num_bins - 1) / 2.0          # 5.0 for 11 bins
+        threshold = 2.0                            # ±2 bins from center triggers change
+        normalized = (bin_indices.float() - center) / center
+        xyz        = normalized[:, :3] * max_delta_m
+
+        g_bin      = bin_indices[:, 3].float()
+        new_gs     = gripper_state.clone()
+        new_gs[g_bin < center - threshold + 1] = -1.0   # bins 0-2  → close
+        new_gs[g_bin > center + threshold - 1] =  1.0   # bins 8-10 → open
+        # bins 3-7 → keep previous state
+
+        zeros3 = torch.zeros(bin_indices.shape[0], 3, device=bin_indices.device)
+        return torch.cat([normalized[:, :3] * max_delta_m, zeros3, new_gs], dim=-1), new_gs
 
     env_cfg = AsyncDualPlayEnvCfg()
     env_cfg.scene.num_envs = args.num_envs
@@ -235,6 +244,12 @@ def main():
     else:
         alice_hidden = None
         bob_hidden   = None
+
+    # --- Sticky gripper state ---
+    # Starts open (+1). Only outer bins (0-2 = close, 8-10 = open) change state;
+    # center bins (3-7) hold previous state to prevent random-policy spassing.
+    alice_gripper_state = torch.ones(env.num_envs, 1, device=env.device)
+    bob_gripper_state   = torch.ones(env.num_envs, 1, device=env.device)
 
     # --- Historical policy pool (Fix 6) ---
     # Paper: 20% of rollout envs use a past Alice/Bob policy for stability.
@@ -471,18 +486,21 @@ def main():
             # 7D env action for RMPFlow: convert bins → deltas, zero-pad rotation
             if use_mc:
                 a_env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
-                a_env_full[alice_indices] = bins_to_env_action(a_acts_active)
+                a_act_7d, new_ags = bins_to_env_action(a_acts_active, alice_gripper_state[alice_indices])
+                a_env_full[alice_indices] = a_act_7d
+                alice_gripper_state[alice_indices] = new_ags
             else:
                 a_env_full = a_policy   # already 7D continuous
 
             obs_full, rewards, dones, truncated, extras = env.step(a_env_full)
 
-            # Reset LSTM hidden state for envs that terminated (Fix 4)
+            # Reset LSTM hidden state and gripper state for envs that terminated
             if alice_hidden is not None:
                 done_alice = alice_indices[dones[alice_indices]]
                 if len(done_alice) > 0:
                     alice_hidden[0][done_alice] = 0.0
                     alice_hidden[1][done_alice] = 0.0
+            alice_gripper_state[alice_indices[dones[alice_indices]]] = 1.0  # reset to open
 
             # Storage masking
             a_masks = torch.zeros(env.num_envs, 1, device=env.device)
@@ -503,10 +521,14 @@ def main():
             settle_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
             env.env.step(settle_acts)
             
-        # Manually overwrite the goal states to the newly settled states
+        # Manually overwrite the goal states to the newly settled states.
+        # Apply the same 14D slice as wrapper._handle_alice_completion:
+        #   full state is (num_envs, 30) = 2 objects × 15 features
+        #   keep only pos+orient (first 7 per object) → (num_envs, 14)
         obs_dict = env.env.observation_manager.compute()
-        settled_goal_states = env._extract_object_states(obs_dict)
-        env.episode_manager.store_goal_state(settled_goal_states, torch.arange(env.num_envs, device=env.device))
+        settled_goal_states = env._extract_object_states(obs_dict)  # (N, 30)
+        settled_goal_states_14d = settled_goal_states.view(-1, 2, 15)[:, :, :7].reshape(-1, 14)
+        env.episode_manager.store_goal_state(settled_goal_states_14d, torch.arange(env.num_envs, device=env.device))
         
         # Alice Phase Done. Goal states extracted by wrapper during transition.
         goal_states = env.episode_manager.goal_states
@@ -577,7 +599,9 @@ def main():
             # 7D env action for RMPFlow
             if use_mc:
                 b_env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
-                b_env_full[bob_indices] = bins_to_env_action(b_acts_active)
+                b_act_7d, new_bgs = bins_to_env_action(b_acts_active, bob_gripper_state[bob_indices])
+                b_env_full[bob_indices] = b_act_7d
+                bob_gripper_state[bob_indices] = new_bgs
             else:
                 b_env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
                 b_env_full[bob_indices] = b_acts_active
@@ -599,12 +623,13 @@ def main():
             _mu      = torch.zeros((env.num_envs, _b_pdim),          device=env.device);  _mu[bob_indices]      = b_mu_active
             _sigma   = torch.zeros((env.num_envs, _b_pdim),          device=env.device);  _sigma[bob_indices]   = b_sigma_active
 
-            # Reset LSTM hidden state for terminated envs (Fix 4)
-            if bob_hidden is not None:
-                done_bob = bob_indices[dones[bob_indices]]
-                if len(done_bob) > 0:
-                    bob_hidden[0][done_bob] = 0.0
-                    bob_hidden[1][done_bob] = 0.0
+            # Reset LSTM hidden state and gripper state for terminated envs
+            done_bob = bob_indices[dones[bob_indices]]
+            if bob_hidden is not None and len(done_bob) > 0:
+                bob_hidden[0][done_bob] = 0.0
+                bob_hidden[1][done_bob] = 0.0
+            if len(done_bob) > 0:
+                bob_gripper_state[done_bob] = 1.0  # reset to open
 
             bob_ppo.storage.add_transitions(_obs, _next_obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
             current_bob_obs = obs_full[:, env.alice_obs_dim:]

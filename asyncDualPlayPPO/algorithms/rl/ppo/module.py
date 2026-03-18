@@ -229,18 +229,22 @@ class ActorCritic(nn.Module):
 
     def bins_to_delta(self, bin_indices: torch.Tensor) -> torch.Tensor:
         """
-        Convert integer bin indices (batch, num_cat_dims) to continuous deltas.
+        Convert integer bin indices (batch, num_cat_dims) to env-ready deltas.
 
-        Mapping:  delta = (bin - center) / center * max_delta
-          bin 0  →  -max_delta
-          bin 5  →   0.0
-          bin 10 → +max_delta
+        XYZ (dims 0-2): delta = (bin - center) / center * max_delta
+          bin 0  →  -max_delta,  bin 5 → 0.0,  bin 10 → +max_delta
+
+        Gripper (dim 3): sign of normalized → -1 / 0 / +1
+          Collapses continuous delta to three states so BinaryJointPositionActionCfg
+          does not oscillate between open/close on bins near center.
 
         Returns (batch, num_cat_dims) float tensor.
         """
-        center    = (self.num_bins - 1) / 2.0
-        normalized = (bin_indices.float() - center) / center   # [-1, 1]
-        return normalized * self.max_delta
+        center     = (self.num_bins - 1) / 2.0
+        normalized = (bin_indices.float() - center) / center        # [-1, 1]
+        xyz        = normalized[:, :3] * self.max_delta
+        gripper    = torch.sign(normalized[:, 3:4])                  # -1 / 0 / +1
+        return torch.cat([xyz, gripper], dim=-1)
 
     # ------------------------------------------------------------------
     # Public API
