@@ -10,11 +10,15 @@ not here, to keep them integer-valued and free of IsaacLab's dt-scaling.
 
 # Single source of truth for all Alice reward magnitudes.
 # Import these constants in train.py — never hardcode the values there.
-ALICE_BOB_FAIL_REWARD: float = 5.0       # Bob failed to reach the goal
-ALICE_BOB_SUCCESS_REWARD: float = 0.0    # Bob succeeded
-ALICE_VALID_GOAL_BONUS: float = 1.0      # Alice set a valid, in-zone goal
-ALICE_OUT_OF_ZONE_PENALTY: float = -3.0  # Alice's goal was valid but outside the placement area
-ALICE_INVALID_GOAL_PENALTY: float = 0.0  # Alice failed to move objects past threshold (invalid goal returns 0)
+ALICE_BOB_FAIL_REWARD: float = 5.0  # Bob failed to reach the goal
+ALICE_BOB_SUCCESS_REWARD: float = 0.0  # Bob succeeded
+ALICE_VALID_GOAL_BONUS: float = 1.0  # Alice set a valid, in-zone goal
+ALICE_OUT_OF_ZONE_PENALTY: float = (
+    -3.0
+)  # Alice's goal was valid but outside the placement area
+ALICE_INVALID_GOAL_PENALTY: float = (
+    0.0  # Alice failed to move objects past threshold (invalid goal returns 0)
+)
 
 import torch
 from isaaclab.envs import ManagerBasedRLEnv
@@ -64,7 +68,9 @@ def valid_goal_bonus(
 
     if hasattr(env, "extras") and "goal_valid" in env.extras:
         goal_valid = env.extras["goal_valid"]
-        rewards = torch.where(goal_valid, torch.full_like(rewards, ALICE_VALID_GOAL_BONUS), rewards)
+        rewards = torch.where(
+            goal_valid, torch.full_like(rewards, ALICE_VALID_GOAL_BONUS), rewards
+        )
 
     return rewards
 

@@ -6,7 +6,7 @@ as described in the original OpenAI paper:
 'Asymmetric Self-Play for Automatic Goal Discovery in Robotic Manipulation'.
 
 Alice's successful trajectories (s_t, a_t) are used as direct demonstrations
-for Bob to reach the same goal g = s_{T_A}. Bob's policy is trained to 
+for Bob to reach the same goal g = s_{T_A}. Bob's policy is trained to
 maximize the likelihood of Alice's actions given the same state and goal.
 """
 
@@ -31,16 +31,30 @@ class PPOABC(PPO):
         apply_reset=False,
         asymmetric=False,
     ):
-        super().__init__(vec_env, cfg_train, device, sampler, log_dir, is_testing, print_log, apply_reset, asymmetric)
+        super().__init__(
+            vec_env,
+            cfg_train,
+            device,
+            sampler,
+            log_dir,
+            is_testing,
+            print_log,
+            apply_reset,
+            asymmetric,
+        )
 
         # Recompute mini_batch_size if the parent did not set it
         if not hasattr(self, "mini_batch_size"):
-            num_envs   = vec_env.unwrapped.num_envs if hasattr(vec_env, "unwrapped") else vec_env.num_envs
+            num_envs = (
+                vec_env.unwrapped.num_envs
+                if hasattr(vec_env, "unwrapped")
+                else vec_env.num_envs
+            )
             batch_size = num_envs * cfg_train["learn"]["nsteps"]
             self.num_mini_batches = max(4, batch_size // 2048)
-            self.mini_batch_size  = batch_size // self.num_mini_batches
+            self.mini_batch_size = batch_size // self.num_mini_batches
 
-        self.abc_coef       = cfg_train["learn"].get("abc_coef",       0.1)
+        self.abc_coef = cfg_train["learn"].get("abc_coef", 0.1)
         self.abc_batch_size = cfg_train["learn"].get("abc_batch_size", 2048)
         self.abc_buffer = None
 
@@ -49,35 +63,62 @@ class PPOABC(PPO):
         self.abc_buffer = abc_buffer
 
     def update(self):
-        mean_value_loss     = 0
+        mean_value_loss = 0
         mean_surrogate_loss = 0
-        mean_bc_loss        = 0
+        mean_bc_loss = 0
 
         # PPO + ABC update
-        abc_batch_size = min(self.abc_batch_size, self.abc_buffer.size if self.abc_buffer else self.abc_batch_size)
+        abc_batch_size = min(
+            self.abc_batch_size,
+            self.abc_buffer.size if self.abc_buffer else self.abc_batch_size,
+        )
 
         batch = self.storage.mini_batch_generator(self.num_mini_batches)
         for epoch in range(self.num_learning_epochs):
             for indices in batch:
-                obs_batch    = self.storage.observations.view(-1, *self.storage.observations.size()[2:])[indices]
-                states_batch = self.storage.states.view(-1, *self.storage.states.size()[2:])[indices] if self.asymmetric else None
-                actions_batch              = self.storage.actions.view(-1, self.storage.actions.size(-1))[indices]
-                target_values_batch        = self.storage.values.view(-1, 1)[indices]
-                returns_batch              = self.storage.returns.view(-1, 1)[indices]
-                old_actions_log_prob_batch = self.storage.actions_log_prob.view(-1, 1)[indices]
-                advantages_batch           = self.storage.advantages.view(-1, 1)[indices]
-                old_mu_batch               = self.storage.mu.view(-1, self.storage.actions.size(-1))[indices]
-                old_sigma_batch            = self.storage.sigma.view(-1, self.storage.actions.size(-1))[indices]
-                masks_batch                = self.storage.masks.view(-1, 1)[indices]
-
-                actions_log_prob_batch, entropy_batch, value_batch, mu_batch, sigma_batch = self.actor_critic.evaluate(
-                    obs_batch, states_batch, actions_batch
+                obs_batch = self.storage.observations.view(
+                    -1, *self.storage.observations.size()[2:]
+                )[indices]
+                states_batch = (
+                    self.storage.states.view(-1, *self.storage.states.size()[2:])[
+                        indices
+                    ]
+                    if self.asymmetric
+                    else None
                 )
+                actions_batch = self.storage.actions.view(
+                    -1, self.storage.actions.size(-1)
+                )[indices]
+                target_values_batch = self.storage.values.view(-1, 1)[indices]
+                returns_batch = self.storage.returns.view(-1, 1)[indices]
+                old_actions_log_prob_batch = self.storage.actions_log_prob.view(-1, 1)[
+                    indices
+                ]
+                advantages_batch = self.storage.advantages.view(-1, 1)[indices]
+                old_mu_batch = self.storage.mu.view(-1, self.storage.actions.size(-1))[
+                    indices
+                ]
+                old_sigma_batch = self.storage.sigma.view(
+                    -1, self.storage.actions.size(-1)
+                )[indices]
+                masks_batch = self.storage.masks.view(-1, 1)[indices]
+
+                (
+                    actions_log_prob_batch,
+                    entropy_batch,
+                    value_batch,
+                    mu_batch,
+                    sigma_batch,
+                ) = self.actor_critic.evaluate(obs_batch, states_batch, actions_batch)
 
                 if self.desired_kl is not None and self.schedule == "adaptive":
                     kl = torch.sum(
-                        sigma_batch - old_sigma_batch
-                        + (torch.square(old_sigma_batch.exp()) + torch.square(old_mu_batch - mu_batch))
+                        sigma_batch
+                        - old_sigma_batch
+                        + (
+                            torch.square(old_sigma_batch.exp())
+                            + torch.square(old_mu_batch - mu_batch)
+                        )
                         / (2.0 * torch.square(sigma_batch.exp()))
                         - 0.5,
                         axis=-1,
@@ -92,24 +133,37 @@ class PPOABC(PPO):
 
                 valid_mask = masks_batch.squeeze() > 0
                 if valid_mask.sum() > 0:
-                    ratio             = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
-                    surrogate         = -torch.squeeze(advantages_batch) * ratio
-                    surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param)
-                    surrogate_loss    = torch.max(surrogate, surrogate_clipped)[valid_mask].mean()
+                    ratio = torch.exp(
+                        actions_log_prob_batch
+                        - torch.squeeze(old_actions_log_prob_batch)
+                    )
+                    surrogate = -torch.squeeze(advantages_batch) * ratio
+                    surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(
+                        ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
+                    )
+                    surrogate_loss = torch.max(surrogate, surrogate_clipped)[
+                        valid_mask
+                    ].mean()
 
                     if self.use_clipped_value_loss:
-                        value_clipped        = target_values_batch + (value_batch - target_values_batch).clamp(-self.clip_param, self.clip_param)
-                        value_losses         = (value_batch - returns_batch).pow(2)
+                        value_clipped = target_values_batch + (
+                            value_batch - target_values_batch
+                        ).clamp(-self.clip_param, self.clip_param)
+                        value_losses = (value_batch - returns_batch).pow(2)
                         value_losses_clipped = (value_clipped - returns_batch).pow(2)
-                        value_loss           = torch.max(value_losses, value_losses_clipped)[valid_mask].mean()
+                        value_loss = torch.max(value_losses, value_losses_clipped)[
+                            valid_mask
+                        ].mean()
                     else:
-                        value_loss = (returns_batch - value_batch).pow(2)[valid_mask].mean()
+                        value_loss = (
+                            (returns_batch - value_batch).pow(2)[valid_mask].mean()
+                        )
 
                     entropy_mean = entropy_batch[valid_mask].mean()
                 else:
                     surrogate_loss = torch.tensor(0.0, device=self.device)
-                    value_loss     = torch.tensor(0.0, device=self.device)
-                    entropy_mean   = torch.tensor(0.0, device=self.device)
+                    value_loss = torch.tensor(0.0, device=self.device)
+                    entropy_mean = torch.tensor(0.0, device=self.device)
 
                 # --- ABC (Alice Behavioral Cloning) Loss ---
                 # Paper: apply PPO-style ratio clipping to the BC loss.
@@ -121,28 +175,46 @@ class PPOABC(PPO):
                     sample = self.abc_buffer.sample(abc_batch_size)
                     if sample is not None:
                         bc_obs, bc_states, bc_act = sample[0], sample[1], sample[2]
-                        old_bc_log_probs = sample[5].squeeze(-1)  # stored at collection time
+                        old_bc_log_probs = sample[5].squeeze(
+                            -1
+                        )  # stored at collection time
                         if bc_obs.shape[0] > 0:
-                            abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(bc_obs, None, bc_act)
+                            abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
+                                bc_obs, None, bc_act
+                            )
                             # PPO-style clipped BC loss (treat all demo advantages as +1)
                             ratio = torch.exp(abc_log_probs - old_bc_log_probs)
-                            clipped = torch.clamp(ratio, 1.0 - self.clip_param, 1.0 + self.clip_param)
+                            clipped = torch.clamp(
+                                ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
+                            )
                             bc_loss = -torch.min(ratio, clipped).mean()
                         mean_bc_loss += bc_loss.item()
 
-                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_mean + self.abc_coef * bc_loss
-                
+                loss = (
+                    surrogate_loss
+                    + self.value_loss_coef * value_loss
+                    - self.entropy_coef * entropy_mean
+                    + self.abc_coef * bc_loss
+                )
+
                 self.optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+                nn.utils.clip_grad_norm_(
+                    self.actor_critic.parameters(), self.max_grad_norm
+                )
                 self.optimizer.step()
 
-                mean_value_loss     += value_loss.item()
+                mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
 
-        num_updates          = self.num_learning_epochs * self.num_mini_batches
-        mean_value_loss     /= num_updates
+        num_updates = self.num_learning_epochs * self.num_mini_batches
+        mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
-        mean_bc_loss        /= num_updates
+        mean_bc_loss /= num_updates
 
-        return mean_value_loss, mean_surrogate_loss, mean_bc_loss, 0.0 # 0.0 for IDM loss (removed)
+        return (
+            mean_value_loss,
+            mean_surrogate_loss,
+            mean_bc_loss,
+            0.0,
+        )  # 0.0 for IDM loss (removed)

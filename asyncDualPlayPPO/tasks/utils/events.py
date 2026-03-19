@@ -39,25 +39,39 @@ def randomize_object_positions(
         try:
             obj = env.scene[obj_name]
 
-            x_local = torch.rand(num_resets, device=env.device) * (x_range[1] - x_range[0]) + x_range[0]
-            y_local = torch.rand(num_resets, device=env.device) * (y_range[1] - y_range[0]) + y_range[0]
+            x_local = (
+                torch.rand(num_resets, device=env.device) * (x_range[1] - x_range[0])
+                + x_range[0]
+            )
+            y_local = (
+                torch.rand(num_resets, device=env.device) * (y_range[1] - y_range[0])
+                + y_range[0]
+            )
             z_local = torch.full((num_resets,), z_height, device=env.device)
 
             yaw = torch.rand(num_resets, device=env.device) * 2 * torch.pi
-            quat = torch.stack([
-                torch.cos(yaw / 2),
-                torch.zeros_like(yaw),
-                torch.zeros_like(yaw),
-                torch.sin(yaw / 2),
-            ], dim=1)
+            quat = torch.stack(
+                [
+                    torch.cos(yaw / 2),
+                    torch.zeros_like(yaw),
+                    torch.zeros_like(yaw),
+                    torch.sin(yaw / 2),
+                ],
+                dim=1,
+            )
 
-            pos_global = torch.stack([
-                x_local + env_origins[:, 0],
-                y_local + env_origins[:, 1],
-                z_local + env_origins[:, 2],
-            ], dim=1)
+            pos_global = torch.stack(
+                [
+                    x_local + env_origins[:, 0],
+                    y_local + env_origins[:, 1],
+                    z_local + env_origins[:, 2],
+                ],
+                dim=1,
+            )
 
-            obj.write_root_pose_to_sim(torch.cat([pos_global, quat], dim=1), env_ids=env_ids)
+            obj.write_root_pose_to_sim(
+                torch.cat([pos_global, quat], dim=1), env_ids=env_ids
+            )
 
         except KeyError:
             pass
@@ -90,7 +104,7 @@ def reset_objects_to_fixed_safe_pose(
 
     placements = {
         "target_object": torch.tensor([-0.15, 0.7, 0.05], device=env.device),
-        "cube":          torch.tensor([-0.25, 0.7, 0.05], device=env.device),
+        "cube": torch.tensor([-0.25, 0.7, 0.05], device=env.device),
     }
 
     for obj_name, local_pos in placements.items():

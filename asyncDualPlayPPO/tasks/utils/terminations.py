@@ -39,7 +39,7 @@ def robot_out_of_bounds(
 
     ee_pos = robot.data.body_pos_w[:, body_ids[0], :] - env.scene.env_origins
 
-    z_violation = (ee_pos[:, 2] < table_z + margin)
+    z_violation = ee_pos[:, 2] < table_z + margin
     x_violation = (ee_pos[:, 0] < x_range[0]) | (ee_pos[:, 0] > x_range[1])
     y_violation = (ee_pos[:, 1] < y_range[0]) | (ee_pos[:, 1] > y_range[1])
 
@@ -82,9 +82,11 @@ def objects_out_of_bounds(
             pos_local = pos_w - env.scene.env_origins
 
             out_of_bounds |= (
-                (pos_local[:, 0] < x_range[0]) | (pos_local[:, 0] > x_range[1]) |
-                (pos_local[:, 1] < y_range[0]) | (pos_local[:, 1] > y_range[1]) |
-                (pos_w[:, 2] < z_min)
+                (pos_local[:, 0] < x_range[0])
+                | (pos_local[:, 0] > x_range[1])
+                | (pos_local[:, 1] < y_range[0])
+                | (pos_local[:, 1] > y_range[1])
+                | (pos_w[:, 2] < z_min)
             )
         except KeyError:
             pass

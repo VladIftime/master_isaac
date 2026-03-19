@@ -55,7 +55,7 @@ class AsyncDualPlayObservationsCfg:
         object_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":  SceneEntityCfg("target_object"),
+                "object_cfg": SceneEntityCfg("target_object"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
                 "contact_cfg": SceneEntityCfg("contact_forces"),
             },
@@ -63,7 +63,7 @@ class AsyncDualPlayObservationsCfg:
         cube_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":  SceneEntityCfg("cube"),
+                "object_cfg": SceneEntityCfg("cube"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
                 "contact_cfg": SceneEntityCfg("contact_forces"),
             },
@@ -92,7 +92,7 @@ class AsyncDualPlayObservationsCfg:
         object_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":  SceneEntityCfg("target_object"),
+                "object_cfg": SceneEntityCfg("target_object"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
                 "contact_cfg": SceneEntityCfg("contact_forces"),
             },
@@ -100,7 +100,7 @@ class AsyncDualPlayObservationsCfg:
         cube_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":  SceneEntityCfg("cube"),
+                "object_cfg": SceneEntityCfg("cube"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
                 "contact_cfg": SceneEntityCfg("contact_forces"),
             },
@@ -127,7 +127,7 @@ class AsyncDualPlayObservationsCfg:
             self.concatenate_terms = True
 
     alice_policy: AlicePolicyCfg = AlicePolicyCfg()
-    bob_policy:   BobPolicyCfg   = BobPolicyCfg()
+    bob_policy: BobPolicyCfg = BobPolicyCfg()
 
 
 @configclass
@@ -142,6 +142,7 @@ class AsyncDualPlayRewardsCfg:
     computed in AsyncDualPlayEnvWrapper._compute_bob_sparse_rewards() to
     avoid IsaacLab's dt-scaling, which would produce fractional values.
     """
+
     pass
 
 
@@ -158,10 +159,11 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
     @configclass
     class AsyncDualPlaySceneCfg(ReachDualArmSceneCfg):
         """Scene restricted to two objects and augmented with gripper contact sensors."""
+
         cylinder = None
-        rect     = None
+        rect = None
         triangle = None
-        camera   = None
+        camera = None
 
         contact_forces = ContactSensorCfg(
             prim_path="{ENV_REGEX_NS}/RobotUnified/.*finger.*",
@@ -169,15 +171,17 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
             track_air_time=False,
         )
 
-    scene:        AsyncDualPlaySceneCfg        = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
+    scene: AsyncDualPlaySceneCfg = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
     observations: AsyncDualPlayObservationsCfg = AsyncDualPlayObservationsCfg()
-    actions:      ActionsCfg                   = ActionsCfg()
-    rewards:      AsyncDualPlayRewardsCfg      = AsyncDualPlayRewardsCfg()
-    terminations: TerminationsCfg              = TerminationsCfg()
-    events:       EventCfg                     = EventCfg()
+    actions: ActionsCfg = ActionsCfg()
+    rewards: AsyncDualPlayRewardsCfg = AsyncDualPlayRewardsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
 
     def __post_init__(self):
-        self.decimation          = 2
-        self.episode_length_s    = 10000.0  # Extremely high value to prevent internal IsaacLab forced timeouts
-        self.sim.dt              = 0.01
+        self.decimation = 2
+        self.episode_length_s = (
+            10000.0  # Extremely high value to prevent internal IsaacLab forced timeouts
+        )
+        self.sim.dt = 0.01
         self.sim.render_interval = self.decimation

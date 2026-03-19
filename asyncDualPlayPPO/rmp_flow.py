@@ -17,7 +17,10 @@ enable_extension("isaacsim.robot_motion.lula")
 enable_extension("isaacsim.robot_motion.motion_generation")
 
 from isaacsim.robot_motion.motion_generation import ArticulationMotionPolicy
-from isaacsim.robot_motion.motion_generation.lula.motion_policies import RmpFlow, RmpFlowSmoothed
+from isaacsim.robot_motion.motion_generation.lula.motion_policies import (
+    RmpFlow,
+    RmpFlowSmoothed,
+)
 
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import retrieve_file_path
@@ -98,9 +101,15 @@ class RmpFlowController:
             robot.initialize()
             # download files if they are not local
 
-            local_urdf_file = retrieve_file_path(self.cfg.urdf_file, force_download=True)
-            local_collision_file = retrieve_file_path(self.cfg.collision_file, force_download=True)
-            local_config_file = retrieve_file_path(self.cfg.config_file, force_download=True)
+            local_urdf_file = retrieve_file_path(
+                self.cfg.urdf_file, force_download=True
+            )
+            local_collision_file = retrieve_file_path(
+                self.cfg.collision_file, force_download=True
+            )
+            local_config_file = retrieve_file_path(
+                self.cfg.config_file, force_download=True
+            )
 
             # add controller
             rmpflow = controller_cls(
@@ -115,14 +124,22 @@ class RmpFlowController:
             articulation_policy = ArticulationMotionPolicy(robot, rmpflow, physics_dt)
             self.articulation_policies.append(articulation_policy)
         # get number of active joints
-        self.active_dof_names = self.articulation_policies[0].get_motion_policy().get_active_joints()
+        self.active_dof_names = (
+            self.articulation_policies[0].get_motion_policy().get_active_joints()
+        )
         self.num_dof = len(self.active_dof_names)
         # create buffers
         # -- for storing command
-        self._command = torch.zeros(self.num_robots, self.num_actions, device=self._device)
+        self._command = torch.zeros(
+            self.num_robots, self.num_actions, device=self._device
+        )
         # -- for policy output
-        self.dof_pos_target = torch.zeros((self.num_robots, self.num_dof), device=self._device)
-        self.dof_vel_target = torch.zeros((self.num_robots, self.num_dof), device=self._device)
+        self.dof_pos_target = torch.zeros(
+            (self.num_robots, self.num_dof), device=self._device
+        )
+        self.dof_vel_target = torch.zeros(
+            (self.num_robots, self.num_dof), device=self._device
+        )
 
     def reset_idx(self, robot_ids: torch.Tensor = None):
         """Reset the internals."""
@@ -157,7 +174,11 @@ class RmpFlowController:
             # apply action on the robot
             action = policy.get_next_articulation_action()
             # copy actions into buffer
-            self.dof_pos_target[i, :] = torch.from_numpy(action.joint_positions[:]).to(self.dof_pos_target)
-            self.dof_vel_target[i, :] = torch.from_numpy(action.joint_velocities[:]).to(self.dof_vel_target)
+            self.dof_pos_target[i, :] = torch.from_numpy(action.joint_positions[:]).to(
+                self.dof_pos_target
+            )
+            self.dof_vel_target[i, :] = torch.from_numpy(action.joint_velocities[:]).to(
+                self.dof_vel_target
+            )
 
         return self.dof_pos_target, self.dof_vel_target

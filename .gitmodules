@@ -1,0 +1,3 @@
+[submodule "asyncDualPlayPPO/isaacsim_typings_5"]
+	path = asyncDualPlayPPO/isaacsim_typings_5
+	url = https://github.com/work-r-labs/isaacsim_typings_5.git

@@ -1,20 +1,9 @@
 Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/data/Kit/Isaac-Sim/5.0/user.config.json'
-[Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260319_162027.log
-2026-03-19T15:20:27Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'
-[0.058s] [ext: omni.kit.async_engine-0.0.3] startup
-[0.177s] [ext: omni.metrics.core-0.0.3] startup
-[0.177s] [ext: omni.client.lib-1.1.0] startup
-[0.191s] [ext: omni.blobkey-1.1.2] startup
-[0.192s] [ext: omni.stats-1.0.1] startup
-[0.193s] [ext: omni.datastore-0.0.0] startup
-[0.198s] [ext: omni.client-1.3.0] startup
-[0.261s] [ext: omni.ujitso.default-1.0.0] startup
-[0.263s] [ext: omni.hsscclient-1.1.2] startup
-[0.267s] [ext: omni.gpu_foundation.shadercache.vulkan-1.0.0] startup
-[0.270s] [ext: omni.assets.plugins-0.0.0] startup
-[0.272s] [ext: omni.gpu_foundation-0.0.0] startup
-[0.281s] [ext: carb.windowing.plugins-1.0.0] startup
-[0.289s] [ext: omni.kit.renderer.init-0.0.0] startup
+[Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260319_185834.log
+2026-03-19T17:58:34Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'
+2026-03-19T17:58:34Z [156ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-03-19T17:58:35Z [605ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
+2026-03-19T17:58:35Z [827ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
 
 |---------------------------------------------------------------------------------------------|
 | Driver Version: 580.126.09    | Graphics API: Vulkan
@@ -32,292 +21,30 @@ Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-pac
 | Processor: AMD Ryzen 7 3700X 8-Core Processor
 | Cores: 8 | Logical Cores: 16
 |---------------------------------------------------------------------------------------------|
-| Total Memory (MB): 32000 | Free Memory: 20677
+| Total Memory (MB): 32000 | Free Memory: 22117
 | Total Page/Swap (MB): 2047 | Free Page/Swap: 2047
 |---------------------------------------------------------------------------------------------|
-2026-03-19T15:20:29Z [1,200ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
-[1.442s] [ext: omni.materialx.libs-1.0.7] startup
-[1.449s] [ext: omni.usd.config-1.0.6] startup
-[1.453s] [ext: omni.gpucompute.plugins-0.0.0] startup
-[1.454s] [ext: omni.usd.libs-1.0.1] startup
-[1.536s] [ext: omni.mdl-56.0.3] startup
-[1.622s] [ext: omni.iray.libs-0.0.0] startup
-[1.629s] [ext: omni.mdl.neuraylib-0.2.12] startup
-[1.632s] [ext: omni.kit.usd.mdl-1.1.5] startup
-[1.724s] [ext: omni.kit.telemetry-0.5.2] startup
-[1.753s] [ext: omni.kit.pipapi-0.0.0] startup
-[1.754s] [ext: omni.kit.loop-isaac-1.3.7] startup
-[1.756s] [ext: omni.kit.test-2.0.1] startup
-[1.805s] [ext: omni.appwindow-1.1.10] startup
-[2.800s] [ext: omni.kit.renderer.core-1.1.0] startup
-[15.545s] [ext: omni.kit.renderer.capture-0.0.0] startup
-[15.547s] [ext: omni.kit.renderer.imgui-2.0.5] startup
-[15.625s] [ext: omni.ui-2.27.1] startup
-[15.635s] [ext: omni.kit.mainwindow-1.0.3] startup
-[15.636s] [ext: carb.audio-0.1.0] startup
-[15.644s] [ext: omni.uiaudio-1.0.0] startup
-[15.645s] [ext: omni.kit.uiapp-0.0.0] startup
-[15.645s] [ext: omni.usd.schema.metrics.assembler-107.3.1] startup
-[15.648s] [ext: omni.usd.schema.audio-0.0.0] startup
-[15.652s] [ext: omni.usd_resolver-1.0.0] startup
-[15.656s] [ext: omni.usd.core-1.5.3] startup
-[15.658s] [ext: omni.usd.schema.omni_sensors-0.0.0] startup
-[15.674s] [ext: omni.usd.schema.anim-0.0.0] startup
-[15.692s] [ext: omni.usd.schema.physx-107.3.26] startup
-[15.726s] [ext: isaacsim.robot.schema-3.6.0] startup
-[15.734s] [ext: omni.usd.schema.omniscripting-1.0.0] startup
-[15.738s] [ext: omni.usd.schema.omnigraph-1.0.0] startup
-[15.742s] [ext: omni.usd.schema.semantics-0.0.0] startup
-[15.744s] [ext: omni.usd.schema.geospatial-0.0.0] startup
-[15.746s] [ext: omni.kit.window.popup_dialog-2.0.24] startup
-[15.751s] [ext: omni.activity.core-1.0.3] startup
-[15.752s] [ext: omni.kit.widget.nucleus_connector-2.0.1] startup
-[15.762s] [ext: omni.kit.usd_undo-0.1.8] startup
-[15.762s] [ext: omni.graph.exec-0.9.6] startup
-[15.763s] [ext: omni.kit.actions.core-1.0.0] startup
-[15.766s] [ext: usdrt.scenegraph-7.6.1] startup
-[15.805s] [ext: omni.resourcemonitor-107.0.1] startup
-[15.807s] [ext: omni.kit.exec.core-0.13.4] startup
-[15.808s] [ext: omni.timeline-1.0.14] startup
-[15.810s] [ext: omni.kit.commands-1.4.10] startup
-[15.814s] [ext: omni.kit.audiodeviceenum-1.0.2] startup
-[15.815s] [ext: omni.hydra.usdrt_delegate-7.5.1] startup
-[15.822s] [ext: omni.hydra.scene_delegate-0.3.4] startup
-[15.826s] [ext: omni.usd-1.13.10] startup
-[15.852s] [ext: omni.kit.asset_converter-5.0.17] startup
-[15.864s] [ext: omni.usd.schema.omni_lens_distortion-0.0.0] startup
-[15.864s] [ext: omni.usd.schema.render_settings.rtx-0.0.0] startup
-[15.865s] [ext: omni.index.libs-380600.8087.0] startup
-[15.865s] [ext: omni.volume-0.5.2] startup
-[15.868s] [ext: omni.ujitso.client-0.0.0] startup
-[15.868s] [ext: omni.index-1.0.1] startup
-[15.869s] [ext: omni.hydra.rtx.shadercache.vulkan-1.0.0] startup
-[15.870s] [ext: omni.hydra.rtx-1.0.0] startup
-2026-03-19T15:20:43Z [15,865ms] [Warning] [omni.log] Source: omni.hydra was already registered.
-[15.907s] [ext: omni.kit.notification_manager-1.0.10] startup
-[15.908s] [ext: omni.kit.clipboard-1.0.5] startup
-[15.909s] [ext: omni.kit.viewport.legacy_gizmos-1.0.19] startup
-[15.911s] [ext: omni.kit.raycast.query-1.1.0] startup
-[15.915s] [ext: omni.kit.menu.core-1.1.2] startup
-[15.916s] [ext: omni.kit.widget.options_menu-1.1.6] startup
-[15.919s] [ext: omni.kit.helper.file_utils-0.1.9] startup
-[15.920s] [ext: omni.kit.widget.path_field-2.0.11] startup
-[15.921s] [ext: omni.kit.widget.context_menu-1.2.5] startup
-[15.922s] [ext: omni.kit.widget.options_button-1.0.3] startup
-[15.923s] [ext: omni.kit.widget.filebrowser-2.12.3] startup
-[15.926s] [ext: omni.kit.widget.browser_bar-2.0.10] startup
-[15.927s] [ext: omni.kit.usd.layers-2.2.11] startup
-[15.935s] [ext: omni.ui.scene-1.11.5] startup
-[15.940s] [ext: omni.kit.viewport.registry-104.0.6] startup
-[15.940s] [ext: omni.kit.window.filepicker-2.13.4] startup
-[15.954s] [ext: omni.kit.menu.utils-2.0.5] startup
-[15.961s] [ext: omni.kit.context_menu-1.8.6] startup
-[15.962s] [ext: omni.kit.viewport.scene_camera_model-1.0.6] startup
-[15.966s] [ext: omni.kit.hydra_texture-1.4.6] startup
-[15.969s] [ext: omni.kit.window.file_importer-1.1.18] startup
-[15.971s] [ext: omni.kit.widget.searchable_combobox-1.0.6] startup
-[15.972s] [ext: omni.kit.window.drop_support-1.0.5] startup
-[15.972s] [ext: omni.kit.widget.viewport-107.1.3] startup
-[15.975s] [ext: omni.kit.material.library-2.0.7] startup
-[15.979s] [ext: omni.hydra.engine.stats-1.0.3] startup
-[15.981s] [ext: omni.kit.widget.settings-1.2.6] startup
-[15.983s] [ext: omni.kit.viewport.window-107.2.0] startup
-[15.997s] [ext: omni.kit.window.preferences-1.8.0] startup
-[16.002s] [ext: omni.kit.widget.toolbar-2.0.1] startup
-[16.007s] [ext: omni.kit.viewport.utility-1.1.2] startup
-[16.007s] [ext: omni.kit.manipulator.transform-107.0.0] startup
-[16.011s] [ext: omni.kit.manipulator.tool.snap-1.5.13] startup
-[16.014s] [ext: omni.kit.manipulator.selector-1.1.3] startup
-[16.015s] [ext: omni.kit.viewport.manipulator.transform-107.0.4] startup
-[16.017s] [ext: omni.kit.manipulator.viewport-107.0.1] startup
-[16.018s] [ext: omni.kit.primitive.mesh-1.0.17] startup
-[16.021s] [ext: omni.kit.manipulator.prim.core-107.0.8] startup
-[16.027s] [ext: omni.fabric.commands-1.1.6] startup
-[16.029s] [ext: omni.kit.manipulator.prim.usd-107.0.3] startup
-[16.030s] [ext: omni.kit.manipulator.prim.fabric-107.0.4] startup
-[16.031s] [ext: omni.debugdraw-0.1.4] startup
-[16.034s] [ext: omni.kit.property.adapter.core-1.0.2] startup
-[16.036s] [ext: omni.kit.manipulator.prim-107.0.0] startup
-[16.036s] [ext: omni.usdphysics-107.3.26] startup
-[16.038s] [ext: omni.kit.manipulator.selection-106.0.1] startup
-[16.039s] [ext: omni.kit.hotkeys.core-1.3.10] startup
-[16.041s] [ext: omni.kit.property.adapter.usd-1.0.2] startup
-[16.041s] [ext: omni.kit.widget.searchfield-1.1.8] startup
-[16.042s] [ext: omni.kit.widget.filter-1.1.4] startup
-[16.043s] [ext: omni.kit.property.adapter.fabric-1.0.3] startup
-[16.044s] [ext: omni.kit.widget.highlight_label-1.0.3] startup
-[16.044s] [ext: omni.kit.window.file_exporter-1.0.33] startup
-[16.046s] [ext: omni.kit.stage_template.core-1.1.22] startup
-[16.046s] [ext: omni.kit.widget.stage-3.1.4] startup
-[16.055s] [ext: omni.kit.widget.prompt-1.0.7] startup
-[16.056s] [ext: omni.kit.window.property-1.12.1] startup
-[16.058s] [ext: omni.kvdb-107.3.26] startup
-[16.060s] [ext: omni.kit.window.file-2.0.5] startup
-[16.062s] [ext: omni.kit.window.content_browser_registry-0.0.6] startup
-[16.063s] [ext: omni.kit.viewport.menubar.core-107.2.1] startup
-[16.076s] [ext: omni.kit.viewport.actions-107.0.2] startup
-[16.081s] [ext: omni.kit.window.content_browser-3.1.3] startup
-[16.092s] [ext: omni.kit.viewport.menubar.display-107.0.3] startup
-[16.093s] [ext: omni.kit.widget.layers-1.8.6] startup
-[16.103s] [ext: omni.kit.property.usd-4.5.12] startup
-[16.112s] [ext: omni.physx.foundation-107.3.26] startup
-[16.114s] [ext: omni.localcache-107.3.26] startup
-[16.115s] [ext: omni.convexdecomposition-107.3.26] startup
-[16.118s] [ext: omni.usdphysics.ui-107.3.26] startup
-[16.143s] [ext: omni.physx.cooking-107.3.26] startup
-[16.146s] [ext: omni.usd.metrics.assembler-107.3.1] startup
-[16.150s] [ext: omni.physx-107.3.26] startup
-[16.159s] [ext: omni.physics-107.3.26] startup
-[16.162s] [ext: omni.physx.commands-107.3.26] startup
-[16.167s] [ext: omni.physics.stageupdate-107.3.26] startup
-[16.169s] [ext: omni.inspect-1.0.2] startup
-[16.170s] [ext: omni.physx.ui-107.3.26] startup
-[16.200s] [ext: omni.graph.core-2.184.5] startup
-[16.203s] [ext: omni.physics.physx-107.3.26] startup
-2026-03-19T15:20:43Z [16,181ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
-[16.205s] [ext: isaacsim.core.deprecation_manager-0.2.7] startup
-[16.205s] [ext: omni.physics.tensors-107.3.26] startup
-[16.210s] [ext: omni.kit.numpy.common-0.1.3] startup
-[16.211s] [ext: isaacsim.core.version-2.0.6] startup
-[16.212s] [ext: omni.warp.core-1.8.2] startup
-[16.424s] [ext: omni.usd.metrics.assembler.physics-107.3.26] startup
-[16.426s] [ext: omni.isaac.dynamic_control-2.0.7] startup
-2026-03-19T15:20:44Z [16,407ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
-[16.431s] [ext: isaacsim.storage.native-1.5.1] startup
-[16.432s] [ext: isaacsim.core.utils-3.5.1] startup
-[16.434s] [ext: omni.graph.tools-1.79.2] startup
-[16.454s] [ext: omni.graph.action_core-1.1.7] startup
-[16.456s] [ext: omni.graph-1.141.2] startup
-[16.495s] [ext: omni.physx.tensors-107.3.26] startup
-[16.500s] [ext: omni.graph.action_nodes-1.50.4] startup
-[16.503s] [ext: isaacsim.core.simulation_manager-1.4.4] startup
-[18.127s] [ext: omni.kit.usd.collect-2.4.5] startup
-[18.134s] [ext: omni.kit.stage_templates-2.0.0] startup
-[18.137s] [ext: isaacsim.core.prims-0.6.1] startup
-[18.162s] [ext: omni.kit.usdz_export-1.0.9] startup
-[18.169s] [ext: isaacsim.core.api-4.8.0] startup
-[18.178s] [ext: omni.kit.tool.asset_importer-4.3.2] startup
-[18.186s] [ext: omni.graph.action-1.130.0] startup
-[18.188s] [ext: omni.kit.selection-0.1.6] startup
-[18.192s] [ext: omni.ui_query-1.1.8] startup
-[18.193s] [ext: omni.kit.stagerecorder.core-107.0.3] startup
-[18.196s] [ext: omni.kit.widget.text_editor-1.1.1] startup
-[18.198s] [ext: omni.kit.ui_test-1.3.7] startup
-[18.199s] [ext: omni.kit.stagerecorder.ui-107.0.1] startup
-[18.202s] [ext: omni.kit.window.extensions-1.4.27] startup
-[18.208s] [ext: omni.graph.visualization.nodes-2.1.3] startup
-[18.216s] [ext: omni.kit.stagerecorder.bundle-105.0.2] startup
-[18.217s] [ext: isaacsim.gui.components-1.2.1] startup
-[18.221s] [ext: isaacsim.gui.menu-2.4.4] startup
-[18.238s] [ext: isaacsim.app.about-2.0.11] startup
-[18.244s] [ext: isaacsim.asset.importer.mjcf-2.5.13] startup
-[18.292s] [ext: semantics.schema.editor-2.0.2] startup
-2026-03-19T15:20:46Z [18,271ms] [Warning] [pxr.Semantics] pxr.Semantics is deprecated - please use Semantics instead
-[18.297s] [ext: omni.kit.widget.graph-2.0.0] startup
-[18.303s] [ext: semantics.schema.property-2.0.1] startup
-[18.304s] [ext: omni.kit.graph.delegate.default-1.2.3] startup
-[18.307s] [ext: isaacsim.core.cloner-1.4.10] startup
-[18.309s] [ext: omni.kit.graph.editor.core-1.5.3] startup
-[18.313s] [ext: omni.kit.graph.usd.commands-1.3.1] startup
-[18.314s] [ext: omni.kit.widget.material_preview-1.0.16] startup
-[18.317s] [ext: omni.graph.image.core-0.6.1] startup
-[18.318s] [ext: omni.graph.scriptnode-1.50.0] startup
-[18.319s] [ext: omni.kit.widget.stage_icons-1.0.8] startup
-[18.322s] [ext: omni.kit.window.material_graph-1.9.1] startup
-[18.334s] [ext: omni.graph.image.nodes-1.3.1] startup
-[18.336s] [ext: omni.kit.menu.create-2.0.1] startup
-[18.339s] [ext: omni.kit.window.stage-2.6.1] startup
-[18.347s] [ext: omni.kit.viewport.menubar.settings-107.0.3] startup
-[18.350s] [ext: omni.graph.nodes-1.170.10] startup
-[18.360s] [ext: omni.graph.ui_nodes-1.50.5] startup
-[18.364s] [ext: isaacsim.util.debug_draw-3.1.0] startup
-[18.367s] [ext: omni.syntheticdata-0.6.13] startup
-[18.397s] [ext: omni.kit.scripting-107.3.2] startup
-[18.404s] [ext: omni.videoencoding-0.1.2] startup
-[18.408s] [ext: omni.warp-1.8.2] startup
-[18.414s] [ext: omni.sensors.nv.common-3.0.0] startup
-[18.436s] [ext: isaacsim.sensors.physx-2.3.2] startup
-[18.443s] [ext: isaacsim.replicator.behavior-1.1.16] startup
-[18.449s] [ext: omni.sensors.net-1.0.0] startup
-[18.454s] [ext: omni.replicator.core-1.12.27] startup
-2026-03-19T15:20:46Z [18,607ms] [Warning] [omni.graph.core.plugin] Found duplicate of category 'Replicator' - was 'Annotators', adding 'Fabric Reader'
-2026-03-19T15:20:46Z [18,607ms] [Warning] [omni.graph.core.plugin] Category 'Replicator' not accepted on node type 'omni.replicator.core.FabricReader' in extension 'omni.replicator.core'
-2026-03-19T15:20:46Z [18,610ms] [Warning] [omni.replicator.core.scripts.extension] No material configuration file, adding configuration to material settings directly.
-[18.638s] [ext: omni.sensors.nv.materials-2.0.0] startup
-[18.665s] [ext: isaacsim.simulation_app-2.12.2] startup
-[18.666s] [ext: omni.anim.curve.core-1.3.1] startup
-[18.690s] [ext: omni.kit.manipulator.camera-106.0.4] startup
-[18.721s] [ext: isaacsim.core.nodes-3.4.3] startup
-[18.732s] [ext: omni.sensors.nv.ids-2.0.0] startup
-[18.737s] [ext: omni.sensors.nv.lidar-3.0.0] startup
-[18.751s] [ext: omni.sensors.nv.wpm-3.0.0] startup
-[18.756s] [ext: omni.kit.property.audio-1.0.16] startup
-[18.760s] [ext: omni.kit.property.camera-1.0.10] startup
-[18.766s] [ext: omni.kit.property.light-1.0.12] startup
-[18.792s] [ext: omni.kit.property.geometry-2.0.4] startup
-[18.799s] [ext: omni.sensors.nv.radar-3.0.0] startup
-[18.806s] [ext: isaacsim.gui.property-1.1.3] startup
-[18.814s] [ext: omni.kit.property.render-1.2.1] startup
-[18.819s] [ext: omni.hydra.scene_api-0.1.2] startup
-[18.831s] [ext: isaacsim.test.docstring-1.1.0] startup
-[18.843s] [ext: isaacsim.core.experimental.utils-0.3.0] startup
-[18.859s] [ext: omni.kit.widget.zoombar-1.0.6] startup
-[18.863s] [ext: omni.kit.property.transform-1.5.13] startup
-[18.870s] [ext: omni.kit.property.material-1.11.9] startup
-[18.941s] [ext: isaacsim.core.experimental.prims-0.8.1] startup
-[19.178s] [ext: omni.kit.browser.core-2.3.13] startup
-[19.280s] [ext: omni.kit.property.bundle-1.4.1] startup
-[19.302s] [ext: isaacsim.sensors.rtx-15.8.4] startup
-[19.400s] [ext: omni.kit.viewport.menubar.camera-107.0.6] startup
-[19.439s] [ext: isaacsim.robot.surface_gripper-3.3.1] startup
-[19.446s] [ext: omni.kit.browser.folder.core-1.10.9] startup
-[19.469s] [ext: isaacsim.sensors.physics-0.4.3] startup
-[19.487s] [ext: omni.kit.tool.collect-2.2.18] startup
-[19.501s] [ext: omni.kit.menu.stage-1.2.7] startup
-[19.505s] [ext: isaacsim.robot.manipulators-3.3.6] startup
-[19.519s] [ext: omni.kit.viewport.menubar.lighting-107.3.1] startup
-[19.537s] [ext: omni.kit.viewport.menubar.render-107.0.10] startup
-[19.560s] [ext: isaacsim.robot.policy.examples-4.1.11] startup
-[19.567s] [ext: isaacsim.examples.browser-0.2.1] startup
-[19.584s] [ext: isaacsim.asset.importer.urdf-2.4.30] startup
-[19.632s] [ext: omni.kit.window.console-1.1.4] startup
-[19.640s] [ext: omni.physx.demos-107.3.26] startup
-[19.683s] [ext: omni.kit.property.physx-107.3.26] startup
-[19.710s] [ext: omni.rtx.window.settings-0.6.19] startup
-[19.717s] [ext: omni.ocio-0.1.1] startup
-[19.721s] [ext: omni.replicator.replicator_yaml-2.0.11] startup
-[19.725s] [ext: omni.asset_validator.core-1.1.6] startup
-[19.781s] [ext: omni.physx.vehicle-107.3.26] startup
-[19.799s] [ext: omni.rtx.settings.core-0.6.5] startup
-[19.804s] [ext: omni.kit.window.script_editor-2.0.1] startup
-[19.808s] [ext: isaacsim.robot.wheeled_robots-4.0.24] startup
-[19.814s] [ext: omni.kit.window.toolbar-2.0.0] startup
-[19.820s] [ext: omni.physx.asset_validator-107.3.26] startup
-[19.830s] [ext: omni.physx.camera-107.3.26] startup
-[19.840s] [ext: omni.physx.cct-107.3.26] startup
-[19.852s] [ext: omni.physx.graph-107.3.26] startup
-[19.874s] [ext: omni.physx.supportui-107.3.26] startup
-[19.904s] [ext: omni.physx.telemetry-107.3.26] startup
-[19.916s] [ext: omni.kit.window.status_bar-0.1.9] startup
-[19.928s] [ext: omni.usd.metrics.assembler.ui-107.3.1] startup
-[19.945s] [ext: isaacsim.asset.browser-1.3.23] startup
-[20.025s] [ext: isaacsim.core.throttling-2.2.2] startup
-[20.029s] [ext: omni.kit.ui.actions-1.0.5] startup
-[20.033s] [ext: omni.physx.bundle-107.3.26] startup
-[20.034s] [ext: isaacsim.sensors.camera-1.3.6] startup
-[20.039s] [ext: isaaclab-0.47.1] startup
-[20.276s] [ext: isaaclab_assets-0.2.2] startup
-[20.555s] [ext: isaaclab_tasks-0.11.1] startup
-[22.218s] [ext: omni.kit.menu.common-2.0.1] startup
-[22.220s] [ext: isaaclab_rl-0.4.2] startup
-[22.222s] [ext: isaaclab_mimic-1.0.14] startup
-[22.223s] [ext: isaaclab.python-2.2.1] startup
-[22.225s] Simulation App Starting
-2026-03-19T15:20:50Z [22,657ms] [Warning] [omni.fabric.plugin] Warning: attribute viewportHandle not found for bucket id 9
+2026-03-19T17:58:49Z [14,665ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
 
-[23.040s] app ready
-[INFO][AppLauncher]: Using device: cuda:0
-[INFO][AppLauncher]: Loading experience file: /home/vlad/IsaacLab/apps/isaaclab.python.kit
+|---------------------------------------------------------------------------------------------|
+| Driver Version: 580.126.09    | Graphics API: Vulkan
+|=============================================================================================|
+| GPU | Name                             | Active | LDA | GPU Memory | Vendor-ID | LUID       |
+|     |                                  |        |     |            | Device-ID | UUID       |
+|     |                                  |        |     |            | Bus-ID    |            |
+|---------------------------------------------------------------------------------------------|
+| 0   | NVIDIA GeForce RTX 3060 Ti       | Yes: 0 |     | 8438    MB | 10de      | 0          |
+|     |                                  |        |     |            | 2489      | b137bb7e.. |
+|     |                                  |        |     |            | b         |            |
+|=============================================================================================|
+| OS: 22.04.5 LTS (Jammy Jellyfish) ubuntu, Version: 22.04.5, Kernel: 6.8.0-106-generic
+| XServer Vendor: The X.Org Foundation, XServer Version: 12101004 (1.21.1.4)
+| Processor: AMD Ryzen 7 3700X 8-Core Processor
+| Cores: 8 | Logical Cores: 16
+|---------------------------------------------------------------------------------------------|
+| Total Memory (MB): 32000 | Free Memory: 21[INFO][AppLauncher]: Using device: cuda:0
+[INFO][AppLauncher]: Loading experience file: /home/vlad/IsaacLab/apps/isaaclab.python.headless.kit
+[Config] Overriding nsteps: 2048 -> 16
 [Config] Multi-categorical action space: 4 dims × 11 bins (max delta 300.0 cm, bin size 300.0 mm)
 Creating environment (suppressing URDF/Lula warnings)...
 [INFO]: Base environment:
@@ -326,15 +53,15 @@ Creating environment (suppressing URDF/Lula warnings)...
 	Physics step-size     : 0.01
 	Rendering step-size   : 0.02
 	Environment step-size : 0.02
-[INFO]: Time taken for scene creation : 2.414076 seconds
+[INFO]: Time taken for scene creation : 2.021271 seconds
 [INFO]: Scene manager:  <class InteractiveScene>
-	Number of environments: 4
+	Number of environments: 24
 	Environment spacing   : 2.5
 	Source prim name      : /World/envs/env_0
 	Global prim paths     : []
 	Replicate physics     : True
 [INFO]: Starting the simulation. This may take a few seconds. Please wait...
-[INFO]: Time taken for simulation start : 1.949748 seconds
+[INFO]: Time taken for simulation start : 0.968083 seconds
 [INFO] Command Manager:  <CommandManager> contains 0 active terms.
 +------------------------+
 |  Active Command Terms  |
@@ -423,9 +150,8 @@ Creating environment (suppressing URDF/Lula warnings)...
 +-----------+----------+
 +-----------+----------+
 
-Creating window for environment.
 [INFO]: Completed setting up the environment...
-[EpisodeManager] Initialized for 4 envs
+[EpisodeManager] Initialized for 24 envs
   Alice timesteps: 100
   Bob timesteps: 200
   Max goals per episode: 5
@@ -435,579 +161,79 @@ Environment initialized. Starting training loop...
 [Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.699999988079071, 0.029999999329447746] -> [0.0, 0.6999992728233337, 0.02250075899064541] | cube: [-0.1499999761581421, 0.699999988079071, 0.029999999329447746] -> [-0.15000081062316895, 0.7000011801719666, 0.022502055391669273]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.7000000476837158, 0.029999999329447746] -> [0.0, 0.6999993324279785, 0.022500796243548393] | cube: [-0.1499999761581421, 0.7000000476837158, 0.029999999329447746] -> [-0.1500006914138794, 0.7000012397766113, 0.022502051666378975]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.699999988079071, 0.029999999329447746] -> [0.0, 0.6999992728233337, 0.02250075899064541] | cube: [-0.1499999761581421, 0.699999988079071, 0.029999999329447746] -> [-0.15000081062316895, 0.7000011801719666, 0.022502055391669273]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.7000000476837158, 0.029999999329447746] -> [0.0, 0.6999993324279785, 0.022500796243548393] | cube: [-0.1499999761581421, 0.7000000476837158, 0.029999999329447746] -> [-0.1500006914138794, 0.7000012397766113, 0.022502051666378975]
-[DEBUG store_goal] goal_states[0,0:3] after store=[0.0, 0.6999992728233337, 0.02250075899064541]
+[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Termination] Robot out of bounds: 1 envs
+[Reset] Env 19: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
+[Reset] Env 19: Alice phase @ step 96/100 | Goals: 0/5 | Reason: Terminated/Truncated
+[Termination] Robot out of bounds: 1 envs
+[Reset] Env 1: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
+[Reset] Env 1: Alice phase @ step 99/100 | Goals: 0/5 | Reason: Terminated/Truncated
 [Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 0] Loss: -0.0310 | Val: 0.0094 | Rew: 0.0000
+[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Resetting objects to safe pose for 22 envs
+[Reset] Resetting robot arm joints for 22 envs
+  [Alice Update 0] Loss: 0.1611 | Val: 0.0823 | Rew: 0.0000
 Iteration 0: SR=0.00 | ABC Buffer: 0
 [Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 1: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 1] Loss: -0.0307 | Val: 0.0024 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-2026-03-19T15:21:04Z [37,052ms] [Warning] [carb] Client gpu.foundation.plugin has acquired [gpu::unstable::IMemoryBudgetManagerFactory v0.1] 100 times. Consider accessing this interface with carb::getCachedInterface() (Performance warning)
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 3: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 3: Alice phase @ step 99/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-  [Alice Update 2] Loss: -0.0298 | Val: 0.0015 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.7000000476837158, 0.029999999329447746] -> [0.0, 0.6999993324279785, 0.022500796243548393] | cube: [-0.1499999761581421, 0.7000000476837158, 0.029999999329447746] -> [-0.1500006914138794, 0.7000012397766113, 0.022502051666378975]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 3] Loss: -0.0306 | Val: 0.0010 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 4] Loss: -0.0338 | Val: 0.0003 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.024m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.15097522735595703, 0.7032084465026855, 0.026701143011450768] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 5] Loss: -0.0355 | Val: 0.0001 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.15057885646820068, 0.6993230581283569, 0.023392820730805397] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.15057885646820068, 0.6993230581283569, 0.023392820730805397]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 6] Loss: -0.0365 | Val: 0.0001 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Valid Goal (+1.0) | Moved: 0.056m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.10102176666259766, 0.6981667876243591, 0.022502241656184196] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.21389317512512207, 0.7218191623687744, 0.022692030295729637]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Valid Goal (+1.0) | Moved: 0.171m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [0.013737678527832031, 0.741152822971344, 0.025750532746315002] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.10102176666259766, 0.6981667876243591, 0.022502241656184196]
-[Phase] Env 0: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Phase] Env 2: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 2 envs
-[Reset] Alice->Bob Env 0: target reset to [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] | cube reset to [-0.25, 0.699999988079071, 0.05000000074505806] | goals: target=[-0.10102176666259766, 0.6981667876243591, 0.022502241656184196] cube=[-0.21389317512512207, 0.7218191623687744, 0.022692030295729637]
-[Reset] Alice->Bob Env 2: target reset to [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] | cube reset to [-0.25, 0.699999988079071, 0.05000000074505806] | goals: target=[0.013737678527832031, 0.741152822971344, 0.025750532746315002] cube=[-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 2 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[-0.10102176666259766, 0.6981667876243591, 0.022502241656184196]
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-[BobSuccess] Env 1 step=3: target dist=0.0069 (curr=[1.1, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.10102176666259766, 0.6981667876243591, 0.022502241656184196]
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 0: Bob phase @ step 102/200 | Goals: 1/5 | Reason: Terminated/Truncated
-[BobSuccess] Env 1 step=3: target dist=0.0069 (curr=[1.1, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 2: Bob phase @ step 120/200 | Goals: 1/5 | Reason: Terminated/Truncated
-  [Alice Update 7] Loss: -0.0376 | Val: 0.0001 | Rew: 0.0000
-  [Bob Update 0] Loss: 0.0713 | Val: 0.0110 | Rew: 0.0021 | ABC: 0.0000 | SR: 0.0000
-Iteration 1: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 19/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 21/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 21/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.000m | target: [1.6689300537109375e-06, 0.7000001668930054, 0.02250393107533455] -> [0.0, 0.6999991536140442, 0.022500935941934586] | cube: [-0.15000057220458984, 0.7000017762184143, 0.02250257320702076] -> [-0.1500006914138794, 0.7000001668930054, 0.02250094711780548]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.005m | target: [-0.14999592304229736, 0.699999213218689, 0.022509979084134102] -> [-0.15195393562316895, 0.7021999359130859, 0.026942500844597816] | cube: [-0.2499997615814209, 0.6999989748001099, 0.022501396015286446] -> [-0.278386652469635, 0.710708498954773, 0.026386694982647896]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.699999988079071, 0.029999999329447746] -> [0.0, 0.6999992728233337, 0.02250075899064541] | cube: [-0.1499999761581421, 0.699999988079071, 0.029999999329447746] -> [-0.15000081062316895, 0.7000011801719666, 0.022502055391669273]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.000m | target: [-0.14999592304229736, 0.699999213218689, 0.022509979084134102] -> [-0.150002121925354, 0.7000008821487427, 0.022504692897200584] | cube: [-0.2499997615814209, 0.6999989748001099, 0.02250138856470585] -> [-0.24999916553497314, 0.6999995708465576, 0.0225013867020607]
-[DEBUG store_goal] goal_states[0,0:3] after store=[0.0, 0.6999991536140442, 0.022500935941934586]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 8] Loss: -0.0288 | Val: 0.0005 | Rew: 0.0000
-Iteration 1: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Valid Goal (+1.0) | Moved: 0.058m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.09937620162963867, 0.6959741115570068, 0.022505391389131546] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.1878141164779663, 0.7057203650474548, 0.022639140486717224]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.020m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14509832859039307, 0.6973099708557129, 0.030842099338769913] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.2540701627731323, 0.7103015780448914, 0.023419633507728577]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.09937620162963867, 0.6959741115570068, 0.022505391389131546]
-[Phase] Env 0: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 1 envs
-[Reset] Alice->Bob Env 0: target reset to [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] | cube reset to [-0.25, 0.699999988079071, 0.05000000074505806] | goals: target=[-0.09937620162963867, 0.6959741115570068, 0.022505391389131546] cube=[-0.1878141164779663, 0.7057203650474548, 0.022639140486717224]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 1 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[-0.09937620162963867, 0.6959741115570068, 0.022505391389131546]
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 1 step=3: target dist=0.0069 (curr=[1.1, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.09937620162963867, 0.6959741115570068, 0.022505391389131546]
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 1 step=3: target dist=0.0069 (curr=[1.1, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 0: Bob phase @ step 128/200 | Goals: 1/5 | Reason: Terminated/Truncated
-  [Alice Update 9] Loss: -0.0392 | Val: 0.0001 | Rew: 0.0000
-  [Bob Update 1] Loss: 0.1002 | Val: 0.0042 | Rew: 0.0000 | ABC: 0.0000 | SR: 0.0000
-Iteration 2: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 29/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 29/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 29/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.699999988079071, 0.029999999329447746] -> [0.0, 0.6999992728233337, 0.02250075899064541] | cube: [-0.1499999761581421, 0.699999988079071, 0.029999999329447746] -> [-0.15000081062316895, 0.7000011801719666, 0.022502055391669273]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.000m | target: [-0.1500011682510376, 0.7000014781951904, 0.022503167390823364] -> [-0.14999842643737793, 0.7000012397766113, 0.022505108267068863] | cube: [-0.2499995231628418, 0.6999989748001099, 0.0225016288459301] -> [-0.2499983310699463, 0.7000008821487427, 0.022502191364765167]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.004m | target: [-0.1500011682510376, 0.7000014185905457, 0.022503171116113663] -> [-0.14586150646209717, 0.6999692916870117, 0.022504759952425957] | cube: [-0.2499995231628418, 0.6999988555908203, 0.0225016251206398] -> [-0.21336472034454346, 0.6997563242912292, 0.02250439114868641]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.000m | target: [-0.1500011682510376, 0.7000014781951904, 0.022503167390823364] -> [-0.14999842643737793, 0.7000012397766113, 0.022505108267068863] | cube: [-0.2499995231628418, 0.6999989748001099, 0.0225016251206398] -> [-0.2499983310699463, 0.7000008821487427, 0.022502275183796883]
-[DEBUG store_goal] goal_states[0,0:3] after store=[0.0, 0.6999992728233337, 0.02250075899064541]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 10] Loss: -0.0290 | Val: 0.0002 | Rew: 0.0000
-Iteration 2: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 11] Loss: -0.0409 | Val: 0.0002 | Rew: 0.0000
-Iteration 2: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Unstable (0.0) | Moved: 0.035m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.1283944845199585, 0.6989346146583557, 0.022501878440380096] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.19729793071746826, 0.7102760672569275, 0.02488372102379799]
-[Alice Reward] Env 1: Valid Goal (+1.0) | Moved: 0.080m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.07529342174530029, 0.6978423595428467, 0.02250695787370205] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.23814427852630615, 0.699114203453064, 0.022531654685735703]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.1283944845199585, 0.6989346146583557, 0.022501878440380096]
-[Phase] Env 1: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 1 envs
-[Reset] Alice->Bob Env 1: target reset to [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] | cube reset to [-0.25, 0.7000000476837158, 0.05000000074505806] | goals: target=[-0.07529342174530029, 0.6978423595428467, 0.02250695787370205] cube=[-0.23814427852630615, 0.699114203453064, 0.022531654685735703]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 1 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[-0.1283944845199585, 0.6989346146583557, 0.022501878440380096]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[Phase] Env 1: Bob FAILURE | Steps: 200/800 | Alice Outcome Reward: 5.0
-[Phase] Bob->Alice Transition for 1 envs
-[Phase] Env 1: Bob→Alice | Goal 1/5 FAILURE | Bob used 200/200 steps
-[Reset] Resetting objects to safe pose for 1 envs
-[Reset] Resetting robot arm joints for 1 envs
-[ABC Verbose] env=1 | traj_len=100 | obs_shape=torch.Size([100, 56]) | goal_shape=torch.Size([14]) | goal_pos=[-0.07529342174530029, 0.6978423595428467, 0.02250695787370205] | obs[0,goal_start:goal_start+3]=[-0.07529342174530029, 0.6978423595428467, 0.02250695787370205] (should match goal_pos)
-  [Alice Update 12] Loss: -0.0162 | Val: 0.0299 | Rew: 1.2500
-  [Bob Update 2] Loss: 0.1110 | Val: 0.0029 | Rew: 0.0000 | ABC: -1.0678 | SR: 0.0000
-Iteration 3: SR=0.00 | ABC Buffer: 100
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 1/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.032m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.1462346315383911, 0.7167735695838928, 0.022504089400172234] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24528443813323975, 0.7155340313911438, 0.022503629326820374]
-[Alice Reward] Env 1: Valid Goal (+1.0) | Moved: 0.068m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.09059202671051025, 0.7168521881103516, 0.022500833496451378] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.3109555244445801, 0.7669732570648193, 0.022507870569825172]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.15727710723876953, 0.7051025629043579, 0.024978462606668472] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Valid Goal (+1.0) | Moved: 0.044m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.11640143394470215, 0.709022045135498, 0.022508373484015465] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.1839919090270996, 0.7372250556945801, 0.02296335995197296]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.1462346315383911, 0.7167735695838928, 0.022504089400172234]
-[Phase] Env 1: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Phase] Env 3: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 2 envs
-[Reset] Alice->Bob Env 1: target reset to [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] | cube reset to [-0.25, 0.7000000476837158, 0.05000000074505806] | goals: target=[-0.09059202671051025, 0.7168521881103516, 0.022500833496451378] cube=[-0.3109555244445801, 0.7669732570648193, 0.022507870569825172]
-[Reset] Alice->Bob Env 3: target reset to [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] | cube reset to [-0.25, 0.7000000476837158, 0.05000000074505806] | goals: target=[-0.11640143394470215, 0.709022045135498, 0.022508373484015465] cube=[-0.1839919090270996, 0.7372250556945801, 0.02296335995197296]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 2 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[-0.1462346315383911, 0.7167735695838928, 0.022504089400172234]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-[BobSuccess] Env 2 step=3: target dist=0.0099 (curr=[-1.4, -0.55, 0.029] goal=[-0.157, 0.705, 0.025]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-[Phase] Env 1: Bob FAILURE | Steps: 200/800 | Alice Outcome Reward: 5.0
-[Phase] Bob->Alice Transition for 2 envs
-[Phase] Env 1: Bob→Alice | Goal 1/5 FAILURE | Bob used 200/200 steps
-[Phase] Env 3: Bob→Alice | Goal 1/5 FAILURE | Bob used 200/200 steps
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-[ABC Verbose] env=1 | traj_len=100 | obs_shape=torch.Size([100, 56]) | goal_shape=torch.Size([14]) | goal_pos=[-0.09059202671051025, 0.7168521881103516, 0.022500833496451378] | obs[0,goal_start:goal_start+3]=[-0.09059202671051025, 0.7168521881103516, 0.022500833496451378] (should match goal_pos)
-[ABC Verbose] env=3 | traj_len=100 | obs_shape=torch.Size([100, 56]) | goal_shape=torch.Size([14]) | goal_pos=[-0.11640143394470215, 0.709022045135498, 0.022508373484015465] | obs[0,goal_start:goal_start+3]=[-0.11640143394470215, 0.709022045135498, 0.022508373484015465] (should match goal_pos)
-  [Alice Update 13] Loss: -0.0209 | Val: 0.0524 | Rew: 2.5000
-  [Bob Update 3] Loss: 0.1106 | Val: 0.0027 | Rew: 0.0000 | ABC: -1.0593 | SR: 0.0000
-Iteration 4: SR=0.00 | ABC Buffer: 300
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 1/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 1/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Valid Goal (+1.0) | Moved: 0.071m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.15595769882202148, 0.7652275562286377, 0.022508325055241585] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.2605864405632019, 0.7484705448150635, 0.02250361442565918]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.030m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.1445239782333374, 0.7112016677856445, 0.022503962740302086] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Phase] Env 1: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 1 envs
-[Reset] Alice->Bob Env 1: target reset to [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] | cube reset to [-0.25, 0.7000000476837158, 0.05000000074505806] | goals: target=[-0.15595769882202148, 0.7652275562286377, 0.022508325055241585] cube=[-0.2605864405632019, 0.7484705448150635, 0.02250361442565918]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 1 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[Phase] Env 1: Bob FAILURE | Steps: 200/800 | Alice Outcome Reward: 5.0
-[Phase] Bob->Alice Transition for 1 envs
-[Phase] Env 1: Bob→Alice | Goal 1/5 FAILURE | Bob used 200/200 steps
-[Reset] Resetting objects to safe pose for 1 envs
-[Reset] Resetting robot arm joints for 1 envs
-[ABC Verbose] env=1 | traj_len=100 | obs_shape=torch.Size([100, 56]) | goal_shape=torch.Size([14]) | goal_pos=[-0.15595769882202148, 0.7652275562286377, 0.022508325055241585] | obs[0,goal_start:goal_start+3]=[-0.15595769882202148, 0.7652275562286377, 0.022508325055241585] (should match goal_pos)
-  [Alice Update 14] Loss: -0.0099 | Val: 0.0223 | Rew: 1.2500
-  [Bob Update 4] Loss: 0.1122 | Val: 0.0015 | Rew: 0.0000 | ABC: -1.0682 | SR: 0.0000
-Iteration 5: SR=0.00 | ABC Buffer: 400
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 1/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 0: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 0: Alice phase @ step 98/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.2461683750152588, 0.7211785316467285, 0.022504178807139397]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-  [Alice Update 15] Loss: 0.1119 | Val: 0.0031 | Rew: 0.0000
-Iteration 5: SR=0.00 | ABC Buffer: 400
-[Reset] Env 0: Alice phase @ step 2/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.005m | target: [0.0, 0.699999988079071, 0.027056999504566193] -> [0.0, 0.6999992728233337, 0.02250077575445175] | cube: [-0.1499999761581421, 0.699999988079071, 0.027056999504566193] -> [-0.15000081062316895, 0.7000008225440979, 0.022501744329929352]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.032m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.15701556205749512, 0.7171677350997925, 0.0244334414601326] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Valid Goal (+1.0) | Moved: 0.069m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.19423389434814453, 0.7470363974571228, 0.02512502111494541] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.26383650302886963, 0.7028132081031799, 0.022501332685351372]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[0.0, 0.6999992728233337, 0.02250077575445175]
-[Phase] Env 2: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 1 envs
-[Reset] Alice->Bob Env 2: target reset to [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] | cube reset to [-0.25, 0.699999988079071, 0.05000000074505806] | goals: target=[-0.19423389434814453, 0.7470363974571228, 0.02512502111494541] cube=[-0.26383650302886963, 0.7028132081031799, 0.022501332685351372]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 1 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[0.0, 0.6999992728233337, 0.02250077575445175]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 1 step=3: target dist=0.0069 (curr=[1.1, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 2: Bob phase @ step 132/200 | Goals: 1/5 | Reason: Terminated/Truncated
-  [Alice Update 16] Loss: 0.0964 | Val: 0.0015 | Rew: 0.0000
-  [Bob Update 5] Loss: 0.1093 | Val: 0.0011 | Rew: 0.0000 | ABC: -1.0735 | SR: 0.0000
-Iteration 6: SR=0.00 | ABC Buffer: 400
-[Reset] Env 0: Alice phase @ step 33/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 33/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 33/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 0: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 0: Alice phase @ step 77/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.000m | target: [-0.15000391006469727, 0.7000026702880859, 0.02251020446419716] -> [-0.15000009536743164, 0.7000007629394531, 0.022501152008771896] | cube: [-0.24999821186065674, 0.7000004053115845, 0.022501925006508827] -> [-0.24999892711639404, 0.7000001668930054, 0.022501016035676003]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.007m | target: [0.0, 0.699999988079071, 0.029999999329447746] -> [0.0, 0.6999992728233337, 0.02250075899064541] | cube: [-0.1499999761581421, 0.699999988079071, 0.029999999329447746] -> [-0.15000081062316895, 0.7000011801719666, 0.022502055391669273]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.000m | target: [-0.15000391006469727, 0.7000026702880859, 0.02251020446419716] -> [-0.15000009536743164, 0.7000007629394531, 0.022501152008771896] | cube: [-0.24999821186065674, 0.7000004053115845, 0.022501930594444275] -> [-0.24999892711639404, 0.7000002861022949, 0.02250111661851406]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-  [Alice Update 17] Loss: 0.1072 | Val: 0.0005 | Rew: 0.0000
-Iteration 6: SR=0.00 | ABC Buffer: 400
-[Reset] Env 0: Alice phase @ step 23/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.000m | target: [5.960464477539062e-07, 0.6999993920326233, 0.02250182069838047] -> [0.0, 0.6999990940093994, 0.022501010447740555] | cube: [-0.1500002145767212, 0.7000018954277039, 0.022502323612570763] -> [-0.15000081062316895, 0.7000014781951904, 0.0225023552775383]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.025m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.1519085168838501, 0.7010565996170044, 0.02538437768816948] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.25338077545166016, 0.701772928237915, 0.023503145202994347]
-[DEBUG store_goal] goal_states[0,0:3] after store=[0.0, 0.6999990940093994, 0.022501010447740555]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 18] Loss: 0.0977 | Val: 0.0004 | Rew: 0.0000
-Iteration 6: SR=0.00 | ABC Buffer: 400
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Valid Goal (+1.0) | Moved: 0.046m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.18864083290100098, 0.6960567235946655, 0.025236554443836212] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.25712817907333374, 0.6990394592285156, 0.02250140905380249]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Phase] Env 1: Alice→Bob | Goal 1/5 | Alice completed 100/100 steps
-[Reset] Resetting robot arm joints for 1 envs
-[Reset] Alice->Bob Env 1: target reset to [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] | cube reset to [-0.25, 0.7000000476837158, 0.05000000074505806] | goals: target=[-0.18864083290100098, 0.6960567235946655, 0.025236554443836212] cube=[-0.25712817907333374, 0.6990394592285156, 0.02250140905380249]
-[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for 1 envs
-[DEBUG after write_data_to_sim] goal_states[0,0:3]=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[BobSuccess] Env 0 step=3: target dist=0.0069 (curr=[1.1, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[1.0, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 2 step=3: target dist=0.0069 (curr=[-1.4, -0.55, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, -0.55, 0.029] goal=[-0.25, 0.7, 0.023])
-[BobSuccess] Env 3 step=3: target dist=0.0069 (curr=[-1.4, 1.95, 0.029] goal=[-0.15, 0.7, 0.023]) | cube dist=0.0069 (curr=[-1.5, 1.95, 0.029] goal=[-0.25, 0.7, 0.023])
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 3 envs
-[Reset] Resetting robot arm joints for 3 envs
-[Phase] Env 1: Bob FAILURE | Steps: 200/800 | Alice Outcome Reward: 5.0
-[Phase] Bob->Alice Transition for 1 envs
-[Phase] Env 1: Bob→Alice | Goal 1/5 FAILURE | Bob used 200/200 steps
-[Reset] Resetting objects to safe pose for 1 envs
-[Reset] Resetting robot arm joints for 1 envs
-[ABC Verbose] env=1 | traj_len=100 | obs_shape=torch.Size([100, 56]) | goal_shape=torch.Size([14]) | goal_pos=[-0.18864083290100098, 0.6960567235946655, 0.025236554443836212] | obs[0,goal_start:goal_start+3]=[-0.18864083290100098, 0.6960567235946655, 0.025236554443836212] (should match goal_pos)
-  [Alice Update 19] Loss: -0.0136 | Val: 0.0250 | Rew: 1.2500
-  [Bob Update 6] Loss: 0.0742 | Val: 0.0034 | Rew: 0.0000 | ABC: -1.0621 | SR: 0.0000
-Iteration 7: SR=0.00 | ABC Buffer: 500
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 1/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[Alice Reward] Env 2: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000010013580322, 0.022502031177282333]
-[Alice Reward] Env 3: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.022502033039927483]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 4 envs
-[Reset] Resetting robot arm joints for 4 envs
-  [Alice Update 20] Loss: 0.1154 | Val: 0.0011 | Rew: 0.0000
-Iteration 7: SR=0.00 | ABC Buffer: 500
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 3: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 3: Alice phase @ step 97/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 2: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 2: Alice phase @ step 98/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Alice Reward] Env 0: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.699999988079071, 0.05000000074505806] -> [-0.14999914169311523, 0.7000004053115845, 0.022502725943922997] | cube: [-0.25, 0.699999988079071, 0.05000000074505806] -> [-0.24999868869781494, 0.7000009417533875, 0.0225019920617342]
-[Alice Reward] Env 1: Not Moved (0.0) | Moved: 0.027m | target: [-0.1499999761581421, 0.7000000476837158, 0.05000000074505806] -> [-0.14999902248382568, 0.7000002861022949, 0.02250288426876068] | cube: [-0.25, 0.7000000476837158, 0.05000000074505806] -> [-0.24999868869781494, 0.7000011205673218, 0.02250201813876629]
-[DEBUG store_goal] goal_states[0,0:3] after store=[-0.14999914169311523, 0.7000004053115845, 0.022502725943922997]
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 2 envs
-[Reset] Resetting robot arm joints for 2 envs
-  [Alice Update 21] Loss: 0.1127 | Val: 0.0008 | Rew: 0.0000
-Iteration 7: SR=0.00 | ABC Buffer: 500
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 2/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 3/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 19: Alice phase @ step 4/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start

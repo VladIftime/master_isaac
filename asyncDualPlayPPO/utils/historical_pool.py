@@ -36,17 +36,19 @@ class HistoricalPolicyPool:
         """Save a snapshot of the current policy weights."""
         snapshot = {k: v.cpu().clone() for k, v in policy.state_dict().items()}
         if len(self._pool) >= self.max_size:
-            self._pool.pop(0)   # evict oldest
+            self._pool.pop(0)  # evict oldest
         self._pool.append(snapshot)
 
-    def sample_policy(self, reference_policy: nn.Module, device: str) -> Optional[nn.Module]:
+    def sample_policy(
+        self, reference_policy: nn.Module, device: str
+    ) -> Optional[nn.Module]:
         """
         Return a deep-copy of reference_policy loaded with a random past snapshot.
         Returns None if the pool is empty.
         """
         if not self._pool:
             return None
-        snapshot  = random.choice(self._pool)
+        snapshot = random.choice(self._pool)
         hist_copy = copy.deepcopy(reference_policy)
         hist_copy.load_state_dict({k: v.to(device) for k, v in snapshot.items()})
         hist_copy.eval()
@@ -67,10 +69,13 @@ class HistoricalPolicyPool:
         If the pool is empty, hist_ids is empty and curr_ids == env_indices.
         """
         if not self._pool or len(env_indices) == 0:
-            return torch.tensor([], dtype=env_indices.dtype, device=env_indices.device), env_indices
+            return (
+                torch.tensor([], dtype=env_indices.dtype, device=env_indices.device),
+                env_indices,
+            )
 
-        n_hist  = max(1, int(len(env_indices) * frac))
-        perm    = torch.randperm(len(env_indices), device=env_indices.device)
+        n_hist = max(1, int(len(env_indices) * frac))
+        perm = torch.randperm(len(env_indices), device=env_indices.device)
         hist_ids = env_indices[perm[:n_hist]]
         curr_ids = env_indices[perm[n_hist:]]
         return hist_ids, curr_ids

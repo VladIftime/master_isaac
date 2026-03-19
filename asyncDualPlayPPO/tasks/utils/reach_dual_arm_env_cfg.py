@@ -22,7 +22,11 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, patterns
 from isaaclab.sim import SimulationCfg
-from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UrdfFileCfg, UsdFileCfg
+from isaaclab.sim.spawners.from_files.from_files_cfg import (
+    GroundPlaneCfg,
+    UrdfFileCfg,
+    UsdFileCfg,
+)
 from isaaclab.utils import configclass
 
 from . import terminations
@@ -33,12 +37,8 @@ from isaaclab.controllers.rmp_flow import RmpFlowControllerCfg
 # Resolve the project root relative to this file so asset paths work regardless
 # of where the package is installed.
 _PROJ_ROOT = os.path.dirname(  # dual_arm_Isaacgym/
-    os.path.dirname(            # asyncDualPlayPPO/
-        os.path.dirname(        # tasks/
-            os.path.dirname(    # utils/
-                os.path.abspath(__file__)
-            )
-        )
+    os.path.dirname(  # asyncDualPlayPPO/
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # tasks/  # utils/
     )
 )
 ISAACLAB_DUAL_ARM_EXT_DIR = _PROJ_ROOT
@@ -68,18 +68,18 @@ UR5e_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            "shoulder_pan_joint":         1.57,
-            "shoulder_lift_joint":       -1.57,
-            "elbow_joint":                1.57,
-            "wrist_1_joint":             -1.57,
-            "wrist_2_joint":             -1.57,
-            "wrist_3_joint":              0.0,
-            "finger_joint":               0.0,
-            "left_inner_knuckle_joint":   0.0,
-            "left_inner_finger_joint":    0.0,
-            "right_outer_knuckle_joint":  0.0,
-            "right_inner_knuckle_joint":  0.0,
-            "right_inner_finger_joint":   0.0,
+            "shoulder_pan_joint": 1.57,
+            "shoulder_lift_joint": -1.57,
+            "elbow_joint": 1.57,
+            "wrist_1_joint": -1.57,
+            "wrist_2_joint": -1.57,
+            "wrist_3_joint": 0.0,
+            "finger_joint": 0.0,
+            "left_inner_knuckle_joint": 0.0,
+            "left_inner_finger_joint": 0.0,
+            "right_outer_knuckle_joint": 0.0,
+            "right_inner_knuckle_joint": 0.0,
+            "right_inner_finger_joint": 0.0,
         },
     ),
     actuators={
@@ -116,25 +116,25 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
             # Left arm
-            "left_shoulder_pan_joint":             0.0,
-            "left_shoulder_lift_joint":           -1.57,
-            "left_elbow_joint":                   -1.57,
-            "left_wrist_1_joint":                 -1.57,
-            "left_wrist_2_joint":                  1.57,
-            "left_wrist_3_joint":                  1.57,
-            "lgripper_finger_joint":               0.0,
-            "lgripper_left_inner_finger_joint":    0.0,
-            "lgripper_right_inner_finger_joint":   0.0,
+            "left_shoulder_pan_joint": 0.0,
+            "left_shoulder_lift_joint": -1.57,
+            "left_elbow_joint": -1.57,
+            "left_wrist_1_joint": -1.57,
+            "left_wrist_2_joint": 1.57,
+            "left_wrist_3_joint": 1.57,
+            "lgripper_finger_joint": 0.0,
+            "lgripper_left_inner_finger_joint": 0.0,
+            "lgripper_right_inner_finger_joint": 0.0,
             # Right arm
-            "right_shoulder_pan_joint":            0.0,
-            "right_shoulder_lift_joint":          -1.57,
-            "right_elbow_joint":                   1.57,
-            "right_wrist_1_joint":                -1.57,
-            "right_wrist_2_joint":                -1.57,
-            "right_wrist_3_joint":                 1.57,
-            "rgripper_finger_joint":               0.0,
-            "rgripper_left_inner_finger_joint":    0.0,
-            "rgripper_right_inner_finger_joint":   0.0,
+            "right_shoulder_pan_joint": 0.0,
+            "right_shoulder_lift_joint": -1.57,
+            "right_elbow_joint": 1.57,
+            "right_wrist_1_joint": -1.57,
+            "right_wrist_2_joint": -1.57,
+            "right_wrist_3_joint": 1.57,
+            "rgripper_finger_joint": 0.0,
+            "rgripper_left_inner_finger_joint": 0.0,
+            "rgripper_right_inner_finger_joint": 0.0,
         },
     ),
     actuators={
@@ -173,6 +173,7 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
 # Scene definition
 ##
 
+
 @configclass
 class ReachDualArmSceneCfg(InteractiveSceneCfg):
     """Configuration for the dual-arm reach scene."""
@@ -187,10 +188,14 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     table = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Table",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.5, -0.05], rot=[1.0, 0, 0, 0]),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.0, 0.5, -0.05], rot=[1.0, 0, 0, 0]
+        ),
         spawn=sim_utils.CuboidCfg(
             size=(2.0, 2.0, 0.1),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True, disable_gravity=True
+            ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
                 static_friction=0.6,
@@ -203,7 +208,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     target_object = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/TargetObject",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.0, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+        ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/concave.usd",
             scale=(1.0, 1.0, 1.0),
@@ -214,7 +221,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     cube = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.15, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[-0.15, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+        ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
             scale=(1.0, 1.0, 1.0),
@@ -225,7 +234,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     cylinder = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cylinder",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[-0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+        ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
             scale=(1.0, 1.0, 1.0),
@@ -236,7 +247,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     rect = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Rect",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+        ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
             scale=(1.0, 1.0, 1.0),
@@ -247,7 +260,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 
     triangle = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Triangle",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.2, 0.6, 0.03], rot=[0.0, 0.0, 0.0, 1.0]),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.2, 0.6, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+        ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
             scale=(1.0, 1.0, 1.0),
@@ -272,6 +287,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
 # MDP settings
 ##
 
+
 @configclass
 class ActionsCfg:
     """Action specifications for the MDP.
@@ -280,6 +296,7 @@ class ActionsCfg:
     Arm actions are EE Cartesian deltas (use_relative_mode=True).
     Gripper actions are binary (open/close threshold on the raw network output).
     """
+
     arm_action = RMPFlowActionCfg(
         asset_name="robot",
         joint_names=["shoulder_.*", "elbow_.*", "wrist_.*"],
@@ -332,8 +349,14 @@ class ObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for the policy group."""
-        joint_pos  = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])})
-        object_pos = ObsTerm(func=mdp.root_pos_w, params={"asset_cfg": SceneEntityCfg("target_object")})
+
+        joint_pos = ObsTerm(
+            func=mdp.joint_pos,
+            params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*"])},
+        )
+        object_pos = ObsTerm(
+            func=mdp.root_pos_w, params={"asset_cfg": SceneEntityCfg("target_object")}
+        )
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -345,6 +368,7 @@ class ObservationsCfg:
 @configclass
 class EventCfg:
     """Configuration for events."""
+
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 
@@ -355,9 +379,9 @@ class TerminationsCfg:
     robot_through_table = DoneTerm(
         func=terminations.robot_out_of_bounds,
         params={
-            "asset_cfg":  SceneEntityCfg("robot", body_names=["wrist_3_link"]),
+            "asset_cfg": SceneEntityCfg("robot", body_names=["wrist_3_link"]),
             "table_z": 0.0,
-            "margin":  -0.05,
+            "margin": -0.05,
             "x_range": (-0.8, 0.8),
             "y_range": (-0.8, 0.8),
         },
@@ -368,7 +392,7 @@ class TerminationsCfg:
         params={
             "x_range": (-1.0, 1.0),
             "y_range": (-0.5, 1.5),
-            "z_min":   -0.2,
+            "z_min": -0.2,
         },
     )
 
@@ -376,16 +400,19 @@ class TerminationsCfg:
 @configclass
 class ReachDualArmEnvCfg(ManagerBasedRLEnvCfg):
     """Base configuration for the dual-arm reach environment."""
-    scene:        ReachDualArmSceneCfg = ReachDualArmSceneCfg(num_envs=4096, env_spacing=2.5)
-    observations: ObservationsCfg      = ObservationsCfg()
-    actions:      ActionsCfg           = ActionsCfg()
-    terminations: TerminationsCfg      = TerminationsCfg()
-    events:       EventCfg             = EventCfg()
+
+    scene: ReachDualArmSceneCfg = ReachDualArmSceneCfg(num_envs=4096, env_spacing=2.5)
+    observations: ObservationsCfg = ObservationsCfg()
+    actions: ActionsCfg = ActionsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
 
     def __post_init__(self):
-        self.decimation          = 2
-        self.episode_length_s    = 20.0
-        self.sim.dt              = 0.01
-        self.sim.use_fabric      = True
+        self.decimation = 2
+        self.episode_length_s = 20.0
+        self.sim.dt = 0.01
+        self.sim.use_fabric = True
         self.sim.render_interval = self.decimation
-        self.reset_settle_steps  = 5   # was 200; 200 settle steps × 2048 envs costs ~15 min
+        self.reset_settle_steps = (
+            5  # was 200; 200 settle steps × 2048 envs costs ~15 min
+        )

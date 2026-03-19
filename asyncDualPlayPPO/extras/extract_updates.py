@@ -2,15 +2,15 @@ import os
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(script_dir)
-name_of_file = 'slurm-27781189-med'
-name_of_output= name_of_file + '_updates'
-log_file = os.path.join(base_dir, 'logs', name_of_file+'.out')
-output_file = os.path.join(base_dir, 'logs', name_of_output+'.out')
+name_of_file = "slurm-27781189-med"
+name_of_output = name_of_file + "_updates"
+log_file = os.path.join(base_dir, "logs", name_of_file + ".out")
+output_file = os.path.join(base_dir, "logs", name_of_output + ".out")
 
 state = 0
 block = []
 
-with open(log_file, 'r') as f_in, open(output_file, 'w') as f_out:
+with open(log_file, "r") as f_in, open(output_file, "w") as f_out:
     for line in f_in:
         is_sep = "============================================================" in line
         if state == 0:

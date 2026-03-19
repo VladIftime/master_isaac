@@ -4,10 +4,10 @@ import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal, Categorical
 
-
 # ---------------------------------------------------------------------------
 # Multi-Categorical distribution helper
 # ---------------------------------------------------------------------------
+
 
 class MultiCategorical:
     """
@@ -30,7 +30,7 @@ class MultiCategorical:
             logits: (batch, num_dims, num_bins)
         """
         self.num_dims = logits.shape[1]
-        self.dists    = [Categorical(logits=logits[:, i, :]) for i in range(self.num_dims)]
+        self.dists = [Categorical(logits=logits[:, i, :]) for i in range(self.num_dims)]
 
     def sample(self) -> torch.Tensor:
         """Returns (batch, num_dims) integer bin indices."""
@@ -43,7 +43,9 @@ class MultiCategorical:
         Returns:
             (batch,) summed log-probabilities
         """
-        return sum(self.dists[i].log_prob(bin_indices[:, i]) for i in range(self.num_dims))
+        return sum(
+            self.dists[i].log_prob(bin_indices[:, i]) for i in range(self.num_dims)
+        )
 
     def entropy(self) -> torch.Tensor:
         """Returns (batch,) summed entropy."""
@@ -53,6 +55,7 @@ class MultiCategorical:
 # ---------------------------------------------------------------------------
 # Permutation-Invariant Encoder (Fix 7)
 # ---------------------------------------------------------------------------
+
 
 class PermInvEncoder(nn.Module):
     """
@@ -65,15 +68,19 @@ class PermInvEncoder(nn.Module):
     def __init__(self, per_obj_dim: int, emb_dim: int = 512):
         super().__init__()
         self.per_obj_dim = per_obj_dim
-        self.emb_dim     = emb_dim
+        self.emb_dim = emb_dim
         self.obj_encoder = nn.Sequential(
-            nn.Linear(per_obj_dim, emb_dim), nn.ELU(),
-            nn.Linear(emb_dim, emb_dim),     nn.ELU(),
+            nn.Linear(per_obj_dim, emb_dim),
+            nn.ELU(),
+            nn.Linear(emb_dim, emb_dim),
+            nn.ELU(),
         )
         nn.init.orthogonal_(self.obj_encoder[0].weight, gain=np.sqrt(2))
         nn.init.orthogonal_(self.obj_encoder[2].weight, gain=np.sqrt(2))
 
-    def forward(self, robot_state: torch.Tensor, obj_features: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, robot_state: torch.Tensor, obj_features: torch.Tensor
+    ) -> torch.Tensor:
         """
         Args:
             robot_state:  (batch, robot_dim)
@@ -81,10 +88,10 @@ class PermInvEncoder(nn.Module):
         Returns:
             (batch, robot_dim + emb_dim)
         """
-        batch    = obj_features.shape[0]
+        batch = obj_features.shape[0]
         num_objs = obj_features.shape[1] // self.per_obj_dim
-        objs     = obj_features.view(batch * num_objs, self.per_obj_dim)
-        enc      = self.obj_encoder(objs).view(batch, num_objs, self.emb_dim)
+        objs = obj_features.view(batch * num_objs, self.per_obj_dim)
+        enc = self.obj_encoder(objs).view(batch, num_objs, self.emb_dim)
         pooled, _ = enc.max(dim=1)
         return torch.cat([robot_state, pooled], dim=-1)
 
@@ -92,6 +99,7 @@ class PermInvEncoder(nn.Module):
 # ---------------------------------------------------------------------------
 # Actor-Critic
 # ---------------------------------------------------------------------------
+
 
 class ActorCritic(nn.Module):
     """
@@ -116,32 +124,40 @@ class ActorCritic(nn.Module):
     deltas that can be zero-padded and sent to RMPFlow.
     """
 
-    def __init__(self, obs_shape, states_shape, actions_shape, initial_std, model_cfg, asymmetric=False):
+    def __init__(
+        self,
+        obs_shape,
+        states_shape,
+        actions_shape,
+        initial_std,
+        model_cfg,
+        asymmetric=False,
+    ):
         super().__init__()
 
         self.asymmetric = asymmetric
 
         if model_cfg is None:
-            actor_hidden_dim         = [256, 256, 256]
-            critic_hidden_dim        = [256, 256, 256]
-            activation               = get_activation("selu")
-            self.use_lstm            = False
-            self.use_pi_encoder      = False
+            actor_hidden_dim = [256, 256, 256]
+            critic_hidden_dim = [256, 256, 256]
+            activation = get_activation("selu")
+            self.use_lstm = False
+            self.use_pi_encoder = False
             self.use_multicategorical = False
         else:
-            actor_hidden_dim         = model_cfg["pi_hid_sizes"]
-            critic_hidden_dim        = model_cfg["vf_hid_sizes"]
-            activation               = get_activation(model_cfg["activation"])
-            self.use_lstm            = model_cfg.get("use_lstm",             False)
-            self.use_pi_encoder      = model_cfg.get("use_pi_encoder",       False)
+            actor_hidden_dim = model_cfg["pi_hid_sizes"]
+            critic_hidden_dim = model_cfg["vf_hid_sizes"]
+            activation = get_activation(model_cfg["activation"])
+            self.use_lstm = model_cfg.get("use_lstm", False)
+            self.use_pi_encoder = model_cfg.get("use_pi_encoder", False)
             self.use_multicategorical = model_cfg.get("use_multicategorical", False)
 
         # --- Multi-categorical params ---
         if self.use_multicategorical:
             self.num_cat_dims = model_cfg.get("num_cat_dims", 4)
-            self.num_bins     = model_cfg.get("num_bins",     11)
-            self.max_delta    = model_cfg.get("max_delta_m",  0.05)
-            actor_out_dim     = self.num_cat_dims * self.num_bins
+            self.num_bins = model_cfg.get("num_bins", 11)
+            self.max_delta = model_cfg.get("max_delta_m", 0.05)
+            actor_out_dim = self.num_cat_dims * self.num_bins
         else:
             actor_out_dim = actions_shape[0]
 
@@ -150,40 +166,50 @@ class ActorCritic(nn.Module):
         # --- Permutation-Invariant Encoder ---
         if self.use_pi_encoder:
             self.robot_state_dim = model_cfg.get("robot_state_dim", 8)
-            per_obj_dim          = model_cfg.get("pi_obj_dim",      15)
-            pi_emb_dim           = model_cfg.get("pi_emb_dim",      512)
-            self.pi_encoder      = PermInvEncoder(per_obj_dim, pi_emb_dim)
-            actor_in_dim         = self.robot_state_dim + pi_emb_dim
+            per_obj_dim = model_cfg.get("pi_obj_dim", 15)
+            pi_emb_dim = model_cfg.get("pi_emb_dim", 512)
+            self.pi_encoder = PermInvEncoder(per_obj_dim, pi_emb_dim)
+            actor_in_dim = self.robot_state_dim + pi_emb_dim
 
         # --- Actor: MLP or LSTM ---
         if self.use_lstm:
-            lstm_hidden          = model_cfg.get("lstm_hidden_size", actor_hidden_dim[-1])
-            trunk_dims           = actor_hidden_dim[:-1] if len(actor_hidden_dim) > 1 else actor_hidden_dim
-            trunk_out            = actor_hidden_dim[-1]
-            self.actor_trunk     = _build_mlp(actor_in_dim, trunk_dims, trunk_out, activation)
-            self.actor_lstm      = nn.LSTMCell(trunk_out, lstm_hidden)
-            self.actor_head      = nn.Linear(lstm_hidden, actor_out_dim)
+            lstm_hidden = model_cfg.get("lstm_hidden_size", actor_hidden_dim[-1])
+            trunk_dims = (
+                actor_hidden_dim[:-1] if len(actor_hidden_dim) > 1 else actor_hidden_dim
+            )
+            trunk_out = actor_hidden_dim[-1]
+            self.actor_trunk = _build_mlp(
+                actor_in_dim, trunk_dims, trunk_out, activation
+            )
+            self.actor_lstm = nn.LSTMCell(trunk_out, lstm_hidden)
+            self.actor_head = nn.Linear(lstm_hidden, actor_out_dim)
             self.lstm_hidden_size = lstm_hidden
             nn.init.orthogonal_(self.actor_head.weight, gain=0.01)
         else:
-            self.actor = _build_mlp(actor_in_dim, actor_hidden_dim, actor_out_dim, activation)
+            self.actor = _build_mlp(
+                actor_in_dim, actor_hidden_dim, actor_out_dim, activation
+            )
 
         # --- Critic ---
-        critic_in   = states_shape[0] if asymmetric else obs_shape[0]
+        critic_in = states_shape[0] if asymmetric else obs_shape[0]
         self.critic = _build_mlp(critic_in, critic_hidden_dim, 1, activation)
 
         # Log-std only used for Gaussian mode
         if not self.use_multicategorical:
-            self.log_std = nn.Parameter(np.log(initial_std) * torch.ones(*actions_shape))
+            self.log_std = nn.Parameter(
+                np.log(initial_std) * torch.ones(*actions_shape)
+            )
 
         if self.use_lstm:
-            print(f"Actor trunk: {self.actor_trunk}\nActor LSTM: {self.actor_lstm}\nActor head: {self.actor_head}")
+            print(
+                f"Actor trunk: {self.actor_trunk}\nActor LSTM: {self.actor_lstm}\nActor head: {self.actor_head}"
+            )
         else:
             print(self.actor)
         print(self.critic)
 
         if not self.use_lstm:
-            actor_scales  = [np.sqrt(2)] * len(actor_hidden_dim) + [0.01]
+            actor_scales = [np.sqrt(2)] * len(actor_hidden_dim) + [0.01]
             _init_weights(self.actor, actor_scales)
         critic_scales = [np.sqrt(2)] * len(critic_hidden_dim) + [1.0]
         _init_weights(self.critic, critic_scales)
@@ -194,8 +220,8 @@ class ActorCritic(nn.Module):
 
     def _encode_obs(self, observations: torch.Tensor) -> torch.Tensor:
         if self.use_pi_encoder:
-            robot = observations[:, :self.robot_state_dim]
-            objs  = observations[:, self.robot_state_dim:]
+            robot = observations[:, : self.robot_state_dim]
+            objs = observations[:, self.robot_state_dim :]
             return self.pi_encoder(robot, objs)
         return observations
 
@@ -240,10 +266,10 @@ class ActorCritic(nn.Module):
 
         Returns (batch, num_cat_dims) float tensor.
         """
-        center     = (self.num_bins - 1) / 2.0
-        normalized = (bin_indices.float() - center) / center        # [-1, 1]
-        xyz        = normalized[:, :3] * self.max_delta
-        gripper    = torch.sign(normalized[:, 3:4])                  # -1 / 0 / +1
+        center = (self.num_bins - 1) / 2.0
+        normalized = (bin_indices.float() - center) / center  # [-1, 1]
+        xyz = normalized[:, :3] * self.max_delta
+        gripper = torch.sign(normalized[:, 3:4])  # -1 / 0 / +1
         return torch.cat([xyz, gripper], dim=-1)
 
     # ------------------------------------------------------------------
@@ -265,20 +291,20 @@ class ActorCritic(nn.Module):
             sigma:            (batch, action_dim)   — zeros (MC) or log_std (Gaussian)
         """
         raw, _ = self._actor_forward(observations)
-        dist   = self._make_distribution(raw)
-        value  = self.critic(states if self.asymmetric else observations)
+        dist = self._make_distribution(raw)
+        value = self.critic(states if self.asymmetric else observations)
 
         if self.use_multicategorical:
-            bin_indices      = dist.sample()                    # (batch, num_cat_dims) int
-            actions_log_prob = dist.log_prob(bin_indices)       # (batch,)
-            actions          = bin_indices.float()              # store as float
-            mu               = raw.view(-1, self.num_cat_dims, self.num_bins).sum(-1)  # sentinel
-            sigma            = torch.zeros_like(actions)
+            bin_indices = dist.sample()  # (batch, num_cat_dims) int
+            actions_log_prob = dist.log_prob(bin_indices)  # (batch,)
+            actions = bin_indices.float()  # store as float
+            mu = raw.view(-1, self.num_cat_dims, self.num_bins).sum(-1)  # sentinel
+            sigma = torch.zeros_like(actions)
         else:
-            actions          = dist.sample()
+            actions = dist.sample()
             actions_log_prob = dist.log_prob(actions)
-            mu               = raw
-            sigma            = self.log_std.repeat(raw.shape[0], 1)
+            mu = raw
+            sigma = self.log_std.repeat(raw.shape[0], 1)
 
         return (
             actions.detach(),
@@ -291,20 +317,20 @@ class ActorCritic(nn.Module):
     def act_with_hidden(self, observations, states, hidden_state=None):
         """Same as act() but also propagates LSTM hidden state."""
         raw, new_hidden = self._actor_forward(observations, hidden_state)
-        dist  = self._make_distribution(raw)
+        dist = self._make_distribution(raw)
         value = self.critic(states if self.asymmetric else observations)
 
         if self.use_multicategorical:
-            bin_indices      = dist.sample()
+            bin_indices = dist.sample()
             actions_log_prob = dist.log_prob(bin_indices)
-            actions          = bin_indices.float()
-            mu               = raw.view(-1, self.num_cat_dims, self.num_bins).sum(-1)
-            sigma            = torch.zeros_like(actions)
+            actions = bin_indices.float()
+            mu = raw.view(-1, self.num_cat_dims, self.num_bins).sum(-1)
+            sigma = torch.zeros_like(actions)
         else:
-            actions          = dist.sample()
+            actions = dist.sample()
             actions_log_prob = dist.log_prob(actions)
-            mu               = raw
-            sigma            = self.log_std.repeat(raw.shape[0], 1)
+            mu = raw
+            sigma = self.log_std.repeat(raw.shape[0], 1)
 
         return (
             actions.detach(),
@@ -332,21 +358,21 @@ class ActorCritic(nn.Module):
         (cast to int64 internally).
         For Gaussian: `actions` is continuous values.
         """
-        raw, _ = self._actor_forward(observations)   # zero hidden for LSTM
-        dist   = self._make_distribution(raw)
-        value  = self.critic(states if self.asymmetric else observations)
+        raw, _ = self._actor_forward(observations)  # zero hidden for LSTM
+        dist = self._make_distribution(raw)
+        value = self.critic(states if self.asymmetric else observations)
 
         if self.use_multicategorical:
-            bin_indices      = actions.long()                    # (batch, num_cat_dims)
-            actions_log_prob = dist.log_prob(bin_indices)        # (batch,)
-            entropy          = dist.entropy()                    # (batch,)
-            mu               = raw.view(-1, self.num_cat_dims, self.num_bins).sum(-1)
-            sigma            = torch.zeros_like(actions)
+            bin_indices = actions.long()  # (batch, num_cat_dims)
+            actions_log_prob = dist.log_prob(bin_indices)  # (batch,)
+            entropy = dist.entropy()  # (batch,)
+            mu = raw.view(-1, self.num_cat_dims, self.num_bins).sum(-1)
+            sigma = torch.zeros_like(actions)
         else:
             actions_log_prob = dist.log_prob(actions)
-            entropy          = dist.entropy()
-            mu               = raw
-            sigma            = self.log_std.repeat(raw.shape[0], 1)
+            entropy = dist.entropy()
+            mu = raw
+            sigma = self.log_std.repeat(raw.shape[0], 1)
 
         return actions_log_prob, entropy, value, mu, sigma
 
@@ -354,6 +380,7 @@ class ActorCritic(nn.Module):
 # ---------------------------------------------------------------------------
 # Helper utilities
 # ---------------------------------------------------------------------------
+
 
 def _build_mlp(in_dim, hidden_dims, out_dim, activation):
     """Build a feedforward network with the given hidden layer structure."""
@@ -375,14 +402,16 @@ def _init_weights(sequential, scales):
 def get_activation(act_name):
     """Return the nn.Module activation corresponding to act_name."""
     activations = {
-        "elu":     nn.ELU(),
-        "selu":    nn.SELU(),
-        "relu":    nn.ReLU(),
-        "crelu":   nn.ReLU(),
-        "lrelu":   nn.LeakyReLU(),
-        "tanh":    nn.Tanh(),
+        "elu": nn.ELU(),
+        "selu": nn.SELU(),
+        "relu": nn.ReLU(),
+        "crelu": nn.ReLU(),
+        "lrelu": nn.LeakyReLU(),
+        "tanh": nn.Tanh(),
         "sigmoid": nn.Sigmoid(),
     }
     if act_name not in activations:
-        raise ValueError(f"Unknown activation function: '{act_name}'. Choose from {list(activations)}")
+        raise ValueError(
+            f"Unknown activation function: '{act_name}'. Choose from {list(activations)}"
+        )
     return activations[act_name]

@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
 
+
 def build_mlp(in_dim, out_dim):
     return nn.Linear(in_dim, out_dim)
+
 
 class AC(nn.Module):
     def __init__(self):
@@ -12,16 +14,24 @@ class AC(nn.Module):
         self.critic = build_mlp(52, 1)
         self.log_std = nn.Parameter(torch.zeros(14))
         self.asymmetric = False
+
     def evaluate(self, observations, states, actions):
         actions_mean = self.actor(observations)
-        scale_tril   = torch.diag(self.log_std.exp())
+        scale_tril = torch.diag(self.log_std.exp())
         distribution = MultivariateNormal(actions_mean, scale_tril=scale_tril)
 
         actions_log_prob = distribution.log_prob(actions)
-        entropy          = distribution.entropy()
-        value            = self.critic(states if self.asymmetric else observations)
+        entropy = distribution.entropy()
+        value = self.critic(states if self.asymmetric else observations)
 
-        return actions_log_prob, entropy, value, actions_mean, self.log_std.repeat(actions_mean.shape[0], 1)
+        return (
+            actions_log_prob,
+            entropy,
+            value,
+            actions_mean,
+            self.log_std.repeat(actions_mean.shape[0], 1),
+        )
+
 
 ac = AC()
 _o = torch.zeros(25, 52)

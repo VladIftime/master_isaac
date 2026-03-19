@@ -20,11 +20,11 @@ def validate_goal(
 ) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
     """
     Validate goals set by Alice.
-    
+
     Current Configuration:
     - Alice must move at least one object > pos_threshold (0.04m) OR > rot_threshold (0.2rad)
     - All objects must remain on the table.
-    
+
     Args:
         initial_state: Object states at episode start (batch, num_objects * state_dim)
         goal_state: Object states at end of Alice's phase (batch, num_objects * state_dim)
@@ -32,7 +32,7 @@ def validate_goal(
         placement_bounds: Dictionary with x_range, y_range for valid placement area
         pos_threshold: Minimum position distance for considering an object "moved"
         rot_threshold: Minimum rotation distance for considering an object "moved"
-    
+
     Returns:
         valid: Boolean tensor (batch,) - True if goal is valid
         rewards: Float tensor (batch,) - Alice's validation reward (+1, -3, or 0)
@@ -40,7 +40,7 @@ def validate_goal(
     """
     batch_size = initial_state.shape[0]
     total_dims = initial_state.shape[1]
-    
+
     # Infer state dim and number of objects
     if total_dims % 17 == 0:
         state_dim = 17
@@ -51,32 +51,36 @@ def validate_goal(
     elif total_dims % 7 == 0:
         state_dim = 7
     else:
-        state_dim = 7 
-        
+        state_dim = 7
+
     num_objects = total_dims // state_dim
-    
+
     # Reshape to (batch, num_objects, state_dim)
     initial = initial_state.view(batch_size, num_objects, state_dim)
     goal = goal_state.view(batch_size, num_objects, state_dim)
-    
+
     # Extract positions
-    initial_pos = initial[:, :, :3]  
+    initial_pos = initial[:, :, :3]
     goal_pos = goal[:, :, :3]
-    
-    initial_quat = initial[:, :, 3:7]  
+
+    initial_quat = initial[:, :, 3:7]
     goal_quat = goal[:, :, 3:7]
-    
+
     # --- STEP 1: Check if objects fell off the table (CRITICAL PENALTY) ---
-    x_on_table = (goal_pos[:, :, 0] >= table_bounds["x_range"][0]) & (goal_pos[:, :, 0] <= table_bounds["x_range"][1])
-    y_on_table = (goal_pos[:, :, 1] >= table_bounds["y_range"][0]) & (goal_pos[:, :, 1] <= table_bounds["y_range"][1])
+    x_on_table = (goal_pos[:, :, 0] >= table_bounds["x_range"][0]) & (
+        goal_pos[:, :, 0] <= table_bounds["x_range"][1]
+    )
+    y_on_table = (goal_pos[:, :, 1] >= table_bounds["y_range"][0]) & (
+        goal_pos[:, :, 1] <= table_bounds["y_range"][1]
+    )
     z_on_table = goal_pos[:, :, 2] >= table_bounds["z_min"]
     all_on_table = torch.all(x_on_table & y_on_table & z_on_table, dim=1)  # (batch,)
 
     # --- STEP 2: Check if objects moved ---
-    pos_movements = torch.norm(goal_pos - initial_pos, dim=-1)  
+    pos_movements = torch.norm(goal_pos - initial_pos, dim=-1)
     quat_dot = torch.sum(initial_quat * goal_quat, dim=-1)
-    rot_movements = 1.0 - torch.abs(quat_dot) 
-    
+    rot_movements = 1.0 - torch.abs(quat_dot)
+
     obj_moved = (pos_movements > pos_threshold) | (rot_movements > rot_threshold)
     any_moved = torch.any(obj_moved, dim=1)  # (batch,)
 
@@ -87,12 +91,20 @@ def validate_goal(
         obj_stable = (max_lin < 0.5) & (max_ang < 0.5)
         all_stable = torch.all(obj_stable, dim=1)
     else:
-        all_stable = torch.ones(batch_size, dtype=torch.bool, device=initial_state.device)
+        all_stable = torch.ones(
+            batch_size, dtype=torch.bool, device=initial_state.device
+        )
 
     # --- STEP 4: Check if outside placement area ---
-    x_in_placement = (goal_pos[:, :, 0] >= placement_bounds["x_range"][0]) & (goal_pos[:, :, 0] <= placement_bounds["x_range"][1])
-    y_in_placement = (goal_pos[:, :, 1] >= placement_bounds["y_range"][0]) & (goal_pos[:, :, 1] <= placement_bounds["y_range"][1])
-    any_outside_placement = torch.any(~(x_in_placement & y_in_placement), dim=1)  # (batch,)
+    x_in_placement = (goal_pos[:, :, 0] >= placement_bounds["x_range"][0]) & (
+        goal_pos[:, :, 0] <= placement_bounds["x_range"][1]
+    )
+    y_in_placement = (goal_pos[:, :, 1] >= placement_bounds["y_range"][0]) & (
+        goal_pos[:, :, 1] <= placement_bounds["y_range"][1]
+    )
+    any_outside_placement = torch.any(
+        ~(x_in_placement & y_in_placement), dim=1
+    )  # (batch,)
 
     # --- ASSIGN REWARDS AND REASONS ---
     valid = torch.zeros(batch_size, dtype=torch.bool, device=initial_state.device)

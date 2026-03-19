@@ -89,7 +89,7 @@ def object_states(
     Layout per instance:
         pos(3) | quat(4) | lin_vel(3) | ang_vel(3) | dist(1) | contact(1)
 
-    Velocities are clamped to [-5, 5] m/s. All positions are returned in 
+    Velocities are clamped to [-5, 5] m/s. All positions are returned in
     environment-local coordinates (i.e., relative to env_origins).
 
     Args:
@@ -126,8 +126,12 @@ def object_states(
         robot = env.scene[gripper_cfg.name]
         body_ids, _ = robot.find_bodies(gripper_cfg.body_names)
         if body_ids:
-            grip_pos_local = robot.data.body_pos_w[:, body_ids[0], :] - env.scene.env_origins
-            dist = torch.norm(pos_local - grip_pos_local.unsqueeze(1), dim=-1, keepdim=True)
+            grip_pos_local = (
+                robot.data.body_pos_w[:, body_ids[0], :] - env.scene.env_origins
+            )
+            dist = torch.norm(
+                pos_local - grip_pos_local.unsqueeze(1), dim=-1, keepdim=True
+            )
 
     # Calculate contact if sensor provided
     if contact_cfg is not None and hasattr(env.scene, "sensors"):
@@ -172,7 +176,9 @@ def goal_states(
 
     obj = env.scene[object_cfg.name]
     batch_size = obj.data.root_pos_w.shape[0]
-    num_instances = 1 if obj.data.root_pos_w.dim() == 2 else obj.data.root_pos_w.shape[1]
+    num_instances = (
+        1 if obj.data.root_pos_w.dim() == 2 else obj.data.root_pos_w.shape[1]
+    )
     return torch.zeros(batch_size, num_instances * 7, device=env.device)
 
 
@@ -181,22 +187,33 @@ def goal_distance(
     object_cfg: SceneEntityCfg = SceneEntityCfg("target_object"),
 ) -> torch.Tensor:
     """
-    Per-object distance from the current state to the goal state.
-
-    Returns:
-        (num_envs, num_instances * 2) — [pos_dist, rot_dist] per instance
+    Per-object distance from the current state to the goal state in the LOCAL frame.
     """
+    # 1. Get world-space states
     current_flat = object_states(env, object_cfg)
+    # 2. Get stored goal states (assumed to be stored in LOCAL frame via updated wrapper)
     goal_flat = goal_states(env, object_cfg)
 
     batch_size = current_flat.shape[0]
     num_instances = current_flat.shape[1] // 15
 
-    current = current_flat.view(batch_size, num_instances, 15)[..., :7]
-    goal = goal_flat.view(batch_size, num_instances, 7)
+    # Access environment origins to convert world -> local
+    env_origins = env.scene.env_origins  # (num_envs, 3)
 
-    pos_dist = torch.norm(current[..., :3] - goal[..., :3], dim=-1, keepdim=True)
-    quat_dot = torch.sum(current[..., 3:7] * goal[..., 3:7], dim=-1, keepdim=True)
+    current = current_flat.view(batch_size, num_instances, 15)
+
+    # 3. TRANSFORM CURRENT POSITION TO LOCAL FRAME
+    # Subtract env_origins from the XYZ components (index 0:3)
+    current_pos_local = current[..., :3] - env_origins.unsqueeze(1)
+    current_quat = current[..., 3:7]
+
+    goal = goal_flat.view(batch_size, num_instances, 7)
+    goal_pos = goal[..., :3]
+    goal_quat = goal[..., 3:7]
+
+    # 4. Compute distances in the same frame (both Local)
+    pos_dist = torch.norm(current_pos_local - goal_pos, dim=-1, keepdim=True)
+    quat_dot = torch.sum(current_quat * goal_quat, dim=-1, keepdim=True)
     rot_dist = 1.0 - torch.abs(quat_dot)
 
     return torch.cat([pos_dist, rot_dist], dim=-1).view(batch_size, -1)

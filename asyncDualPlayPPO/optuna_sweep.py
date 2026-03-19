@@ -54,7 +54,7 @@ def load_cfg(path):
 
 def auto_nsteps(num_envs: int) -> int:
     """Auto-calculate nsteps so the rollout buffer fills in a reasonable time.
-    
+
     Target: ~32K transitions per rollout (num_envs * nsteps).
     With 64 envs: nsteps=512, with 512 envs: nsteps=64, with 16 envs: nsteps=2048.
     Clamped to [32, 2048].
@@ -69,11 +69,22 @@ parser = argparse.ArgumentParser(description="Optuna HPO Sweep for Async Dual Pl
 parser.add_argument("--num_envs", type=int, default=64)
 parser.add_argument("--n_trials", type=int, default=50, help="Number of Optuna trials")
 parser.add_argument("--trial_iters", type=int, default=50, help="Bob updates per trial")
-parser.add_argument("--max_steps_per_trial", type=int, default=500000,
-                    help="Max env steps before force-terminating a trial (escape hatch)")
+parser.add_argument(
+    "--max_steps_per_trial",
+    type=int,
+    default=500000,
+    help="Max env steps before force-terminating a trial (escape hatch)",
+)
 parser.add_argument("--study_name", type=str, default="asp_sweep")
-parser.add_argument("--db_path", type=str, default=None, help="SQLite path for persistent study (e.g. sqlite:///sweep.db)")
-parser.add_argument("--arm_config", type=str, default="rotated", choices=["default", "rotated"])
+parser.add_argument(
+    "--db_path",
+    type=str,
+    default=None,
+    help="SQLite path for persistent study (e.g. sqlite:///sweep.db)",
+)
+parser.add_argument(
+    "--arm_config", type=str, default="rotated", choices=["default", "rotated"]
+)
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 
@@ -100,7 +111,9 @@ from asyncDualPlayPPO.tasks.utils.rewards import (
 
 # ─── Auto-calculate nsteps ───────────────────────────────────────────────────
 computed_nsteps = auto_nsteps(args.num_envs)
-print(f"[Optuna] Auto nsteps: {computed_nsteps} (target ~32K transitions with {args.num_envs} envs)")
+print(
+    f"[Optuna] Auto nsteps: {computed_nsteps} (target ~32K transitions with {args.num_envs} envs)"
+)
 
 # ─── Create environment ONCE ─────────────────────────────────────────────────
 ppo_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
@@ -117,7 +130,9 @@ if args.arm_config == "rotated":
 
 print("[Optuna] Creating environment (once)...")
 base_env = ManagerBasedRLEnv(cfg=env_cfg)
-env = AsyncDualPlayEnvWrapper(env=base_env, device=base_env.device, arm_config=args.arm_config)
+env = AsyncDualPlayEnvWrapper(
+    env=base_env, device=base_env.device, arm_config=args.arm_config
+)
 print(f"[Optuna] Environment ready: {args.num_envs} envs, nsteps={computed_nsteps}")
 
 
@@ -150,9 +165,15 @@ def objective(trial: optuna.Trial) -> float:
     print(f"\n{'='*60}", flush=True)
     print(f"TRIAL {trial.number}", flush=True)
     print(f"{'='*60}", flush=True)
-    print(f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice must move this far)", flush=True)
+    print(
+        f"  min_goal_dist:       {min_goal_dist:.4f} m (Alice must move this far)",
+        flush=True,
+    )
     print(f"  goal_margin:         {goal_margin:.2f}x", flush=True)
-    print(f"  bob_completion:      {bob_completion_radius:.4f} m (= goal_dist ÷ margin, Bob success)", flush=True)
+    print(
+        f"  bob_completion:      {bob_completion_radius:.4f} m (= goal_dist ÷ margin, Bob success)",
+        flush=True,
+    )
     print(f"  rot_threshold:       {rot_threshold:.4f} rad", flush=True)
     print(f"  alpha_decay_steps:   {alpha_decay_steps}", flush=True)
     print(f"  learning_rate:       {lr:.6f}", flush=True)
@@ -167,7 +188,9 @@ def objective(trial: optuna.Trial) -> float:
     # SINGLE SOURCE: EpisodeManager owns all thresholds
     env.episode_manager.pos_threshold = bob_completion_radius  # Bob's success radius
     env.episode_manager.rot_threshold = rot_threshold
-    env.episode_manager.min_goal_dist = min_goal_dist  # Alice's validation threshold (decoupled!)
+    env.episode_manager.min_goal_dist = (
+        min_goal_dist  # Alice's validation threshold (decoupled!)
+    )
 
     # ── 3. Build PPO config for this trial ──────────────────────────────────
     ppo_cfg = copy.deepcopy(base_ppo_cfg)
@@ -242,8 +265,12 @@ def objective(trial: optuna.Trial) -> float:
 
     # ── 5. Pre-allocate Trajectory Buffers ──────────────────────────────────
     nsteps = computed_nsteps
-    alice_obs_log = torch.zeros((args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device)
-    alice_act_log = torch.zeros((args.num_envs, max_alice_steps, *env.action_space.shape), device=env.device)
+    alice_obs_log = torch.zeros(
+        (args.num_envs, max_alice_steps, env.alice_obs_dim), device=env.device
+    )
+    alice_act_log = torch.zeros(
+        (args.num_envs, max_alice_steps, *env.action_space.shape), device=env.device
+    )
     alice_rew_log = torch.zeros((args.num_envs, max_alice_steps), device=env.device)
     alice_step_counts = torch.zeros(args.num_envs, dtype=torch.long, device=env.device)
 
@@ -252,7 +279,7 @@ def objective(trial: optuna.Trial) -> float:
     alice_valid_goals = 0
     bob_updates = 0
     total_env_steps = 0  # Escape hatch counter
-    
+
     # -- NEW: Trackers for Short Episode Pruning --
     total_bob_steps_episodes = 0
     total_bob_episodes_count = 0
@@ -275,35 +302,45 @@ def objective(trial: optuna.Trial) -> float:
         if alice_ppo.storage.step < nsteps:
             return
         if alice_updates >= (bob_updates + 1) * max_alice_bob_ratio:
-            if alice_updates % 10 == 0: # Only log occasionally to avoid spam
-                print(f"  [Trial {trial.number}] Alice Throttled: {alice_updates} updates (Waiting for Bob Update {bob_updates+1})", flush=True)
+            if alice_updates % 10 == 0:  # Only log occasionally to avoid spam
+                print(
+                    f"  [Trial {trial.number}] Alice Throttled: {alice_updates} updates (Waiting for Bob Update {bob_updates+1})",
+                    flush=True,
+                )
             alice_ppo.storage.clear()
             alice_rew_buf.clear()
             return
-        
+
         # Compute returns before update
         dummy_val = torch.zeros(env.num_envs, 1, device=env.device)
         alice_ppo.storage.compute_returns(dummy_val, alice_ppo.gamma, alice_ppo.lam)
-        
+
         val_loss, surr_loss = alice_ppo.update()
         alice_ppo.storage.clear()
         alice_rew_buf.clear()
         alice_updates += 1
-        
-        validity_rate = (alice_valid_goals / alice_total_goals) if alice_total_goals > 0 else 0.0
-        print(f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f} (Bob @ {bob_ppo.storage.step}/{nsteps})", flush=True)
+
+        validity_rate = (
+            (alice_valid_goals / alice_total_goals) if alice_total_goals > 0 else 0.0
+        )
+        print(
+            f"  [Trial {trial.number}] Alice Update {alice_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, ValRate={validity_rate:.2f} (Bob @ {bob_ppo.storage.step}/{nsteps})",
+            flush=True,
+        )
 
         # -- NEW: Alice Competence Pruning --
         # Report Alice's validity rate to Optuna as an intermediate step
         # Using a negative step index to distinguish it from Bob's updates
-        trial.report(validity_rate, step=-alice_updates) 
+        trial.report(validity_rate, step=-alice_updates)
         if trial.should_prune():
-            print(f"  [Trial {trial.number}] Pruning due to poor Alice Validity Rate ({validity_rate:.2f}).")
+            print(
+                f"  [Trial {trial.number}] Pruning due to poor Alice Validity Rate ({validity_rate:.2f})."
+            )
             raise optuna.exceptions.TrialPruned()
 
     def perform_bob_update(current_obs):
         nonlocal bob_updates
-        
+
         # Initialize a tracker if it doesn't exist
         if not hasattr(perform_bob_update, "last_logged_step"):
             perform_bob_update.last_logged_step = -1
@@ -312,10 +349,13 @@ def objective(trial: optuna.Trial) -> float:
             # Only print ONCE per 100 steps
             if bob_ppo.storage.step > 0 and bob_ppo.storage.step % 100 == 0:
                 if perform_bob_update.last_logged_step != bob_ppo.storage.step:
-                    print(f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}", flush=True)
+                    print(
+                        f"  [Trial {trial.number}] Bob Storage: {bob_ppo.storage.step}/{nsteps}",
+                        flush=True,
+                    )
                     perform_bob_update.last_logged_step = bob_ppo.storage.step
             return current_obs
-        
+
         with torch.no_grad():
             _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_obs, None)
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
@@ -323,7 +363,10 @@ def objective(trial: optuna.Trial) -> float:
         bob_ppo.storage.clear()
 
         bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
-        print(f"  [Trial {trial.number}] Bob Update {bob_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, SR={bob_success_rate:.4f} (steps={total_env_steps})", flush=True)
+        print(
+            f"  [Trial {trial.number}] Bob Update {bob_updates}: L_val={val_loss:.4f}, L_surr={surr_loss:.4f}, SR={bob_success_rate:.4f} (steps={total_env_steps})",
+            flush=True,
+        )
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -343,23 +386,29 @@ def objective(trial: optuna.Trial) -> float:
         # ── ESCAPE HATCH ──────────────────────────────
         total_env_steps += 1
         if total_env_steps > args.max_steps_per_trial:
-            print(f"  [Trial {trial.number}] BAILOUT: {total_env_steps} steps, only {bob_updates} Bob updates. Pruning.")
+            print(
+                f"  [Trial {trial.number}] BAILOUT: {total_env_steps} steps, only {bob_updates} Bob updates. Pruning."
+            )
             raise optuna.exceptions.TrialPruned()
 
         # ── NEW: Early Starvation Pruning ────────────
         # Every 20,000 environment steps, check if Bob is getting data.
         if total_env_steps % 20000 == 0:
             if bob_updates == 0 and bob_ppo.storage.step < (computed_nsteps * 0.5):
-                print(f"  [Trial {trial.number}] EARLY PRUNE: Bob is starved ({bob_ppo.storage.step}/{nsteps} buffer). Alice's valid goal rate is likely 0.")
+                print(
+                    f"  [Trial {trial.number}] EARLY PRUNE: Bob is starved ({bob_ppo.storage.step}/{nsteps} buffer). Alice's valid goal rate is likely 0."
+                )
                 raise optuna.exceptions.TrialPruned()
-        
+
         # ── NEW: Short Episode Pruning ───────────────
         # If Bob is finishing episodes too quickly after some warmup, it's likely a bug or trivial task.
         if total_env_steps > 50000 and total_env_steps % 1000 == 0:
-             avg_bob_steps = total_bob_steps_episodes / max(1, total_bob_episodes_count)
-             if total_bob_episodes_count > 10 and avg_bob_steps < 10:
-                 print(f"  [Trial {trial.number}] PRUNING: Bob is terminating too early (Avg {avg_bob_steps:.1f} steps over {total_bob_episodes_count} episodes).")
-                 raise optuna.exceptions.TrialPruned()
+            avg_bob_steps = total_bob_steps_episodes / max(1, total_bob_episodes_count)
+            if total_bob_episodes_count > 10 and avg_bob_steps < 10:
+                print(
+                    f"  [Trial {trial.number}] PRUNING: Bob is terminating too early (Avg {avg_bob_steps:.1f} steps over {total_bob_episodes_count} episodes)."
+                )
+                raise optuna.exceptions.TrialPruned()
 
         # Alpha annealing (uses trial-specific alpha_decay_steps)
         alpha = max(0.0, 1.0 - (bob_updates / alpha_decay_steps))
@@ -372,16 +421,20 @@ def objective(trial: optuna.Trial) -> float:
 
         alice_indices = torch.where(is_alice)[0]
         if len(alice_indices) > 0:
-            alice_obs = obs[alice_indices, :env.alice_obs_dim]
+            alice_obs = obs[alice_indices, : env.alice_obs_dim]
             with torch.no_grad():
-                a_acts, a_logprob, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(alice_obs, None)
+                a_acts, a_logprob, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(
+                    alice_obs, None
+                )
             actions[alice_indices] = a_acts
 
         bob_indices = torch.where(is_bob)[0]
         if len(bob_indices) > 0:
             bob_obs = obs[bob_indices]
             with torch.no_grad():
-                b_acts, b_logprob, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(bob_obs, None)
+                b_acts, b_logprob, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(
+                    bob_obs, None
+                )
             actions[bob_indices] = b_acts
 
         next_obs, rewards, dones, truncated, extras = env.step(actions)
@@ -389,8 +442,11 @@ def objective(trial: optuna.Trial) -> float:
         # ── Hindsight Goal Injection ────────────────────────────────────
         if "episode_manager" in extras:
             # We still need goal_valid for HGI logic
-            curr_validity = extras.get("goal_valid", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
-            
+            curr_validity = extras.get(
+                "goal_valid",
+                torch.zeros(env.num_envs, dtype=torch.bool, device=env.device),
+            )
+
             alice_success_mask = curr_validity
             if alice_success_mask.any():
                 success_ids = torch.where(alice_success_mask)[0]
@@ -418,7 +474,9 @@ def objective(trial: optuna.Trial) -> float:
                     _d[-1] = 1.0
 
                     with torch.no_grad():
-                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(_o, None, demo_acts)
+                        _lp, _, _v, _m, _s = bob_ppo.actor_critic.evaluate(
+                            _o, None, demo_acts
+                        )
 
                     _ret = torch.zeros((s_count,), device=env.device)
                     _adv = torch.zeros((s_count,), device=env.device)
@@ -430,18 +488,28 @@ def objective(trial: optuna.Trial) -> float:
                     for step in reversed(range(s_count)):
                         next_val = 0.0 if step == s_count - 1 else _v[step + 1].item()
                         next_not_done = 0.0 if step == s_count - 1 else 1.0
-                        delta = _r[step] + gamma * next_val * next_not_done - _v[step].item()
+                        delta = (
+                            _r[step]
+                            + gamma * next_val * next_not_done
+                            - _v[step].item()
+                        )
                         adv = delta + gamma * lam * next_not_done * adv
                         _adv[step] = adv
                         _ret[step] = adv + _v[step].item()
 
-                    none_states = torch.zeros((s_count, *env.bob_observation_space.shape), device=env.device)
-                    bob_ppo.demo_buffer.add_trajectory(_o, none_states, demo_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv)
+                    none_states = torch.zeros(
+                        (s_count, *env.bob_observation_space.shape), device=env.device
+                    )
+                    bob_ppo.demo_buffer.add_trajectory(
+                        _o, none_states, demo_acts, _r, _d, _v, _lp, _m, _s, _ret, _adv
+                    )
                     hgi_count += s_count
 
         # ── Store Alice observations ────────────────────────────────────
         if len(alice_indices) > 0:
-            steps = torch.clamp(alice_step_counts[alice_indices], max=max_alice_steps - 1)
+            steps = torch.clamp(
+                alice_step_counts[alice_indices], max=max_alice_steps - 1
+            )
             alice_obs_log[alice_indices, steps] = alice_obs
             alice_act_log[alice_indices, steps] = a_acts.clone()
             alice_rew_log[alice_indices, steps] = rewards[alice_indices]
@@ -457,16 +525,24 @@ def objective(trial: optuna.Trial) -> float:
             b_masks = torch.zeros(env.num_envs, 1, device=env.device)
             b_masks[bob_indices[~ended_for_bob]] = 1.0
 
-            _obs = torch.zeros_like(obs);     _obs[bob_indices] = obs[bob_indices]
-            _acts = torch.zeros_like(actions); _acts[bob_indices] = b_acts
+            _obs = torch.zeros_like(obs)
+            _obs[bob_indices] = obs[bob_indices]
+            _acts = torch.zeros_like(actions)
+            _acts[bob_indices] = b_acts
             _rew = torch.zeros(env.num_envs, device=env.device)
             _rew[bob_indices] = rewards[bob_indices]
-            _val = torch.zeros(env.num_envs, 1, device=env.device); _val[bob_indices] = b_val
-            _lp = torch.zeros(env.num_envs, 1, device=env.device); _lp[bob_indices] = b_logprob.unsqueeze(1)
-            _mu = torch.zeros_like(actions); _mu[bob_indices] = b_mu
-            _sigma = torch.zeros_like(actions); _sigma[bob_indices] = b_sigma
+            _val = torch.zeros(env.num_envs, 1, device=env.device)
+            _val[bob_indices] = b_val
+            _lp = torch.zeros(env.num_envs, 1, device=env.device)
+            _lp[bob_indices] = b_logprob.unsqueeze(1)
+            _mu = torch.zeros_like(actions)
+            _mu[bob_indices] = b_mu
+            _sigma = torch.zeros_like(actions)
+            _sigma[bob_indices] = b_sigma
 
-            bob_ppo.storage.add_transitions(_obs, _obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks)
+            bob_ppo.storage.add_transitions(
+                _obs, _obs, _acts, _rew, dones.clone(), _val, _lp, _mu, _sigma, b_masks
+            )
 
             bob_step_rewards = rewards[bob_indices]
             bob_rew_buf.extend(bob_step_rewards.cpu().numpy().tolist())
@@ -476,7 +552,10 @@ def objective(trial: optuna.Trial) -> float:
             em_info = extras["episode_manager"]
 
             bob_done_mask = em_info["bob_done_this_step"]
-            alice_failed_mask = extras.get("alice_failed_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+            alice_failed_mask = extras.get(
+                "alice_failed_this_step",
+                torch.zeros(env.num_envs, dtype=torch.bool, device=env.device),
+            )
 
             alice_eval_mask = alice_failed_mask | bob_done_mask
             if alice_eval_mask.any():
@@ -489,7 +568,9 @@ def objective(trial: optuna.Trial) -> float:
                 alice_valid_goals += bob_done_mask.sum().item()
 
                 max_count = 0
-                env_counts = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
+                env_counts = torch.zeros(
+                    env.num_envs, dtype=torch.long, device=env.device
+                )
                 env_rewards_buf = torch.zeros(env.num_envs, device=env.device)
 
                 for idx in eval_ids:
@@ -501,15 +582,22 @@ def objective(trial: optuna.Trial) -> float:
                     max_count = max(max_count, count)
 
                     # Unified Reward: Validation Bonus + Outcome Penalty/Reward
-                    alice_reward = extras.get("alice_total_reward", torch.zeros(env.num_envs, device=env.device))[env_id].item()
+                    alice_reward = extras.get(
+                        "alice_total_reward",
+                        torch.zeros(env.num_envs, device=env.device),
+                    )[env_id].item()
                     env_rewards_buf[env_id] = alice_reward
                     alice_rew_buf.append(alice_reward)
 
                 if max_count > 0:
                     for t in range(max_count):
                         active_mask = (env_counts > t).float().unsqueeze(1)
-                        _o = torch.zeros((env.num_envs, env.alice_obs_dim), device=env.device)
-                        _a = torch.zeros((env.num_envs, *env.action_space.shape), device=env.device)
+                        _o = torch.zeros(
+                            (env.num_envs, env.alice_obs_dim), device=env.device
+                        )
+                        _a = torch.zeros(
+                            (env.num_envs, *env.action_space.shape), device=env.device
+                        )
                         _r = torch.zeros((env.num_envs,), device=env.device)
                         _d = torch.zeros((env.num_envs,), device=env.device)
 
@@ -520,7 +608,7 @@ def objective(trial: optuna.Trial) -> float:
 
                             _r[active_ids] = alice_rew_log[active_ids, t]
 
-                            is_last_step = (env_counts == (t + 1))
+                            is_last_step = env_counts == (t + 1)
                             last_step_ids = torch.where(is_last_step)[0]
                             if len(last_step_ids) > 0:
                                 # Overwrite last step reward with end-of-phase reward (outcome + val)
@@ -528,12 +616,16 @@ def objective(trial: optuna.Trial) -> float:
                                 _d[last_step_ids] = 1.0
 
                             with torch.no_grad():
-                                _lp, _, _v, _m, _s = alice_ppo.actor_critic.evaluate(_o, None, _a)
+                                _lp, _, _v, _m, _s = alice_ppo.actor_critic.evaluate(
+                                    _o, None, _a
+                                )
 
                             _v = _v.view(-1, 1) * active_mask
                             _lp = _lp.view(-1, 1) * active_mask
 
-                            alice_ppo.storage.add_transitions(_o, _o, _a, _r, _d, _v, _lp, _m, _s, active_mask)
+                            alice_ppo.storage.add_transitions(
+                                _o, _o, _a, _r, _d, _v, _lp, _m, _s, active_mask
+                            )
 
                     perform_alice_update()
 
@@ -543,13 +635,27 @@ def objective(trial: optuna.Trial) -> float:
             if bob_done_mask.any():
                 done_ids = torch.where(bob_done_mask)[0]
                 total_bob_episodes_count += len(done_ids)
-                total_bob_steps_episodes += env.episode_manager.phase_step[done_ids].sum().item()
+                total_bob_steps_episodes += (
+                    env.episode_manager.phase_step[done_ids].sum().item()
+                )
 
                 bob_success_mask_log = em_info["bob_success_this_step"]
-                bob_success_buf.extend(bob_success_mask_log[bob_success_mask_log].cpu().numpy().astype(float).tolist())
-                bob_success_buf.extend([0.0] * (bob_done_mask & ~bob_success_mask_log).sum().item())
-                bob_pos_err_buf.extend(em_info["bob_pos_err"][bob_done_mask].cpu().numpy().tolist())
-                bob_rot_err_buf.extend(em_info["bob_rot_err"][bob_done_mask].cpu().numpy().tolist())
+                bob_success_buf.extend(
+                    bob_success_mask_log[bob_success_mask_log]
+                    .cpu()
+                    .numpy()
+                    .astype(float)
+                    .tolist()
+                )
+                bob_success_buf.extend(
+                    [0.0] * (bob_done_mask & ~bob_success_mask_log).sum().item()
+                )
+                bob_pos_err_buf.extend(
+                    em_info["bob_pos_err"][bob_done_mask].cpu().numpy().tolist()
+                )
+                bob_rot_err_buf.extend(
+                    em_info["bob_rot_err"][bob_done_mask].cpu().numpy().tolist()
+                )
 
         if dones.any():
             alice_step_counts[torch.where(dones)[0]] = 0
@@ -559,7 +665,9 @@ def objective(trial: optuna.Trial) -> float:
 
     # ── 8. Return Final Metric ──────────────────────────────────────────────
     final_sr = np.mean(bob_success_buf) if bob_success_buf else 0.0
-    print(f"\n[Trial {trial.number}] FINAL Bob Success Rate: {final_sr:.4f} ({total_env_steps} env steps)\n")
+    print(
+        f"\n[Trial {trial.number}] FINAL Bob Success Rate: {final_sr:.4f} ({total_env_steps} env steps)\n"
+    )
     return final_sr
 
 
