@@ -393,17 +393,15 @@ class AsyncDualPlayEnvWrapper:
     def _handle_alice_completion(
         self, obs_dict: Dict, env_ids: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Handle completion of Alice's phase with proper Local/Global handling."""
-        # 1. Extract current state (Local)
+        """Handle completion of Alice's phase with verbose coordinate logging."""
+        # 1. Extract states in LOCAL frame
         goal_state = self._extract_object_states(obs_dict)
-        # 2. Get initial state (Should already be Local if reset() is correct)
         initial_state = self.episode_manager.initial_states
+        
+        alice_pos_req = 0.04  # 4cm movement required
+        alice_rot_req = 0.10 
 
-        # Define thresholds
-        alice_pos_req = 0.04
-        alice_rot_req = 0.10
-
-        # 3. Validate Goal (Comparing Local to Local)
+        # 2. Validate Goal (comparing Local to Local)
         valid, val_reward, reasons = validate_goal(
             initial_state[env_ids],
             goal_state[env_ids],
@@ -415,7 +413,24 @@ class AsyncDualPlayEnvWrapper:
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 4. Storage (Store Local coordinates for Bob)
+        # 3. VERBOSE LOGGING (Restored as requested)
+        start_pos = initial_state[env_ids][:, 0:3]
+        final_pos = goal_state[env_ids][:, 0:3]
+        dist_moved = torch.norm(final_pos - start_pos, dim=-1)
+
+        cube_start = initial_state[env_ids][:, 15:18]
+        cube_final = goal_state[env_ids][:, 15:18]
+
+        for i, env_id in enumerate(env_ids):
+            # Log every completion to see exactly why it fails (OOB vs Not Moved)
+            print(
+                f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | Moved: {dist_moved[i]:.3f}m"
+                f" | target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}"
+                f" | cube: {cube_start[i].tolist()} -> {cube_final[i].tolist()}",
+                flush=True,
+            )
+
+        # 4. Storage for Bob (LOCAL)
         goal_state_storage = goal_state.view(-1, 2, 15)[:, :, :7].reshape(-1, 14)
         self.episode_manager.store_goal_state(goal_state_storage, env_ids)
         self.episode_manager.mark_goal_valid(env_ids, valid)
@@ -426,11 +441,12 @@ class AsyncDualPlayEnvWrapper:
         if len(valid_env_ids) > 0:
             self.episode_manager.transition_to_bob(valid_env_ids)
 
-            # --- FIX: Define start_states here ---
+            # Retrieve states and origins for reset
+            # FIX: defined start_states locally for this scope
             start_states = self.episode_manager.initial_states[valid_env_ids]
             env_origins = self.env.scene.env_origins[valid_env_ids]
 
-            # 5. Reset for Bob (Transform Local -> World for Sim)
+            # 5. Reset Objects (Local -> World for Simulator)
             pos1_global = start_states[:, 0:3] + env_origins
             self.env.scene["target_object"].write_root_pose_to_sim(
                 torch.cat([pos1_global, start_states[:, 3:7]], dim=-1),
@@ -454,12 +470,10 @@ class AsyncDualPlayEnvWrapper:
             reset_robot_joints(self.env, valid_env_ids)
             self.env.scene.write_data_to_sim()
 
-        # 6. Handle Invalid (Alice didn't move or went OOB)
+        # 6. Handle Invalid Goals
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
-            self.episode_manager.reset_episode(
-                invalid_env_ids, reason="Alice Invalid Goal"
-            )
+            self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Invalid Goal")
             reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.env.scene.write_data_to_sim()
