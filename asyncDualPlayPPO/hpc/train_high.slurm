@@ -1,47 +1,50 @@
 #!/bin/bash
-#SBATCH --job-name=asp_a100
+#SBATCH --job-name=asp_high
 #SBATCH --time=24:00:00
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gpus-per-node=rtx_pro_6000:1   # RTX Pro 6000  96 GB — most VRAM on Habrok
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=64G
-#SBATCH --output=slurm-%j-asp.out
+#SBATCH --output=slurm-%j-high.out
 
-# ── I/O config ──────────────────────────────────────────────────────────────
-# Write checkpoints and TensorBoard logs to the node's fast local scratch.
+# ── What this script is for ──────────────────────────────────────────────────
+# Full-scale training run (24 h).  Uses the RTX Pro 6000 (96 GB) for maximum
+# env count.  Swap --gpus-per-node if a different GPU is preferred:
+#
+#   rtx_pro_6000  96 GB  →  4096 envs   (comfortable)
+#   l40s          48 GB  →  2048 envs   (safe)
+#   a100          40 GB  →  1024 envs   (safe)
+#   v100          32 GB  →   512 envs   (safe)
+#
+# nsteps=2048 is the PPO storage capacity per env.  Actual rollout lengths are
+# alice_timesteps (100) and bob_timesteps (200), so the buffer is never more
+# than 10 % full.  Keeping nsteps=2048 gives the GAE computation full context
+# if the rollout lengths are ever increased.
+#
+# Step budget: each iteration ≈ (100 + 200) × 4096 = 1.23 M env-steps.
+# 1000 iterations ≈ 1.23 B steps, close to the OpenAI paper's ~1.5 B.
+# ─────────────────────────────────────────────────────────────────────────────
+
 LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS"
-# ────────────────────────────────────────────────────────────────────────────
 
-# ── Env scaling for A100 (40GB/80GB) ────────────────────────────────────────
-# Single-arm Asymmetric Self-Play (ASP): Alice sets goals, Bob solves them.
-# ~50% of envs run Alice, ~50% run Bob at any given time (async dual-play).
-# 8,192 environments saturates the A100 while keeping PPO updates frequent.
-# 2,048 steps = ~20 full episodes (100 steps/ep) per rollout → stable GAE.
-# Buffer size: 8,192 * 2,048 = 16,777,216 transitions per update.
-NUM_ENVS=8192
+NUM_ENVS=4096
 NSTEPS=2048
-# ────────────────────────────────────────────────────────────────────────────
 
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
 
 echo "[INFO] Job ID:        $SLURM_JOB_ID"
 echo "[INFO] Node:          $SLURMD_NODENAME"
-echo "[INFO] Project root:  $PROJECT_ROOT"
+echo "[INFO] GPU:           RTX Pro 6000 96 GB"
+echo "[INFO] Envs × nsteps: ${NUM_ENVS} × ${NSTEPS} = $(( NUM_ENVS * NSTEPS )) buffer slots"
 echo "[INFO] Local runs:    $LOCAL_RUNS"
-echo "[INFO] Buffer size:   ${NUM_ENVS} envs × ${NSTEPS} steps = $(( NUM_ENVS * NSTEPS )) transitions"
 
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found!"
     echo "[INFO]  Pull it with: apptainer pull isaac-lab.sif docker://nvcr.io/nvidia/isaac-lab:2.3.0"
     exit 1
 fi
-
-# To reach the OpenAI paper scale of ~1.5 Billion steps:
-# 1,500,000,000 / 16,777,216 ≈ 90 iterations.
-# We set max_iterations to 150 (approx. 2.5 Billion steps) to ensure training
-# continues if the A100 crunches through it faster than expected within 24 hours.
 
 apptainer exec --nv \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
@@ -53,9 +56,17 @@ apptainer exec --nv \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
     "$SIF_IMAGE" \
     /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train.py \
-    --num_envs      "$NUM_ENVS" \
-    --nsteps        "$NSTEPS" \
-    --max_iterations 150 \
-    --arm_config    "default" \
-    --exp_name      "hpc_a100_asp_single_arm" \
-    --headless
+    --num_envs       "$NUM_ENVS" \
+    --nsteps         "$NSTEPS" \
+    --max_iterations 1000 \
+    --save_interval  50 \
+    --exp_name       "hpc_high_${NUM_ENVS}env" \
+    --arm_config     default \
+    --headless \
+    2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
+                   -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+
+# ── Sync results back to NFS ─────────────────────────────────────────────────
+echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
+rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/"
+echo "[INFO] Sync complete."
