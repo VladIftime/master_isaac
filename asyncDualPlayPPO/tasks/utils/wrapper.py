@@ -109,7 +109,7 @@ class AsyncDualPlayEnvWrapper:
         else:
             self.action_space = env.action_space
 
-              # Table and placement bounds for goal validation
+        # Table and placement bounds for goal validation
         self.table_bounds = {
             "x_range": (-1.0, 1.0),
             "y_range": (-0.5, 1.5),
@@ -165,7 +165,12 @@ class AsyncDualPlayEnvWrapper:
         
         # Step base environment
         obs_dict, rewards, terminated, truncated, extras = self.env.step(scaled_action)
-        
+
+        # Capture phase state BEFORE any resets so reward/success logic sees the
+        # correct phase even for envs that terminate this step.
+        is_alice_before = self.episode_manager.is_alice_phase().clone()
+        is_bob_before   = self.episode_manager.is_bob_phase().clone()
+
         # Sync EpisodeManager with Env Resets
         dones = terminated | truncated
         if dones.any():
@@ -200,10 +205,6 @@ class AsyncDualPlayEnvWrapper:
                     print(f"[Reset] Env {env_id.item()}: Alice FAILED early ({reason}) | Penalty: -3.0", flush=True)
 
                 self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
-        
-        # Capture phase state BEFORE transitions
-        is_alice_before = self.episode_manager.is_alice_phase().clone()
-        is_bob_before = self.episode_manager.is_bob_phase().clone()
         
         # Advance episode manager
         phase_info = self.episode_manager.step()
@@ -368,6 +369,7 @@ class AsyncDualPlayEnvWrapper:
         goal_state_storage = goal_state.view(-1, 2, 15)[:, :, :7].reshape(-1, 14)
         self.episode_manager.store_goal_state(goal_state_storage, env_ids)
         self.episode_manager.mark_goal_valid(env_ids, valid)
+        print(f"[DEBUG store_goal] goal_states[0,0:3] after store={self.episode_manager.goal_states[0, 0:3].tolist()}", flush=True)
         
         # In this implementation, OOB goals (val_reward == -3.0) are considered INVALID for transition
         # This aligns with Step 1: "if oob -> return False, -3.0"
@@ -402,6 +404,7 @@ class AsyncDualPlayEnvWrapper:
                 )
             print(f"[Reset] Alice->Bob Transition: Resetting Objects (Initial) & Robot (Default) for {len(valid_env_ids)} envs", flush=True)
             self.env.scene.write_data_to_sim()
+            print(f"[DEBUG after write_data_to_sim] goal_states[0,0:3]={self.episode_manager.goal_states[0, 0:3].tolist()}", flush=True)
         
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
@@ -703,7 +706,11 @@ class AsyncDualPlayEnvWrapper:
         from isaaclab.managers import SceneEntityCfg
         
         rewards = torch.zeros(self.num_envs, device=self.device)
-        
+
+        # # Debug: print goal_states BEFORE any computation
+        # if self.episode_manager.goal_states is not None:
+        #     print(f"[DEBUG bob_sparse entry] goal_states[0,0:3]={self.episode_manager.goal_states[0, 0:3].tolist()}", flush=True)
+
         # Get goal distances for both objects
         # target_object distances
         target_dists = goal_distance(self.env, object_cfg=SceneEntityCfg("target_object"))

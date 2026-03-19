@@ -4,6 +4,7 @@ from isaaclab.app import AppLauncher
 import math
 import os
 import sys
+import threading
 import yaml
 import argparse
 from datetime import datetime
@@ -34,6 +35,46 @@ class SuppressAllOutput:
             print(f"Error occurred while suppressed: {exc_val}", file=sys.stderr)
 
 
+def install_noise_filter():
+    """
+    Permanently redirect C-level stderr (fd 2) through a pipe and drop lines
+    that match known Lula/URDF/carb noise patterns.  Everything else is passed
+    through to the original stderr unchanged.  Call once at process start.
+    """
+    _DROP = (
+        b"[Lula] Joint",
+        b"Warning: link",
+        b"urdf_parser",
+        b"flat_black",
+        b"IMemoryBudgetManager",
+    )
+    orig_fd = os.dup(2)
+    read_fd, write_fd = os.pipe()
+    os.dup2(write_fd, 2)
+    os.close(write_fd)
+
+    def _worker():
+        orig = os.fdopen(orig_fd, "wb", buffering=0)
+        buf = b""
+        with os.fdopen(read_fd, "rb", buffering=0) as src:
+            while True:
+                chunk = src.read(256)
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    line_nl = line + b"\n"
+                    if not any(p in line_nl for p in _DROP):
+                        orig.write(line_nl)
+                        orig.flush()
+        if buf and not any(p in buf for p in _DROP):
+            orig.write(buf)
+            orig.flush()
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def load_cfg(path):
     with open(path, "r") as f:
         return yaml.safe_load(f)
@@ -58,9 +99,21 @@ def main():
         choices=["default", "rotated"],
     )
     parser.add_argument("--dummy_alice", action="store_true", help="Use dummy Alice wrapper")
+    parser.add_argument("--test_bob_reward", action="store_true",
+                        help="Test: use DummyBobWrapper (teleports target→goal at step 50). "
+                             "Expected: Bob Rew > 0, SR > 0 from iter 1. "
+                             "Verifies sparse reward threshold and +5 completion bonus.")
+    parser.add_argument("--test_abc_verbose", action="store_true",
+                        help="Test: print ABC demo content (goal shape, obs range) each time "
+                             "a trajectory is added. Verifies goal is appended to obs and "
+                             "filtering only stores Bob-failure episodes.")
+    parser.add_argument("--test_hparams", action="store_true",
+                        help="Test: print hyperparameter audit comparing loaded config "
+                             "against paper Table 2 values and exit.")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
+    install_noise_filter()
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
 
@@ -71,7 +124,7 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
-    from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import DummyAliceWrapper
+    from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import DummyAliceWrapper, DummyBobWrapper
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
@@ -89,6 +142,45 @@ def main():
     task_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/task/AsyncDualPlay.yaml")
     ppo_cfg_path  = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
     ppo_cfg = load_cfg(ppo_cfg_path)
+
+    if args.test_hparams:
+        # Paper Table 2 reference values
+        PAPER = {
+            "gamma":        0.998,
+            "lam":          0.95,
+            "e_clip":       0.2,
+            "entropy_coef": 0.01,
+            "learning_rate":3e-4,
+            "mini_epochs":  3,      # "sample reuse (experience replay)"
+            "critic_coef":  1.0,    # "value loss weight"
+            "abc_coef":     0.5,    # "ABC loss weight β"
+        }
+        learn = ppo_cfg["params"].get("learn", {})
+        actual = {
+            "gamma":         learn.get("gamma",         "?"),
+            "lam":           learn.get("lam",           "?"),
+            "e_clip":        learn.get("cliprange",     "?"),
+            "entropy_coef":  learn.get("ent_coef",      "?"),
+            "learning_rate": learn.get("optim_stepsize","?"),
+            "mini_epochs":   learn.get("noptepochs",    "?"),
+            "critic_coef":   learn.get("value_loss_coef","?"),
+            "abc_coef":      learn.get("abc_coef",      "?"),
+        }
+        print("\n" + "="*60)
+        print("HYPERPARAMETER AUDIT  (paper Table 2 vs loaded config)")
+        print(f"{'Key':<18} {'Paper':>10} {'Loaded':>10}  {'OK?':>6}")
+        print("-"*60)
+        all_ok = True
+        for k, pv in PAPER.items():
+            av = actual[k]
+            ok = "✓" if av == pv else "✗ MISMATCH"
+            if av != pv:
+                all_ok = False
+            print(f"  {k:<16} {str(pv):>10} {str(av):>10}  {ok}")
+        print("="*60)
+        print("All OK!" if all_ok else "Fix mismatches before large-scale training.")
+        print("="*60 + "\n")
+        import sys as _sys; _sys.exit(0)
 
     if args.nsteps is not None:
         print(f"[Config] Overriding nsteps: {ppo_cfg['params']['learn']['nsteps']} -> {args.nsteps}")
@@ -138,8 +230,14 @@ def main():
         env_cfg.scene.robot.init_state.joint_pos["left_shoulder_pan_joint"]  = -1.57
         env_cfg.scene.robot.init_state.joint_pos["right_shoulder_pan_joint"] =  1.57
 
-    base_env = ManagerBasedRLEnv(cfg=env_cfg)
-    if args.dummy_alice:
+    print("Creating environment (suppressing URDF/Lula warnings)...")
+    with SuppressAllOutput():
+        base_env = ManagerBasedRLEnv(cfg=env_cfg)
+    if args.test_bob_reward:
+        print("[Test] --test_bob_reward: using DummyBobWrapper (teleports target→goal at Bob step 50).")
+        print("[Test] Expected: Bob Rew > 0 and SR > 0 from iteration 1.")
+        env = DummyBobWrapper(env=base_env, device=base_env.device, alice_timesteps=100, bob_timesteps=200, teleport_step=50)
+    elif args.dummy_alice:
         env = DummyAliceWrapper(env=base_env, device=base_env.device, alice_timesteps=100, bob_timesteps=200)
     else:
         env = AsyncDualPlayEnvWrapper(env=base_env, device=base_env.device, arm_config=args.arm_config)
@@ -215,10 +313,13 @@ def main():
         bob_ppo.actor_critic.parameters(), lr=bob_ppo.learning_rate
     )
     
-    # Re-initialize Bob's standard PPO storage for 56 dims
+    # Re-initialize Bob's standard PPO storage for 56 dims.
+    # Must hold the full bob_timesteps rollout (same pattern as Alice's oversized storage).
+    max_bob_steps = env.episode_manager.bob_timesteps + 10
+    bob_storage_size = bob_ppo.num_transitions_per_env + max_bob_steps
     bob_ppo.storage = bob_ppo.storage.__class__(
         bob_ppo.vec_env.num_envs,
-        bob_ppo.num_transitions_per_env,
+        bob_storage_size,
         bob_ppo.observation_space.shape,
         bob_ppo.state_space.shape,
         bob_ppo.action_space.shape,
@@ -324,7 +425,7 @@ def main():
         """Run a PPO + ABC update for Bob after his rollout is complete."""
         nonlocal bob_updates, best_bob_success_rate
         
-        if bob_ppo.storage.step < bob_ppo.storage.num_transitions_per_env:
+        if bob_ppo.storage.step == 0:
             return
             
         with torch.no_grad():
@@ -351,7 +452,7 @@ def main():
         writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err,     bob_updates)
         writer.add_scalar("Metrics/Bob/RotError",    mean_rot_err,     bob_updates)
 
-        print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | ABC Loss: {loss_abc:.4f} | SR: {bob_success_rate:.4f}", flush=True)
+        print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | ABC: {loss_abc:.4f} | SR: {bob_success_rate:.4f}", flush=True)
 
         if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
             bob_ppo.save(os.path.join(bob_ppo.log_dir,   f"model_{bob_updates+1}.pt"))
@@ -401,7 +502,9 @@ def main():
 
         # --- 1. ALICE ROLLOUT PHASE ---
         alice_ppo.storage.clear()
-        
+
+        iter_sr_counts = [0, 0]  # [attempted, succeeded] — moved here so Alice-loop Bob completions are counted
+
         # Reset all envs to Alice phase at start of iteration
         env.episode_manager.reset_episode(torch.arange(env.num_envs, device=env.device), reason="Iteration Start")
         
@@ -502,6 +605,15 @@ def main():
 
             obs_full, rewards, dones, truncated, extras = env.step(a_env_full)
 
+            # Count Bob completions that fire during Alice-phase stepping
+            # (Bob-phase envs are still stepped when the wrapper advances all envs)
+            ep_info_a = extras.get("episode_manager", {})
+            if ep_info_a:
+                finished_bob_a = torch.where(ep_info_a["bob_done_this_step"])[0]
+                if len(finished_bob_a) > 0:
+                    iter_sr_counts[0] += len(finished_bob_a)
+                    iter_sr_counts[1] += int(ep_info_a["bob_success_this_step"][finished_bob_a].sum().item())
+
             # Reset LSTM hidden state and gripper state for envs that terminated
             if alice_hidden is not None:
                 done_alice = alice_indices[dones[alice_indices]]
@@ -522,23 +634,10 @@ def main():
             )
             current_alice_obs = next_alice_obs
 
-        # --- 1.5 SETTLE PHYSICS ---
-        # Run 20 zero-action steps to let objects stop sliding/bouncing before extracting the goal.
-        # Use env.env (ManagerBasedRLEnv) directly to avoid advancing the EpisodeManager state.
-        for _ in range(20):
-            settle_acts = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
-            env.env.step(settle_acts)
-            
-        # Manually overwrite the goal states to the newly settled states.
-        # Apply the same 14D slice as wrapper._handle_alice_completion:
-        #   full state is (num_envs, 30) = 2 objects × 15 features
-        #   keep only pos+orient (first 7 per object) → (num_envs, 14)
-        obs_dict = env.env.observation_manager.compute()
-        settled_goal_states = env._extract_object_states(obs_dict)  # (N, 30)
-        settled_goal_states_14d = settled_goal_states.view(-1, 2, 15)[:, :, :7].reshape(-1, 14)
-        env.episode_manager.store_goal_state(settled_goal_states_14d, torch.arange(env.num_envs, device=env.device))
-        
-        # Alice Phase Done. Goal states extracted by wrapper during transition.
+        # Goal states already extracted by wrapper during Alice→Bob transition
+        # (in _handle_alice_completion, before objects were reset to S0).
+        # DO NOT re-extract here: the objects have already been reset to S0 by the wrapper,
+        # so any extraction now would overwrite the goal with the reset position.
         goal_states = env.episode_manager.goal_states
         
         # --- 2. BOB ROLLOUT PHASE ---
@@ -652,6 +751,8 @@ def main():
                 if len(finished_bob) > 0:
                     bob_pos_err_buf.extend(pos_err[finished_bob].cpu().numpy().tolist())
                     bob_rot_err_buf.extend(rot_err[finished_bob].cpu().numpy().tolist())
+                    iter_sr_counts[0] = iter_sr_counts[0] + len(finished_bob)
+                    iter_sr_counts[1] = iter_sr_counts[1] + int(ep_info["bob_success_this_step"][finished_bob].sum().item())
 
         # --- 3. ALICE BEHAVIORAL CLONING (ABC) BUFFER PUSH ---
         goal_valid = env.episode_manager.goal_valid
@@ -680,6 +781,19 @@ def main():
                 with torch.no_grad():
                     old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(bc_obs, None, traj_a)
 
+                if args.test_abc_verbose:
+                    g_slice = goal_states[eid]
+                    obs_dim = bc_obs.shape[-1]
+                    goal_start = obs_dim - 18  # layout: alice_obs | goal_states(14) | distances(4)
+                    print(
+                        f"[ABC Verbose] env={eid} | traj_len={len(traj_o)} | "
+                        f"obs_shape={bc_obs.shape} | goal_shape={g_slice.shape} | "
+                        f"goal_pos={g_slice[0:3].tolist()} | "
+                        f"obs[0,goal_start:goal_start+3]={bc_obs[0, goal_start:goal_start+3].tolist()} "
+                        f"(should match goal_pos)",
+                        flush=True,
+                    )
+
                 # Add to ABC buffer with old_log_probs for ratio clipping
                 bob_ppo.abc_buffer.add_trajectory(
                     bc_obs, bc_obs, traj_a,
@@ -706,11 +820,10 @@ def main():
             
             alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
-        # Per-goal success rate: successes / goals_attempted across all envs this iteration
-        # (Paper metric: ξ tracks cumulative per-goal outcomes, not per-episode boolean)
-        total_attempted = env.episode_manager.goals_attempted.sum().item()
-        total_succeeded = env.episode_manager.goals_succeeded.sum().item()
-        current_sr = total_succeeded / max(1, total_attempted)
+        # Per-goal success rate accumulated from extras during Bob rollout.
+        # Cannot read from episode_manager here: wrapper resets goals_attempted/goals_succeeded
+        # during Bob→Alice transition (reset_episode call in wrapper.py), so they are 0 by now.
+        current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         bob_success_buf.append(current_sr)
         
         # Perform Updates
