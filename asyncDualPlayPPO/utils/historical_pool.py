@@ -74,7 +74,17 @@ class HistoricalPolicyPool:
                 env_indices,
             )
 
-        n_hist = max(1, int(len(env_indices) * frac))
+        # Ensure at least 1 env always stays in curr_ids — calling code passes
+        # curr_ids directly to act_with_hidden, which crashes on an empty batch.
+        n_hist = min(
+            max(1, int(len(env_indices) * frac)),
+            len(env_indices) - 1,
+        )
+        if n_hist <= 0:
+            return (
+                torch.tensor([], dtype=env_indices.dtype, device=env_indices.device),
+                env_indices,
+            )
         perm = torch.randperm(len(env_indices), device=env_indices.device)
         hist_ids = env_indices[perm[:n_hist]]
         curr_ids = env_indices[perm[n_hist:]]
