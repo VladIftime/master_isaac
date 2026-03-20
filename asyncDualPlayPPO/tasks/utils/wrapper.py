@@ -167,9 +167,15 @@ class AsyncDualPlayEnvWrapper:
         self.episode_manager.reset_episode(env_ids, reason="Global Manual Reset")
         self.delayed_alice_reward[env_ids] = 0.0
 
-        # Extract and store initial object states
-        initial_state = self._extract_object_states(obs_dict)
-        self.episode_manager.store_initial_state(initial_state)
+        # Place objects at safe starting positions (Isaac Lab's default reset may use
+        # different spawn locations). Set initial_states directly from the known safe
+        # pose rather than reading physics cache (avoids PhysX readback timing issues).
+        reset_objects_to_fixed_safe_pose(self.env, env_ids)
+        reset_robot_joints(self.env, env_ids)
+        self.env.scene.write_data_to_sim()
+        self.episode_manager.initial_states = (
+            self._safe_reset_state.unsqueeze(0).expand(self.num_envs, -1).clone()
+        )
 
         # Return concatenated observations so train.py can slice them
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
@@ -204,27 +210,55 @@ class AsyncDualPlayEnvWrapper:
         dones = terminated | truncated
         if dones.any():
             reset_ids = torch.where(dones)[0]
-
-            # NOTE: extras["log"] contains aggregated scalar means for TensorBoard,
-            # NOT per-env tensors. We use `terminated[env_id]` as the OOB proxy:
-            # terminated=True means physics termination (OOB/collision),
-            # truncated=True (without terminated) means timeout — no Alice penalty.
             is_alice = self.episode_manager.is_alice_phase()
 
-            # the active boolean tensors for each termination condition.
+            # Build a reason string per env from the termination manager's condition dict.
+            # _term_dones maps condition_name -> bool tensor (one entry per env).
             term_dones = self.env.termination_manager._term_dones
 
             for env_id in reset_ids:
-                # Skip timeout resets — only penalize hard terminations
-                if not terminated[env_id]:
-                    continue
+                is_term = terminated[env_id].item()
+                is_trunc = truncated[env_id].item()
+                phase_name = "Alice" if is_alice[env_id] else "Bob"
+                phase_step = self.episode_manager.phase_step[env_id].item()
+                goal_num = self.episode_manager.goal_count[env_id].item()
 
-                # Determine specific reason from term_dones
+                # Collect fired condition names from the termination manager.
+                # _term_dones maps condition_name -> bool tensor (num_envs,).
+                fired = []
                 if isinstance(term_dones, dict):
-                    reasons = [name for name, val in term_dones.items() if val[env_id]]
+                    for cname, cval in term_dones.items():
+                        try:
+                            v = cval[env_id]
+                            # handle 0-dim tensor, plain bool, or scalar
+                            if isinstance(v, torch.Tensor):
+                                v = v.item()
+                            if v:
+                                fired.append(cname)
+                        except Exception:
+                            pass
+
+                if fired:
+                    reason = " | ".join(fired)
+                elif is_term:
+                    reason = "physics_termination"
                 else:
-                    reasons = ["Terminated/Truncated"]
-                reason = " | ".join(reasons) if reasons else "OOB/Termination"
+                    reason = "timeout"
+
+                status = ("TERMINATED" if is_term else "") + (" TRUNCATED" if is_trunc else "")
+                max_steps = (self.episode_manager.alice_timesteps
+                             if is_alice[env_id] else self.episode_manager.bob_timesteps)
+                print(
+                    f"[EarlyEnd] Env {env_id.item()} [{status.strip()}] "
+                    f"{phase_name} step={phase_step}/{max_steps} goal={goal_num}/5 "
+                    f"reason={reason}",
+                    flush=True,
+                )
+
+                # Only penalize hard physics terminations (not timeouts)
+                if not is_term:
+                    self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
+                    continue
 
                 if is_alice[env_id]:
                     if not hasattr(self, "_early_alice_failures"):
@@ -233,10 +267,6 @@ class AsyncDualPlayEnvWrapper:
                         )
                     self._early_alice_failures[env_id] = True
                     self.delayed_alice_reward[env_id] = -3.0
-                    print(
-                        f"[Reset] Env {env_id.item()}: Alice FAILED early ({reason}) | Penalty: -3.0",
-                        flush=True,
-                    )
 
                 self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
 
@@ -497,7 +527,7 @@ class AsyncDualPlayEnvWrapper:
             steps_used = self.episode_manager.phase_step[first_env].item()
             status = "SUCCESS" if success[0].item() else "FAILURE"
             print(
-                f"[Phase] Env {first_env}: Bob {status} | Steps: {steps_used}/800 | Alice Outcome Reward: {outcome_rewards[0].item():.1f}",
+                f"[Phase] Env {first_env}: Bob {status} | Steps: {steps_used}/{self.episode_manager.bob_timesteps} | Alice Outcome Reward: {outcome_rewards[0].item():.1f}",
                 flush=True,
             )
 
@@ -849,8 +879,10 @@ class AsyncDualPlayEnvWrapper:
         # Prevent spurious rewards on the very first step of Bob's phase.
         # If an object (like the secondary cube) is untouched by Alice, its start position is its goal position.
         # It will be evaluated as "True" on step 1, but we don't want to give Bob a free +1 reward for it.
+        # Restrict to Bob-phase envs only (Alice-phase envs at step 1 must not interfere).
         bob_phase_steps = self.episode_manager.phase_step
-        is_first_step = bob_phase_steps == 1
+        is_bob_phase = self.episode_manager.is_bob_phase()
+        is_first_step = (bob_phase_steps == 1) & is_bob_phase
         if is_first_step.any():
             first_step_mask = is_first_step.unsqueeze(1).expand_as(prev_success)
             prev_success = torch.where(first_step_mask, obj_success, prev_success)
@@ -869,31 +901,32 @@ class AsyncDualPlayEnvWrapper:
         all_success = torch.all(obj_success, dim=1)
         completion_not_given = ~self.episode_manager.completion_given
 
-        # Prevent success on the very first step of Bob's phase (stale observations)
-        # episode_manager.phase_step is 0 immediately after transition
-        bob_phase_steps = self.episode_manager.phase_step
-
-        # Only allow completion if this is not the transition step (step 0)
+        # Only allow completion if this is not the transition step (step 0) AND env is in Bob phase
         should_give_completion = (
-            all_success & completion_not_given & (bob_phase_steps > 0)
+            all_success & completion_not_given & (bob_phase_steps > 0) & is_bob_phase
         )
 
-        # Debug: log positions when completion fires
+        # Debug: log positions when completion fires (LOCAL frame for both curr and goal)
         if should_give_completion.any():
             comp_ids = torch.where(should_give_completion)[0]
+            env_origins = self.env.scene.env_origins
             for env_id in comp_ids:
                 t_pos = pos_dists[env_id, 0].item()
                 c_pos = pos_dists[env_id, 1].item()
-                t_curr = (
-                    self.env.scene["target_object"].data.root_pos_w[env_id].tolist()
-                )
+                t_curr_l = (
+                    self.env.scene["target_object"].data.root_pos_w[env_id]
+                    - env_origins[env_id]
+                ).tolist()
                 t_goal = self.episode_manager.goal_states[env_id, 0:3].tolist()
-                c_curr = self.env.scene["cube"].data.root_pos_w[env_id].tolist()
+                c_curr_l = (
+                    self.env.scene["cube"].data.root_pos_w[env_id]
+                    - env_origins[env_id]
+                ).tolist()
                 c_goal = self.episode_manager.goal_states[env_id, 7:10].tolist()
                 print(
                     f"[BobSuccess] Env {env_id.item()} step={bob_phase_steps[env_id].item()}: "
-                    f"target dist={t_pos:.4f} (curr={[round(x,3) for x in t_curr]} goal={[round(x,3) for x in t_goal]}) | "
-                    f"cube dist={c_pos:.4f} (curr={[round(x,3) for x in c_curr]} goal={[round(x,3) for x in c_goal]})",
+                    f"target dist={t_pos:.4f} (curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]}) | "
+                    f"cube dist={c_pos:.4f} (curr={[round(x,3) for x in c_curr_l]} goal={[round(x,3) for x in c_goal]})",
                     flush=True,
                 )
 
@@ -910,14 +943,14 @@ class AsyncDualPlayEnvWrapper:
 
         rewards = step_rewards + completion_bonus
 
-        # Total Bob Reward (Sparse Only)
-        total_rewards = rewards
-
-        # Update state for next step
-        self.episode_manager.prev_obj_success = obj_success.clone()
+        # Update prev_obj_success only for Bob-phase envs to avoid Alice-phase
+        # envs carrying stale success state into their first Bob step.
+        new_prev = self.episode_manager.prev_obj_success.clone() if self.episode_manager.prev_obj_success is not None else obj_success.clone()
+        new_prev[is_bob_phase] = obj_success[is_bob_phase]
+        self.episode_manager.prev_obj_success = new_prev
 
         # Return rewards and which envs just achieved completion
-        return total_rewards, should_give_completion
+        return rewards, should_give_completion
 
     def close(self):
         """Close wrapped environment"""

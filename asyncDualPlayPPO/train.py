@@ -630,23 +630,10 @@ def main():
             0,
         ]  # [attempted, succeeded] — moved here so Alice-loop Bob completions are counted
 
-        # Reset all envs to Alice phase at start of iteration
-        env.episode_manager.reset_episode(
-            torch.arange(env.num_envs, device=env.device), reason="Iteration Start"
-        )
-
         # Use wrapper's reset/step returned obs or re-compute and slice
         obs_dict = env.env.observation_manager.compute()
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_alice_obs = obs[:, : env.alice_obs_dim]
-
-        # Set initial_states to the safe reset position directly.
-        # data.root_pos_w is only refreshed inside env.step(); reading it here (before
-        # the Alice loop starts) gives stale values (still the goal position from the
-        # previous iteration's Bob phase).  Using _safe_reset_state avoids this.
-        env.episode_manager.store_initial_state(
-            env._safe_reset_state.unsqueeze(0).expand(env.num_envs, -1).clone()
-        )
 
         # Pre-allocate iteration buffers for ABC
         alice_traj_obs = []  # list of (num_envs, obs_dim)
