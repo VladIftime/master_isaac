@@ -41,17 +41,13 @@ def validate_goal(
     batch_size = initial_state.shape[0]
     total_dims = initial_state.shape[1]
 
-    # Infer state dim and number of objects
-    if total_dims % 17 == 0:
-        state_dim = 17
-    elif total_dims % 15 == 0:
-        state_dim = 15
-    elif total_dims % 13 == 0:
-        state_dim = 13
-    elif total_dims % 7 == 0:
-        state_dim = 7
+    # State coming from _extract_object_states is always [pos(3)+quat(4)] per object
+    # = 7 dims/object.  Support other sizes for forward-compatibility.
+    for state_dim in (7, 13, 15, 17):
+        if total_dims % state_dim == 0:
+            break
     else:
-        state_dim = 7
+        state_dim = 7  # fallback
 
     num_objects = total_dims // state_dim
 
@@ -106,32 +102,33 @@ def validate_goal(
         ~(x_in_placement & y_in_placement), dim=1
     )  # (batch,)
 
-    # --- ASSIGN REWARDS AND REASONS ---
-    valid = torch.zeros(batch_size, dtype=torch.bool, device=initial_state.device)
-    rewards = torch.zeros(batch_size, device=initial_state.device)
-    reasons = ["Unknown"] * batch_size
+    # --- ASSIGN REWARDS AND REASONS (vectorised) ---
+    # Priority: Off Table > Not Moved > Unstable > Out of Zone > Valid
+    off_table = ~all_on_table
+    not_moved = all_on_table & ~any_moved
+    unstable = all_on_table & any_moved & ~all_stable
+    out_of_zone = all_on_table & any_moved & all_stable & any_outside_placement
+    is_valid = all_on_table & any_moved & all_stable & ~any_outside_placement
 
+    rewards = torch.where(off_table, torch.full((batch_size,), -3.0, device=initial_state.device),
+              torch.where(not_moved,  torch.zeros(batch_size, device=initial_state.device),
+              torch.where(unstable,   torch.zeros(batch_size, device=initial_state.device),
+              torch.where(out_of_zone, torch.full((batch_size,), -3.0, device=initial_state.device),
+                                       torch.ones(batch_size, device=initial_state.device)))))
+
+    valid = is_valid
+
+    reasons = ["Unknown"] * batch_size
     for i in range(batch_size):
-        if not all_on_table[i]:
-            valid[i] = False
-            rewards[i] = -3.0
+        if off_table[i]:
             reasons[i] = "Off Table (-3.0)"
-        elif not any_moved[i]:
-            valid[i] = False
-            rewards[i] = 0.0
+        elif not_moved[i]:
             reasons[i] = "Not Moved (0.0)"
-        elif not all_stable[i]:
-            valid[i] = False
-            rewards[i] = 0.0
+        elif unstable[i]:
             reasons[i] = "Unstable (0.0)"
+        elif out_of_zone[i]:
+            reasons[i] = "Out of Zone (-3.0)"
         else:
-            # Goal is physically valid!
-            valid[i] = True
-            if any_outside_placement[i]:
-                rewards[i] = -3.0
-                reasons[i] = "Out of Zone (-3.0)"
-            else:
-                rewards[i] = 1.0
-                reasons[i] = "Valid Goal (+1.0)"
+            reasons[i] = "Valid Goal (+1.0)"
 
     return valid, rewards, reasons

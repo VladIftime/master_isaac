@@ -132,6 +132,22 @@ def main():
         help="Test: print hyperparameter audit comparing loaded config "
         "against paper Table 2 values and exit.",
     )
+    parser.add_argument(
+        "--dummy_goal_distance",
+        action="store_true",
+        help="Test: use DummyGoalDistanceWrapper (snaps both objects to stored "
+        "goals at Bob step 30, then measures goal_distance()). "
+        "Expected: pos_dist < 0.01 and rot_dist < 0.01 (printed as ✓). "
+        "A distance ≈ env_origin magnitude (~2m) means double-subtraction bug.",
+    )
+    parser.add_argument(
+        "--test_movement",
+        action="store_true",
+        help="Test: use DummyMovementWrapper (teleports target to [0.15,0.5,0.05] "
+        "local during Alice's phase). "
+        "Expected: measured_dist ≈ 0.300 and validate_goal says 'Valid Goal'. "
+        "measured_dist ≈ 0.000 means stale initial_states.",
+    )
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -149,6 +165,8 @@ def main():
     from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import (
         DummyAliceWrapper,
         DummyBobWrapper,
+        DummyGoalDistanceWrapper,
+        DummyMovementWrapper,
     )
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
@@ -287,6 +305,31 @@ def main():
             alice_timesteps=100,
             bob_timesteps=200,
             teleport_step=50,
+        )
+    elif args.dummy_goal_distance:
+        print(
+            "[Test] --dummy_goal_distance: using DummyGoalDistanceWrapper "
+            "(snaps both objects to stored goals at Bob step 30)."
+        )
+        print("[Test] Expected: [DistCheck] pos < 0.01 and rot < 0.01 marked ✓.")
+        env = DummyGoalDistanceWrapper(
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=100,
+            bob_timesteps=200,
+            teleport_step=30,
+        )
+    elif args.test_movement:
+        print(
+            "[Test] --test_movement: using DummyMovementWrapper "
+            "(teleports target to [0.15,0.5,0.05] local during Alice's phase)."
+        )
+        print("[Test] Expected: [MoveCheck] measured_dist≈0.300 marked ✓.")
+        env = DummyMovementWrapper(
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=100,
+            bob_timesteps=200,
         )
     elif args.dummy_alice:
         env = DummyAliceWrapper(
@@ -597,8 +640,13 @@ def main():
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_alice_obs = obs[:, : env.alice_obs_dim]
 
-        # Collect S0 for ABC
-        env.episode_manager.store_initial_state(env._extract_object_states(obs_dict))
+        # Set initial_states to the safe reset position directly.
+        # data.root_pos_w is only refreshed inside env.step(); reading it here (before
+        # the Alice loop starts) gives stale values (still the goal position from the
+        # previous iteration's Bob phase).  Using _safe_reset_state avoids this.
+        env.episode_manager.store_initial_state(
+            env._safe_reset_state.unsqueeze(0).expand(env.num_envs, -1).clone()
+        )
 
         # Pre-allocate iteration buffers for ABC
         alice_traj_obs = []  # list of (num_envs, obs_dim)

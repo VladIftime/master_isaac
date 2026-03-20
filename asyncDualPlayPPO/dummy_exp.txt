@@ -1,9 +1,9 @@
 Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/data/Kit/Isaac-Sim/5.0/user.config.json'
-[Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260319_185834.log
-2026-03-19T17:58:34Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'
-2026-03-19T17:58:34Z [156ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
-2026-03-19T17:58:35Z [605ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
-2026-03-19T17:58:35Z [827ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
+[Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260319_190244.log
+2026-03-19T18:02:44Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'
+2026-03-19T18:02:44Z [156ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-03-19T18:02:45Z [612ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
+2026-03-19T18:02:45Z [837ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
 
 |---------------------------------------------------------------------------------------------|
 | Driver Version: 580.126.09    | Graphics API: Vulkan
@@ -21,10 +21,10 @@ Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-pac
 | Processor: AMD Ryzen 7 3700X 8-Core Processor
 | Cores: 8 | Logical Cores: 16
 |---------------------------------------------------------------------------------------------|
-| Total Memory (MB): 32000 | Free Memory: 22117
+| Total Memory (MB): 32000 | Free Memory: 22133
 | Total Page/Swap (MB): 2047 | Free Page/Swap: 2047
 |---------------------------------------------------------------------------------------------|
-2026-03-19T17:58:49Z [14,665ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
+2026-03-19T18:02:59Z [14,637ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
 
 |---------------------------------------------------------------------------------------------|
 | Driver Version: 580.126.09    | Graphics API: Vulkan
@@ -53,7 +53,7 @@ Creating environment (suppressing URDF/Lula warnings)...
 	Physics step-size     : 0.01
 	Rendering step-size   : 0.02
 	Environment step-size : 0.02
-[INFO]: Time taken for scene creation : 2.021271 seconds
+[INFO]: Time taken for scene creation : 2.066709 seconds
 [INFO]: Scene manager:  <class InteractiveScene>
 	Number of environments: 24
 	Environment spacing   : 2.5
@@ -61,7 +61,7 @@ Creating environment (suppressing URDF/Lula warnings)...
 	Global prim paths     : []
 	Replicate physics     : True
 [INFO]: Starting the simulation. This may take a few seconds. Please wait...
-[INFO]: Time taken for simulation start : 0.968083 seconds
+[INFO]: Time taken for simulation start : 0.963378 seconds
 [INFO] Command Manager:  <CommandManager> contains 0 active terms.
 +------------------------+
 |  Active Command Terms  |
@@ -181,13 +181,188 @@ Environment initialized. Starting training loop...
 [Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Alice Reward] Env 0: Off Table (-3.0) | Moved: 0.034m | target: [-6.25, 4.449999809265137, 0.029999999329447746] -> [-6.247241497039795, 4.482927322387695, 0.022507356479763985] | cube: [-6.400000095367432, 4.449999809265137, 0.029999999329447746] -> [-6.463266372680664, 4.452378273010254, 0.022503651678562164]
+[Alice Reward] Env 1: Off Table (-3.0) | Moved: 0.212m | target: [-6.25, 1.9500000476837158, 0.029999999329447746] -> [-6.045485019683838, 2.004758358001709, 0.022510521113872528] | cube: [-6.400000095367432, 1.9500000476837158, 0.029999999329447746] -> [-6.397737979888916, 1.9550855159759521, 0.022501714527606964]
+[Alice Reward] Env 2: Off Table (-3.0) | Moved: 0.007m | target: [-6.25, -0.5499999523162842, 0.029999999329447746] -> [-6.25, -0.5500006675720215, 0.022500822320580482] | cube: [-6.400000095367432, -0.5499999523162842, 0.029999999329447746] -> [-6.400001049041748, -0.5499987602233887, 0.02250208705663681]
+[Alice Reward] Env 3: Off Table (-3.0) | Moved: 0.007m | target: [-6.25, -3.0500001907348633, 0.029999999329447746] -> [-6.249999523162842, -3.0500006675720215, 0.022501079365611076] | cube: [-6.400000095367432, -3.0500001907348633, 0.029999999329447746] -> [-6.400001049041748, -3.049999237060547, 0.02250204049050808]
+[Alice Reward] Env 4: Off Table (-3.0) | Moved: 0.007m | target: [-3.75, 4.449999809265137, 0.029999999329447746] -> [-3.75, 4.4499993324279785, 0.02250082418322563] | cube: [-3.9000000953674316, 4.449999809265137, 0.029999999329447746] -> [-3.900000810623169, 4.450001239776611, 0.022502068430185318]
+[Alice Reward] Env 5: Off Table (-3.0) | Moved: 0.007m | target: [-3.75, 1.9500000476837158, 0.029999999329447746] -> [-3.75, 1.949999213218689, 0.022500785067677498] | cube: [-3.9000000953674316, 1.9500000476837158, 0.029999999329447746] -> [-3.900000810623169, 1.9500012397766113, 0.022502083331346512]
+[Alice Reward] Env 6: Off Table (-3.0) | Moved: 0.007m | target: [-3.75, -0.5499999523162842, 0.029999999329447746] -> [-3.75, -0.5500006675720215, 0.022500822320580482] | cube: [-3.9000000953674316, -0.5499999523162842, 0.029999999329447746] -> [-3.900000810623169, -0.5499987602233887, 0.02250208891928196]
+[Alice Reward] Env 7: Off Table (-3.0) | Moved: 0.007m | target: [-3.75, -3.0500001907348633, 0.029999999329447746] -> [-3.749999761581421, -3.0500006675720215, 0.02250099368393421] | cube: [-3.9000000953674316, -3.0500001907348633, 0.029999999329447746] -> [-3.900000810623169, -3.049999237060547, 0.022502044215798378]
+[Alice Reward] Env 8: Off Table (-3.0) | Moved: 0.007m | target: [-1.25, 4.449999809265137, 0.029999999329447746] -> [-1.2499998807907104, 4.4499993324279785, 0.02250082418322563] | cube: [-1.399999976158142, 4.449999809265137, 0.029999999329447746] -> [-1.400000810623169, 4.450001239776611, 0.022502074018120766]
+[Alice Reward] Env 9: Off Table (-3.0) | Moved: 0.007m | target: [-1.25, 1.9500000476837158, 0.029999999329447746] -> [-1.25, 1.9499993324279785, 0.02250075899064541] | cube: [-1.399999976158142, 1.9500000476837158, 0.029999999329447746] -> [-1.400000810623169, 1.9500012397766113, 0.022502055391669273]
+[Alice Reward] Env 10: Off Table (-3.0) | Moved: 0.007m | target: [-1.25, -0.5499999523162842, 0.029999999329447746] -> [-1.25, -0.5500006675720215, 0.022500796243548393] | cube: [-1.399999976158142, -0.5499999523162842, 0.029999999329447746] -> [-1.4000006914138794, -0.5499987602233887, 0.022502051666378975]
+[Alice Reward] Env 11: Off Table (-3.0) | Moved: 0.007m | target: [-1.25, -3.0500001907348633, 0.029999999329447746] -> [-1.25, -3.0500011444091797, 0.022500798106193542] | cube: [-1.399999976158142, -3.0500001907348633, 0.029999999329447746] -> [-1.400000810623169, -3.049999237060547, 0.022502059116959572]
+[Alice Reward] Env 12: Off Table (-3.0) | Moved: 0.062m | target: [1.25, 4.449999809265137, 0.029999999329447746] -> [1.2910393476486206, 4.495985507965088, 0.02250317856669426] | cube: [1.100000023841858, 4.449999809265137, 0.029999999329447746] -> [1.099999189376831, 4.450001239776611, 0.022502074018120766]
+[Alice Reward] Env 13: Off Table (-3.0) | Moved: 0.007m | target: [1.25, 1.9500000476837158, 0.029999999329447746] -> [1.25, 1.9499993324279785, 0.02250075899064541] | cube: [1.100000023841858, 1.9500000476837158, 0.029999999329447746] -> [1.099999189376831, 1.9500012397766113, 0.022502055391669273]
+[Alice Reward] Env 14: Off Table (-3.0) | Moved: 0.007m | target: [1.25, -0.5499999523162842, 0.029999999329447746] -> [1.25, -0.5500006675720215, 0.022500796243548393] | cube: [1.100000023841858, -0.5499999523162842, 0.029999999329447746] -> [1.0999993085861206, -0.5499987602233887, 0.022502051666378975]
+[Alice Reward] Env 15: Off Table (-3.0) | Moved: 0.007m | target: [1.25, -3.0500001907348633, 0.029999999329447746] -> [1.25, -3.0500011444091797, 0.022500798106193542] | cube: [1.100000023841858, -3.0500001907348633, 0.029999999329447746] -> [1.099999189376831, -3.049999237060547, 0.022502059116959572]
+[Alice Reward] Env 16: Off Table (-3.0) | Moved: 0.007m | target: [3.75, 4.449999809265137, 0.029999999329447746] -> [3.75, 4.4499993324279785, 0.02250082418322563] | cube: [3.5999999046325684, 4.449999809265137, 0.029999999329447746] -> [3.599999189376831, 4.450001239776611, 0.022502068430185318]
+[Alice Reward] Env 17: Off Table (-3.0) | Moved: 0.007m | target: [3.75, 1.9500000476837158, 0.029999999329447746] -> [3.75, 1.949999213218689, 0.022500785067677498] | cube: [3.5999999046325684, 1.9500000476837158, 0.029999999329447746] -> [3.599999189376831, 1.9500012397766113, 0.022502083331346512]
+[Alice Reward] Env 18: Off Table (-3.0) | Moved: 0.170m | target: [3.75, -0.5499999523162842, 0.029999999329447746] -> [3.919750452041626, -0.5590249300003052, 0.022515801712870598] | cube: [3.5999999046325684, -0.5499999523162842, 0.029999999329447746] -> [3.599999189376831, -0.5499987602233887, 0.02250208891928196]
+[Alice Reward] Env 19: Off Table (-3.0) | Moved: 0.007m | target: [3.75, -3.0500001907348633, 0.029999999329447746] -> [3.750000238418579, -3.0500006675720215, 0.02250099368393421] | cube: [3.5999999046325684, -3.0500001907348633, 0.029999999329447746] -> [3.6055822372436523, -3.0443005561828613, 0.02250247448682785]
+[Alice Reward] Env 20: Off Table (-3.0) | Moved: 0.007m | target: [6.25, 4.449999809265137, 0.029999999329447746] -> [6.25, 4.4499993324279785, 0.022500816732645035] | cube: [6.099999904632568, 4.449999809265137, 0.029999999329447746] -> [6.099998950958252, 4.450001239776611, 0.02250204049050808]
+[Alice Reward] Env 21: Off Table (-3.0) | Moved: 0.007m | target: [6.25, 1.9500000476837158, 0.029999999329447746] -> [6.25, 1.9499993324279785, 0.02250080555677414] | cube: [6.099999904632568, 1.9500000476837158, 0.029999999329447746] -> [6.099058628082275, 1.9476994276046753, 0.023187506943941116]
+[Alice Reward] Env 22: Off Table (-3.0) | Moved: 0.007m | target: [6.25, -0.5499999523162842, 0.029999999329447746] -> [6.25, -0.5500006675720215, 0.022500822320580482] | cube: [6.099999904632568, -0.5499999523162842, 0.029999999329447746] -> [6.099998950958252, -0.5499987602233887, 0.02250208705663681]
+[Alice Reward] Env 23: Off Table (-3.0) | Moved: 0.007m | target: [6.25, -3.0500001907348633, 0.029999999329447746] -> [6.250000476837158, -3.0500006675720215, 0.022501079365611076] | cube: [6.099999904632568, -3.0500001907348633, 0.029999999329447746] -> [6.099998950958252, -3.049999237060547, 0.02250204049050808]
+[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Resetting objects to safe pose for 24 envs
+[Reset] Resetting robot arm joints for 24 envs
+  [Alice Update 0] Loss: -0.0376 | Val: 0.0816 | Rew: 0.0000
+Iteration 0: SR=0.00 | ABC Buffer: 0
+[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Alice Reward] Env 0: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, 4.449999809265137, 0.05000000074505806] -> [-6.399998664855957, 4.450000762939453, 0.022502906620502472] | cube: [-6.5, 4.449999809265137, 0.05000000074505806] -> [-6.499998569488525, 4.450001239776611, 0.022502027451992035]
+[Alice Reward] Env 1: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, 1.9500000476837158, 0.05000000074505806] -> [-6.399998664855957, 1.9500004053115845, 0.022502779960632324] | cube: [-6.5, 1.9500000476837158, 0.05000000074505806] -> [-6.499998569488525, 1.9500010013580322, 0.022502034902572632]
+[Alice Reward] Env 2: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, -0.5499999523162842, 0.05000000074505806] -> [-6.399998664855957, -0.5499997138977051, 0.022502660751342773] | cube: [-6.5, -0.5499999523162842, 0.05000000074505806] -> [-6.499998569488525, -0.5499988794326782, 0.022502025589346886]
+[Alice Reward] Env 3: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, -3.0500001907348633, 0.05000000074505806] -> [-6.399998664855957, -3.049999713897705, 0.022502915933728218] | cube: [-6.5, -3.0500001907348633, 0.05000000074505806] -> [-6.499998569488525, -3.049999237060547, 0.022501762956380844]
+[Alice Reward] Env 4: Off Table (-3.0) | Moved: 0.112m | target: [-3.9000000953674316, 4.449999809265137, 0.05000000074505806] -> [-3.998013734817505, 4.497430324554443, 0.022506726905703545] | cube: [-4.0, 4.449999809265137, 0.05000000074505806] -> [-4.0714216232299805, 4.460186958312988, 0.02250075526535511]
+[Alice Reward] Env 5: Off Table (-3.0) | Moved: 0.034m | target: [-3.9000000953674316, 1.9500000476837158, 0.05000000074505806] -> [-3.8977832794189453, 1.9696706533432007, 0.022513793781399727] | cube: [-4.0, 1.9500000476837158, 0.05000000074505806] -> [-3.9999988079071045, 1.9500010013580322, 0.022501984611153603]
+[Alice Reward] Env 6: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, -0.5499999523162842, 0.05000000074505806] -> [-3.899998903274536, -0.5499997138977051, 0.022502927109599113] | cube: [-4.0, -0.5499999523162842, 0.05000000074505806] -> [-3.9999988079071045, -0.5499988794326782, 0.022502023726701736]
+[Alice Reward] Env 7: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, -3.0500001907348633, 0.05000000074505806] -> [-3.8999991416931152, -3.049999237060547, 0.02250274084508419] | cube: [-4.0, -3.0500001907348633, 0.05000000074505806] -> [-3.9999988079071045, -3.049999237060547, 0.022502029314637184]
+[Alice Reward] Env 8: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, 4.449999809265137, 0.05000000074505806] -> [-1.3999990224838257, 4.450000762939453, 0.022502854466438293] | cube: [-1.5, 4.449999809265137, 0.05000000074505806] -> [-1.499998688697815, 4.450000762939453, 0.022502001374959946]
+[Alice Reward] Env 9: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, 1.9500000476837158, 0.05000000074505806] -> [-1.3999991416931152, 1.9500004053115845, 0.022502725943922997] | cube: [-1.5, 1.9500000476837158, 0.05000000074505806] -> [-1.499998688697815, 1.9500010013580322, 0.0225019920617342]
+[Alice Reward] Env 10: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, -0.5499999523162842, 0.05000000074505806] -> [-1.3999990224838257, -0.5499997138977051, 0.02250288426876068] | cube: [-1.5, -0.5499999523162842, 0.05000000074505806] -> [-1.499998688697815, -0.5499988794326782, 0.02250201813876629]
+[Alice Reward] Env 11: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, -3.0500001907348633, 0.05000000074505806] -> [-1.3999990224838257, -3.049999713897705, 0.022502878680825233] | cube: [-1.5, -3.0500001907348633, 0.05000000074505806] -> [-1.499998688697815, -3.049999237060547, 0.02250201255083084]
+[Alice Reward] Env 12: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, 4.449999809265137, 0.05000000074505806] -> [1.1000009775161743, 4.450000762939453, 0.022502854466438293] | cube: [1.0, 4.449999809265137, 0.05000000074505806] -> [1.000001311302185, 4.450000762939453, 0.022501995787024498]
+[Alice Reward] Env 13: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, 1.9500000476837158, 0.05000000074505806] -> [1.1000008583068848, 1.9500004053115845, 0.022502725943922997] | cube: [1.0, 1.9500000476837158, 0.05000000074505806] -> [1.000001311302185, 1.9500010013580322, 0.022502031177282333]
+[Alice Reward] Env 14: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, -0.5499999523162842, 0.05000000074505806] -> [1.1000009775161743, -0.5499997138977051, 0.02250288426876068] | cube: [1.0, -0.5499999523162842, 0.05000000074505806] -> [1.000001311302185, -0.5499988794326782, 0.022502033039927483]
+[Alice Reward] Env 15: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, -3.0500001907348633, 0.05000000074505806] -> [1.1000009775161743, -3.049999713897705, 0.022502878680825233] | cube: [1.0, -3.0500001907348633, 0.05000000074505806] -> [1.000001072883606, -3.049999237060547, 0.022501816973090172]
+[Alice Reward] Env 16: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, 4.449999809265137, 0.05000000074505806] -> [3.6000008583068848, 4.450000762939453, 0.02250269614160061] | cube: [3.5, 4.449999809265137, 0.05000000074505806] -> [3.5000011920928955, 4.450000762939453, 0.022502020001411438]
+[Alice Reward] Env 17: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, 1.9500000476837158, 0.05000000074505806] -> [3.600001096725464, 1.950000286102295, 0.022502899169921875] | cube: [3.5, 1.9500000476837158, 0.05000000074505806] -> [3.5000011920928955, 1.9500010013580322, 0.0225019920617342]
+[Alice Reward] Env 18: Off Table (-3.0) | Moved: 0.125m | target: [3.5999999046325684, -0.5499999523162842, 0.05000000074505806] -> [3.522310256958008, -0.45638179779052734, 0.022504722699522972] | cube: [3.5, -0.5499999523162842, 0.05000000074505806] -> [3.5000011920928955, -0.5499988794326782, 0.022502034902572632]
+[Alice Reward] Env 19: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, -3.0500001907348633, 0.05000000074505806] -> [3.6000008583068848, -3.049999237060547, 0.02250274084508419] | cube: [3.5, -3.0500001907348633, 0.05000000074505806] -> [3.5000011920928955, -3.049999237060547, 0.022501930594444275]
+[Alice Reward] Env 20: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, 4.449999809265137, 0.05000000074505806] -> [6.100001335144043, 4.450000762939453, 0.022502906620502472] | cube: [6.0, 4.449999809265137, 0.05000000074505806] -> [5.99996280670166, 4.454047679901123, 0.024901771917939186]
+[Alice Reward] Env 21: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, 1.9500000476837158, 0.05000000074505806] -> [6.100001335144043, 1.9500004053115845, 0.022502779960632324] | cube: [6.0, 1.9500000476837158, 0.05000000074505806] -> [6.000001430511475, 1.9500010013580322, 0.022502034902572632]
+[Alice Reward] Env 22: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, -0.5499999523162842, 0.05000000074505806] -> [6.100001335144043, -0.5499997138977051, 0.022502660751342773] | cube: [6.0, -0.5499999523162842, 0.05000000074505806] -> [6.000001430511475, -0.5499988794326782, 0.022502025589346886]
+[Alice Reward] Env 23: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, -3.0500001907348633, 0.05000000074505806] -> [6.100001335144043, -3.049999713897705, 0.022502915933728218] | cube: [6.0, -3.0500001907348633, 0.05000000074505806] -> [6.000001430511475, -3.049999237060547, 0.022501762956380844]
+[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Resetting objects to safe pose for 24 envs
+[Reset] Resetting robot arm joints for 24 envs
+  [Alice Update 1] Loss: 0.1569 | Val: 0.0066 | Rew: 0.0000
+Iteration 0: SR=0.00 | ABC Buffer: 0
+[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Termination] Robot out of bounds: 1 envs
+[Reset] Env 13: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
+[Reset] Env 13: Alice phase @ step 97/100 | Goals: 0/5 | Reason: Terminated/Truncated
 [Termination] Robot out of bounds: 1 envs
 [Reset] Env 19: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 19: Alice phase @ step 96/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 1: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 1: Alice phase @ step 99/100 | Goals: 0/5 | Reason: Terminated/Truncated
+[Reset] Env 19: Alice phase @ step 98/100 | Goals: 0/5 | Reason: Terminated/Truncated
+[Alice Reward] Env 0: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, 4.449999809265137, 0.05000000074505806] -> [-6.399998664855957, 4.450000762939453, 0.022502906620502472] | cube: [-6.5, 4.449999809265137, 0.05000000074505806] -> [-6.499998569488525, 4.450001239776611, 0.022502027451992035]
+[Alice Reward] Env 1: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, 1.9500000476837158, 0.05000000074505806] -> [-6.399998664855957, 1.9500004053115845, 0.022502779960632324] | cube: [-6.5, 1.9500000476837158, 0.05000000074505806] -> [-6.500476360321045, 1.9504594802856445, 0.023204803466796875]
+[Alice Reward] Env 2: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, -0.5499999523162842, 0.05000000074505806] -> [-6.399998664855957, -0.5499997138977051, 0.022502660751342773] | cube: [-6.5, -0.5499999523162842, 0.05000000074505806] -> [-6.499998569488525, -0.5499988794326782, 0.022502025589346886]
+[Alice Reward] Env 3: Off Table (-3.0) | Moved: 0.044m | target: [-6.400000095367432, -3.0500001907348633, 0.05000000074505806] -> [-6.438031196594238, -3.041360378265381, 0.029275160282850266] | cube: [-6.5, -3.0500001907348633, 0.05000000074505806] -> [-6.507928371429443, -3.0482964515686035, 0.022509468719363213]
+[Alice Reward] Env 4: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, 4.449999809265137, 0.05000000074505806] -> [-3.8999991416931152, 4.450000762939453, 0.02250269614160061] | cube: [-4.0, 4.449999809265137, 0.05000000074505806] -> [-3.9999988079071045, 4.450001239776611, 0.022502031177282333]
+[Alice Reward] Env 5: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, 1.9500000476837158, 0.05000000074505806] -> [-3.899998903274536, 1.950000286102295, 0.022502899169921875] | cube: [-4.0, 1.9500000476837158, 0.05000000074505806] -> [-3.9999988079071045, 1.9500010013580322, 0.022501984611153603]
+[Alice Reward] Env 6: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, -0.5499999523162842, 0.05000000074505806] -> [-3.899998903274536, -0.5499997138977051, 0.022502927109599113] | cube: [-4.0, -0.5499999523162842, 0.05000000074505806] -> [-3.9999988079071045, -0.5499988794326782, 0.022502023726701736]
+[Alice Reward] Env 7: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, -3.0500001907348633, 0.05000000074505806] -> [-3.8999991416931152, -3.049999237060547, 0.02250274084508419] | cube: [-4.0, -3.0500001907348633, 0.05000000074505806] -> [-3.9999988079071045, -3.049999237060547, 0.022502029314637184]
+[Alice Reward] Env 8: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, 4.449999809265137, 0.05000000074505806] -> [-1.3999990224838257, 4.450000762939453, 0.022502854466438293] | cube: [-1.5, 4.449999809265137, 0.05000000074505806] -> [-1.499998688697815, 4.450000762939453, 0.022502001374959946]
+[Alice Reward] Env 9: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, 1.9500000476837158, 0.05000000074505806] -> [-1.3999991416931152, 1.9500004053115845, 0.022502725943922997] | cube: [-1.5, 1.9500000476837158, 0.05000000074505806] -> [-1.499998688697815, 1.9500010013580322, 0.0225019920617342]
+[Alice Reward] Env 10: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, -0.5499999523162842, 0.05000000074505806] -> [-1.3999990224838257, -0.5499997138977051, 0.02250288426876068] | cube: [-1.5, -0.5499999523162842, 0.05000000074505806] -> [-1.499998688697815, -0.5499988794326782, 0.02250201813876629]
+[Alice Reward] Env 11: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, -3.0500001907348633, 0.05000000074505806] -> [-1.3999990224838257, -3.049999713897705, 0.022502878680825233] | cube: [-1.5, -3.0500001907348633, 0.05000000074505806] -> [-1.500347375869751, -3.0497846603393555, 0.022890964522957802]
+[Alice Reward] Env 12: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, 4.449999809265137, 0.05000000074505806] -> [1.1000009775161743, 4.450000762939453, 0.022502854466438293] | cube: [1.0, 4.449999809265137, 0.05000000074505806] -> [1.000001311302185, 4.450000762939453, 0.022501995787024498]
+[Alice Reward] Env 14: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, -0.5499999523162842, 0.05000000074505806] -> [1.1000009775161743, -0.5499997138977051, 0.02250288426876068] | cube: [1.0, -0.5499999523162842, 0.05000000074505806] -> [1.000001311302185, -0.5499988794326782, 0.022502033039927483]
+[Alice Reward] Env 15: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, -3.0500001907348633, 0.05000000074505806] -> [1.1000009775161743, -3.049999713897705, 0.022502878680825233] | cube: [1.0, -3.0500001907348633, 0.05000000074505806] -> [1.000001072883606, -3.049999237060547, 0.022501816973090172]
+[Alice Reward] Env 16: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, 4.449999809265137, 0.05000000074505806] -> [3.6000008583068848, 4.450000762939453, 0.02250269614160061] | cube: [3.5, 4.449999809265137, 0.05000000074505806] -> [3.5000011920928955, 4.450000762939453, 0.022502020001411438]
+[Alice Reward] Env 17: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, 1.9500000476837158, 0.05000000074505806] -> [3.600001096725464, 1.950000286102295, 0.022502899169921875] | cube: [3.5, 1.9500000476837158, 0.05000000074505806] -> [3.5000011920928955, 1.9500010013580322, 0.0225019920617342]
+[Alice Reward] Env 18: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, -0.5499999523162842, 0.05000000074505806] -> [3.600001096725464, -0.5499997138977051, 0.022502927109599113] | cube: [3.5, -0.5499999523162842, 0.05000000074505806] -> [3.5000011920928955, -0.5499988794326782, 0.022502034902572632]
+[Alice Reward] Env 20: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, 4.449999809265137, 0.05000000074505806] -> [6.100001335144043, 4.450000762939453, 0.022502906620502472] | cube: [6.0, 4.449999809265137, 0.05000000074505806] -> [5.897449493408203, 4.485918045043945, 0.023768965154886246]
+[Alice Reward] Env 21: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, 1.9500000476837158, 0.05000000074505806] -> [6.100001335144043, 1.9500004053115845, 0.022502779960632324] | cube: [6.0, 1.9500000476837158, 0.05000000074505806] -> [6.000001430511475, 1.9500010013580322, 0.022502034902572632]
+[Alice Reward] Env 22: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, -0.5499999523162842, 0.05000000074505806] -> [6.100001335144043, -0.5499997138977051, 0.022502660751342773] | cube: [6.0, -0.5499999523162842, 0.05000000074505806] -> [6.000001430511475, -0.5499988794326782, 0.022502025589346886]
+[Alice Reward] Env 23: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, -3.0500001907348633, 0.05000000074505806] -> [6.100001335144043, -3.049999713897705, 0.022502915933728218] | cube: [6.0, -3.0500001907348633, 0.05000000074505806] -> [6.000001430511475, -3.049999237060547, 0.022501762956380844]
 [Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
+[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
@@ -199,7 +374,6 @@ Environment initialized. Starting training loop...
 [Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
@@ -211,59 +385,7 @@ Environment initialized. Starting training loop...
 [Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Resetting objects to safe pose for 22 envs
 [Reset] Resetting robot arm joints for 22 envs
-  [Alice Update 0] Loss: 0.1611 | Val: 0.0823 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 4/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 1] Loss: 0.1536 | Val: 0.0313 | Rew: 0.0000
+  [Alice Update 2] Loss: 0.1534 | Val: 0.0036 | Rew: 0.0000
 Iteration 0: SR=0.00 | ABC Buffer: 0
 [Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
@@ -278,292 +400,43 @@ Iteration 0: SR=0.00 | ABC Buffer: 0
 [Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 13: Alice phase @ step 3/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 2] Loss: 0.1664 | Val: 0.0289 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 11: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 11: Alice phase @ step 98/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 23 envs
-[Reset] Resetting robot arm joints for 23 envs
-  [Alice Update 3] Loss: 0.1803 | Val: 0.0316 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 2/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 11: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 11: Alice phase @ step 92/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 5: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 5: Alice phase @ step 96/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 22 envs
-[Reset] Resetting robot arm joints for 22 envs
-  [Alice Update 4] Loss: 0.1906 | Val: 0.0211 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 4/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 8/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 11: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 11: Alice phase @ step 92/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 23 envs
-[Reset] Resetting robot arm joints for 23 envs
-  [Alice Update 5] Loss: 0.1931 | Val: 0.0220 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 8/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 15: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 15: Alice phase @ step 97/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 3: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 3: Alice phase @ step 99/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 22 envs
-[Reset] Resetting robot arm joints for 22 envs
-  [Alice Update 6] Loss: 0.2022 | Val: 0.0204 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 3/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 19: Alice phase @ step 2/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Termination] Robot out of bounds: 1 envs
 [Reset] Env 13: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 13: Alice phase @ step 98/100 | Goals: 0/5 | Reason: Terminated/Truncated
+[Reset] Env 13: Alice phase @ step 93/100 | Goals: 0/5 | Reason: Terminated/Truncated
+[Alice Reward] Env 0: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, 4.449999809265137, 0.05000000074505806] -> [-6.399998664855957, 4.450000762939453, 0.022502906620502472] | cube: [-6.5, 4.449999809265137, 0.05000000074505806] -> [-6.499998569488525, 4.450001239776611, 0.022502027451992035]
+[Alice Reward] Env 1: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, 1.9500000476837158, 0.05000000074505806] -> [-6.399998664855957, 1.9500004053115845, 0.022502779960632324] | cube: [-6.5, 1.9500000476837158, 0.05000000074505806] -> [-6.499998569488525, 1.9500010013580322, 0.022502034902572632]
+[Alice Reward] Env 2: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, -0.5499999523162842, 0.05000000074505806] -> [-6.399998664855957, -0.5499997138977051, 0.022502660751342773] | cube: [-6.5, -0.5499999523162842, 0.05000000074505806] -> [-6.499998569488525, -0.5499988794326782, 0.022502025589346886]
+[Alice Reward] Env 3: Off Table (-3.0) | Moved: 0.027m | target: [-6.400000095367432, -3.0500001907348633, 0.05000000074505806] -> [-6.399998664855957, -3.049999713897705, 0.022502915933728218] | cube: [-6.5, -3.0500001907348633, 0.05000000074505806] -> [-6.499998569488525, -3.049999237060547, 0.022501762956380844]
+[Alice Reward] Env 4: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, 4.449999809265137, 0.05000000074505806] -> [-3.8999991416931152, 4.450000762939453, 0.02250269614160061] | cube: [-4.0, 4.449999809265137, 0.05000000074505806] -> [-3.9999988079071045, 4.450001239776611, 0.022502031177282333]
+[Alice Reward] Env 5: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, 1.9500000476837158, 0.05000000074505806] -> [-3.899998903274536, 1.950000286102295, 0.022502899169921875] | cube: [-4.0, 1.9500000476837158, 0.05000000074505806] -> [-3.9999988079071045, 1.9500010013580322, 0.022501984611153603]
+[Alice Reward] Env 6: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, -0.5499999523162842, 0.05000000074505806] -> [-3.899998903274536, -0.5499997138977051, 0.022502927109599113] | cube: [-4.0, -0.5499999523162842, 0.05000000074505806] -> [-3.9999988079071045, -0.5499988794326782, 0.022502023726701736]
+[Alice Reward] Env 7: Off Table (-3.0) | Moved: 0.027m | target: [-3.9000000953674316, -3.0500001907348633, 0.05000000074505806] -> [-3.8999991416931152, -3.049999237060547, 0.02250274084508419] | cube: [-4.0, -3.0500001907348633, 0.05000000074505806] -> [-3.9999988079071045, -3.049999237060547, 0.022502029314637184]
+[Alice Reward] Env 8: Off Table (-3.0) | Moved: 0.023m | target: [-1.399999976158142, 4.449999809265137, 0.05000000074505806] -> [-1.4028931856155396, 4.450775146484375, 0.027387328445911407] | cube: [-1.5, 4.449999809265137, 0.05000000074505806] -> [-1.4999808073043823, 4.449998378753662, 0.022526780143380165]
+[Alice Reward] Env 9: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, 1.9500000476837158, 0.05000000074505806] -> [-1.3999991416931152, 1.9500004053115845, 0.022502725943922997] | cube: [-1.5, 1.9500000476837158, 0.05000000074505806] -> [-1.485495686531067, 1.9403001070022583, 0.02279590256512165]
+[Alice Reward] Env 10: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, -0.5499999523162842, 0.05000000074505806] -> [-1.3999990224838257, -0.5499997138977051, 0.02250288426876068] | cube: [-1.5, -0.5499999523162842, 0.05000000074505806] -> [-1.499998688697815, -0.5499988794326782, 0.02250201813876629]
+[Alice Reward] Env 11: Off Table (-3.0) | Moved: 0.027m | target: [-1.399999976158142, -3.0500001907348633, 0.05000000074505806] -> [-1.3999990224838257, -3.049999713897705, 0.022502878680825233] | cube: [-1.5, -3.0500001907348633, 0.05000000074505806] -> [-1.499998688697815, -3.049999237060547, 0.02250201255083084]
+[Alice Reward] Env 12: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, 4.449999809265137, 0.05000000074505806] -> [1.1000009775161743, 4.450000762939453, 0.022502854466438293] | cube: [1.0, 4.449999809265137, 0.05000000074505806] -> [1.000001311302185, 4.450000762939453, 0.022501995787024498]
+[Alice Reward] Env 14: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, -0.5499999523162842, 0.05000000074505806] -> [1.0973925590515137, -0.5462852716445923, 0.023739051073789597] | cube: [1.0, -0.5499999523162842, 0.05000000074505806] -> [1.000001311302185, -0.5499988794326782, 0.022502033039927483]
+[Alice Reward] Env 15: Off Table (-3.0) | Moved: 0.027m | target: [1.100000023841858, -3.0500001907348633, 0.05000000074505806] -> [1.1000009775161743, -3.049999713897705, 0.022502878680825233] | cube: [1.0, -3.0500001907348633, 0.05000000074505806] -> [1.000001072883606, -3.049999237060547, 0.022501816973090172]
+[Alice Reward] Env 16: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, 4.449999809265137, 0.05000000074505806] -> [3.6000008583068848, 4.450000762939453, 0.02250269614160061] | cube: [3.5, 4.449999809265137, 0.05000000074505806] -> [3.5000011920928955, 4.450000762939453, 0.022502020001411438]
+[Alice Reward] Env 17: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, 1.9500000476837158, 0.05000000074505806] -> [3.600001096725464, 1.950000286102295, 0.022502899169921875] | cube: [3.5, 1.9500000476837158, 0.05000000074505806] -> [3.5000011920928955, 1.9500010013580322, 0.0225019920617342]
+[Alice Reward] Env 18: Off Table (-3.0) | Moved: 0.027m | target: [3.5999999046325684, -0.5499999523162842, 0.05000000074505806] -> [3.600001096725464, -0.5499997138977051, 0.022502927109599113] | cube: [3.5, -0.5499999523162842, 0.05000000074505806] -> [3.5000011920928955, -0.5499988794326782, 0.022502034902572632]
+[Alice Reward] Env 19: Off Table (-3.0) | Moved: 0.005m | target: [3.75, -3.0500001907348633, 0.027056999504566193] -> [3.750000238418579, -3.0500006675720215, 0.022500889375805855] | cube: [3.5999999046325684, -3.0500001907348633, 0.027056999504566193] -> [3.599999189376831, -3.049999237060547, 0.022501712664961815]
+[Alice Reward] Env 20: Off Table (-3.0) | Moved: 0.025m | target: [6.099999904632568, 4.449999809265137, 0.05000000074505806] -> [6.098718643188477, 4.450948715209961, 0.025089699774980545] | cube: [6.0, 4.449999809265137, 0.05000000074505806] -> [6.000001430511475, 4.450001239776611, 0.022502027451992035]
+[Alice Reward] Env 21: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, 1.9500000476837158, 0.05000000074505806] -> [6.100001335144043, 1.9500004053115845, 0.022502779960632324] | cube: [6.0, 1.9500000476837158, 0.05000000074505806] -> [6.000001430511475, 1.9500010013580322, 0.022502034902572632]
+[Alice Reward] Env 22: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, -0.5499999523162842, 0.05000000074505806] -> [6.100001335144043, -0.5499997138977051, 0.022502660751342773] | cube: [6.0, -0.5499999523162842, 0.05000000074505806] -> [6.000001430511475, -0.5499988794326782, 0.022502025589346886]
+[Alice Reward] Env 23: Off Table (-3.0) | Moved: 0.027m | target: [6.099999904632568, -3.0500001907348633, 0.05000000074505806] -> [6.100001335144043, -3.049999713897705, 0.022502915933728218] | cube: [6.0, -3.0500001907348633, 0.05000000074505806] -> [6.000001430511475, -3.049999237060547, 0.022501762956380844]
 [Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
@@ -589,7 +462,7 @@ Iteration 0: SR=0.00 | ABC Buffer: 0
 [Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
 [Reset] Resetting objects to safe pose for 23 envs
 [Reset] Resetting robot arm joints for 23 envs
-  [Alice Update 7] Loss: 0.2044 | Val: 0.0191 | Rew: 0.0000
+  [Alice Update 3] Loss: 0.0097 | Val: 0.0030 | Rew: 0.0000
 Iteration 0: SR=0.00 | ABC Buffer: 0
 [Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
@@ -604,958 +477,7 @@ Iteration 0: SR=0.00 | ABC Buffer: 0
 [Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 2/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 17: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 17: Alice phase @ step 97/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 23 envs
-[Reset] Resetting robot arm joints for 23 envs
-  [Alice Update 8] Loss: 0.2088 | Val: 0.0186 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 3/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 9: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 9: Alice phase @ step 98/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 8: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 8: Alice phase @ step 99/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 22 envs
-[Reset] Resetting robot arm joints for 22 envs
-  [Alice Update 9] Loss: 0.2076 | Val: 0.0174 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 1/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 2/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 2 envs
-[Reset] Env 11: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 11: Alice phase @ step 96/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 21: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 21: Alice phase @ step 96/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 5: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 5: Alice phase @ step 97/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 21 envs
-[Reset] Resetting robot arm joints for 21 envs
-  [Alice Update 10] Loss: 0.2113 | Val: 0.0164 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 3/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 4/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 4/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 11] Loss: 0.2041 | Val: 0.0149 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 19: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 19: Alice phase @ step 95/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 23 envs
-[Reset] Resetting robot arm joints for 23 envs
-  [Alice Update 12] Loss: 0.2200 | Val: 0.0149 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 5/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 13] Loss: 0.2123 | Val: 0.0128 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Termination] Robot out of bounds: 1 envs
-[Reset] Env 18: Alice FAILED early (Terminated/Truncated) | Penalty: -3.0
-[Reset] Env 18: Alice phase @ step 97/100 | Goals: 0/5 | Reason: Terminated/Truncated
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 23 envs
-[Reset] Resetting robot arm joints for 23 envs
-  [Alice Update 14] Loss: 0.2120 | Val: 0.0126 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 3/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 15] Loss: 0.1976 | Val: 0.0121 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 16] Loss: 0.2194 | Val: 0.0108 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 17] Loss: 0.2119 | Val: 0.0101 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 18] Loss: 0.2068 | Val: 0.0106 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 19] Loss: 0.2049 | Val: 0.0099 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 20] Loss: 0.2058 | Val: 0.0090 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 21] Loss: 0.2139 | Val: 0.0086 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 22] Loss: 0.2345 | Val: 0.0075 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 23] Loss: 0.2399 | Val: 0.0066 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 24] Loss: 0.2546 | Val: 0.0053 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 17: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 18: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 19: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 20: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 21: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 22: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 23: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 0: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 1: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 2: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 3: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 4: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 5: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 6: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 7: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 8: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 9: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 10: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 11: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 12: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 13: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 14: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 15: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 16: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 17: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 18: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 19: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 20: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 21: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 22: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Env 23: Alice phase @ step 100/100 | Goals: 0/5 | Reason: Alice Invalid Goal
-[Reset] Resetting objects to safe pose for 24 envs
-[Reset] Resetting robot arm joints for 24 envs
-  [Alice Update 25] Loss: 0.2574 | Val: 0.0045 | Rew: 0.0000
-Iteration 0: SR=0.00 | ABC Buffer: 0
-[Reset] Env 0: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 1: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 2: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 3: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 4: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 5: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 6: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 7: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 8: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 9: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 10: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 11: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 12: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
-[Reset] Env 13: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
+[Reset] Env 13: Alice phase @ step 7/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 14: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 15: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start
 [Reset] Env 16: Alice phase @ step 0/100 | Goals: 0/5 | Reason: Iteration Start

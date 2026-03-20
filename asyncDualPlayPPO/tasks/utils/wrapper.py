@@ -55,6 +55,16 @@ class AsyncDualPlayEnvWrapper:
         self.num_objects = num_objects
         self.arm_config = arm_config
 
+        # Safe reset positions (LOCAL frame) — must match events.reset_objects_to_fixed_safe_pose.
+        # Used to set initial_states directly after Bob→Alice transitions, avoiding
+        # PhysX readback timing issues (data.root_pos_w is only updated by scene.update()
+        # inside env.step(), so reading it in the same wrapper step as the write gives stale data).
+        _id_quat = torch.tensor([1., 0., 0., 0.], device=device)
+        _t_pos   = torch.tensor([-0.15, 0.7, 0.05], device=device)
+        _c_pos   = torch.tensor([-0.25, 0.7, 0.05], device=device)
+        # Shape (14,): [t_pos(3), t_quat(4), c_pos(3), c_quat(4)]
+        self._safe_reset_state = torch.cat([_t_pos, _id_quat, _c_pos, _id_quat])
+
         # Bob's success threshold (5cm)
         self.goal_tolerance = 0.05
 
@@ -341,16 +351,6 @@ class AsyncDualPlayEnvWrapper:
             obs_dict = self.env.observation_manager.compute()
             current_obs = self._get_current_observations(obs_dict)
 
-            new_alice_mask = self.episode_manager.is_alice_phase() & (
-                self.episode_manager.phase_step == 0
-            )
-            if new_alice_mask.any() and self.episode_manager.initial_states is not None:
-                new_alice_ids = torch.where(new_alice_mask)[0]
-                fresh_states = self._extract_object_states(obs_dict)
-                self.episode_manager.initial_states[new_alice_ids] = fresh_states[
-                    new_alice_ids
-                ].clone()
-
         # Track contact forces
         if hasattr(self.env.scene, "sensors"):
             bob_mask = self.episode_manager.is_bob_phase()
@@ -393,18 +393,22 @@ class AsyncDualPlayEnvWrapper:
     def _handle_alice_completion(
         self, obs_dict: Dict, env_ids: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Handle completion of Alice's phase with verbose coordinate logging."""
-        # 1. Extract states in LOCAL frame
+        """Handle completion of Alice's phase with 14-dim local state handling."""
+        # 1. Extract Local states (14 dims)
         goal_state = self._extract_object_states(obs_dict)
         initial_state = self.episode_manager.initial_states
         
-        alice_pos_req = 0.04  # 4cm movement required
-        alice_rot_req = 0.10 
+        # Slice for active environments
+        active_goal = goal_state[env_ids]     # Shape: (N, 14)
+        active_initial = initial_state[env_ids] # Shape: (N, 14)
 
-        # 2. Validate Goal (comparing Local to Local)
+        alice_pos_req = 0.04 
+        alice_rot_req = 0.10
+
+        # 2. Validate Goal (Local vs Local)
         valid, val_reward, reasons = validate_goal(
-            initial_state[env_ids],
-            goal_state[env_ids],
+            active_initial,
+            active_goal,
             self.table_bounds,
             self.placement_bounds,
             pos_threshold=alice_pos_req,
@@ -413,69 +417,60 @@ class AsyncDualPlayEnvWrapper:
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 3. VERBOSE LOGGING (Restored as requested)
-        start_pos = initial_state[env_ids][:, 0:3]
-        final_pos = goal_state[env_ids][:, 0:3]
+        # 3. Logging (Debug coordinate math)
+        start_pos = active_initial[:, 0:3]
+        final_pos = active_goal[:, 0:3]
         dist_moved = torch.norm(final_pos - start_pos, dim=-1)
 
-        cube_start = initial_state[env_ids][:, 15:18]
-        cube_final = goal_state[env_ids][:, 15:18]
-
         for i, env_id in enumerate(env_ids):
-            # Log every completion to see exactly why it fails (OOB vs Not Moved)
             print(
                 f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | Moved: {dist_moved[i]:.3f}m"
-                f" | target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}"
-                f" | cube: {cube_start[i].tolist()} -> {cube_final[i].tolist()}",
+                f" | Local target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}",
                 flush=True,
             )
 
         # 4. Storage for Bob (LOCAL)
-        goal_state_storage = goal_state.view(-1, 2, 15)[:, :, :7].reshape(-1, 14)
-        self.episode_manager.store_goal_state(goal_state_storage, env_ids)
+        # FIX: active_goal is already (N, 14). No complex view() needed.
+        self.episode_manager.store_goal_state(active_goal, env_ids)
         self.episode_manager.mark_goal_valid(env_ids, valid)
 
+        # 5. Transition logic
         successful_goal = valid
         valid_env_ids = env_ids[successful_goal]
 
         if len(valid_env_ids) > 0:
             self.episode_manager.transition_to_bob(valid_env_ids)
-
-            # Retrieve states and origins for reset
-            # FIX: defined start_states locally for this scope
             start_states = self.episode_manager.initial_states[valid_env_ids]
-            env_origins = self.env.scene.env_origins[valid_env_ids]
+            origins = self.env.scene.env_origins[valid_env_ids]
 
-            # 5. Reset Objects (Local -> World for Simulator)
-            pos1_global = start_states[:, 0:3] + env_origins
+            # Reset Target (Local -> World)
+            # start_states indices: 0:3 (pos), 3:7 (quat)
+            pos1_global = start_states[:, 0:3] + origins
             self.env.scene["target_object"].write_root_pose_to_sim(
                 torch.cat([pos1_global, start_states[:, 3:7]], dim=-1),
-                env_ids=valid_env_ids,
-            )
-            self.env.scene["target_object"].write_root_velocity_to_sim(
-                torch.zeros(len(valid_env_ids), 6, device=self.device),
-                env_ids=valid_env_ids,
+                env_ids=valid_env_ids
             )
 
-            pos2_global = start_states[:, 15:18] + env_origins
+            # Reset Cube (Local -> World)
+            # start_states indices: 7:10 (pos), 10:14 (quat)
+            pos2_global = start_states[:, 7:10] + origins
             self.env.scene["cube"].write_root_pose_to_sim(
-                torch.cat([pos2_global, start_states[:, 18:22]], dim=-1),
-                env_ids=valid_env_ids,
-            )
-            self.env.scene["cube"].write_root_velocity_to_sim(
-                torch.zeros(len(valid_env_ids), 6, device=self.device),
-                env_ids=valid_env_ids,
+                torch.cat([pos2_global, start_states[:, 10:14]], dim=-1),
+                env_ids=valid_env_ids
             )
 
             reset_robot_joints(self.env, valid_env_ids)
             self.env.scene.write_data_to_sim()
 
-        # 6. Handle Invalid Goals
+        # 6. Handle Invalid
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
             self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Invalid Goal")
             reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
+            self.episode_manager.initial_states[invalid_env_ids] = (
+                self._safe_reset_state.unsqueeze(0).expand(len(invalid_env_ids), -1).clone()
+            )
             self.env.scene.write_data_to_sim()
 
         return valid, invalid_env_ids
@@ -521,6 +516,11 @@ class AsyncDualPlayEnvWrapper:
             self.episode_manager.transition_to_alice(continue_ids)
             reset_objects_to_fixed_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
+            # Set initial_states directly from known safe reset positions to avoid
+            # PhysX readback timing issues (data.root_pos_w is stale until next env.step()).
+            self.episode_manager.initial_states[continue_ids] = (
+                self._safe_reset_state.unsqueeze(0).expand(len(continue_ids), -1).clone()
+            )
 
         # Episode End (Bob failed or max goals)
         reset_ids = env_ids[~can_continue]
@@ -531,6 +531,12 @@ class AsyncDualPlayEnvWrapper:
 
             reset_objects_to_fixed_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
+            self.episode_manager.initial_states[reset_ids] = (
+                self._safe_reset_state.unsqueeze(0).expand(len(reset_ids), -1).clone()
+            )
+
+        # Commit all physics writes so the next observation read reflects the reset.
+        self.env.scene.write_data_to_sim()
 
         return success, pos_err, rot_err
 
@@ -551,9 +557,11 @@ class AsyncDualPlayEnvWrapper:
                 f"[Phase] Bob->Alice Transition (Early Success) for {len(continue_ids)} envs"
             )
             self.episode_manager.transition_to_alice(continue_ids)
-            # FIX: Ensure Alice starts from clean state too!
             reset_objects_to_fixed_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
+            self.episode_manager.initial_states[continue_ids] = (
+                self._safe_reset_state.unsqueeze(0).expand(len(continue_ids), -1).clone()
+            )
 
         # Others reset (reached max goals with success)
         reset_ids = env_ids[~can_continue]
@@ -562,28 +570,31 @@ class AsyncDualPlayEnvWrapper:
 
             reset_objects_to_fixed_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
+            self.episode_manager.initial_states[reset_ids] = (
+                self._safe_reset_state.unsqueeze(0).expand(len(reset_ids), -1).clone()
+            )
+
+        # Commit all physics writes so the next observation read reflects the reset.
+        self.env.scene.write_data_to_sim()
 
     def _check_bob_success(self, obs_dict: Dict, env_ids: torch.Tensor) -> torch.Tensor:
-        """Check if Bob successfully reached the goal"""
-        # Get current object states
+        """Check if Bob successfully reached the goal.
+
+        _extract_object_states returns [pos(3), quat(4)] × num_objects = 7 dims/object.
+        Both current_state and goal_state are in LOCAL frame.
+        """
+        # Get current object states — shape (num_envs, num_objects * 7)
         current_state = self._extract_object_states(obs_dict)
 
-        # Get goal states
+        # Get goal states — shape (num_envs, num_objects * 7)
         goal_state = self.episode_manager.goal_states
 
-        # Compute distances
-        pos_current = current_state[env_ids, :3]  # Simplified: first object only
-        pos_goal = goal_state[env_ids, :3]
-
-        # Need to reshape for rotation calc
-        # current_state: (num_envs, num_objects * 7)
-        # goal_state: (num_envs, num_objects * 7)
-
-        # Filter for the relevant environments FIRST
+        # Slice to active environments
         current_state = current_state[env_ids]
         goal_state = goal_state[env_ids]
 
-        curr_reshaped = current_state.view(-1, self.num_objects, 15)
+        # _extract_object_states gives 7 dims per object (pos+quat), NOT 15
+        curr_reshaped = current_state.view(-1, self.num_objects, 7)
         goal_reshaped = goal_state.view(-1, self.num_objects, 7)
 
         # Position Distance
@@ -620,34 +631,24 @@ class AsyncDualPlayEnvWrapper:
         return success, max_pos_err, max_rot_err
 
     def _extract_object_states(self, obs_dict: Dict) -> torch.Tensor:
-        """Extract object states in the LOCAL environment frame."""
-        params = {
-            "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-            "contact_cfg": SceneEntityCfg("contact_forces"),
-        }
-
-        # 1. Get world-space states (num_envs, 15)
-        target_state = observations.object_states(
-            self.env, SceneEntityCfg("target_object"), **params
-        )
-        cube_state = observations.object_states(
-            self.env, SceneEntityCfg("cube"), **params
-        )
-
-        # 2. Access environment origins (num_envs, 3)
+        """Extract object states in the LOCAL environment frame (14 dims total)."""
+        # 1. Pull RAW world data from the scene
+        t_pos_w = self.env.scene["target_object"].data.root_pos_w
+        t_quat_w = self.env.scene["target_object"].data.root_quat_w
+        c_pos_w = self.env.scene["cube"].data.root_pos_w
+        c_quat_w = self.env.scene["cube"].data.root_quat_w
+        
         env_origins = self.env.scene.env_origins
 
-        # 3. Convert Global Positions to Local Positions
-        # Indices 0:3 are XYZ for the first object, 15:18 are XYZ for the second
-        target_state[:, 0:3] -= env_origins
-        cube_state[
-            :, 0:3
-        ] -= env_origins  # Indices in cube_state are relative to its own 15-dim slice
+        # 2. TRANSFORM: World -> Local
+        # This fixes the "Off Table" bug by making coordinates relative to the table center
+        t_pos_l = t_pos_w - env_origins
+        c_pos_l = c_pos_w - env_origins
 
-        # 4. Concatenate: (num_envs, 30)
-        return torch.cat([target_state, cube_state], dim=1)
+        # 3. Concatenate: [Target_Pos(3), Target_Quat(4), Cube_Pos(3), Cube_Quat(4)]
+        # Total = 14 dims per environment
+        return torch.cat([t_pos_l, t_quat_w, c_pos_l, c_quat_w], dim=-1)
 
-    # ... Rest of file is unchanged ...
     def _get_alice_observations(self, obs_dict: Dict) -> torch.Tensor:
         """Get Alice's observations from policy group"""
         return obs_dict["alice_policy"]

@@ -211,10 +211,21 @@ class EpisodeManager:
         self.initial_states = state.clone()
 
     def store_goal_state(self, state: torch.Tensor, env_ids: torch.Tensor):
-        """Store goal state after Alice's phase"""
+        """Store goal state after Alice's phase.
+
+        Args:
+            state: Already-sliced goal states for env_ids, shape (len(env_ids), state_dim).
+            env_ids: Global environment indices into the full num_envs pool.
+        """
+        state_dim = state.shape[-1]
         if self.goal_states is None:
-            self.goal_states = torch.zeros_like(state)
-        self.goal_states[env_ids] = state[env_ids].clone()
+            # Must be sized (num_envs, state_dim), NOT zeros_like(state) which
+            # would create a tensor sized to the active subset only.
+            self.goal_states = torch.zeros(
+                self.num_envs, state_dim, device=self.device
+            )
+        # state is already sliced for env_ids — do not re-index with env_ids.
+        self.goal_states[env_ids] = state.clone()
 
     def mark_goal_valid(self, env_ids: torch.Tensor, valid: torch.Tensor):
         """Mark goals as valid/invalid"""

@@ -197,14 +197,11 @@ def goal_distance(
     batch_size = current_flat.shape[0]
     num_instances = current_flat.shape[1] // 15
 
-    # Access environment origins to convert world -> local
-    env_origins = env.scene.env_origins  # (num_envs, 3)
-
     current = current_flat.view(batch_size, num_instances, 15)
 
-    # 3. TRANSFORM CURRENT POSITION TO LOCAL FRAME
-    # Subtract env_origins from the XYZ components (index 0:3)
-    current_pos_local = current[..., :3] - env_origins.unsqueeze(1)
+    # 3. Positions from object_states() are ALREADY in LOCAL frame (env_origins
+    #    subtracted inside object_states).  Do NOT subtract again here.
+    current_pos_local = current[..., :3]
     current_quat = current[..., 3:7]
 
     goal = goal_flat.view(batch_size, num_instances, 7)
