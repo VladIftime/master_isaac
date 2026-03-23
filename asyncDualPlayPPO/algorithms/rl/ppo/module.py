@@ -71,12 +71,14 @@ class PermInvEncoder(nn.Module):
         self.emb_dim = emb_dim
         self.obj_encoder = nn.Sequential(
             nn.Linear(per_obj_dim, emb_dim),
-            nn.ELU(),
+            nn.LayerNorm(emb_dim),
+            nn.ReLU(),
             nn.Linear(emb_dim, emb_dim),
-            nn.ELU(),
+            nn.LayerNorm(emb_dim),
+            nn.ReLU(),
         )
         nn.init.orthogonal_(self.obj_encoder[0].weight, gain=np.sqrt(2))
-        nn.init.orthogonal_(self.obj_encoder[2].weight, gain=np.sqrt(2))
+        nn.init.orthogonal_(self.obj_encoder[3].weight, gain=np.sqrt(2))
 
     def forward(
         self, robot_state: torch.Tensor, obj_features: torch.Tensor
@@ -90,9 +92,9 @@ class PermInvEncoder(nn.Module):
         """
         batch = obj_features.shape[0]
         num_objs = obj_features.shape[1] // self.per_obj_dim
-        objs = obj_features.view(batch * num_objs, self.per_obj_dim)
-        enc = self.obj_encoder(objs).view(batch, num_objs, self.emb_dim)
-        pooled, _ = enc.max(dim=1)
+        objs = obj_features.reshape(batch * num_objs, self.per_obj_dim)
+        enc = self.obj_encoder(objs).reshape(batch, num_objs, self.emb_dim)
+        pooled = enc.sum(dim=1)
         return torch.cat([robot_state, pooled], dim=-1)
 
 
@@ -269,8 +271,9 @@ class ActorCritic(nn.Module):
         center = (self.num_bins - 1) / 2.0
         normalized = (bin_indices.float() - center) / center  # [-1, 1]
         xyz = normalized[:, :3] * self.max_delta
-        gripper = torch.sign(normalized[:, 3:4])  # -1 / 0 / +1
-        return torch.cat([xyz, gripper], dim=-1)
+        rot_xy = normalized[:, 3:5] * 0.5  # 0.5 rad (~28 deg)
+        gripper = torch.sign(normalized[:, 5:6])  # -1 / 0 / +1
+        return torch.cat([xyz, rot_xy, gripper], dim=-1)
 
     # ------------------------------------------------------------------
     # Public API

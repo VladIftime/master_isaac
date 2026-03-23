@@ -241,7 +241,7 @@ def main():
     # --- Multi-categorical action space config ---
     _pol_cfg = ppo_cfg["params"]["policy"]
     use_mc = _pol_cfg.get("use_multicategorical", False)
-    num_cat_dims = _pol_cfg.get("num_cat_dims", 4)
+    num_cat_dims = _pol_cfg.get("num_cat_dims", 6)
     num_bins = _pol_cfg.get("num_bins", 11)
     max_delta_m = _pol_cfg.get("max_delta_m", 0.05)
     if use_mc:
@@ -254,9 +254,10 @@ def main():
         bin_indices: "torch.Tensor", gripper_state: "torch.Tensor"
     ) -> "torch.Tensor":
         """
-        Convert policy bin indices (N, 4) → 7D RMPFlow+gripper env action.
+        Convert policy bin indices (N, 6) → 7D RMPFlow+gripper env action.
 
         XYZ: delta = (bin - center) / center * max_delta_m
+        Rx, Ry: delta = (bin - center) / center * max_delta_rot (0.5 rad)
           env scale=0.05 → 5 cm/step at max bin.
 
         Gripper (sticky): only the outer bins trigger a state change.
@@ -267,17 +268,23 @@ def main():
         center = (num_bins - 1) / 2.0  # 5.0 for 11 bins
         threshold = 2.0  # ±2 bins from center triggers change
         normalized = (bin_indices.float() - center) / center
+        
         xyz = normalized[:, :3] * max_delta_m
+        
+        # 2D wrist rotation (Rx, Ry) - scale 0.5 rad (~28 deg) at max bin
+        max_delta_rot = 0.5
+        rot_xy = normalized[:, 3:5] * max_delta_rot
 
-        g_bin = bin_indices[:, 3].float()
+        g_bin = bin_indices[:, 5].float()
         new_gs = gripper_state.clone()
         new_gs[g_bin < center - threshold + 1] = -1.0  # bins 0-2  → close
         new_gs[g_bin > center + threshold - 1] = 1.0  # bins 8-10 → open
         # bins 3-7 → keep previous state
 
-        zeros3 = torch.zeros(bin_indices.shape[0], 3, device=bin_indices.device)
+        # RMPFlow expects 6D (xyz, rpy) + 1D gripper. We zero out Rz.
+        zeros1 = torch.zeros(bin_indices.shape[0], 1, device=bin_indices.device)
         return (
-            torch.cat([normalized[:, :3] * max_delta_m, zeros3, new_gs], dim=-1),
+            torch.cat([xyz, rot_xy, zeros1, new_gs], dim=-1),
             new_gs,
         )
 
@@ -386,9 +393,14 @@ def main():
         alice_ppo.actor_critic.parameters(), lr=alice_ppo.learning_rate
     )
 
+    import copy
+    bob_cfg = copy.deepcopy(ppo_cfg["params"])
+    if bob_cfg.get("policy", {}).get("use_pi_encoder", False):
+        bob_cfg["policy"]["pi_obj_dim"] = 24  # Object(15) + Goal(7) + Dist(2)
+
     bob_ppo = PPOABC(
         vec_env=env,
-        cfg_train=ppo_cfg["params"],
+        cfg_train=bob_cfg,
         device=env.device,
         sampler="sequential",
         log_dir=f"runs/{args.exp_name}/bob",

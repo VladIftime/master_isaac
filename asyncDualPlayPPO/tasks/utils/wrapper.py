@@ -729,15 +729,24 @@ class AsyncDualPlayEnvWrapper:
         quat_dot = torch.abs(torch.sum(quat_current * quat_goal, dim=-1, keepdim=True))
         quat_dist = 1.0 - quat_dot  # Result: (batch, num_objs, 1)
 
-        # 5. Flatten and Concatenate
-        # Distances: (batch, num_objects * 2) -> [target_pos_err, target_rot_err, cube_pos_err, cube_rot_err]
-        distances_flat = torch.cat([pos_dist, quat_dist], dim=-1).view(
-            -1, self.num_objects * 2
-        )
-
-        # Final concatenation:
-        # Alice Obs (38) + Goal States (14) + Distances (4) = 56 Dimensions
-        return torch.cat([alice_obs, goal_states, distances_flat], dim=-1)
+        # Final concatenation for Bob:
+        # The PI encoder expects objects to be contiguous. 
+        # We need to interleave: [Obj1(15), Goal1(7), Dist1(2), Obj2(15), Goal2(7), Dist2(2)]
+        
+        # current_obj_reshaped: (batch, num_objs, 15)
+        # goal_states_reshaped: (batch, num_objs, 7)
+        # distances: (batch, num_objs, 2)
+        distances_per_obj = torch.cat([pos_dist, quat_dist], dim=-1) # (batch, num_objs, 2)
+        
+        # Concatenate per object: (batch, num_objs, 24)
+        bob_objs = torch.cat([current_obj_reshaped, goal_states_reshaped, distances_per_obj], dim=-1)
+        
+        # Flatten to (batch, num_objs * 24)
+        bob_objs_flat = bob_objs.view(-1, self.num_objects * 24)
+        
+        # Final output: Robot(8) + Bob_Objs(48) = 56
+        robot_state = alice_obs[:, :self.robot_state_dim]
+        return torch.cat([robot_state, bob_objs_flat], dim=-1)
 
     def _get_bob_observations(self, obs_dict: Dict) -> torch.Tensor:
         """Get Bob's observations from policy group"""
