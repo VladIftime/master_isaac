@@ -93,10 +93,11 @@ class EpisodeManager:
             flush=True,
         )
 
-        # CRITICAL VALIDATION: Prevent instant win bug
-        # Alice's movement_threshold (wrapper: pos_threshold + 0.01) must be LARGER than Bob's pos_threshold
-        # Current: Alice must move > 0.06m (6cm) | Bob succeeds at < 0.05m (5cm) ✓ (1cm safety margin)
-        # If this is violated, Bob wins instantly without moving!
+        # NOTE: Alice's movement threshold (wrapper: alice_pos_req) uses XY-only
+        # distance (gravity z-drop excluded). Bob's pos_threshold uses full 3D
+        # distance against the goal state (which is already gravity-settled).
+        # The instant-win bug is prevented by resetting objects to initial pos
+        # before Bob's phase starts (see wrapper._handle_alice_completion).
         if pos_threshold >= 0.1:  # Sanity check: threshold too large = too easy
             print(
                 f"[WARNING] pos_threshold ({pos_threshold}) is very large - goals may be too easy!"

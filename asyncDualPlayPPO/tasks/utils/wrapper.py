@@ -432,7 +432,10 @@ class AsyncDualPlayEnvWrapper:
         active_goal = goal_state[env_ids]     # Shape: (N, 14)
         active_initial = initial_state[env_ids] # Shape: (N, 14)
 
-        alice_pos_req = 0.06
+        # XY-only threshold (gravity z-drop is excluded in goal_validator).
+        # Start low so untrained Alice can bootstrap valid goals from random
+        # exploration; the adversarial curriculum raises difficulty naturally.
+        alice_pos_req = 0.01   # 1cm XY movement
         alice_rot_req = 0.25
 
         # 2. Validate Goal (Local vs Local)
@@ -450,11 +453,12 @@ class AsyncDualPlayEnvWrapper:
         # 3. Logging (Debug coordinate math)
         start_pos = active_initial[:, 0:3]
         final_pos = active_goal[:, 0:3]
-        dist_moved = torch.norm(final_pos - start_pos, dim=-1)
+        dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
+        dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
 
         for i, env_id in enumerate(env_ids):
             print(
-                f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | Moved: {dist_moved[i]:.3f}m"
+                f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | XY: {dist_xy[i]:.3f}m Z: {dist_z[i]:.3f}m"
                 f" | Local target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}",
                 flush=True,
             )

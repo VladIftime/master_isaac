@@ -1,31 +1,32 @@
 #!/bin/bash
-#SBATCH --job-name=asp_low
+#SBATCH --job-name=asp_smoke
 #SBATCH --time=01:00:00
 #SBATCH --partition=gpushort
-#SBATCH --gpus-per-node=v100:1       # V100  32 GB — cheapest/fastest queue
+#SBATCH --gpus-per-node=a100:1       # A100  40 GB — V100 lacks sm_80 support for this container
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --output=slurm-%j-low.out
+#SBATCH --output=slurm-%j-smoke.out
 
 # ── What this script is for ──────────────────────────────────────────────────
-# Quick smoke-test / env-count sweep.  Runs for 1 hour on a V100 (32 GB).
-# Swap --gpus-per-node to a100:1 (40 GB) or l40s:1 (48 GB) if V100 is busy.
+# Fast smoke-test to verify the ABC fix is working.  20 min on a V100.
 #
-# Env-count guide (headless, single-GPU):
-#   V100  32 GB  →  512 envs   (safe)  |  1024 envs  (tight, watch OOM)
-#   A100  40 GB  →  1024 envs  (safe)  |  2048 envs  (tight)
-#   L40S  48 GB  →  2048 envs  (safe)
-#   RTX Pro 6000 96 GB → 4096+ envs
+# What to check in the output:
+#   1. ABC loss should NOT be flat at -1.016 — expect variation (-3 to -5 range)
+#   2. Bob's Rew should show non-zero values
+#   3. No "[Alice Update] Skipped" messages (both agents always update now)
+#   4. Bob SR should start climbing within ~50 iterations
 #
-# nsteps must be ≥ bob_timesteps (200).  512 gives a comfortable margin and
-# keeps storage at 512 × num_envs × obs_dim — well within 32 GB.
+# nsteps = 256 (min safe value above bob_timesteps=200, saves memory+time)
+# num_envs = 64 (small enough for fast iterations, large enough for signal)
+# max_iterations = 100 (enough to see if ABC loss moves)
+# save_interval = 50 (only 2 checkpoints to minimize I/O)
 # ─────────────────────────────────────────────────────────────────────────────
 
 LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS"
 
-NUM_ENVS=512
-NSTEPS=512
+NUM_ENVS=64
+NSTEPS=256
 
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
@@ -35,6 +36,7 @@ echo "[INFO] Node:          $SLURMD_NODENAME"
 echo "[INFO] GPU:           V100 32 GB"
 echo "[INFO] Envs × nsteps: ${NUM_ENVS} × ${NSTEPS} = $(( NUM_ENVS * NSTEPS )) buffer slots"
 echo "[INFO] Local runs:    $LOCAL_RUNS"
+echo "[INFO] Mode:          SMOKE TEST — verifying ABC fix"
 
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found!"
@@ -54,9 +56,9 @@ apptainer exec --nv \
     /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train.py \
     --num_envs      "$NUM_ENVS" \
     --nsteps        "$NSTEPS" \
-    --max_iterations 200 \
-    --save_interval  25 \
-    --exp_name      "hpc_low_${NUM_ENVS}env" \
+    --max_iterations 100 \
+    --save_interval  50 \
+    --exp_name      "smoke_abc_fix" \
     --arm_config    default \
     --headless \
     2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
@@ -66,3 +68,12 @@ apptainer exec --nv \
 echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
 rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/"
 echo "[INFO] Sync complete."
+
+# ── Quick summary ─────────────────────────────────────────────────────────────
+echo ""
+echo "=== SMOKE TEST CHECKLIST ==="
+echo "Grep the output for these:"
+echo "  grep 'ABC'        → loss should vary, NOT stuck at -1.016"
+echo "  grep 'BobSuccess' → should appear within first 100 iters"
+echo "  grep 'Skipped'    → should be ZERO matches (Alice always updates)"
+echo "==========================="

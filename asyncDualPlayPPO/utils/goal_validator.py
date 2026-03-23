@@ -73,7 +73,10 @@ def validate_goal(
     all_on_table = torch.all(x_on_table & y_on_table & z_on_table, dim=1)  # (batch,)
 
     # --- STEP 2: Check if objects moved ---
-    pos_movements = torch.norm(goal_pos - initial_pos, dim=-1)
+    # Use XY-only distance to ignore gravity settling (objects drop ~2.7cm in z
+    # from spawn height to table surface, which would otherwise dominate the
+    # movement metric and produce false positives).
+    pos_movements = torch.norm(goal_pos[:, :, :2] - initial_pos[:, :, :2], dim=-1)
     quat_dot = torch.sum(initial_quat * goal_quat, dim=-1)
     rot_movements = 1.0 - torch.abs(quat_dot)
 
