@@ -434,10 +434,10 @@ class AsyncDualPlayEnvWrapper:
         active_goal = goal_state[env_ids]     # Shape: (N, 14)
         active_initial = initial_state[env_ids] # Shape: (N, 14)
 
-        # XY-only threshold (gravity z-drop is excluded in goal_validator).
-        # Start low so untrained Alice can bootstrap valid goals from random
-        # exploration; the adversarial curriculum raises difficulty naturally.
-        alice_pos_req = 0.01   # 1cm XY movement
+        # Alice must move objects MORE than Bob's success threshold (0.04m),
+        # otherwise Bob starts already within the goal zone → instant win.
+        # 0.05m gives a 1cm safety margin above Bob's 0.04m threshold.
+        alice_pos_req = 0.05
         alice_rot_req = 0.25
 
         # 2. Validate Goal (Local vs Local)
