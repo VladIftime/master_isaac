@@ -55,13 +55,15 @@ class AsyncDualPlayEnvWrapper:
         self.num_objects = num_objects
         self.arm_config = arm_config
 
-        # Safe reset positions (LOCAL frame) — must match events.reset_objects_to_fixed_safe_pose.
-        # Used to set initial_states directly after Bob→Alice transitions, avoiding
-        # PhysX readback timing issues (data.root_pos_w is only updated by scene.update()
-        # inside env.step(), so reading it in the same wrapper step as the write gives stale data).
+        # Safe reset positions (LOCAL frame) for initial_states tracking.
+        # Objects are physically spawned at z=0.05 (events.py) but gravity settles
+        # them to z≈0.023 on the table surface within the first few sim steps.
+        # We record the SETTLED height here so the movement metric isn't inflated
+        # by the ~2.7cm gravity drop. This preserves Z in the distance check so
+        # Alice is still rewarded for lifting objects in the future.
         _id_quat = torch.tensor([1., 0., 0., 0.], device=device)
-        _t_pos   = torch.tensor([-0.15, 0.7, 0.05], device=device)
-        _c_pos   = torch.tensor([-0.25, 0.7, 0.05], device=device)
+        _t_pos   = torch.tensor([-0.15, 0.7, 0.023], device=device)
+        _c_pos   = torch.tensor([-0.25, 0.7, 0.023], device=device)
         # Shape (14,): [t_pos(3), t_quat(4), c_pos(3), c_quat(4)]
         self._safe_reset_state = torch.cat([_t_pos, _id_quat, _c_pos, _id_quat])
 
