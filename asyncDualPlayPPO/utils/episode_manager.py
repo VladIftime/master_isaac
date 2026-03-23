@@ -93,11 +93,10 @@ class EpisodeManager:
             flush=True,
         )
 
-        # NOTE: Alice's movement threshold (wrapper: alice_pos_req) uses XY-only
-        # distance (gravity z-drop excluded). Bob's pos_threshold uses full 3D
-        # distance against the goal state (which is already gravity-settled).
-        # The instant-win bug is prevented by resetting objects to initial pos
-        # before Bob's phase starts (see wrapper._handle_alice_completion).
+        # NOTE: Both Alice's movement threshold (wrapper: alice_pos_req=0.05) and
+        # Bob's pos_threshold (0.04) use full 3D distance. Gravity drop is excluded
+        # by recording initial_states at the settled z=0.023 (not spawn z=0.05).
+        # alice_pos_req > pos_threshold prevents instant-win (see wrapper).
         if pos_threshold >= 0.1:  # Sanity check: threshold too large = too easy
             print(
                 f"[WARNING] pos_threshold ({pos_threshold}) is very large - goals may be too easy!"

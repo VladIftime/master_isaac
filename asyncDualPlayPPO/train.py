@@ -526,6 +526,18 @@ def main():
         nonlocal bob_updates, best_bob_success_rate
 
         if bob_ppo.storage.step == 0:
+            # No Bob transitions collected (e.g. Alice produced no valid goals).
+            # Still increment bob_updates to prevent deadlock — paper Algorithm 1
+            # always advances both agents per training step.
+            print(
+                f"  [Bob Update {bob_updates}] SKIPPED (no Bob transitions)",
+                flush=True,
+            )
+            bob_rew_buf.clear()
+            bob_success_buf.clear()
+            bob_pos_err_buf.clear()
+            bob_rot_err_buf.clear()
+            bob_updates += 1
             return
 
         with torch.no_grad():
@@ -598,14 +610,7 @@ def main():
                 flush=True,
             )
 
-        # --- 0. CURRICULUM UPDATE ---
-        # Slowly increase Alice's horizon so Bob isn't overwhelmed with max-distance goals at iteration 0
-        curriculum_steps = min(
-            target_alice_timesteps,
-            100 + int(bob_updates * (target_alice_timesteps / 200.0)),
-        )
-        env.episode_manager.alice_timesteps = curriculum_steps
-
+        # Paper uses fixed Alice timesteps (T=100) — no curriculum.
         # --- 1. ALICE ROLLOUT PHASE ---
         alice_ppo.storage.clear()
 
