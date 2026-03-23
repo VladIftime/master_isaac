@@ -35,8 +35,8 @@ class EpisodeManager:
         alice_timesteps: int = 100,  # Reduced from 250 for better temporal credit assignment
         bob_timesteps: int = 200,
         max_goals_per_episode: int = 5,
-        pos_threshold: float = 0.01,
-        rot_threshold: float = 0.1,
+        pos_threshold: float = 0.04,
+        rot_threshold: float = 0.2,
         min_goal_dist: float = 0.001,  # Minimum distance Alice must move an object (near-zero = always valid)
     ):
         self.num_envs = num_envs

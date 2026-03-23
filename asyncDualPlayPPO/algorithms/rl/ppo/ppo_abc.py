@@ -67,11 +67,24 @@ class PPOABC(PPO):
         mean_surrogate_loss = 0
         mean_bc_loss = 0
 
-        # PPO + ABC update
-        abc_batch_size = min(
-            self.abc_batch_size,
-            self.abc_buffer.size if self.abc_buffer else self.abc_batch_size,
-        )
+        # --- ABC: sample ONCE and compute fresh θ_old BEFORE mini-epochs ---
+        # Paper Section 3.2: θ_old is Bob's behavior policy at the START of
+        # this training step (the policy used to collect the current rollout).
+        # We compute Bob's current log-probs on the demo batch here, then use
+        # them as the denominator for PPO-style ratio clipping during the
+        # mini-epoch loop. This prevents the stale-denominator bug where
+        # old_log_probs from demo insertion time (potentially hundreds of
+        # iterations ago) immediately clip the ratio to 1.2 → zero gradient.
+        abc_sample = None
+        abc_old_lp = None
+        if self.abc_buffer is not None and self.abc_buffer.size > 0:
+            abc_batch_size = min(self.abc_batch_size, self.abc_buffer.size)
+            abc_sample = self.abc_buffer.sample(abc_batch_size)
+            if abc_sample is not None and abc_sample[0].shape[0] > 0:
+                with torch.no_grad():
+                    abc_old_lp, _, _, _, _ = self.actor_critic.evaluate(
+                        abc_sample[0], None, abc_sample[2]
+                    )
 
         batch = self.storage.mini_batch_generator(self.num_mini_batches)
         for epoch in range(self.num_learning_epochs):
@@ -166,29 +179,22 @@ class PPOABC(PPO):
                     entropy_mean = torch.tensor(0.0, device=self.device)
 
                 # --- ABC (Alice Behavioral Cloning) Loss ---
-                # Paper: apply PPO-style ratio clipping to the BC loss.
-                # ratio = π_Bob_current(a|s) / π_Bob_old(a|s)  (old = policy at demo-collection time)
-                # bc_loss = -min(ratio, clip(ratio, 1-ε, 1+ε)).mean()
-                # This prevents large BC updates from stale demonstrations.
+                # Paper Section 3.2: L_abc = -E[clip(π_B(a|s,g;θ) / π_B(a|s,g;θ_old), 1-ε, 1+ε)]
+                # θ_old = Bob's policy at the START of this training step (computed above).
+                # The same abc_sample and abc_old_lp are reused across all mini-epochs;
+                # only θ (the optimizing params) changes during the loop.
                 bc_loss = torch.tensor(0.0, device=self.device)
-                if self.abc_buffer is not None and self.abc_buffer.size > 0:
-                    sample = self.abc_buffer.sample(abc_batch_size)
-                    if sample is not None:
-                        bc_obs, bc_states, bc_act = sample[0], sample[1], sample[2]
-                        old_bc_log_probs = sample[5].squeeze(
-                            -1
-                        )  # stored at collection time
-                        if bc_obs.shape[0] > 0:
-                            abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
-                                bc_obs, None, bc_act
-                            )
-                            # PPO-style clipped BC loss (treat all demo advantages as +1)
-                            ratio = torch.exp(abc_log_probs - old_bc_log_probs)
-                            clipped = torch.clamp(
-                                ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
-                            )
-                            bc_loss = -torch.min(ratio, clipped).mean()
-                        mean_bc_loss += bc_loss.item()
+                if abc_sample is not None and abc_old_lp is not None:
+                    bc_obs, bc_act = abc_sample[0], abc_sample[2]
+                    abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
+                        bc_obs, None, bc_act
+                    )
+                    ratio = torch.exp(abc_log_probs - abc_old_lp)
+                    clipped = torch.clamp(
+                        ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
+                    )
+                    bc_loss = -torch.min(ratio, clipped).mean()
+                    mean_bc_loss += bc_loss.item()
 
                 loss = (
                     surrogate_loss

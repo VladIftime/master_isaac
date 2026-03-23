@@ -471,23 +471,12 @@ def main():
     # --- Agents ---
     alice_updates = 0
     bob_updates = 0
-    consecutive_alice_skips = 0
 
-    # Resolve max_alice_bob_ratio: if not provided, derive from episode timesteps and num_envs.
-    # bob_timesteps / alice_timesteps gives the base ratio (Bob needs proportionally more gradient steps).
-    # The num_envs factor scales it down: more envs → more samples per iteration → Bob catches up faster.
-    if args.max_alice_bob_ratio is None:
-        _bob_ts = env.episode_manager.bob_timesteps
-        _alice_ts = env.episode_manager.alice_timesteps
-        max_alice_bob_ratio = max(
-            2, math.ceil(_bob_ts / _alice_ts) * max(1, 64 // args.num_envs)
-        )
+    if args.num_envs < 32:
         print(
-            f"[Config] max_alice_bob_ratio auto-computed: {max_alice_bob_ratio} "
-            f"(bob_ts={_bob_ts}, alice_ts={_alice_ts}, num_envs={args.num_envs})"
+            f"[WARNING] num_envs={args.num_envs} is very low. "
+            f"Paper uses 1856 envs (batch_size=4096). Recommend at least 32 for sparse rewards."
         )
-    else:
-        max_alice_bob_ratio = args.max_alice_bob_ratio
 
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
@@ -542,12 +531,7 @@ def main():
         with torch.no_grad():
             _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_bob_obs, None)
 
-        # Dynamic ABC weight decay: 0.5 -> 0.01 over max_iterations
-        _abc_coef_init = ppo_cfg["params"]["learn"].get("abc_coef", 0.5)
-        bob_ppo.abc_coef = max(
-            0.01, _abc_coef_init * (1.0 - (bob_updates / args.max_iterations))
-        )
-
+        # Paper Table 2: fixed β=0.5 throughout training (no decay).
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
         loss_val, loss_surr, loss_abc, _ = bob_ppo.update()
         bob_ppo.storage.clear()
@@ -1050,28 +1034,9 @@ def main():
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         bob_success_buf.append(current_sr)
 
-        # Perform Updates
-        # Freeze Alice if Bob is struggling (< 10% SR), but force an Alice update after
-        # max_alice_bob_ratio consecutive skips to prevent Alice from going stale.
-        force_alice = consecutive_alice_skips >= max_alice_bob_ratio
-        if current_sr >= 0.10 or bob_updates < 10 or force_alice:
-            if force_alice and current_sr < 0.10:
-                print(
-                    f"  [Alice Update] Forced after {consecutive_alice_skips} skips "
-                    f"(ratio={max_alice_bob_ratio}). Bob SR={current_sr:.2f}",
-                    flush=True,
-                )
-            perform_alice_update()
-            consecutive_alice_skips = 0
-        else:
-            consecutive_alice_skips += 1
-            print(
-                f"  [Alice Update] Skipped ({consecutive_alice_skips}/{max_alice_bob_ratio}). "
-                f"Bob SR ({current_sr:.2f}) < 0.10. Letting Bob catch up.",
-                flush=True,
-            )
-            alice_ppo.storage.clear()
-
+        # Paper Algorithm 1: always update both agents every training step.
+        # The adversarial curriculum requires Alice to keep evolving alongside Bob.
+        perform_alice_update()
         perform_bob_update(current_bob_obs)
 
         # Logging

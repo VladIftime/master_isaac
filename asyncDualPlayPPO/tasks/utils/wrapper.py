@@ -432,8 +432,8 @@ class AsyncDualPlayEnvWrapper:
         active_goal = goal_state[env_ids]     # Shape: (N, 14)
         active_initial = initial_state[env_ids] # Shape: (N, 14)
 
-        alice_pos_req = 0.04 
-        alice_rot_req = 0.10
+        alice_pos_req = 0.06
+        alice_rot_req = 0.25
 
         # 2. Validate Goal (Local vs Local)
         valid, val_reward, reasons = validate_goal(
