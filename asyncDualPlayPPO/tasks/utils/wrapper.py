@@ -61,9 +61,9 @@ class AsyncDualPlayEnvWrapper:
         # We record the SETTLED height here so the movement metric isn't inflated
         # by the ~2.7cm gravity drop. This preserves Z in the distance check so
         # Alice is still rewarded for lifting objects in the future.
-        _id_quat = torch.tensor([1., 0., 0., 0.], device=device)
-        _t_pos   = torch.tensor([-0.15, 0.7, 0.023], device=device)
-        _c_pos   = torch.tensor([-0.25, 0.7, 0.023], device=device)
+        _id_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=device)
+        _t_pos = torch.tensor([-0.15, 0.7, 0.023], device=device)
+        _c_pos = torch.tensor([-0.25, 0.7, 0.023], device=device)
         # Shape (14,): [t_pos(3), t_quat(4), c_pos(3), c_quat(4)]
         self._safe_reset_state = torch.cat([_t_pos, _id_quat, _c_pos, _id_quat])
 
@@ -247,9 +247,14 @@ class AsyncDualPlayEnvWrapper:
                 else:
                     reason = "timeout"
 
-                status = ("TERMINATED" if is_term else "") + (" TRUNCATED" if is_trunc else "")
-                max_steps = (self.episode_manager.alice_timesteps
-                             if is_alice[env_id] else self.episode_manager.bob_timesteps)
+                status = ("TERMINATED" if is_term else "") + (
+                    " TRUNCATED" if is_trunc else ""
+                )
+                max_steps = (
+                    self.episode_manager.alice_timesteps
+                    if is_alice[env_id]
+                    else self.episode_manager.bob_timesteps
+                )
                 print(
                     f"[EarlyEnd] Env {env_id.item()} [{status.strip()}] "
                     f"{phase_name} step={phase_step}/{max_steps} goal={goal_num}/5 "
@@ -259,7 +264,9 @@ class AsyncDualPlayEnvWrapper:
 
                 # Only penalize hard physics terminations (not timeouts)
                 if not is_term:
-                    self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
+                    self.episode_manager.reset_episode(
+                        env_id.unsqueeze(0), reason=reason
+                    )
                     continue
 
                 if is_alice[env_id]:
@@ -429,10 +436,10 @@ class AsyncDualPlayEnvWrapper:
         # 1. Extract Local states (14 dims)
         goal_state = self._extract_object_states(obs_dict)
         initial_state = self.episode_manager.initial_states
-        
+
         # Slice for active environments
-        active_goal = goal_state[env_ids]     # Shape: (N, 14)
-        active_initial = initial_state[env_ids] # Shape: (N, 14)
+        active_goal = goal_state[env_ids]  # Shape: (N, 14)
+        active_initial = initial_state[env_ids]  # Shape: (N, 14)
 
         # Alice must move objects MORE than Bob's success threshold (0.04m),
         # otherwise Bob starts already within the goal zone → instant win.
@@ -484,7 +491,7 @@ class AsyncDualPlayEnvWrapper:
             pos1_global = start_states[:, 0:3] + origins
             self.env.scene["target_object"].write_root_pose_to_sim(
                 torch.cat([pos1_global, start_states[:, 3:7]], dim=-1),
-                env_ids=valid_env_ids
+                env_ids=valid_env_ids,
             )
 
             # Reset Cube (Local -> World)
@@ -492,7 +499,7 @@ class AsyncDualPlayEnvWrapper:
             pos2_global = start_states[:, 7:10] + origins
             self.env.scene["cube"].write_root_pose_to_sim(
                 torch.cat([pos2_global, start_states[:, 10:14]], dim=-1),
-                env_ids=valid_env_ids
+                env_ids=valid_env_ids,
             )
 
             reset_robot_joints(self.env, valid_env_ids)
@@ -501,11 +508,15 @@ class AsyncDualPlayEnvWrapper:
         # 6. Handle Invalid
         invalid_env_ids = env_ids[~successful_goal]
         if len(invalid_env_ids) > 0:
-            self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Invalid Goal")
+            self.episode_manager.reset_episode(
+                invalid_env_ids, reason="Alice Invalid Goal"
+            )
             reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.episode_manager.initial_states[invalid_env_ids] = (
-                self._safe_reset_state.unsqueeze(0).expand(len(invalid_env_ids), -1).clone()
+                self._safe_reset_state.unsqueeze(0)
+                .expand(len(invalid_env_ids), -1)
+                .clone()
             )
             self.env.scene.write_data_to_sim()
 
@@ -555,7 +566,9 @@ class AsyncDualPlayEnvWrapper:
             # Set initial_states directly from known safe reset positions to avoid
             # PhysX readback timing issues (data.root_pos_w is stale until next env.step()).
             self.episode_manager.initial_states[continue_ids] = (
-                self._safe_reset_state.unsqueeze(0).expand(len(continue_ids), -1).clone()
+                self._safe_reset_state.unsqueeze(0)
+                .expand(len(continue_ids), -1)
+                .clone()
             )
 
         # Episode End (Bob failed or max goals)
@@ -596,7 +609,9 @@ class AsyncDualPlayEnvWrapper:
             reset_objects_to_fixed_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
             self.episode_manager.initial_states[continue_ids] = (
-                self._safe_reset_state.unsqueeze(0).expand(len(continue_ids), -1).clone()
+                self._safe_reset_state.unsqueeze(0)
+                .expand(len(continue_ids), -1)
+                .clone()
             )
 
         # Others reset (reached max goals with success)
@@ -673,7 +688,7 @@ class AsyncDualPlayEnvWrapper:
         t_quat_w = self.env.scene["target_object"].data.root_quat_w
         c_pos_w = self.env.scene["cube"].data.root_pos_w
         c_quat_w = self.env.scene["cube"].data.root_quat_w
-        
+
         env_origins = self.env.scene.env_origins
 
         # 2. TRANSFORM: World -> Local
@@ -730,22 +745,26 @@ class AsyncDualPlayEnvWrapper:
         quat_dist = 1.0 - quat_dot  # Result: (batch, num_objs, 1)
 
         # Final concatenation for Bob:
-        # The PI encoder expects objects to be contiguous. 
+        # The PI encoder expects objects to be contiguous.
         # We need to interleave: [Obj1(15), Goal1(7), Dist1(2), Obj2(15), Goal2(7), Dist2(2)]
-        
+
         # current_obj_reshaped: (batch, num_objs, 15)
         # goal_states_reshaped: (batch, num_objs, 7)
         # distances: (batch, num_objs, 2)
-        distances_per_obj = torch.cat([pos_dist, quat_dist], dim=-1) # (batch, num_objs, 2)
-        
+        distances_per_obj = torch.cat(
+            [pos_dist, quat_dist], dim=-1
+        )  # (batch, num_objs, 2)
+
         # Concatenate per object: (batch, num_objs, 24)
-        bob_objs = torch.cat([current_obj_reshaped, goal_states_reshaped, distances_per_obj], dim=-1)
-        
+        bob_objs = torch.cat(
+            [current_obj_reshaped, goal_states_reshaped, distances_per_obj], dim=-1
+        )
+
         # Flatten to (batch, num_objs * 24)
         bob_objs_flat = bob_objs.view(-1, self.num_objects * 24)
-        
+
         # Final output: Robot(8) + Bob_Objs(48) = 56
-        robot_state = alice_obs[:, :self.robot_state_dim]
+        robot_state = alice_obs[:, : self.robot_state_dim]
         return torch.cat([robot_state, bob_objs_flat], dim=-1)
 
     def _get_bob_observations(self, obs_dict: Dict) -> torch.Tensor:
@@ -934,8 +953,7 @@ class AsyncDualPlayEnvWrapper:
                 ).tolist()
                 t_goal = self.episode_manager.goal_states[env_id, 0:3].tolist()
                 c_curr_l = (
-                    self.env.scene["cube"].data.root_pos_w[env_id]
-                    - env_origins[env_id]
+                    self.env.scene["cube"].data.root_pos_w[env_id] - env_origins[env_id]
                 ).tolist()
                 c_goal = self.episode_manager.goal_states[env_id, 7:10].tolist()
                 print(
@@ -960,7 +978,11 @@ class AsyncDualPlayEnvWrapper:
 
         # Update prev_obj_success only for Bob-phase envs to avoid Alice-phase
         # envs carrying stale success state into their first Bob step.
-        new_prev = self.episode_manager.prev_obj_success.clone() if self.episode_manager.prev_obj_success is not None else obj_success.clone()
+        new_prev = (
+            self.episode_manager.prev_obj_success.clone()
+            if self.episode_manager.prev_obj_success is not None
+            else obj_success.clone()
+        )
         new_prev[is_bob_phase] = obj_success[is_bob_phase]
         self.episode_manager.prev_obj_success = new_prev
 

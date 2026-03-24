@@ -268,9 +268,9 @@ def main():
         center = (num_bins - 1) / 2.0  # 5.0 for 11 bins
         threshold = 2.0  # ±2 bins from center triggers change
         normalized = (bin_indices.float() - center) / center
-        
+
         xyz = normalized[:, :3] * max_delta_m
-        
+
         # 2D wrist rotation (Rx, Ry) - scale 0.5 rad (~28 deg) at max bin
         max_delta_rot = 0.5
         rot_xy = normalized[:, 3:5] * max_delta_rot
@@ -394,6 +394,7 @@ def main():
     )
 
     import copy
+
     bob_cfg = copy.deepcopy(ppo_cfg["params"])
     if bob_cfg.get("policy", {}).get("use_pi_encoder", False):
         bob_cfg["policy"]["pi_obj_dim"] = 24  # Object(15) + Goal(7) + Dist(2)

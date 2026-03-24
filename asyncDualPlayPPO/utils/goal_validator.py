@@ -110,11 +110,23 @@ def validate_goal(
     out_of_zone = all_on_table & any_moved & all_stable & any_outside_placement
     is_valid = all_on_table & any_moved & all_stable & ~any_outside_placement
 
-    rewards = torch.where(off_table, torch.full((batch_size,), -3.0, device=initial_state.device),
-              torch.where(not_moved,  torch.zeros(batch_size, device=initial_state.device),
-              torch.where(unstable,   torch.zeros(batch_size, device=initial_state.device),
-              torch.where(out_of_zone, torch.full((batch_size,), -3.0, device=initial_state.device),
-                                       torch.ones(batch_size, device=initial_state.device)))))
+    rewards = torch.where(
+        off_table,
+        torch.full((batch_size,), -3.0, device=initial_state.device),
+        torch.where(
+            not_moved,
+            torch.zeros(batch_size, device=initial_state.device),
+            torch.where(
+                unstable,
+                torch.zeros(batch_size, device=initial_state.device),
+                torch.where(
+                    out_of_zone,
+                    torch.full((batch_size,), -3.0, device=initial_state.device),
+                    torch.ones(batch_size, device=initial_state.device),
+                ),
+            ),
+        ),
+    )
 
     valid = is_valid
 

@@ -42,7 +42,9 @@ class RolloutStorage:
         self.dones = torch.zeros(
             num_transitions_per_env, num_envs, 1, device=device
         ).byte()
-        self.masks = torch.ones(
+        # Initialized to 0: unfilled entries are invalid by default.
+        # add_transitions sets mask=1 for real steps.
+        self.masks = torch.zeros(
             num_transitions_per_env, num_envs, 1, device=device
         ).byte()
         self.actions_log_prob = torch.zeros(
@@ -102,19 +104,19 @@ class RolloutStorage:
 
     def compute_returns(self, last_values, gamma, lam):
         """
-        GAE-λ return computation.
+        GAE-λ return computation over FILLED entries only.
 
-        Uses the mask rather than dones to gate bootstrapping: during the
-        Alice→Bob phase transition, mask=0 prevents value estimates from the
-        incoming Alice phase from leaking into Bob's return calculation.
+        Only iterates over self.step entries (not the full buffer capacity).
+        Uses the mask to gate bootstrapping: mask=0 prevents value estimates
+        from leaking across phase transitions.
         """
+        filled = self.step
+        if filled == 0:
+            return
+
         advantage = 0
-        for step in reversed(range(self.num_transitions_per_env)):
-            next_values = (
-                last_values
-                if step == self.num_transitions_per_env - 1
-                else self.values[step + 1]
-            )
+        for step in reversed(range(filled)):
+            next_values = last_values if step == filled - 1 else self.values[step + 1]
             next_is_not_terminal = self.masks[step].float()
             delta = (
                 self.rewards[step]
@@ -124,26 +126,24 @@ class RolloutStorage:
             advantage = delta + next_is_not_terminal * gamma * lam * advantage
             self.returns[step] = advantage + self.values[step]
 
-        self.advantages = self.returns - self.values
+        # Only compute advantages over filled portion
+        filled_adv = self.returns[:filled] - self.values[:filled]
+        self.advantages[:filled] = filled_adv
 
-        # Normalize advantages using ONLY valid (mask=1) entries.
-        # Alice's buffer is ~95% zero-padding; including those zeros in
-        # the normalization makes std tiny → valid advantages explode.
-        valid = self.masks.bool().squeeze(-1)  # (T, N)
+        # Normalize using only valid (mask=1) entries within filled portion
+        valid = self.masks[:filled].bool().squeeze(-1)  # (filled, N)
         if valid.any():
-            valid_adv = self.advantages[valid]
+            valid_adv = self.advantages[:filled][valid]
             adv_mean = valid_adv.mean()
             adv_std = valid_adv.std() + 1e-8
         else:
-            adv_mean = self.advantages.mean()
-            adv_std = self.advantages.std() + 1e-8
+            adv_mean = filled_adv.mean()
+            adv_std = filled_adv.std() + 1e-8
 
-        self.advantages = (self.advantages - adv_mean) / adv_std
+        self.advantages[:filled] = (self.advantages[:filled] - adv_mean) / adv_std
 
-        # CRITICAL FIX: Zero out advantages for invalid/padded entries!
-        # Otherwise, the normalization shifts the 0.0 advantages of padded entries
-        # to (0 - mean)/std, which causes massive surrogate loss explosions.
-        self.advantages[~valid] = 0.0
+        # Zero out advantages for invalid/padded entries within filled portion
+        self.advantages[:filled][~valid] = 0.0
 
     def get_statistics(self):
         done = self.dones.cpu()
@@ -160,13 +160,15 @@ class RolloutStorage:
 
     def mini_batch_generator(self, num_mini_batches):
         """
-        Return a BatchSampler over the full rollout buffer.
+        Return a BatchSampler over FILLED entries only.
 
-        Uses sequential sampling for physics-based RL: parallel envs are
-        already independently randomized, so random sub-sampling provides
-        no additional diversity but adds CPU overhead.
+        Only iterates over self.step * num_envs entries, not the full buffer
+        capacity. This prevents OOM when nsteps >> actual rollout length
+        (e.g. nsteps=2048 but Alice only uses ~100 steps).
         """
-        batch_size = self.num_envs * self.num_transitions_per_env
+        batch_size = self.num_envs * self.step
+        if batch_size == 0:
+            return iter([])  # empty iterator for zero-length rollouts
         mini_batch_size = batch_size // num_mini_batches
 
         if self.sampler == "sequential":

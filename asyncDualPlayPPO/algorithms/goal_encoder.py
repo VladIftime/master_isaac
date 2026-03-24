@@ -48,7 +48,9 @@ class GoalEncoder(nn.Module):
         super().__init__()
 
         if variant not in ("difference", "absolute"):
-            raise ValueError(f"variant must be 'difference' or 'absolute', got {variant!r}")
+            raise ValueError(
+                f"variant must be 'difference' or 'absolute', got {variant!r}"
+            )
 
         self.variant = variant
         self.state_dim = state_dim

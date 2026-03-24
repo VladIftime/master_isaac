@@ -37,7 +37,7 @@ params:
     use_multicategorical: true
     num_cat_dims: 6       # X, Y, Z, Rx, Ry, Gripper
     num_bins: 11          # bins per dimension (paper uses 11)
-    max_delta_m: 3.0     
+    max_delta_m: 0.05     
     use_lstm: true
     lstm_hidden_size: 256
 

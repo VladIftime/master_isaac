@@ -271,8 +271,12 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
         # Default target: 30 cm right of the safe-reset position [-0.15, 0.5, 0.05]
         if target_local is None:
             target_local = [0.15, 0.5, 0.05]
-        self._target_local = torch.tensor(target_local, dtype=torch.float32, device=device)
-        safe_reset_local = torch.tensor([-0.15, 0.5, 0.05], dtype=torch.float32, device=device)
+        self._target_local = torch.tensor(
+            target_local, dtype=torch.float32, device=device
+        )
+        safe_reset_local = torch.tensor(
+            [-0.15, 0.5, 0.05], dtype=torch.float32, device=device
+        )
         self._expected_dist = torch.norm(self._target_local - safe_reset_local).item()
 
     def step(self, action):

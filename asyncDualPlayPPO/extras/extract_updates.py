@@ -10,10 +10,10 @@ output_file = os.path.join(base_dir, "logs", name_of_output + ".txt")
 
 # Patterns to extract
 patterns = [
-    re.compile(r"\[Alice Update \d+\]"),      # Alice update with stats
-    re.compile(r"\[Bob Update \d+\]"),         # Bob update with stats
-    re.compile(r"\[Alice Update\] Skipped"),   # Alice skipped updates
-    re.compile(r"^Iteration \d+:"),            # Iteration summary
+    re.compile(r"\[Alice Update \d+\]"),  # Alice update with stats
+    re.compile(r"\[Bob Update \d+\]"),  # Bob update with stats
+    re.compile(r"\[Alice Update\] Skipped"),  # Alice skipped updates
+    re.compile(r"^Iteration \d+:"),  # Iteration summary
 ]
 
 count = 0
