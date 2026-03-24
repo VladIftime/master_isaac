@@ -243,11 +243,10 @@ def main():
     use_mc = _pol_cfg.get("use_multicategorical", False)
     num_cat_dims = _pol_cfg.get("num_cat_dims", 6)
     num_bins = _pol_cfg.get("num_bins", 11)
-    max_delta_m = _pol_cfg.get("max_delta_m", 0.05)
     if use_mc:
         print(
             f"[Config] Multi-categorical action space: {num_cat_dims} dims × {num_bins} bins "
-            f"(max delta {max_delta_m*100:.1f} cm, bin size {max_delta_m*100/(num_bins-1)*10:.1f} mm)"
+            f"(physical scale set by env RMPFlow scale factor)"
         )
 
     def bins_to_env_action(
@@ -256,9 +255,8 @@ def main():
         """
         Convert policy bin indices (N, 6) → 7D RMPFlow+gripper env action.
 
-        XYZ: delta = (bin - center) / center * max_delta_m
+        XYZ: normalized = (bin - center) / center → [-1, 1]; env scale=0.05 → ±5cm/step.
         Rx, Ry: delta = (bin - center) / center * max_delta_rot (0.5 rad)
-          env scale=0.05 → 5 cm/step at max bin.
 
         Gripper (sticky): only the outer bins trigger a state change.
           Dead zone = center 3 bins (4/5/6) → keep previous gripper_state.
@@ -268,8 +266,7 @@ def main():
         center = (num_bins - 1) / 2.0  # 5.0 for 11 bins
         threshold = 2.0  # ±2 bins from center triggers change
         normalized = (bin_indices.float() - center) / center
-
-        xyz = normalized[:, :3] * max_delta_m
+        xyz = normalized[:, :3]  # [-1, 1]; RMPFlow scale=0.05 gives ±5cm/step
 
         # 2D wrist rotation (Rx, Ry) - scale 0.5 rad (~28 deg) at max bin
         max_delta_rot = 0.5
