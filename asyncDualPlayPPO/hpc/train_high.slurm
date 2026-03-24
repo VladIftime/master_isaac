@@ -8,13 +8,19 @@
 #SBATCH --output=slurm-%j-high.out
 
 # ── What this script is for ──────────────────────────────────────────────────
-# Full-scale training run (24 h).  Uses the RTX Pro 6000 (96 GB) for maximum
-# env count.  Swap --gpus-per-node if a different GPU is preferred:
+# Full-scale training run (24 h).  GPU VRAM is not the bottleneck — IsaacSim
+# physics uses ~15 MB CPU RAM per env, so node RAM is the real limit.
+# Habrok node specs (from wiki):
 #
-#   rtx_pro_6000  96 GB  →  2048 envs   (safe; 4096 OOMs CPU RAM not GPU)
-#   l40s          48 GB  →  1024 envs   (safe)
-#   a100          40 GB  →   512 envs   (safe)
-#   v100          32 GB  →   256 envs   (safe)
+#   GPU           VRAM   Node RAM   CPUs   Max safe envs
+#   ─────────────────────────────────────────────────────
+#   rtx_pro_6000   96 GB   192 GB    128     2048  (4096 OOMs node RAM)
+#   l40s           48 GB   512 GB     56     4096+ (plenty of RAM)
+#   a100           40 GB   512 GB     64     4096+ (plenty of RAM)
+#   v100           32 GB   128 GB     36      512
+#
+# For 4096 envs use l40s or a100 — they have 512 GB RAM.
+# Current: rtx_pro_6000 with 2048 envs (~40 GB RAM usage, safe on 192 GB node).
 #
 # nsteps is the PPO buffer capacity per env (set in ppo_continuous.yaml).
 # Actual rollout lengths: Alice=100 steps, Bob=200 steps.
