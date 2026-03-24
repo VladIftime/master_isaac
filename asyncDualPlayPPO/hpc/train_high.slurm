@@ -16,10 +16,10 @@
 #   a100          40 GB  →  1024 envs   (safe)
 #   v100          32 GB  →   512 envs   (safe)
 #
-# nsteps=2048 is the PPO storage capacity per env.  Actual rollout lengths are
-# alice_timesteps (100) and bob_timesteps (200), so the buffer is never more
-# than 10 % full.  Keeping nsteps=2048 gives the GAE computation full context
-# if the rollout lengths are ever increased.
+# nsteps is the PPO buffer capacity per env (set in ppo_continuous.yaml).
+# Actual rollout lengths: Alice=100 steps, Bob=200 steps.
+# nsteps=256 gives 28% headroom over Bob's 200-step limit.
+# nsteps=2048 pre-allocates ~50 GB RAM for 4096 envs → CPU OOM.
 #
 # Step budget: each iteration ≈ (100 + 200) × 4096 = 1.23 M env-steps.
 # 1000 iterations ≈ 1.23 B steps, close to the OpenAI paper's ~1.5 B.
@@ -29,7 +29,7 @@ LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS"
 
 NUM_ENVS=4096
-NSTEPS=2048
+NSTEPS=256
 
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)

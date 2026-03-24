@@ -10,7 +10,10 @@ params:
     # Physical scaling (e.g. 5cm exploration) is now handled in wrapper.py to prevent 
     # the 1/sigma^2 gradient explosion.
     init_noise_std: 1.0
-    nsteps: 2048
+    # Buffer capacity per env. Must be >= max rollout length (Bob=200 steps).
+    # 2048 pre-allocates ~50 GB RAM for 4096 envs → OOM. 256 gives 28% headroom over
+    # Bob's 200-step limit while using ~6 GB instead.
+    nsteps: 256
 
     # PPO params
     cliprange: 0.2
