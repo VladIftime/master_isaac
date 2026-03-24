@@ -620,7 +620,17 @@ def main():
                 flush=True,
             )
 
-        # Paper uses fixed Alice timesteps (T=100) — no curriculum.
+        # --- Alice entropy annealing ---
+        # Paper uses fixed ent_coef=0.01 but relies on 1856 parallel envs for diversity.
+        # With fewer envs we anneal from 1.0 → 0.01 over the first 100 iterations so
+        # Alice explores uniformly early on then converges to paper's value.
+        _ALICE_ENT_START = 1.0
+        _ALICE_ENT_END = 0.01
+        _ALICE_ENT_ANNEAL_ITERS = 100
+        frac = min(1.0, bob_updates / _ALICE_ENT_ANNEAL_ITERS)
+        alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (_ALICE_ENT_END - _ALICE_ENT_START)
+        writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
+
         # --- 1. ALICE ROLLOUT PHASE ---
         alice_ppo.storage.clear()
 

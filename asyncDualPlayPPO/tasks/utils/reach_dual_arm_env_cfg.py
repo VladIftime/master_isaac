@@ -309,7 +309,7 @@ class ActionsCfg:
             evaluations_per_frame=12.0,
         ),
         articulation_prim_expr="/World/envs/env_.*/RobotUnified",
-        scale=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+        scale=[0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
         use_relative_mode=True,
     )
 
