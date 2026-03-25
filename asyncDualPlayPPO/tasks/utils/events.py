@@ -16,7 +16,7 @@ def randomize_object_positions(
     env_ids: torch.Tensor,
     x_range: tuple[float, float] = (-0.3, 0.3),
     y_range: tuple[float, float] = (0.55, 0.65),
-    z_height: float = 0.03,
+    z_height: float = 0.05,
 ) -> None:
     """
     Randomize positions of all objects within the workspace on episode reset.

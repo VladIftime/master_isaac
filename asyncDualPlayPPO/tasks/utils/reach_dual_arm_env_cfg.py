@@ -209,7 +209,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     target_object = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/TargetObject",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+            pos=[0.0, 0.7, 0.05], rot=[0.0, 0.0, 0.0, 1.0]  # 0.05: gravity settles to ~0.023
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/concave.usd",
@@ -222,7 +222,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     cube = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[-0.15, 0.7, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+            pos=[-0.15, 0.7, 0.05], rot=[0.0, 0.0, 0.0, 1.0]  # 0.05: gravity settles to ~0.023
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
@@ -235,7 +235,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     cylinder = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cylinder",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[-0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+            pos=[-0.05, 0.5, 0.05], rot=[0.0, 0.0, 0.0, 1.0]
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
@@ -248,7 +248,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     rect = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Rect",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.05, 0.5, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+            pos=[0.05, 0.5, 0.05], rot=[0.0, 0.0, 0.0, 1.0]
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
@@ -261,7 +261,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     triangle = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Triangle",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.2, 0.6, 0.03], rot=[0.0, 0.0, 0.0, 1.0]
+            pos=[0.2, 0.6, 0.05], rot=[0.0, 0.0, 0.0, 1.0]
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",

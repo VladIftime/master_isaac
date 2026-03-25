@@ -1,6 +1,7 @@
 import isaaclab.app
 from isaaclab.app import AppLauncher
 
+import gc
 import math
 import os
 import sys
@@ -591,6 +592,11 @@ def main():
         bob_rot_err_buf.clear()
 
         bob_updates += 1
+
+        # Force Python GC every 10 iterations to reclaim Python-side memory.
+        # IsaacSim's PhysX heap is not affected, but this helps with Python objects.
+        if bob_updates % 10 == 0:
+            gc.collect()
 
     print("Initializing environment (suppressing URDF/Lula warnings)...")
     with SuppressAllOutput():
