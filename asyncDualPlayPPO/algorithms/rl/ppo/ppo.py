@@ -106,7 +106,7 @@ class PPO:
         self.actor_critic.eval()
 
     def load(self, path):
-        self.actor_critic.load_state_dict(torch.load(path))
+        self.actor_critic.load_state_dict(torch.load(path), strict=False)
         self.current_learning_iteration = int(path.split("_")[-1].split(".")[0])
         self.actor_critic.train()
 

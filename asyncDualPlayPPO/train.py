@@ -395,7 +395,9 @@ def main():
 
     bob_cfg = copy.deepcopy(ppo_cfg["params"])
     if bob_cfg.get("policy", {}).get("use_pi_encoder", False):
-        bob_cfg["policy"]["pi_obj_dim"] = 24  # Object(15) + Goal(7) + Dist(2)
+        bob_cfg["policy"]["pi_obj_dim"] = 24  # NOTE: ignored when use_goal_encoder=True
+                                              # (per_obj_dim = 15 + K_per_obj = 23 in that path)
+    bob_cfg["policy"]["use_goal_encoder"] = True
 
     bob_ppo = PPOABC(
         vec_env=env,
@@ -553,6 +555,16 @@ def main():
 
         with torch.no_grad():
             _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_bob_obs, None)
+
+        # --- Goal Encoder Monitoring ---
+        if bob_ppo.actor_critic.use_goal_encoder:
+            with torch.no_grad():
+                sample_obs = current_bob_obs[:8]
+                s_t_batch = torch.cat([sample_obs[:, 8:15], sample_obs[:, 32:39]], dim=-1)
+                s_star_batch = torch.cat([sample_obs[:, 23:30], sample_obs[:, 47:54]], dim=-1)
+                g_sample = bob_ppo.actor_critic.goal_encoder(s_star_batch, s_t_batch)
+                writer.add_scalar("GoalEncoder/embedding_norm", g_sample.norm(dim=-1).mean().item(), bob_updates)
+                writer.add_scalar("GoalEncoder/embedding_std", g_sample.std(dim=-1).mean().item(), bob_updates)
 
         # Paper Table 2: fixed β=0.5 throughout training (no decay).
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)

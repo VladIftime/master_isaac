@@ -187,7 +187,7 @@ class PPOABC(PPO):
                 if abc_sample is not None and abc_old_lp is not None:
                     bc_obs, bc_act = abc_sample[0], abc_sample[2]
                     abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
-                        bc_obs, None, bc_act
+                        bc_obs, None, bc_act, detach_goal_encoder=True
                     )
                     ratio = torch.exp(abc_log_probs - abc_old_lp)
                     clipped = torch.clamp(
@@ -196,11 +196,27 @@ class PPOABC(PPO):
                     bc_loss = -torch.min(ratio, clipped).mean()
                     mean_bc_loss += bc_loss.item()
 
+                # --- Auxiliary Distance Prediction Loss ---
+                aux_loss_val = torch.tensor(0.0, device=self.device)
+                if getattr(self.actor_critic, "use_goal_encoder", False) and hasattr(self.actor_critic.goal_encoder, "aux_loss"):
+                    # Extract 14-dim s_t and s_star from 56-dim obs_batch
+                    s_t_batch = torch.cat([obs_batch[:, 8:15], obs_batch[:, 32:39]], dim=-1)
+                    s_star_batch = torch.cat([obs_batch[:, 23:30], obs_batch[:, 47:54]], dim=-1)
+                    
+                    aux, pos_loss, rot_loss = self.actor_critic.goal_encoder.aux_loss(s_star_batch, s_t_batch)
+                    aux_loss_val = self.cfg_train["learn"].get("aux_coef", 0.1) * aux
+                    
+                    if hasattr(self, "writer") and self.writer is not None:
+                        it = self.current_learning_iteration
+                        self.writer.add_scalar("GoalEncoder/aux_pos_loss", pos_loss.item(), it)
+                        self.writer.add_scalar("GoalEncoder/aux_rot_loss", rot_loss.item(), it)
+
                 loss = (
                     surrogate_loss
                     + self.value_loss_coef * value_loss
                     - self.entropy_coef * entropy_mean
                     + self.abc_coef * bc_loss
+                    + aux_loss_val
                 )
 
                 self.optimizer.zero_grad()
