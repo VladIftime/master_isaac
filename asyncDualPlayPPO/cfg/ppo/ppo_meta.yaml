@@ -1,0 +1,39 @@
+# Meta-level PPO configuration for Phase 2 (Charlie Architecture)
+# Both Meta-Alice and Meta-Bob use these params unless overridden in train_meta.py
+
+params:
+  learn:
+    optim_stepsize: 3.0e-4
+    schedule: fixed
+    desired_kl: 0.016           # Adaptive KL — valid for Gaussian meta-policy
+    init_noise_std: 0.5         # Meta-actions are K-dim continuous vectors
+    nsteps: 15                  # = TB_meta (one full Meta-Bob rollout)
+    cliprange: 0.2
+    noptepochs: 5
+    nminibatches: 2
+    ent_coef: 0.01
+    gamma: 0.99                 # Shorter horizon than Phase 1 (meta episodes ~15 steps)
+    lam: 0.95
+    max_grad_norm: 1.0
+    value_loss_coef: 1.0
+
+    # Meta-ABC (only used by Meta-Bob / Charlie)
+    abc_coef: 0.5
+    abc_batch_size: 512         # Smaller — meta demos are short sequences
+
+  policy:
+    pi_hid_sizes: [256, 128]    # Smaller MLP — global state is only 44 dims
+    vf_hid_sizes: [256, 128]
+    activation: tanh            # tanh per Charlie paper Section 2.4
+    use_multicategorical: false
+    use_lstm: false
+    use_pi_encoder: false
+    use_goal_encoder: false
+
+  # Phase 2 meta-level params
+  meta:
+    C: 30                       # Atomic steps per meta-step
+    TA_meta: 10                 # Meta-Alice's meta-step budget
+    TB_meta: 15                 # Meta-Bob's meta-step budget
+    success_threshold: 0.04     # D(S_final, S*) < threshold → success
+    abc_buffer_capacity: 10000  # Meta-ABC demo buffer size

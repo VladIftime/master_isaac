@@ -55,6 +55,26 @@ def ee_poses(
     return torch.cat([pos, quat], dim=-1)
 
 
+def other_arm_ee_pos(
+    env: ManagerBasedRLEnv,
+    ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="wrist_3_link"),
+) -> torch.Tensor:
+    """
+    Other arm's end-effector position in environment-local coordinates (3 dims).
+
+    Phase 1.5: gives each worker minimal spatial awareness of the opposing arm.
+    This is NOT for collision avoidance (RMPflow handles that) but for informed
+    timing decisions when the shared workspace is contested.
+
+    Returns:
+        (num_envs, 3) — [x, y, z] in local frame
+    """
+    robot = env.scene[ee_cfg.name]
+    body_ids, _ = robot.find_bodies(ee_cfg.body_names)
+    pos = robot.data.body_pos_w[:, body_ids[0]] - env.scene.env_origins
+    return pos
+
+
 def gripper_positions(
     env: ManagerBasedRLEnv,
     arm_cfg: SceneEntityCfg = SceneEntityCfg("robot"),

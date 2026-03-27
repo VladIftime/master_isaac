@@ -149,6 +149,15 @@ def main():
         "Expected: measured_dist ≈ 0.300 and validate_goal says 'Valid Goal'. "
         "measured_dist ≈ 0.000 means stale initial_states.",
     )
+    parser.add_argument(
+        "--phase",
+        type=str,
+        default="1",
+        choices=["1", "1.5"],
+        help="Training phase. '1' = standard Phase 1 self-play. "
+        "'1.5' = fine-tune Phase 1 workers with other-arm EE observation "
+        "at lr=1e-4 for 200 iterations (requires --chkpt_alice and --chkpt_bob).",
+    )
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 

@@ -411,7 +411,8 @@ class ActorCritic(nn.Module):
         return observations, None
 
     def _actor_forward(self, observations: torch.Tensor, hidden_state=None,
-                       detach_goal_encoder: bool = False):
+                       detach_goal_encoder: bool = False,
+                       goal_override: torch.Tensor = None):
         """
         Returns (raw_output, new_hidden).
         raw_output is (batch, actor_out_dim):
@@ -422,8 +423,15 @@ class ActorCritic(nn.Module):
             observations: raw observations
             hidden_state: LSTM hidden state (h, c) or None
             detach_goal_encoder: if True, detach goal encoder from computation graph
+            goal_override: Phase 2 — if not None, bypasses GoalEncoder entirely.
+                           The K-dim latent vector from Meta-Bob is used directly
+                           in the additive injection path (Charlie paper Section 2.3).
         """
         enc, g_pooled = self._encode_obs(observations, detach_goal_encoder)
+
+        # Phase 2: meta-level overrides the encoded goal entirely
+        if goal_override is not None:
+            g_pooled = goal_override
 
         if self.use_lstm:
             if self.use_goal_encoder and g_pooled is not None:
@@ -521,9 +529,16 @@ class ActorCritic(nn.Module):
             sigma.detach(),
         )
 
-    def act_with_hidden(self, observations, states, hidden_state=None):
-        """Same as act() but also propagates LSTM hidden state."""
-        raw, new_hidden = self._actor_forward(observations, hidden_state)
+    def act_with_hidden(self, observations, states, hidden_state=None,
+                        goal_override: 'torch.Tensor | None' = None):
+        """Same as act() but also propagates LSTM hidden state.
+
+        Args:
+            goal_override: Phase 2 — if not None, bypasses GoalEncoder and injects
+                           this K-dim latent vector directly into the actor trunk.
+        """
+        raw, new_hidden = self._actor_forward(observations, hidden_state,
+                                              goal_override=goal_override)
         dist = self._make_distribution(raw)
         value = self.critic(states if self.asymmetric else observations)
 

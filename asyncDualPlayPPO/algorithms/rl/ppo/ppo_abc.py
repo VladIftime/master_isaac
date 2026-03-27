@@ -199,9 +199,13 @@ class PPOABC(PPO):
                 # --- Auxiliary Distance Prediction Loss ---
                 aux_loss_val = torch.tensor(0.0, device=self.device)
                 if getattr(self.actor_critic, "use_goal_encoder", False) and hasattr(self.actor_critic.goal_encoder, "aux_loss"):
-                    # Extract 14-dim s_t and s_star from 56-dim obs_batch
-                    s_t_batch = torch.cat([obs_batch[:, 8:15], obs_batch[:, 32:39]], dim=-1)
-                    s_star_batch = torch.cat([obs_batch[:, 23:30], obs_batch[:, 47:54]], dim=-1)
+                    # Extract 14-dim s_t and s_star from 59-dim obs_batch
+                    # Layout: ee_pose(7) + gripper(1) + other_arm_ee(3) + obj_state(15) + cube_state(15)
+                    #          + goal(7) + cube_goal(7) + dist(2) + cube_dist(2) = 59
+                    # s_t   = obj_pos_quat(11:18) + cube_pos_quat(35:42) = 14 dims
+                    # s_star = goal_state(26:33) + cube_goal_state(50:57) = 14 dims
+                    s_t_batch = torch.cat([obs_batch[:, 11:18], obs_batch[:, 35:42]], dim=-1)
+                    s_star_batch = torch.cat([obs_batch[:, 26:33], obs_batch[:, 50:57]], dim=-1)
                     
                     aux, pos_loss, rot_loss = self.actor_critic.goal_encoder.aux_loss(s_star_batch, s_t_batch)
                     aux_loss_val = self.cfg_train["learn"].get("aux_coef", 0.1) * aux

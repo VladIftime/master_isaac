@@ -52,6 +52,13 @@ class AsyncDualPlayObservationsCfg:
                 "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
+        # Phase 1.5: other arm's EE position for dual-arm spatial awareness (3 dims)
+        other_arm_ee = ObsTerm(
+            func=observations.other_arm_ee_pos,
+            params={
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+            },
+        )
         object_state = ObsTerm(
             func=observations.object_states,
             params={
@@ -87,6 +94,13 @@ class AsyncDualPlayObservationsCfg:
             func=observations.gripper_positions,
             params={
                 "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
+            },
+        )
+        # Phase 1.5: other arm's EE position for dual-arm spatial awareness (3 dims)
+        other_arm_ee = ObsTerm(
+            func=observations.other_arm_ee_pos,
+            params={
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
             },
         )
         object_state = ObsTerm(
