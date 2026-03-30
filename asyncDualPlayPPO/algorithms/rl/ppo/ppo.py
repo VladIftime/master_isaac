@@ -306,8 +306,9 @@ class PPO:
         mean_value_loss = 0
         mean_surrogate_loss = 0
 
-        batch = self.storage.mini_batch_generator(self.num_mini_batches)
         for epoch in range(self.num_learning_epochs):
+            # Regenerate the BatchSampler each epoch (it is a one-shot iterator)
+            batch = self.storage.mini_batch_generator(self.num_mini_batches)
             for indices in batch:
                 obs_batch = self.storage.observations.view(
                     -1, *self.storage.observations.size()[2:]
@@ -335,8 +336,6 @@ class PPO:
                     -1, self.storage.actions.size(-1)
                 )[indices]
                 masks_batch = self.storage.masks.view(-1, 1)[indices]
-
-                # (Legacy direct demo buffer injection removed; ABC is now handled via NLL in ppo_abc.py)
 
                 (
                     actions_log_prob_batch,

@@ -67,27 +67,21 @@ class PPOABC(PPO):
         mean_surrogate_loss = 0
         mean_bc_loss = 0
 
-        # --- ABC: sample ONCE and compute fresh θ_old BEFORE mini-epochs ---
-        # Paper Section 3.2: θ_old is Bob's behavior policy at the START of
-        # this training step (the policy used to collect the current rollout).
-        # We compute Bob's current log-probs on the demo batch here, then use
-        # them as the denominator for PPO-style ratio clipping during the
-        # mini-epoch loop. This prevents the stale-denominator bug where
-        # old_log_probs from demo insertion time (potentially hundreds of
-        # iterations ago) immediately clip the ratio to 1.2 → zero gradient.
+        # --- ABC: sample ONCE before mini-epochs ---
+        # We sample a fixed batch of Alice demos and reuse it for all epochs.
+        # The BC loss uses standard NLL (negative log-likelihood), not PPO-style
+        # ratio clipping, since we simply want to maximize the probability of
+        # Alice's demonstrated actions under Bob's policy.
         abc_sample = None
-        abc_old_lp = None
         if self.abc_buffer is not None and self.abc_buffer.size > 0:
             abc_batch_size = min(self.abc_batch_size, self.abc_buffer.size)
             abc_sample = self.abc_buffer.sample(abc_batch_size)
-            if abc_sample is not None and abc_sample[0].shape[0] > 0:
-                with torch.no_grad():
-                    abc_old_lp, _, _, _, _ = self.actor_critic.evaluate(
-                        abc_sample[0], None, abc_sample[2]
-                    )
 
-        batch = self.storage.mini_batch_generator(self.num_mini_batches)
         for epoch in range(self.num_learning_epochs):
+            # FIX Bug 1: regenerate the BatchSampler each epoch.
+            # BatchSampler is a one-shot iterator — reusing the same object
+            # across epochs means epochs 2+ silently yield zero mini-batches.
+            batch = self.storage.mini_batch_generator(self.num_mini_batches)
             for indices in batch:
                 obs_batch = self.storage.observations.view(
                     -1, *self.storage.observations.size()[2:]
@@ -179,21 +173,17 @@ class PPOABC(PPO):
                     entropy_mean = torch.tensor(0.0, device=self.device)
 
                 # --- ABC (Alice Behavioral Cloning) Loss ---
-                # Paper Section 3.2: L_abc = -E[clip(π_B(a|s,g;θ) / π_B(a|s,g;θ_old), 1-ε, 1+ε)]
-                # θ_old = Bob's policy at the START of this training step (computed above).
-                # The same abc_sample and abc_old_lp are reused across all mini-epochs;
-                # only θ (the optimizing params) changes during the loop.
+                # Standard NLL: L_abc = -E[log π_B(a_alice | s, g; θ)]
+                # Simply maximize the probability of Alice's actions under Bob's
+                # current policy. Goal encoder gradients are detached so ABC
+                # updates only the actor trunk, not the encoder.
                 bc_loss = torch.tensor(0.0, device=self.device)
-                if abc_sample is not None and abc_old_lp is not None:
+                if abc_sample is not None and abc_sample[0].shape[0] > 0:
                     bc_obs, bc_act = abc_sample[0], abc_sample[2]
                     abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
                         bc_obs, None, bc_act, detach_goal_encoder=True
                     )
-                    ratio = torch.exp(abc_log_probs - abc_old_lp)
-                    clipped = torch.clamp(
-                        ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
-                    )
-                    bc_loss = -torch.min(ratio, clipped).mean()
+                    bc_loss = -abc_log_probs.mean()
                     mean_bc_loss += bc_loss.item()
 
                 # --- Auxiliary Distance Prediction Loss ---
