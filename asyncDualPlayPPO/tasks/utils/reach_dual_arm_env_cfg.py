@@ -60,7 +60,7 @@ UR5e_CFG = ArticulationCfg(
         ),
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True,
+            enabled_self_collisions=False,
             solver_position_iteration_count=8,
             solver_velocity_iteration_count=0,
         ),
@@ -106,7 +106,7 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
         usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/dual_arm_robot_no_gripper_col.usd",
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True,
+            enabled_self_collisions=False,
             solver_position_iteration_count=8,
             solver_velocity_iteration_count=0,
             fix_root_link=True,
@@ -381,7 +381,7 @@ class TerminationsCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["wrist_3_link"]),
             "table_z": 0.0,
-            "margin": -0.05,
+            "margin": 0.0,
             "x_range": (-0.8, 0.8),
             "y_range": (-0.8, 0.8),
         },

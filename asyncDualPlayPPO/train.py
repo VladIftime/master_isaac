@@ -102,8 +102,12 @@ def main():
         "Auto-computed as ceil(bob_timesteps / alice_timesteps) * max(1, 64 // num_envs) "
         "if not specified.",
     )
-    parser.add_argument("--chkpt_alice", type=str, default=None)
-    parser.add_argument("--chkpt_bob", type=str, default=None)
+    parser.add_argument("--chkpt_alice", type=str, default=None,
+                        help="Path to Alice checkpoint (.pt) for resuming training")
+    parser.add_argument("--chkpt_bob", type=str, default=None,
+                        help="Path to Bob checkpoint (.pt) for resuming training")
+    parser.add_argument("--resume_iteration", type=int, default=0,
+                        help="Starting iteration count when resuming from checkpoint")
     parser.add_argument(
         "--arm_config",
         type=str,
@@ -481,9 +485,17 @@ def main():
     HIST_SAVE_INTERVAL = 50  # save snapshot every N bob_updates
     HIST_FRAC = 0.2  # fraction of envs using historical policy
 
+    # --- Resume from checkpoint ---
+    if args.chkpt_alice and os.path.isfile(args.chkpt_alice):
+        alice_ppo.load(args.chkpt_alice)
+        print(f"[Resume] Loaded Alice from {args.chkpt_alice}")
+    if args.chkpt_bob and os.path.isfile(args.chkpt_bob):
+        bob_ppo.load(args.chkpt_bob)
+        print(f"[Resume] Loaded Bob from {args.chkpt_bob}")
+
     # --- Agents ---
     alice_updates = 0
-    bob_updates = 0
+    bob_updates = args.resume_iteration
 
     if args.num_envs < 32:
         print(
@@ -568,6 +580,7 @@ def main():
 
         # Paper Table 2: fixed β=0.5 throughout training (no decay).
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
+        bob_ppo.current_learning_iteration = bob_updates
         loss_val, loss_surr, loss_abc, _ = bob_ppo.update()
         bob_ppo.storage.clear()
 
@@ -1094,10 +1107,11 @@ def main():
     print("  ✓ Saved final models")
     writer.close()
 
-    print(f"\n{'='*80}\nTRAINING COMPLETE\n{'='*80}")
-    print(f"To resume:\n  python train.py --exp_name {args.exp_name}_resume \\")
+    print(f"\n{'='*80}\nTRAINING COMPLETE ({bob_updates} iterations)\n{'='*80}")
+    print(f"To resume:\n  python train.py --exp_name {args.exp_name} \\")
     print(f"    --chkpt_alice runs/{args.exp_name}/alice/model_final.pt \\")
-    print(f"    --chkpt_bob   runs/{args.exp_name}/bob/model_final.pt\n{'='*80}\n")
+    print(f"    --chkpt_bob   runs/{args.exp_name}/bob/model_final.pt \\")
+    print(f"    --resume_iteration {bob_updates}\n{'='*80}\n")
 
 
 if __name__ == "__main__":
