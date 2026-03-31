@@ -7,6 +7,7 @@ Validates whether Alice's proposed goals are valid according to paper criteria:
 3. Penalty flag if objects outside placement area
 """
 
+import math
 import torch
 
 
@@ -41,13 +42,13 @@ def validate_goal(
     batch_size = initial_state.shape[0]
     total_dims = initial_state.shape[1]
 
-    # State coming from _extract_object_states is always [pos(3)+quat(4)] per object
-    # = 7 dims/object.  Support other sizes for forward-compatibility.
-    for state_dim in (7, 13, 15, 17):
+    # State coming from _extract_object_states is [pos(3)+euler(3)] per object = 6D (Euler)
+    # or legacy [pos(3)+quat(4)] = 7D.  Support both plus extended states.
+    for state_dim in (6, 7, 13, 15, 17):
         if total_dims % state_dim == 0:
             break
     else:
-        state_dim = 7  # fallback
+        state_dim = 6  # fallback: Euler is the new default
 
     num_objects = total_dims // state_dim
 
@@ -59,8 +60,17 @@ def validate_goal(
     initial_pos = initial[:, :, :3]
     goal_pos = goal[:, :, :3]
 
-    initial_quat = initial[:, :, 3:7]
-    goal_quat = goal[:, :, 3:7]
+    # --- Rotation distance ---
+    if state_dim >= 7:  # quaternion format (legacy)
+        initial_quat = initial[:, :, 3:7]
+        goal_quat = goal[:, :, 3:7]
+        quat_dot = torch.sum(initial_quat * goal_quat, dim=-1)
+        rot_movements = 1.0 - torch.abs(quat_dot)
+    else:  # 6D Euler format: max absolute angle diff with wrap-around
+        initial_euler = initial[:, :, 3:6]
+        goal_euler = goal[:, :, 3:6]
+        diff = ((goal_euler - initial_euler + math.pi) % (2 * math.pi)) - math.pi
+        rot_movements = torch.max(torch.abs(diff), dim=-1)[0]  # (batch, num_objects)
 
     # --- STEP 1: Check if objects fell off the table (CRITICAL PENALTY) ---
     x_on_table = (goal_pos[:, :, 0] >= table_bounds["x_range"][0]) & (
@@ -74,8 +84,7 @@ def validate_goal(
 
     # --- STEP 2: Check if objects moved ---
     pos_movements = torch.norm(goal_pos - initial_pos, dim=-1)
-    quat_dot = torch.sum(initial_quat * goal_quat, dim=-1)
-    rot_movements = 1.0 - torch.abs(quat_dot)
+    # rot_movements already computed above in the Euler/quat if/else block
 
     obj_moved = (pos_movements > pos_threshold) | (rot_movements > rot_threshold)
     any_moved = torch.any(obj_moved, dim=1)  # (batch,)

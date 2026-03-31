@@ -102,7 +102,7 @@ class GoalEncoder(nn.Module):
         self.K_per_obj = K_per_obj
         self.pose_dim = pose_dim
         self.use_aux_loss = use_aux_loss
-        self._obj_state_dim = 7
+        self._obj_state_dim = 6   # pos(3) + euler(3) — matches paper's Euler representation
 
         # phi: 6D pose → R^{K_per_obj}
         # Two-layer MLP, no final non-linearity (per paper)
@@ -123,20 +123,21 @@ class GoalEncoder(nn.Module):
         if self.use_aux_loss:
             self.aux_head = nn.Linear(K_per_obj, 2 * num_objects)
 
-    def _preprocess_pose(self, pose_7d: torch.Tensor) -> torch.Tensor:
+    def _preprocess_pose(self, pose_6d: torch.Tensor) -> torch.Tensor:
         """
-        Convert 7D pose (pos3 + quat4) to 6D (pos3 + axis_angle3).
+        Accept 6D pose (pos3 + euler3) and return as-is.
+
+        Previously converted 7D pos+quat -> 6D pos+axis_angle.
+        Now the observation pipeline delivers Euler angles directly,
+        so no conversion is needed.
 
         Args:
-            pose_7d: (..., 7) tensor with [pos(3), quat(4)] per object.
+            pose_6d: (..., 6) tensor with [pos(3), roll, pitch, yaw] per object.
 
         Returns:
-            (..., 6) tensor with [pos(3), axis_angle(3)].
+            (..., 6) tensor unchanged.
         """
-        pos = pose_7d[..., :3]
-        quat = pose_7d[..., 3:7]
-        aa = quat_to_axis_angle(quat)
-        return torch.cat([pos, aa], dim=-1)
+        return pose_6d
 
     def forward(
         self,
@@ -147,17 +148,17 @@ class GoalEncoder(nn.Module):
         Compute permutation-invariant goal embedding.
 
         Args:
-            goal_poses:    (batch, num_objects * 7) — per-object [pos(3), quat(4)]
-            current_poses: (batch, num_objects * 7) — per-object [pos(3), quat(4)]
+            goal_poses:    (batch, num_objects * 6) — per-object [pos(3), euler(3)]
+            current_poses: (batch, num_objects * 6) — per-object [pos(3), euler(3)]
 
         Returns:
             g: (batch, K_per_obj) — pooled goal embedding.
         """
         batch = goal_poses.shape[0]
 
-        # Reshape to per-object: (batch, num_objects, 7)
-        goals = goal_poses.view(batch, self.num_objects, 7)
-        currents = current_poses.view(batch, self.num_objects, 7)
+        # Reshape to per-object: (batch, num_objects, 6)
+        goals = goal_poses.view(batch, self.num_objects, 6)
+        currents = current_poses.view(batch, self.num_objects, 6)
 
         # Convert quat → axis-angle: (batch, num_objects, 6)
         goals_6d = self._preprocess_pose(goals)
@@ -197,16 +198,16 @@ class GoalEncoder(nn.Module):
         per-object feature vectors.
 
         Args:
-            goal_poses:    (batch, num_objects * 7)
-            current_poses: (batch, num_objects * 7)
+            goal_poses:    (batch, num_objects * 6) — per-object [pos(3), euler(3)]
+            current_poses: (batch, num_objects * 6) — per-object [pos(3), euler(3)]
 
         Returns:
             (batch, num_objects, K_per_obj) — per-object embeddings.
         """
         batch = goal_poses.shape[0]
 
-        goals = goal_poses.view(batch, self.num_objects, 7)
-        currents = current_poses.view(batch, self.num_objects, 7)
+        goals = goal_poses.view(batch, self.num_objects, 6)
+        currents = current_poses.view(batch, self.num_objects, 6)
 
         goals_6d = self._preprocess_pose(goals)
         currents_6d = self._preprocess_pose(currents)
@@ -225,17 +226,21 @@ class GoalEncoder(nn.Module):
         return g_per_obj.view(batch, self.num_objects, self.K_per_obj)
 
     def compute_aux_targets(self, s_star: torch.Tensor, s_t: torch.Tensor) -> torch.Tensor:
+        import math
         targets = []
         for i in range(self.num_objects):
-            base = i * self._obj_state_dim
-            pos_star = s_star[:, base : base + 3]
-            q_star   = s_star[:, base + 3 : base + 7]
-            pos_t    = s_t[:, base : base + 3]
-            q_t      = s_t[:, base + 3 : base + 7]
+            base = i * self._obj_state_dim   # now 6D per object
+            pos_star  = s_star[:, base:base + 3]
+            euler_star = s_star[:, base + 3:base + 6]   # roll, pitch, yaw
+            pos_t     = s_t[:, base:base + 3]
+            euler_t   = s_t[:, base + 3:base + 6]
 
             pos_dist = torch.norm(pos_star - pos_t, dim=-1, keepdim=True)
-            quat_dot = torch.abs(torch.sum(q_star * q_t, dim=-1, keepdim=True)).clamp(0.0, 1.0)
-            rot_dist = 1.0 - quat_dot
+
+            # Max Euler diff with wraparound (matches paper + goal_distance())
+            euler_diff = euler_star - euler_t
+            euler_diff = (euler_diff + math.pi) % (2 * math.pi) - math.pi
+            rot_dist = euler_diff.abs().max(dim=-1, keepdim=True)[0]
 
             targets.append(pos_dist)
             targets.append(rot_dist)

@@ -199,21 +199,37 @@ class PPOABC(PPO):
                     )
                     bc_loss = -torch.min(bc_ratio, bc_clipped).mean()
                     mean_bc_loss += bc_loss.item()
-
                 # --- Auxiliary Distance Prediction Loss ---
                 aux_loss_val = torch.tensor(0.0, device=self.device)
                 if getattr(self.actor_critic, "use_goal_encoder", False) and hasattr(self.actor_critic.goal_encoder, "aux_loss"):
-                    # Extract 14-dim s_t and s_star from 56-dim obs_batch
-                    s_t_batch = torch.cat([obs_batch[:, 8:15], obs_batch[:, 32:39]], dim=-1)
-                    s_star_batch = torch.cat([obs_batch[:, 23:30], obs_batch[:, 47:54]], dim=-1)
-                    
+                    # Extract current poses and goal poses dynamically using obs layout constants.
+                    # Old code had hardcoded offsets [8:15, 32:39] / [23:30, 47:54] baked for the
+                    # 56D quat obs — after the Euler switch these silently truncate and give wrong dims.
+                    ge = self.actor_critic
+                    r   = ge._ge_robot_dim       # robot state dims (7 after Euler switch)
+                    od  = ge._ge_obj_state_dim   # obj state dims per object (14)
+                    gd  = ge._ge_goal_dim        # goal dims per object (6 = pos+euler)
+                    ro  = ge._ge_raw_per_obj     # raw chunk per object (22 = 14+6+2)
+
+                    curr_poses, goal_poses = [], []
+                    for _i in range(ge._ge_num_objects):
+                        chunk = r + _i * ro
+                        # Current pose = first gd dims of the object state (pos+euler)
+                        curr_poses.append(obs_batch[:, chunk:chunk + gd])
+                        # Goal pose = the gd-dim goal block inside each object chunk
+                        goal_poses.append(obs_batch[:, chunk + od:chunk + od + gd])
+
+                    s_t_batch    = torch.cat(curr_poses, dim=-1)   # (batch, N*gd)
+                    s_star_batch = torch.cat(goal_poses, dim=-1)   # (batch, N*gd)
+
                     aux, pos_loss, rot_loss = self.actor_critic.goal_encoder.aux_loss(s_star_batch, s_t_batch)
                     aux_loss_val = self.cfg_train["learn"].get("aux_coef", 0.1) * aux
-                    
+
                     if hasattr(self, "writer") and self.writer is not None:
                         it = self.current_learning_iteration
                         self.writer.add_scalar("GoalEncoder/aux_pos_loss", pos_loss.item(), it)
                         self.writer.add_scalar("GoalEncoder/aux_rot_loss", rot_loss.item(), it)
+
 
                 loss = (
                     surrogate_loss

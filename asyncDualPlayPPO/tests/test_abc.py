@@ -203,7 +203,7 @@ def main():
             bob_ppo.action_space = _mc_space
             bob_ppo.desired_kl = None
 
-        # Rebuild actor_critic for correct Bob obs shape (56-dim)
+        # Rebuild actor_critic with the correct Bob obs shape (51-dim after Euler switch)
         bob_ppo.actor_critic = bob_ppo.actor_critic.__class__(
             bob_ppo.observation_space.shape,
             bob_ppo.state_space.shape,
@@ -486,7 +486,7 @@ def main():
         if not fake_obs_list:
             print("  [Step2] goal_states never set; using dummy zero-goal obs")
             all_alice = torch.cat(alice_obs_list, dim=0)
-            fake_goal = torch.zeros(all_alice.shape[0], 14, device=env.device)
+            fake_goal = torch.zeros(all_alice.shape[0], 12, device=env.device)  # 6D per object × 2 (Euler format)
             bc_obs = env.construct_bob_observation(all_alice, fake_goal)
             fake_obs_list.append(bc_obs)
 
@@ -557,31 +557,34 @@ def main():
             with torch.no_grad():
                 _, _, last_val, _, _ = bob_ppo.actor_critic.act(bob_obs, None)
             bob_ppo.storage.compute_returns(last_val, bob_ppo.gamma, bob_ppo.lam)
+
+            # Refresh old_log_probs EVERY iteration so ratio never saturates the clip.
+            # When old_lp is current, ratio≈1 and gradients flow continuously.
+            # This is equivalent to NLL while keeping the clip for numerical stability.
+            with torch.no_grad():
+                new_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(
+                    fake_obs, None, fake_acts
+                )
+            bob_ppo.abc_buffer.step = 0
+            bob_ppo.abc_buffer.full = False
+            bob_ppo.abc_buffer.add_trajectory(
+                fake_obs, fake_obs, fake_acts,
+                torch.zeros(NUM_FAKE_STEPS, device=env.device),
+                torch.zeros(NUM_FAKE_STEPS, device=env.device).byte(),
+                torch.zeros(NUM_FAKE_STEPS, device=env.device),
+                new_lp.view(-1, 1),           # ← fresh old_lp: ratio starts at 1
+                torch.zeros_like(fake_acts),
+                torch.zeros_like(fake_acts),
+                torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),
+                torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),
+            )
+
             val_loss, surr_loss, bc_loss, _ = bob_ppo.update()
             bob_ppo.storage.clear()
 
-            # Refresh old_log_probs in buffer periodically
-            if it % 50 == 0:
-                with torch.no_grad():
-                    new_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(
-                        fake_obs, None, fake_acts
-                    )
-                # Re-inject with updated log probs
-                bob_ppo.abc_buffer.step = 0
-                bob_ppo.abc_buffer.full = False
-                bob_ppo.abc_buffer.add_trajectory(
-                    fake_obs, fake_obs, fake_acts,
-                    torch.zeros(NUM_FAKE_STEPS, device=env.device),
-                    torch.zeros(NUM_FAKE_STEPS, device=env.device).byte(),
-                    torch.zeros(NUM_FAKE_STEPS, device=env.device),
-                    new_lp.view(-1, 1),
-                    torch.zeros_like(fake_acts),
-                    torch.zeros_like(fake_acts),
-                    torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),
-                    torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),
-                )
-
-            bc_losses.append(bc_loss)
+            # Also track raw NLL separately (always meaningful, not clipped)
+            raw_nll = -new_lp.mean().item()
+            bc_losses.append(raw_nll)
 
             # Check: does Bob's greedy action match the God Mode action?
             with torch.no_grad():
@@ -591,7 +594,7 @@ def main():
                 dim0_modes.append(dim0_mode)
 
             if it % 10 == 0 or it == 1:
-                print(f"  {it:>6} | {bc_loss:>+10.4f} | {dim0_mode:>10.0f} | {all_match:>9.1%}")
+                print(f"  {it:>6} | NLL:{raw_nll:>+8.3f} | BC:{bc_loss:>+8.3f} | Dim0:{dim0_mode:>4.0f} | Match:{all_match:>5.1%}")
 
         # -- Verdict --
         print(f"\n  BC Loss:    {bc_losses[0]:+.4f} -> {bc_losses[-1]:+.4f}")

@@ -61,11 +61,11 @@ class AsyncDualPlayEnvWrapper:
         # We record the SETTLED height here so the movement metric isn't inflated
         # by the ~2.7cm gravity drop. This preserves Z in the distance check so
         # Alice is still rewarded for lifting objects in the future.
-        _id_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=device)
+        _id_euler = torch.tensor([0.0, 0.0, 0.0], device=device)  # identity rotation (ZYX Euler)
         _t_pos = torch.tensor([-0.15, 0.7, 0.023], device=device)
         _c_pos = torch.tensor([-0.25, 0.7, 0.023], device=device)
-        # Shape (14,): [t_pos(3), t_quat(4), c_pos(3), c_quat(4)]
-        self._safe_reset_state = torch.cat([_t_pos, _id_quat, _c_pos, _id_quat])
+        # Shape (12,): [t_pos(3), t_euler(3), c_pos(3), c_euler(3)] — Euler format matches _extract_object_states
+        self._safe_reset_state = torch.cat([_t_pos, _id_euler, _c_pos, _id_euler])
 
         # Bob's success threshold (5cm)
         self.goal_tolerance = 0.05
@@ -81,8 +81,8 @@ class AsyncDualPlayEnvWrapper:
         # Attach manager to env so reward functions can access it
         self.env.episode_manager = self.episode_manager
 
-        # Robot state dimensions (EE pose: 7 + 1 gripper)
-        self.robot_state_dim = 8
+        # Robot state dimensions (EE pose: 6 euler + 1 gripper = 7D)
+        self.robot_state_dim = 7
 
         # Fetch the dimensions directly from the observation manager
         alice_dim_info = self.env.unwrapped.observation_manager.group_obs_dim[
@@ -152,7 +152,7 @@ class AsyncDualPlayEnvWrapper:
 
         print(f"[AsyncDualPlayEnvWrapper] Initialized (task-space mode)")
         print(f"  Alice obs: {self.alice_obs_dim}, Bob obs: {self.bob_obs_dim}")
-        print(f"  Robot state: {self.robot_state_dim} (EE pose 7 + gripper 1)")
+        print(f"  Robot state: {self.robot_state_dim} (EE pose 6 euler + gripper 1)")
 
     @property
     def num_envs(self):
@@ -486,21 +486,26 @@ class AsyncDualPlayEnvWrapper:
             start_states = self.episode_manager.initial_states[valid_env_ids]
             origins = self.env.scene.env_origins[valid_env_ids]
 
-            # Reset Target (Local -> World)
-            # start_states indices: 0:3 (pos), 3:7 (quat)
-            pos1_global = start_states[:, 0:3] + origins
+            # Reset Target (Local -> World) — 12D Euler layout: [t_pos(3)|t_euler(3)|c_pos(3)|c_euler(3)]
+            # write_root_pose_to_sim expects 7D (pos3 + quat4), so convert euler→quat first.
+            from .observations import _euler_xyz_to_quat
+            t_pos_local = start_states[:, 0:3]
+            t_quat      = _euler_xyz_to_quat(start_states[:, 3:6])
+            pos1_global = t_pos_local + origins
             self.env.scene["target_object"].write_root_pose_to_sim(
-                torch.cat([pos1_global, start_states[:, 3:7]], dim=-1),
+                torch.cat([pos1_global, t_quat], dim=-1),
                 env_ids=valid_env_ids,
             )
 
-            # Reset Cube (Local -> World)
-            # start_states indices: 7:10 (pos), 10:14 (quat)
-            pos2_global = start_states[:, 7:10] + origins
+            # Reset Cube (Local -> World) — cube starts at indices 6:12 in 12D layout
+            c_pos_local = start_states[:, 6:9]
+            c_quat      = _euler_xyz_to_quat(start_states[:, 9:12])
+            pos2_global = c_pos_local + origins
             self.env.scene["cube"].write_root_pose_to_sim(
-                torch.cat([pos2_global, start_states[:, 10:14]], dim=-1),
+                torch.cat([pos2_global, c_quat], dim=-1),
                 env_ids=valid_env_ids,
             )
+
 
             reset_robot_joints(self.env, valid_env_ids)
             self.env.scene.write_data_to_sim()
@@ -644,9 +649,10 @@ class AsyncDualPlayEnvWrapper:
         current_state = current_state[env_ids]
         goal_state = goal_state[env_ids]
 
-        # _extract_object_states gives 7 dims per object (pos+quat), NOT 15
-        curr_reshaped = current_state.view(-1, self.num_objects, 7)
-        goal_reshaped = goal_state.view(-1, self.num_objects, 7)
+        import math
+        # _extract_object_states returns [pos(3), euler(3)] x num_objects = 6D/object
+        curr_reshaped = current_state.view(-1, self.num_objects, 6)
+        goal_reshaped = goal_state.view(-1, self.num_objects, 6)
 
         # Position Distance
         pos_curr = curr_reshaped[:, :, :3]
@@ -655,13 +661,12 @@ class AsyncDualPlayEnvWrapper:
             pos_curr - pos_goal, dim=-1
         )  # (batch_subset, num_objects)
 
-        # Rotation Distance
-        quat_curr = curr_reshaped[:, :, 3:7]
-        quat_goal = goal_reshaped[:, :, 3:7]
-
-        # Handle quaternion dot product (ensure positive)
-        quat_dot = torch.abs(torch.sum(quat_curr * quat_goal, dim=-1))
-        rot_dist = 1.0 - quat_dot  # (batch_subset, num_objects)
+        # Rotation Distance: max abs Euler diff with wraparound (matches paper Appendix A.2)
+        euler_curr = curr_reshaped[:, :, 3:6]
+        euler_goal = goal_reshaped[:, :, 3:6]
+        euler_diff = euler_curr - euler_goal
+        euler_diff = (euler_diff + math.pi) % (2 * math.pi) - math.pi
+        rot_dist = euler_diff.abs().max(dim=-1)[0]  # (batch_subset, num_objects)
 
         # Get threshold values dynamically
         pos_threshold = self.episode_manager.pos_threshold
@@ -682,23 +687,31 @@ class AsyncDualPlayEnvWrapper:
         return success, max_pos_err, max_rot_err
 
     def _extract_object_states(self, obs_dict: Dict) -> torch.Tensor:
-        """Extract object states in the LOCAL environment frame (14 dims total)."""
+        """Extract object states in the LOCAL frame as Euler poses (12 dims total).
+
+        Returns [pos(3)+euler(3)] per object = 6D per object, 12D total.
+        Matching the paper's rotation representation (ZYX Euler angles).
+        """
+        from .observations import _quat_to_euler_xyz
         # 1. Pull RAW world data from the scene
-        t_pos_w = self.env.scene["target_object"].data.root_pos_w
+        t_pos_w  = self.env.scene["target_object"].data.root_pos_w
         t_quat_w = self.env.scene["target_object"].data.root_quat_w
-        c_pos_w = self.env.scene["cube"].data.root_pos_w
+        c_pos_w  = self.env.scene["cube"].data.root_pos_w
         c_quat_w = self.env.scene["cube"].data.root_quat_w
 
         env_origins = self.env.scene.env_origins
 
         # 2. TRANSFORM: World -> Local
-        # This fixes the "Off Table" bug by making coordinates relative to the table center
         t_pos_l = t_pos_w - env_origins
         c_pos_l = c_pos_w - env_origins
 
-        # 3. Concatenate: [Target_Pos(3), Target_Quat(4), Cube_Pos(3), Cube_Quat(4)]
-        # Total = 14 dims per environment
-        return torch.cat([t_pos_l, t_quat_w, c_pos_l, c_quat_w], dim=-1)
+        # 3. Convert quaternion -> Euler angles (paper representation)
+        t_euler = _quat_to_euler_xyz(t_quat_w)   # (N, 3)
+        c_euler = _quat_to_euler_xyz(c_quat_w)   # (N, 3)
+
+        # 4. Concatenate: [Target_Pos(3), Target_Euler(3), Cube_Pos(3), Cube_Euler(3)]
+        # Total = 12 dims per environment
+        return torch.cat([t_pos_l, t_euler, c_pos_l, c_euler], dim=-1)
 
     def _get_alice_observations(self, obs_dict: Dict) -> torch.Tensor:
         """Get Alice's observations from policy group"""
@@ -711,6 +724,7 @@ class AsyncDualPlayEnvWrapper:
         Construct Bob's full observation (Alice Obs + Goal States + Goal Distances).
 
         Assumes alice_obs and goal_states are already in the LOCAL environment frame.
+        goal_states must be in Euler format: [pos(3)+euler(3)] per object = 6D each.
         """
         # 0. Ensure batch dimensions
         if alice_obs.dim() == 1:
@@ -718,16 +732,17 @@ class AsyncDualPlayEnvWrapper:
         if goal_states.dim() == 1:
             goal_states = goal_states.unsqueeze(0)
 
+        import math
+
         # 1. Reshape object states from Alice's observation
-        # Alice obs layout: [RobotState(8), Obj1(15), Obj2(15)] -> Total 38 dims
-        # robot_state_dim is 8 (EE pose 7 + gripper 1)
-        current_obj_reshaped = alice_obs[:, self.robot_state_dim :].view(
-            -1, self.num_objects, 15
+        # Alice obs layout: [RobotState(7), Obj1(14), Obj2(14)] -> Total 35 dims
+        current_obj_reshaped = alice_obs[:, self.robot_state_dim:].view(
+            -1, self.num_objects, 14
         )
 
         # 2. Reshape goal states
-        # goal_states layout: [Obj1_Goal(7), Obj2_Goal(7)] -> Total 14 dims
-        goal_states_reshaped = goal_states.view(-1, self.num_objects, 7)
+        # goal_states layout: [Obj1_Goal(6), Obj2_Goal(6)] -> Total 12 dims (Euler format)
+        goal_states_reshaped = goal_states.view(-1, self.num_objects, 6)
 
         # 3. Compute Position Distances (Both are in LOCAL frame)
         pos_current = current_obj_reshaped[:, :, :3]
@@ -736,35 +751,30 @@ class AsyncDualPlayEnvWrapper:
             pos_current - pos_goal, dim=-1, keepdim=True
         )  # Result: (batch, num_objs, 1)
 
-        # 4. Compute Rotation Distances
-        quat_current = current_obj_reshaped[:, :, 3:7]
-        quat_goal = goal_states_reshaped[:, :, 3:7]
-
-        # Use absolute dot product to handle quaternion double-cover (q and -q are same rotation)
-        quat_dot = torch.abs(torch.sum(quat_current * quat_goal, dim=-1, keepdim=True))
-        quat_dist = 1.0 - quat_dot  # Result: (batch, num_objs, 1)
+        # 4. Compute Rotation Distances (Euler max-diff, matches paper)
+        euler_current = current_obj_reshaped[:, :, 3:6]
+        euler_goal    = goal_states_reshaped[:, :, 3:6]
+        euler_diff = euler_current - euler_goal
+        euler_diff = (euler_diff + math.pi) % (2 * math.pi) - math.pi
+        euler_dist = euler_diff.abs().max(dim=-1, keepdim=True)[0]  # (batch, num_objs, 1)
 
         # Final concatenation for Bob:
         # The PI encoder expects objects to be contiguous.
-        # We need to interleave: [Obj1(15), Goal1(7), Dist1(2), Obj2(15), Goal2(7), Dist2(2)]
-
-        # current_obj_reshaped: (batch, num_objs, 15)
-        # goal_states_reshaped: (batch, num_objs, 7)
-        # distances: (batch, num_objs, 2)
+        # Interleaved: [Obj1(14), Goal1(6), Dist1(2), Obj2(14), Goal2(6), Dist2(2)]
         distances_per_obj = torch.cat(
-            [pos_dist, quat_dist], dim=-1
+            [pos_dist, euler_dist], dim=-1
         )  # (batch, num_objs, 2)
 
-        # Concatenate per object: (batch, num_objs, 24)
+        # Concatenate per object: (batch, num_objs, 22)
         bob_objs = torch.cat(
             [current_obj_reshaped, goal_states_reshaped, distances_per_obj], dim=-1
         )
 
-        # Flatten to (batch, num_objs * 24)
-        bob_objs_flat = bob_objs.view(-1, self.num_objects * 24)
+        # Flatten to (batch, num_objs * 22)
+        bob_objs_flat = bob_objs.view(-1, self.num_objects * 22)
 
-        # Final output: Robot(8) + Bob_Objs(48) = 56
-        robot_state = alice_obs[:, : self.robot_state_dim]
+        # Final output: Robot(7) + Bob_Objs(44) = 51
+        robot_state = alice_obs[:, :self.robot_state_dim]
         return torch.cat([robot_state, bob_objs_flat], dim=-1)
 
     def _get_bob_observations(self, obs_dict: Dict) -> torch.Tensor:
@@ -955,7 +965,7 @@ class AsyncDualPlayEnvWrapper:
                 c_curr_l = (
                     self.env.scene["cube"].data.root_pos_w[env_id] - env_origins[env_id]
                 ).tolist()
-                c_goal = self.episode_manager.goal_states[env_id, 7:10].tolist()
+                c_goal = self.episode_manager.goal_states[env_id, 6:9].tolist()
                 print(
                     f"[BobSuccess] Env {env_id.item()} step={bob_phase_steps[env_id].item()}: "
                     f"target dist={t_pos:.4f} (curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]}) | "

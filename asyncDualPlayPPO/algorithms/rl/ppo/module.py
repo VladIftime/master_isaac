@@ -77,6 +77,10 @@ class PermInvEncoder(nn.Module):
             nn.LayerNorm(emb_dim),
             nn.ReLU(),
         )
+        # LayerNorm applied to the pooled embedding AFTER max-pooling across objects.
+        # Matches the paper's normalization layer on the PI encoder output.
+        # Prevents pooled embedding scale from growing unbounded during training.
+        self.pool_norm = nn.LayerNorm(emb_dim)
         nn.init.orthogonal_(self.obj_encoder[0].weight, gain=np.sqrt(2))
         nn.init.orthogonal_(self.obj_encoder[3].weight, gain=np.sqrt(2))
 
@@ -94,7 +98,8 @@ class PermInvEncoder(nn.Module):
         num_objs = obj_features.shape[1] // self.per_obj_dim
         objs = obj_features.reshape(batch * num_objs, self.per_obj_dim)
         enc = self.obj_encoder(objs).reshape(batch, num_objs, self.emb_dim)
-        pooled, _ = enc.max(dim=1)
+        pooled, _ = enc.max(dim=1)          # (batch, emb_dim)
+        pooled = self.pool_norm(pooled)     # ← paper's normalization after PI aggregation
         return torch.cat([robot_state, pooled], dim=-1)
 
 
@@ -204,22 +209,28 @@ class ActorCritic(nn.Module):
             # Bob obs layout: [robot(8) | obj1(15)+goal1(7)+dist1(2) | obj2(15)+goal2(7)+dist2(2)]
             # With PI encoder: per_obj_dim = 24 = 15 + 7 + 2
             # After goal encoding: per_obj_dim = 15 + K_per_obj (drop raw goal + dist)
-            self._ge_robot_dim = model_cfg.get("robot_state_dim", 8)
-            self._ge_obj_state_dim = 15  # pos(3)+quat(4)+linvel(3)+angvel(3)+dist(1)+contact(1)
-            self._ge_goal_dim = 7   # pos(3)+quat(4) per object
-            self._ge_dist_dim = 2   # pos_dist(1)+rot_dist(1) per object
-            self._ge_raw_per_obj = self._ge_obj_state_dim + self._ge_goal_dim + self._ge_dist_dim  # 24
+            self._ge_robot_dim = model_cfg.get("robot_state_dim", 7)
+            self._ge_obj_state_dim = 14  # pos(3)+euler(3)+linvel(3)+angvel(3)+dist(1)+contact(1)
+            self._ge_goal_dim = 6        # pos(3)+euler(3) per object — Euler matches paper
+            self._ge_dist_dim = 2        # pos_dist(1)+rot_dist(1) per object
+            self._ge_raw_per_obj = self._ge_obj_state_dim + self._ge_goal_dim + self._ge_dist_dim  # 22
+
+            # Bob obs layout: [robot(7) | obj1(14)+goal1(6)+dist1(2) | obj2(14)+goal2(6)+dist2(2)]
 
         # --- Permutation-Invariant Encoder ---
         if self.use_pi_encoder:
             self.robot_state_dim = model_cfg.get("robot_state_dim", 8)
 
             if self.use_goal_encoder:
-                # With goal encoder: per-object features become [obj_state(15) | g_i(K)]
-                # instead of [obj_state(15) | goal(7) | dist(2)]
-                per_obj_dim = self._ge_obj_state_dim + self._ge_K_per_obj  # 15 + K
+                # PI encoder sees ONLY obj_state — goal enters exclusively via additive injection.
+                # This cleanly separates state extraction from goal conditioning:
+                #   - PI encoder: goal-agnostic state extractor (same structure as Alice)
+                #   - AdditiveInjection: h = act(LN(W·enc + W_g·g_pooled))
+                # Charlie-ready: Charlie outputs g_pooled at inference to steer Bob
+                # without touching the PI encoder at all.
+                per_obj_dim = self._ge_obj_state_dim  # 14D only
             else:
-                per_obj_dim = model_cfg.get("pi_obj_dim", 15)
+                per_obj_dim = model_cfg.get("pi_obj_dim", 14)
 
             pi_emb_dim = model_cfg.get("pi_emb_dim", 512)
             self.pi_encoder = PermInvEncoder(per_obj_dim, pi_emb_dim)
@@ -374,33 +385,35 @@ class ActorCritic(nn.Module):
                                          self._ge_obj_state_dim + self._ge_goal_dim]  # (B, N, 7)
             # distances are dropped — encoder subsumes their role
 
-            # Extract current object poses (pos+quat) from obj_states for encoder
-            current_poses = obj_states[:, :, :7]  # (B, N, 7) — pos(3)+quat(4)
+            # Extract current object poses (pos+euler) from obj_states for encoder
+            current_poses = obj_states[:, :, :6]  # (B, N, 6) — pos(3)+euler(3)
 
-            # Flatten for goal encoder: (batch, num_objects * 7)
-            goal_flat = goal_poses.reshape(batch, -1)
+            # Flatten for goal encoder: (batch, num_objects * 6)
+            goal_flat    = goal_poses.reshape(batch, -1)
             current_flat = current_poses.reshape(batch, -1)
 
             # Compute per-object goal embeddings
             g_per_obj = self.goal_encoder.encode_per_object(goal_flat, current_flat)
             # (batch, num_objects, K_per_obj)
 
-            # Pooled goal for additive injection
-            g_pooled, _ = g_per_obj.max(dim=1)  # (batch, K_per_obj)
-
             if detach_goal_encoder:
                 g_per_obj = g_per_obj.detach()
+
+            # Sum-pool goal across objects: (batch, K_per_obj)
+            # Sum-pool = "AND" semantics: ALL per-object goal signals contribute.
+            # Scales naturally to N objects (unlike concat which fixes N).
+            # Charlie will output g_pooled directly at inference time to steer Bob.
+            g_pooled = g_per_obj.sum(dim=1)  # (batch, K_per_obj)
+
+            if detach_goal_encoder:
                 g_pooled = g_pooled.detach()
 
-            # Reassemble per-object features: [obj_state(15) | g_i(K_per_obj)]
-            new_obj_features = torch.cat([obj_states, g_per_obj], dim=-1)
-            # (batch, num_objects, 15 + K_per_obj)
-
-            # Flatten for PI encoder: (batch, num_objects * (15 + K_per_obj))
-            new_obj_flat = new_obj_features.reshape(batch, -1)
+            # PI encoder sees ONLY obj_states — no goal info baked in.
+            # This matches Alice's PI encoder structure (goal-agnostic).
+            obj_flat = obj_states.reshape(batch, -1)  # (batch, N * obj_state_dim)
 
             # Pass through PermInvEncoder
-            encoded = self.pi_encoder(robot, new_obj_flat)
+            encoded = self.pi_encoder(robot, obj_flat)
             return encoded, g_pooled
 
         elif self.use_pi_encoder:

@@ -43,8 +43,8 @@ params:
     lstm_hidden_size: 256
 
     use_pi_encoder: true
-    robot_state_dim: 8
-    pi_obj_dim: 15
+    robot_state_dim: 7
+    pi_obj_dim: 14
     pi_emb_dim: 512
     goal_embed_dim: 8
     num_objects: 2
