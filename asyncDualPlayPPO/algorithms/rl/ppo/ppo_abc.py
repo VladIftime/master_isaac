@@ -54,7 +54,7 @@ class PPOABC(PPO):
             self.num_mini_batches = max(4, batch_size // 2048)
             self.mini_batch_size = batch_size // self.num_mini_batches
 
-        self.abc_coef = cfg_train["learn"].get("abc_coef", 0.1)
+        self.abc_coef = cfg_train["learn"].get("abc_coef", 0.5)
         self.abc_batch_size = cfg_train["learn"].get("abc_batch_size", 2048)
         self.abc_buffer = None
 
@@ -173,17 +173,31 @@ class PPOABC(PPO):
                     entropy_mean = torch.tensor(0.0, device=self.device)
 
                 # --- ABC (Alice Behavioral Cloning) Loss ---
-                # Standard NLL: L_abc = -E[log π_B(a_alice | s, g; θ)]
-                # Simply maximize the probability of Alice's actions under Bob's
-                # current policy. Goal encoder gradients are detached so ABC
-                # updates only the actor trunk, not the encoder.
+                # PPO-clipped ratio form from the OpenAI ASP paper:
+                #   ratio = π(a|s;θ) / π(a|s;θ_old)
+                #   L_abc = -min(ratio, clip(ratio, 1-ε, 1+ε))
+                #
+                # This is bounded (unlike raw NLL which explodes to ~14 for
+                # 6-dim × 11-bin multi-categorical with a near-uniform policy).
+                # θ_old is the log_prob stored when the demo was added to the
+                # buffer (abc_sample[5] = actions_log_prob).
+                #
+                # Goal encoder gradients are detached to prevent ABC from
+                # distorting the learned goal embedding.
                 bc_loss = torch.tensor(0.0, device=self.device)
                 if abc_sample is not None and abc_sample[0].shape[0] > 0:
                     bc_obs, bc_act = abc_sample[0], abc_sample[2]
+                    bc_old_lp = abc_sample[5].squeeze(-1)  # (N,) stored log_prob
+
                     abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
                         bc_obs, None, bc_act, detach_goal_encoder=True
                     )
-                    bc_loss = -abc_log_probs.mean()
+                    # Clipped ratio ABC (bounded, stable)
+                    bc_ratio = torch.exp(abc_log_probs - bc_old_lp)
+                    bc_clipped = torch.clamp(
+                        bc_ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
+                    )
+                    bc_loss = -torch.min(bc_ratio, bc_clipped).mean()
                     mean_bc_loss += bc_loss.item()
 
                 # --- Auxiliary Distance Prediction Loss ---

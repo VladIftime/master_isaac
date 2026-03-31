@@ -62,7 +62,7 @@ class PPO:
         self.num_learning_epochs = learn_cfg["noptepochs"]
         self.num_mini_batches = learn_cfg["nminibatches"]
         self.num_transitions_per_env = learn_cfg["nsteps"]
-        self.value_loss_coef = learn_cfg.get("value_loss_coef", 2.0)
+        self.value_loss_coef = learn_cfg.get("value_loss_coef", 1.0)
         self.entropy_coef = learn_cfg["ent_coef"]
         self.gamma = learn_cfg["gamma"]
         self.lam = learn_cfg["lam"]

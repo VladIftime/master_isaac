@@ -94,7 +94,7 @@ class PermInvEncoder(nn.Module):
         num_objs = obj_features.shape[1] // self.per_obj_dim
         objs = obj_features.reshape(batch * num_objs, self.per_obj_dim)
         enc = self.obj_encoder(objs).reshape(batch, num_objs, self.emb_dim)
-        pooled = enc.sum(dim=1)
+        pooled, _ = enc.max(dim=1)
         return torch.cat([robot_state, pooled], dim=-1)
 
 
