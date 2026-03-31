@@ -450,16 +450,13 @@ def main():
         })
 
         # ── Inject God Mode trajectory ─────────────────────────
-        # Constant action: bin 8 for X (strong positive), bin 5 for rest
-        GOD_ACTION = torch.zeros(num_cat_dims, device=env.device)
+        # Constant action: bin 8 for X (strong positive), bin 5 for rest.
+        # _act_dim matches what the abc_buffer stores (num_cat_dims if MC, else env action dim).
+        _act_dim = num_cat_dims if use_mc else env.action_space.shape[0]
+        GOD_ACTION = torch.full((_act_dim,), 5.0, device=env.device)  # center = no movement
         GOD_ACTION[0] = 8.0   # X: bin 8 → positive movement
-        GOD_ACTION[1] = 5.0   # Y: center (no movement)
-        GOD_ACTION[2] = 5.0   # Z: center
-        GOD_ACTION[3] = 5.0   # Rx: center
-        GOD_ACTION[4] = 5.0   # Ry: center
-        GOD_ACTION[5] = 5.0   # Gripper: center (hold)
 
-        print(f"\n  God Mode action (bin indices): {GOD_ACTION.tolist()}")
+        print(f"\n  God Mode action (dim={_act_dim}): {GOD_ACTION.tolist()}")
         center = (num_bins - 1) / 2.0
         delta_x = (GOD_ACTION[0].item() - center) / center * 0.05
         print(f"  → X delta per step: {delta_x:+.4f} m (should be +0.030)")
@@ -472,25 +469,35 @@ def main():
         alice_obs = obs[:, :env.alice_obs_dim]
         gripper_state = torch.ones(env.num_envs, 1, device=env.device)
 
-        # Step a few times to get varied observations
+        # Step a few times to collect varied obs. goal_states is None until Alice completes,
+        # so we also keep raw alice obs as a fallback. We tile to NUM_FAKE_STEPS afterwards.
         fake_obs_list = []
-        for step in range(NUM_FAKE_STEPS // env.num_envs + 1):
+        alice_obs_list = []
+        for step in range(NUM_FAKE_STEPS // env.num_envs + 2):
             zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
             obs, _, _, _, _ = env.step(zero_act)
             alice_obs = obs[:, :env.alice_obs_dim]
-            # Construct Bob-compatible obs using current object state as "goal"
+            alice_obs_list.append(alice_obs.clone())
             goal_states = env.episode_manager.goal_states
             if goal_states is not None:
                 bc_obs = env.construct_bob_observation(alice_obs, goal_states)
                 fake_obs_list.append(bc_obs.clone())
 
         if not fake_obs_list:
-            # Fallback: use zeros as dummy goal
-            fake_goal = torch.zeros(env.num_envs, 14, device=env.device)
-            bc_obs = env.construct_bob_observation(alice_obs, fake_goal)
+            print("  [Step2] goal_states never set; using dummy zero-goal obs")
+            all_alice = torch.cat(alice_obs_list, dim=0)
+            fake_goal = torch.zeros(all_alice.shape[0], 14, device=env.device)
+            bc_obs = env.construct_bob_observation(all_alice, fake_goal)
             fake_obs_list.append(bc_obs)
 
-        fake_obs = torch.cat(fake_obs_list, dim=0)[:NUM_FAKE_STEPS]
+        # Tile to reach exactly NUM_FAKE_STEPS rows
+        raw_obs = torch.cat(fake_obs_list, dim=0)
+        if raw_obs.shape[0] < NUM_FAKE_STEPS:
+            reps = (NUM_FAKE_STEPS + raw_obs.shape[0] - 1) // raw_obs.shape[0]
+            raw_obs = raw_obs.repeat(reps, 1)
+        fake_obs = raw_obs[:NUM_FAKE_STEPS]
+        print(f"  fake_obs shape: {fake_obs.shape}")  # should be [200, bob_obs_dim]
+
         fake_acts = GOD_ACTION.unsqueeze(0).expand(NUM_FAKE_STEPS, -1).clone()
 
         # Compute old_log_probs for clipped ratio ABC
@@ -505,7 +512,7 @@ def main():
             torch.zeros(NUM_FAKE_STEPS, device=env.device).byte(),        # dones
             torch.zeros(NUM_FAKE_STEPS, device=env.device),               # values
             old_lp.view(-1, 1),                                           # log_probs
-            torch.zeros_like(fake_acts),                                  # 
+            torch.zeros_like(fake_acts),                                  # mu
             torch.zeros_like(fake_acts),                                  # sigma
             torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),            # returns
             torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),            # advantages
