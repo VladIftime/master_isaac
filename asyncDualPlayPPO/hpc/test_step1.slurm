@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=test_abc_step1
-#SBATCH --time=01:30:00
+#SBATCH --time=05:30:00
 #SBATCH --partition=gpushort
 #SBATCH --gpus-per-node=a100:1       # A100 required (sm_80+ for IsaacLab container)
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --output=slurm-%j-test_step1.out
 
 # ── Step 1: Pure PPO Overfit ──────────────────────────────────────────────────

@@ -584,12 +584,14 @@ def main():
         if bob_ppo.actor_critic.use_goal_encoder:
             with torch.no_grad():
                 sample_obs = current_bob_obs[:8]
+                # Bob obs layout: robot(7) | obj1_state(14) | obj2_state(14) |
+                #                 obj1_goal(6) | obj2_goal(6) | obj1_dist(2) | obj2_dist(2)
+                # Current poses: first 6D (pos+euler) of each object_state
                 s_t_batch = torch.cat(
-                    [sample_obs[:, 8:15], sample_obs[:, 32:39]], dim=-1
+                    [sample_obs[:, 7:13], sample_obs[:, 21:27]], dim=-1
                 )
-                s_star_batch = torch.cat(
-                    [sample_obs[:, 23:30], sample_obs[:, 47:54]], dim=-1
-                )
+                # Goal poses: obj1_goal + obj2_goal
+                s_star_batch = sample_obs[:, 35:47]
                 g_sample = bob_ppo.actor_critic.goal_encoder(s_star_batch, s_t_batch)
                 writer.add_scalar(
                     "GoalEncoder/embedding_norm",
