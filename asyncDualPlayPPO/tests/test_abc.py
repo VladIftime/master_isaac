@@ -81,12 +81,15 @@ def install_noise_filter():
 def main():
     parser = argparse.ArgumentParser(description="3-Step PPO+ABC Diagnostic Test")
     parser.add_argument(
-        "--step", choices=["1", "2", "3"], required=True,
-        help="Which diagnostic step to run (1=Pure PPO, 2=Pure BC, 3=Integration)",
+        "--step", choices=["1", "2", "3", "4", "5", "6"], required=True,
+        help="Which diagnostic step to run (1=Pure PPO, 2=Pure BC, 3=Integration, "
+             "4=GoalDist check, 5=Reward pipeline, 6=Movement detection)",
     )
     parser.add_argument("--num_envs", type=int, default=64)
     parser.add_argument("--num_iterations", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--pos_threshold", type=float, default=None,
+                        help="Override Bob pos_threshold in metres (default: env default 0.04 m)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -103,7 +106,12 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
-    from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import DummyAliceWrapper
+    from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import (
+        DummyAliceWrapper,
+        DummyBobWrapper,
+        DummyGoalDistanceWrapper,
+        DummyMovementWrapper,
+    )
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import (
@@ -312,7 +320,7 @@ def main():
         print("  DummyAlice=ON, abc_coef=0.0, ent_coef=0.0")
         print("=" * 70)
 
-        env = create_env(use_dummy_alice=True)
+        env = create_env(use_dummy_alice=True, pos_threshold=args.pos_threshold)
         bob_ppo = create_bob_agent(env, learn_overrides={
             "abc_coef": 0.0,
             "ent_coef": 0.0,
@@ -321,9 +329,12 @@ def main():
 
         gripper_state = torch.ones(env.num_envs, 1, device=env.device)
         sr_buf = deque(maxlen=50)
+        max_rew_ever = 0.0  # highest reward seen across all iterations
 
-        print(f"\n  {'Iter':>6} | {'SR':>8} | {'Val Loss':>10} | {'Surr Loss':>10}")
-        print("  " + "-" * 50)
+        thr = env.episode_manager.pos_threshold
+        print(f"  pos_threshold = {thr:.3f} m")
+        print(f"\n  {'Iter':>6} | {'SR':>8} | {'Val Loss':>10} | {'Surr Loss':>10} | {'MaxRew':>8}")
+        print("  " + "-" * 60)
 
         for it in range(1, args.num_iterations + 1):
             alice_ppo.storage.clear()
@@ -362,6 +373,7 @@ def main():
             iter_attempts = 0
 
             gripper_state.fill_(1.0)
+            iter_rew_max = 0.0
             for step in range(bob_timesteps):
                 with torch.no_grad():
                     if use_mc:
@@ -372,6 +384,7 @@ def main():
                         b_env = b_acts
 
                 obs, rew, term, trunc, extras = env.step(b_env)
+                iter_rew_max = max(iter_rew_max, rew.max().item())
                 bob_obs_new = obs[:, env.alice_obs_dim:]
 
                 b_masks = torch.ones(env.num_envs, 1, device=env.device)
@@ -406,14 +419,16 @@ def main():
 
             sr = iter_successes / max(1, iter_attempts)
             sr_buf.append(sr)
+            max_rew_ever = max(max_rew_ever, iter_rew_max)
 
             if it % 10 == 0 or it == 1:
                 avg_sr = np.mean(sr_buf) if sr_buf else 0.0
-                print(f"  {it:>6} | {avg_sr:>7.1%} | {val_loss:>10.4f} | {surr_loss:>10.4f}")
+                print(f"  {it:>6} | {avg_sr:>7.1%} | {val_loss:>10.4f} | {surr_loss:>10.4f} | {max_rew_ever:>8.4f}")
 
         # -- Verdict --
         final_sr = np.mean(sr_buf) if sr_buf else 0.0
-        print(f"\n  Final rolling SR: {final_sr:.1%}")
+        print(f"\n  Final rolling SR:  {final_sr:.1%}")
+        print(f"  Max reward seen:   {max_rew_ever:.4f}  (0.0 = reward never fired → check reward pipeline)")
         passed = final_sr > 0.5
         print(f"  STEP 1 {'PASSED' if passed else 'FAILED'}: "
               f"SR {final_sr:.1%} {'>' if passed else '<='} 50% threshold")
@@ -810,6 +825,190 @@ def main():
         simulation_app.close()
         return passed
 
+    # ════════════════════════════════════════════════════════════
+    # STEP 4: Goal Distance Sanity Check
+    # ════════════════════════════════════════════════════════════
+
+    def run_step4():
+        """
+        Prove goal_distance() returns ~0 when objects ARE at their stored goals.
+
+        DummyGoalDistanceWrapper teleports BOTH objects to their stored goal at
+        Bob step 30, then immediately measures goal_distance().
+
+        PASS: [DistCheck] lines show pos < 0.01 and rot < 0.01 (marked ✓)
+        FAIL: pos ≈ 2 m  → double env_origins subtraction in goal_distance()
+              pos ≈ large → world/local frame mismatch in stored goal_states
+        """
+        print("\n" + "=" * 70)
+        print("  STEP 4: Goal Distance Sanity Check (DummyGoalDistanceWrapper)")
+        print("  Teleports objects to stored goals; goal_distance() must return ~0")
+        print("=" * 70)
+
+        env_cfg = AsyncDualPlayEnvCfg()
+        env_cfg.scene.num_envs = args.num_envs
+        base_env = ManagerBasedRLEnv(cfg=env_cfg)
+        env = DummyGoalDistanceWrapper(
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=100,
+            bob_timesteps=200,
+            teleport_step=30,
+        )
+
+        bugs_found = 0
+        checks_done = 0
+
+        for it in range(1, args.num_iterations + 1):
+            obs, _ = env.reset()
+            zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+
+            # Step through Alice phase
+            for _ in range(env.episode_manager.alice_timesteps):
+                obs, _, _, _, _ = env.step(zero_act)
+
+            # Step through enough of Bob phase to trigger teleport (step 30) + a few more
+            for bob_step in range(env.teleport_step + 5):
+                obs, _, _, _, extras = env.step(zero_act)
+
+            # Count ✗ BUG markers from wrapper prints (we track via extras if available)
+            checks_done += env.num_envs
+
+        print(f"\n  STEP 4 SUMMARY: reviewed [DistCheck] lines above ({checks_done} checks)")
+        print(f"  PASS: all lines marked ✓  (pos < 0.01, rot < 0.01)")
+        print(f"  FAIL: any line marked ✗ BUG  (frame error in goal_distance)")
+
+        simulation_app.close()
+
+    # ════════════════════════════════════════════════════════════
+    # STEP 5: Reward Pipeline Sanity Check
+    # ════════════════════════════════════════════════════════════
+
+    def run_step5():
+        """
+        Prove sparse reward fires when the object IS physically at the goal.
+
+        DummyBobWrapper teleports the target TO its goal at Bob step 50.
+        The very next env.step() should return rew > 0 and SR should → 1.0.
+
+        PASS: SR > 0.9  (reward fires every episode after teleport)
+        FAIL: SR = 0.0  → success threshold is broken or reward function never fires
+        """
+        print("\n" + "=" * 70)
+        print("  STEP 5: Reward Pipeline Sanity Check (DummyBobWrapper)")
+        print("  Teleports target to goal at Bob step 50; reward must fire")
+        print("=" * 70)
+
+        env_cfg = AsyncDualPlayEnvCfg()
+        env_cfg.scene.num_envs = args.num_envs
+        base_env = ManagerBasedRLEnv(cfg=env_cfg)
+        env = DummyBobWrapper(
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=100,
+            bob_timesteps=200,
+            teleport_step=50,
+        )
+
+        sr_buf = deque(maxlen=50)
+        max_rew_ever = 0.0
+
+        print(f"\n  {'Iter':>6} | {'SR':>8} | {'MaxRew':>8}")
+        print("  " + "-" * 30)
+
+        for it in range(1, args.num_iterations + 1):
+            obs, _ = env.reset()
+            zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+
+            # Alice phase — zero actions; DummyAliceWrapper (base of DummyBobWrapper)
+            # teleports target to fixed goal so goal_states is set
+            for _ in range(env.episode_manager.alice_timesteps):
+                obs, _, _, _, _ = env.step(zero_act)
+
+            # Bob phase — zero actions; DummyBobWrapper teleports target onto the goal
+            # at step 50; reward should fire at step 51
+            iter_successes = 0
+            iter_attempts = 0
+            iter_rew_max = 0.0
+
+            for _ in range(env.episode_manager.bob_timesteps):
+                obs, rew, term, trunc, extras = env.step(zero_act)
+                iter_rew_max = max(iter_rew_max, rew.max().item())
+
+                ep_info = extras.get("episode_manager", {})
+                if ep_info and "bob_done_this_step" in ep_info:
+                    finished = torch.where(ep_info["bob_done_this_step"])[0]
+                    if len(finished) > 0:
+                        iter_attempts += len(finished)
+                        iter_successes += int(
+                            ep_info["bob_success_this_step"][finished].sum().item()
+                        )
+
+            sr = iter_successes / max(1, iter_attempts)
+            sr_buf.append(sr)
+            max_rew_ever = max(max_rew_ever, iter_rew_max)
+
+            if it % 5 == 0 or it == 1:
+                avg_sr = np.mean(sr_buf) if sr_buf else 0.0
+                print(f"  {it:>6} | {avg_sr:>7.1%} | {max_rew_ever:>8.4f}")
+
+        final_sr = np.mean(sr_buf) if sr_buf else 0.0
+        passed = final_sr > 0.9
+        print(f"\n  Final SR:        {final_sr:.1%}  (target > 90%)")
+        print(f"  Max reward seen: {max_rew_ever:.4f}")
+        print(f"  STEP 5 {'PASSED' if passed else 'FAILED'}: "
+              f"{'reward fires correctly' if passed else 'reward never fired — check _check_bob_success or pos_threshold'}")
+
+        simulation_app.close()
+        return passed
+
+    # ════════════════════════════════════════════════════════════
+    # STEP 6: Alice Movement Detection Check
+    # ════════════════════════════════════════════════════════════
+
+    def run_step6():
+        """
+        Prove validate_goal() correctly detects that Alice moved the object.
+
+        DummyMovementWrapper teleports the target 30 cm during Alice's phase.
+        At Alice phase end, validate_goal() should measure ~0.30 m and emit
+        "Valid Goal" lines.
+
+        PASS: [MoveCheck] shows measured_dist ≈ 0.30 m (marked ✓)
+        FAIL: measured_dist ≈ 0.00 m → initial_states stale or wrong frame
+              measured_dist ≈ 2 m   → env_origins subtraction bug
+        """
+        print("\n" + "=" * 70)
+        print("  STEP 6: Alice Movement Detection (DummyMovementWrapper)")
+        print("  Teleports target 30 cm during Alice phase; validate_goal must detect it")
+        print("=" * 70)
+
+        env_cfg = AsyncDualPlayEnvCfg()
+        env_cfg.scene.num_envs = args.num_envs
+        base_env = ManagerBasedRLEnv(cfg=env_cfg)
+        env = DummyMovementWrapper(
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=100,
+            bob_timesteps=200,
+        )
+
+        zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+
+        for it in range(1, args.num_iterations + 1):
+            obs, _ = env.reset()
+
+            # Step through full Alice phase — wrapper emits [MoveCheck] at end
+            for _ in range(env.episode_manager.alice_timesteps + 2):
+                obs, _, _, _, _ = env.step(zero_act)
+
+        print(f"\n  STEP 6 SUMMARY: reviewed [MoveCheck] lines above")
+        print(f"  PASS: measured_dist ≈ 0.300 m, marked ✓,  'Valid Goal' lines present")
+        print(f"  FAIL: measured_dist ≈ 0.000  → initial_states bug")
+        print(f"  FAIL: measured_dist ≈ 2.0 m  → env_origins frame bug")
+
+        simulation_app.close()
+
     # ── Dispatch ────────────────────────────────────────────────
     if args.step == "1":
         run_step1()
@@ -817,6 +1016,12 @@ def main():
         run_step2()
     elif args.step == "3":
         run_step3()
+    elif args.step == "4":
+        run_step4()
+    elif args.step == "5":
+        run_step5()
+    elif args.step == "6":
+        run_step6()
 
 
 if __name__ == "__main__":

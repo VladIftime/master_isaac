@@ -1,7 +1,7 @@
 import torch
 from isaaclab.managers import SceneEntityCfg
 from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
-from asyncDualPlayPPO.tasks.utils.observations import goal_distance
+from asyncDualPlayPPO.tasks.utils.observations import goal_distance, _euler_xyz_to_quat
 
 
 class DummyAliceWrapper(AsyncDualPlayEnvWrapper):
@@ -91,19 +91,17 @@ class DummyBobWrapper(DummyAliceWrapper):
 
         if len(bob_envs) > 0 and self.episode_manager.goal_states is not None:
             target_obj = self.env.scene["target_object"]
-            # goal_states shape: (N_total, 14) = [target_pose(7) | cube_pose(7)]
-            # target_pose = [pos(3) | quat(4)] in world frame
+            # goal_states layout: [t_pos(3), t_euler(3), c_pos(3), c_euler(3)] = 12D LOCAL
             goal_states = self.episode_manager.goal_states
 
-            # goal_states stores LOCAL coords; convert to WORLD by adding env origins
+            # goal_states layout: [t_pos(3), t_euler(3), c_pos(3), c_euler(3)] = 12D LOCAL
             env_origins_bob = self.env.scene.env_origins[bob_envs]  # (N_bob, 3)
             goal_pos_world = goal_states[bob_envs, 0:3] + env_origins_bob
+            goal_quat = _euler_xyz_to_quat(goal_states[bob_envs, 3:6])  # euler → quat
 
             root_states = target_obj.data.root_state_w.clone()
             root_states[bob_envs, 0:3] = goal_pos_world  # world pos
-            root_states[bob_envs, 3:7] = goal_states[
-                bob_envs, 3:7
-            ]  # goal quat (orientation only, no offset)
+            root_states[bob_envs, 3:7] = goal_quat        # goal orientation as quat
             root_states[bob_envs, 7:] = 0.0  # zero vel
 
             target_obj.write_root_state_to_sim(root_states[bob_envs], env_ids=bob_envs)
@@ -170,25 +168,28 @@ class DummyGoalDistanceWrapper(DummyAliceWrapper):
         bob_envs = bob_mask.nonzero(as_tuple=True)[0]
 
         if len(bob_envs) > 0 and self.episode_manager.goal_states is not None:
-            goal_states = self.episode_manager.goal_states  # (N_total, 14), LOCAL
+            goal_states = self.episode_manager.goal_states  # (N_total, 12), LOCAL
             target_obj = self.env.scene["target_object"]
             cube_obj = self.env.scene["cube"]
 
             env_origins = self.env.scene.env_origins[bob_envs]
 
+            # goal_states layout: [t_pos(3), t_euler(3), c_pos(3), c_euler(3)] = 12D LOCAL
             # Snap target to stored goal (LOCAL → WORLD)
             tgt_pos_world = goal_states[bob_envs, 0:3] + env_origins
+            tgt_quat = _euler_xyz_to_quat(goal_states[bob_envs, 3:6])
             root_t = target_obj.data.root_state_w.clone()
             root_t[bob_envs, 0:3] = tgt_pos_world
-            root_t[bob_envs, 3:7] = goal_states[bob_envs, 3:7]
+            root_t[bob_envs, 3:7] = tgt_quat
             root_t[bob_envs, 7:] = 0.0
             target_obj.write_root_state_to_sim(root_t[bob_envs], env_ids=bob_envs)
 
             # Snap cube to stored goal too
-            cube_pos_world = goal_states[bob_envs, 7:10] + env_origins
+            cube_pos_world = goal_states[bob_envs, 6:9] + env_origins
+            cube_quat = _euler_xyz_to_quat(goal_states[bob_envs, 9:12])
             root_c = cube_obj.data.root_state_w.clone()
             root_c[bob_envs, 0:3] = cube_pos_world
-            root_c[bob_envs, 3:7] = goal_states[bob_envs, 10:14]
+            root_c[bob_envs, 3:7] = cube_quat
             root_c[bob_envs, 7:] = 0.0
             cube_obj.write_root_state_to_sim(root_c[bob_envs], env_ids=bob_envs)
 
