@@ -3,6 +3,8 @@
 ---
 
 ## Original OpenAI ASP Network
+<!-- add reference to the paper -->
+
 
 ### Input Vectors
 
@@ -48,88 +50,107 @@ Sum* (256+256+512[+512 Bob]) → ReLU → MLP → LSTM → Actor head / Value he
 ### Input Vectors
 
 ```
-ee_pose         = [ee_x, ee_y, ee_z, ee_qw, ee_qx, ee_qy, ee_qz]
-                    EE position (metres, env-local) + quaternion
+ee_pose         = [ee_x, ee_y, ee_z, roll, pitch, yaw]
+                    EE position (metres, env-local) + ZYX Euler angles
+                    ─── Euler matches paper; quaternion double-cover avoided via conversion ───
 
 gripper_state   = [finger_joint_angle]
                     Raw finger joint position (radians)
 
-     robot_state (8D) = concat(ee_pose, gripper_state)
+     robot_state (7D) = concat(ee_pose(6), gripper_state(1))
      ─── No joint angles: RMPFlow handles IK internally ───
 
 object_state    = [pos_x, pos_y, pos_z,
-                    quat_w, quat_x, quat_y, quat_z,            ← quaternion (4D not Euler 3D)
+                    roll, pitch, yaw,                          ← ZYX Euler (3D, not quat)
                     vel_x, vel_y, vel_z,
                     angvel_x, angvel_y, angvel_z,
-                    gripper_distance, gripper_contact]         = 15D per object
+                    gripper_distance, gripper_contact]         = 14D per object
 
 goal_state (Bob only)
                 = [desired_pos_x, desired_pos_y, desired_pos_z,
-                    desired_quat_w, desired_quat_x, desired_quat_y, desired_quat_z]  = 7D per object
+                    desired_roll, desired_pitch, desired_yaw]  = 6D per object (Euler, not quat)
 
 goal_distance (Bob only)
                 = [pos_dist,   ← L2(current_pos, goal_pos) in metres
-                    rot_dist]  ← 1 - |dot(current_quat, goal_quat)|, range [0,1]
+                    rot_dist]  ← max |Euler diff| with wraparound, range [0, π]
                                                                              = 2D per object
+```
+
+**Assembled observation vectors:**
+
+```
+Alice obs = [robot_state(7) | obj1_state(14) | obj2_state(14)]          = 35D
+Bob obs   = [robot_state(7) | obj1_state(14) | obj2_state(14)
+                            | obj1_goal(6)   | obj2_goal(6)
+                            | obj1_dist(2)   | obj2_dist(2)]             = 51D
 ```
 
 ### Forward Pass (Alice)
 
 ```
-robot_state (8D) ───────────────────────────────────────────────────────────┐
+robot_state (7D) ───────────────────────────────────────────────────────────┐
                                                                              │
-object_state (15D × 2 objects) →  PI Embedding:                            │ concat
-                                     shared Linear(15→512) → LayerNorm → ReLU
+object_state (14D × 2 objects) →  PI Embedding (PermInvEncoder):           │ concat
+                                     shared Linear(14→512) → LayerNorm → ReLU
                                      shared Linear(512→512) → LayerNorm → ReLU
                                      max-pool over 2 objects               │
                                      LayerNorm(512)  ← post-pool norm      │
                                                                             ─┘
-                          concat [robot(8) | PI_pooled(512)] = 520D
+                          concat [robot(7) | PI_pooled(512)] = 519D
                                      ↓
-                          Linear(520→256) → ReLU
+              actor_trunk: Linear(519→512) → ReLU → Linear(512→256) → ReLU → Linear(256→128)
                                      ↓
-                          LSTMCell(256→256)
+                          LSTMCell(128→256)
                                      ↓
               ┌────────────────────────────────┐
               ▼                                ▼
        Actor head                       Value head
-       Linear(256→6×11)                 Linear(256→1)
-       MultiCategorical                 scalar V(s)
-       (6D Cartesian deltas × 11 bins)
+       Linear(256→6×11=66)              Linear(35→512) → ReLU
+       MultiCategorical                 → Linear(512→256) → ReLU
+       (6 action dims × 11 bins)        → Linear(256→128) → ReLU → Linear(128→1)
+```
+
+**Action bins:**
+```
+dims 0-2: XYZ Cartesian delta   → (bin − 5) / 5 × max_delta  (default 0.05 m)
+dims 3-4: Rx, Ry rotation delta → (bin − 5) / 5 × 0.5 rad
+dim  5:   Gripper               → sign(normalized) ∈ {−1, 0, +1}
 ```
 
 ### Forward Pass (Bob)
 
 ```
-robot_state (8D) ───────────────────────────────────────────────────────────┐
+robot_state (7D) ───────────────────────────────────────────────────────────┐
                                                                              │
-per-object block (24D each = 15 obj + 7 goal + 2 dist):                    │
-  ├─ GoalEncoder (per object):                                              │
-  │    input: current_pose(7D) + goal_pose(7D) → difference encoding       │
-  │    Linear(7→64) → ReLU → Linear(64→K=6) → g_i (6D per object)        │
-  │    g_pooled = max-pool(g_0, g_1) → 6D  (additive injection later)     │
-  │                                                                          │
-  └─ Reassemble: [obj_state(15) | g_i(6)] = 21D per object                │
-                                                                             │ concat
-       PI Embedding:                                                         │
-         shared Linear(21→512) → LayerNorm → ReLU                          │
-         shared Linear(512→512) → LayerNorm → ReLU                         │
-         max-pool over 2 objects                                            │
-         LayerNorm(512)  ← post-pool norm                                  │
+GoalEncoder (φ MLP, shared across objects):                                 │
+  input per object: current_pose(6D) + goal_pose(6D)                       │
+  φ: Linear(6→64) → Tanh → Linear(64→K=8)   ← no final activation        │
+  g_i = φ(goal_i) − φ(current_i)  [difference variant]                    │
+  g_pooled = sum-pool(g_0, g_1)              → 8D  (additive injection)    │
+                                                                             │
+PI Embedding (PermInvEncoder):                                              │
+  input: ONLY obj_states (14D each) — goal enters via additive injection   │ concat
+  shared Linear(14→512) → LayerNorm → ReLU                                 │
+  shared Linear(512→512) → LayerNorm → ReLU                                │
+  max-pool over 2 objects                                                   │
+  LayerNorm(512)  ← post-pool norm                                         │
                                                                             ─┘
-                    concat [robot(8) | PI_pooled(512)] = 520D
+                    concat [robot(7) | PI_pooled(512)] = 519D
                                      ↓
-  h₁ = Linear(520→256)(enc) + Linear(6→256)(g_pooled)  ← additive goal injection
+  h₁ = Linear(519→512)(enc) + Linear(8→512, no bias)(g_pooled)  ← additive goal injection
   h₁ = ReLU(LayerNorm(h₁))
                                      ↓
-                          LSTMCell(256→256)
+       actor_trunk_rest: Linear(512→256) → ReLU → Linear(256→128)
+                                     ↓
+                          LSTMCell(128→256)
                                      ↓
               ┌────────────────────────────────┐
               ▼                                ▼
        Actor head                       Value head
-       Linear(256→6×11)                 Linear(256→1)
-       MultiCategorical                 raw obs (56D) as input
-                                        (no goal encoder bottleneck)
+       Linear(256→6×11=66)              Linear(51→512) → ReLU
+       MultiCategorical                 → Linear(512→256) → ReLU
+                                        → Linear(256→128) → ReLU → Linear(128→1)
+                                        (full raw obs, no goal encoder bottleneck)
 ```
 
 ---
@@ -139,27 +160,36 @@ per-object block (24D each = 15 obj + 7 goal + 2 dist):                    │
 | | Paper | Current |
 |--|-------|---------|
 | **Robot arm state** | Joint angles (6D) | ❌ Removed — RMPFlow handles IK |
-| **Gripper / EE state** | EE Cartesian pose + finger (7D) | EE quaternion pose + finger (8D) |
-| **Object rotation** | Euler angles (3D) | **Quaternion (4D)** — avoids gimbal lock |
-| **Object state dims** | 14D per object | **15D** per object (quat adds 1D) |
-| **Goal rotation** | Euler angles (3D) | **Quaternion (4D)** |
-| **Goal state dims** | 7D (with 1 scalar dist) | **7D** goal pose + **2D** dist (separate term) |
-| **Goal encoding** | Raw PI embedding on goal states | **GoalEncoder → K=6 latent** per object |
-| **Additive goal injection** | ❌ | ✅ `h = act(LN(W·enc + Wg·g))` |
-| **Pooling** | Sum-pool | **Max-pool** (more robust, standard DeepSets) |
+| **Gripper / EE state** | EE Cartesian pose + finger (7D) | EE Euler pose + finger (7D) |
+| **Object rotation** | Euler angles (3D) | **Euler angles (3D)** — matches paper |
+| **Object state dims** | 14D per object | **14D** per object |
+| **Goal rotation** | Euler angles (3D) | **Euler angles (3D)** — matches paper |
+| **Goal state dims** | 7D (3D pos + 3D euler + 1 scalar dist) | **6D** goal pose + **2D** dist (separate term) |
+| **Goal encoding** | Raw PI embedding on goal states | **GoalEncoder → K=8 latent** per object |
+| **GoalEncoder φ activation** | — | **Tanh** (paper §2.4) |
+| **GoalEncoder input** | — | **6D Euler pose** (pos3 + euler3) |
+| **GoalEncoder pooling** | — | **Sum-pool** (g = Σ g_i; "AND" semantics) |
+| **Additive goal injection** | ❌ | ✅ `h = ReLU(LN(W·enc + Wg·g))` |
+| **PI encoder per-obj input** | 14D obj state | **14D obj state only** (goal separated out) |
+| **Pooling (PI encoder)** | Sum-pool | **Max-pool** (more robust, standard DeepSets) |
 | **Post-pool norm** | LayerNorm ✅ | LayerNorm ✅ |
-| **Object streams merged** | obj + goal → separate PI embeddings, summed | **Combined [obj\|g_i] → single PI embedding** |
+| **Alice obs dim** | — | **35D** |
+| **Bob obs dim** | — | **51D** |
+| **Actor trunk** | MLP → LSTM | **Linear(519→512)→ReLU→(256)→(128) → LSTMCell(128→256)** |
+| **Action space** | Continuous Gaussian | **MultiCategorical: 6 dims × 11 bins** |
 
 ---
 
-## Why quaternion instead of Euler?
+## Rotation Representation Note
 
-The paper uses Euler for goal checking (absolute difference per axis) but the observation representation
-is not explicitly stated as Euler — it may also use quaternion internally.
+The current implementation uses ZYX Euler angles (roll, pitch, yaw) at observation time,
+matching the paper's Appendix A.2 ("three Euler angles on three dimensions").
+Quaternions are produced by IsaacSim but converted in `observations.py` before the
+policy ever sees them.
 
-Quaternion advantages in observations:
-- No gimbal lock (Euler has singularity at pitch = ±90°)
-- Smooth interpolation (SLERP)
-- Consistent gradient signal for the policy network
+Gimbal lock at pitch = ±90° is not a concern for UR5e table manipulation tasks
+(empirical max pitch < 80°).
 
-Disadvantage: double-cover (q ≡ -q). Fixed by canonicalizing `w ≥ 0` in `ee_poses()`.
+The GoalEncoder's φ MLP therefore receives 6D inputs (pos3 + euler3) and computes
+difference embeddings `φ(goal) − φ(current)` that are meaningful under linear arithmetic
+— an advantage of Euler over quaternion for this structured subtraction.

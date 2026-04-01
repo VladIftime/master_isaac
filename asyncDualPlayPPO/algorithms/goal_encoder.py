@@ -46,8 +46,8 @@ def quat_to_axis_angle(q: torch.Tensor) -> torch.Tensor:
     # Ensure w >= 0 to resolve double-cover
     q = torch.where(q[..., :1] < 0, -q, q)
 
-    w = q[..., 0:1]          # (..., 1)
-    xyz = q[..., 1:4]        # (..., 3)
+    w = q[..., 0:1]  # (..., 1)
+    xyz = q[..., 1:4]  # (..., 3)
 
     # sin(half_angle) = ||xyz||
     sin_half = torch.norm(xyz, dim=-1, keepdim=True).clamp(min=1e-8)
@@ -102,7 +102,9 @@ class GoalEncoder(nn.Module):
         self.K_per_obj = K_per_obj
         self.pose_dim = pose_dim
         self.use_aux_loss = use_aux_loss
-        self._obj_state_dim = 6   # pos(3) + euler(3) — matches paper's Euler representation
+        self._obj_state_dim = (
+            6  # pos(3) + euler(3) — matches paper's Euler representation
+        )
 
         # phi: 6D pose → R^{K_per_obj}
         # Two-layer MLP, no final non-linearity (per paper)
@@ -169,12 +171,12 @@ class GoalEncoder(nn.Module):
         currents_flat = currents_6d.reshape(batch * self.num_objects, self.pose_dim)
 
         # Encode through phi
-        phi_goal = self.phi(goals_flat)      # (batch * num_objects, K_per_obj)
-        phi_curr = self.phi(currents_flat)   # (batch * num_objects, K_per_obj)
+        phi_goal = self.phi(goals_flat)  # (batch * num_objects, K_per_obj)
+        phi_curr = self.phi(currents_flat)  # (batch * num_objects, K_per_obj)
 
         # Per-object goal embedding
         if self.variant == "difference":
-            g_per_obj = phi_goal - phi_curr   # (batch * num_objects, K_per_obj)
+            g_per_obj = phi_goal - phi_curr  # (batch * num_objects, K_per_obj)
         else:
             g_per_obj = phi_goal
 
@@ -182,7 +184,7 @@ class GoalEncoder(nn.Module):
         g_per_obj = g_per_obj.view(batch, self.num_objects, self.K_per_obj)
 
         # Permutation-invariant pooling (max-pool across objects)
-        g_pooled, _ = g_per_obj.max(dim=1)   # (batch, K_per_obj)
+        g_pooled, _ = g_per_obj.max(dim=1)  # (batch, K_per_obj)
 
         return g_pooled
 
@@ -225,15 +227,18 @@ class GoalEncoder(nn.Module):
 
         return g_per_obj.view(batch, self.num_objects, self.K_per_obj)
 
-    def compute_aux_targets(self, s_star: torch.Tensor, s_t: torch.Tensor) -> torch.Tensor:
+    def compute_aux_targets(
+        self, s_star: torch.Tensor, s_t: torch.Tensor
+    ) -> torch.Tensor:
         import math
+
         targets = []
         for i in range(self.num_objects):
-            base = i * self._obj_state_dim   # now 6D per object
-            pos_star  = s_star[:, base:base + 3]
-            euler_star = s_star[:, base + 3:base + 6]   # roll, pitch, yaw
-            pos_t     = s_t[:, base:base + 3]
-            euler_t   = s_t[:, base + 3:base + 6]
+            base = i * self._obj_state_dim  # now 6D per object
+            pos_star = s_star[:, base : base + 3]
+            euler_star = s_star[:, base + 3 : base + 6]  # roll, pitch, yaw
+            pos_t = s_t[:, base : base + 3]
+            euler_t = s_t[:, base + 3 : base + 6]
 
             pos_dist = torch.norm(pos_star - pos_t, dim=-1, keepdim=True)
 
@@ -248,14 +253,15 @@ class GoalEncoder(nn.Module):
 
     def aux_loss(self, s_star: torch.Tensor, s_t: torch.Tensor):
         import torch.nn.functional as F
+
         g = self.forward(s_star, s_t)
-        pred  = self.aux_head(g)
+        pred = self.aux_head(g)
         target = self.compute_aux_targets(s_star, s_t)
 
         pos_pred = pred[:, ::2]
         rot_pred = pred[:, 1::2]
-        pos_tgt  = target[:, ::2]
-        rot_tgt  = target[:, 1::2]
+        pos_tgt = target[:, ::2]
+        rot_tgt = target[:, 1::2]
 
         pos_loss = F.mse_loss(pos_pred, pos_tgt)
         rot_loss = F.mse_loss(rot_pred, rot_tgt)

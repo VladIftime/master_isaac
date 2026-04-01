@@ -101,7 +101,7 @@ class DummyBobWrapper(DummyAliceWrapper):
 
             root_states = target_obj.data.root_state_w.clone()
             root_states[bob_envs, 0:3] = goal_pos_world  # world pos
-            root_states[bob_envs, 3:7] = goal_quat        # goal orientation as quat
+            root_states[bob_envs, 3:7] = goal_quat  # goal orientation as quat
             root_states[bob_envs, 7:] = 0.0  # zero vel
 
             target_obj.write_root_state_to_sim(root_states[bob_envs], env_ids=bob_envs)
@@ -288,12 +288,15 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
         move_snapshots = []
         if self.episode_manager.initial_states is not None:
             ending_mask = self.episode_manager.is_alice_phase() & (
-                self.episode_manager.phase_step >= self.episode_manager.alice_timesteps - 1
+                self.episode_manager.phase_step
+                >= self.episode_manager.alice_timesteps - 1
             )
             env_origins = self.env.scene.env_origins
             for env_id in ending_mask.nonzero(as_tuple=True)[0]:
                 init_pos = self.episode_manager.initial_states[env_id, 0:3].clone()
-                cur_pos_w = self.env.scene["target_object"].data.root_pos_w[env_id].clone()
+                cur_pos_w = (
+                    self.env.scene["target_object"].data.root_pos_w[env_id].clone()
+                )
                 cur_pos_l = cur_pos_w - env_origins[env_id]
                 move_snapshots.append((env_id, init_pos, cur_pos_l))
 

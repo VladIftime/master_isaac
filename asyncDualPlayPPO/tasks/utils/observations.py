@@ -56,9 +56,9 @@ def _euler_xyz_to_quat(euler: torch.Tensor) -> torch.Tensor:
         (..., 4) tensor [w, x, y, z] — unit quaternion.
     """
     roll, pitch, yaw = euler[..., 0], euler[..., 1], euler[..., 2]
-    cr, sr = torch.cos(roll * 0.5),  torch.sin(roll * 0.5)
+    cr, sr = torch.cos(roll * 0.5), torch.sin(roll * 0.5)
     cp, sp = torch.cos(pitch * 0.5), torch.sin(pitch * 0.5)
-    cy, sy = torch.cos(yaw * 0.5),   torch.sin(yaw * 0.5)
+    cy, sy = torch.cos(yaw * 0.5), torch.sin(yaw * 0.5)
     w = cr * cp * cy + sr * sp * sy
     x = sr * cp * cy - cr * sp * sy
     y = cr * sp * cy + sr * cp * sy
@@ -106,11 +106,11 @@ def ee_poses(
     robot = env.scene[ee_cfg.name]
     body_ids, _ = robot.find_bodies(ee_cfg.body_names)
 
-    pos  = robot.data.body_pos_w[:, body_ids[0]] - env.scene.env_origins
+    pos = robot.data.body_pos_w[:, body_ids[0]] - env.scene.env_origins
     quat = robot.data.body_quat_w[:, body_ids[0]]
-    euler = _quat_to_euler_xyz(quat)   # (num_envs, 3)
+    euler = _quat_to_euler_xyz(quat)  # (num_envs, 3)
 
-    return torch.cat([pos, euler], dim=-1)   # (num_envs, 6)
+    return torch.cat([pos, euler], dim=-1)  # (num_envs, 6)
 
 
 def gripper_positions(
@@ -202,8 +202,9 @@ def object_states(
             contact = has_contact * (dist < 0.25).float()
 
     # Convert quaternion → Euler angles (paper representation)
-    euler = _quat_to_euler_xyz(quat.squeeze(1) if quat.dim() == 3 and quat.shape[1] == 1 else
-                               quat.view(-1, 4)).view(*quat.shape[:-1], 3)
+    euler = _quat_to_euler_xyz(
+        quat.squeeze(1) if quat.dim() == 3 and quat.shape[1] == 1 else quat.view(-1, 4)
+    ).view(*quat.shape[:-1], 3)
 
     state = torch.cat([pos_local, euler, lin_vel, ang_vel, dist, contact], dim=-1)
     return state.view(batch_size, -1)
@@ -216,11 +217,11 @@ def goal_states(
     """
     Goal state for a specific object, as recorded by the episode manager.
 
-    Goal states are stored as [target_object(0:7), cube(7:14)].
+    Goal states are stored as [target_object(0:6), cube(6:12)] in LOCAL Euler format.
     Returns zeros during Alice's phase.
 
     Returns:
-        (num_envs, 7) — [pos(3), quat(4)] for the requested object
+        (num_envs, 6) — [pos(3), euler(3)] for the requested object
     """
     if hasattr(env, "episode_manager") and env.episode_manager.goal_states is not None:
         # episode_manager stores goals as [pos(3)+euler(3)] × num_objects = 6D per object
@@ -266,11 +267,11 @@ def goal_distance(
     # 3. Positions from object_states() are ALREADY in LOCAL frame (env_origins
     #    subtracted inside object_states).  Do NOT subtract again here.
     current_pos_local = current[..., :3]
-    current_euler = current[..., 3:6]   # roll, pitch, yaw
+    current_euler = current[..., 3:6]  # roll, pitch, yaw
 
     goal = goal_flat.view(batch_size, num_instances, 6)
     goal_pos = goal[..., :3]
-    goal_euler = goal[..., 3:6]         # roll, pitch, yaw
+    goal_euler = goal[..., 3:6]  # roll, pitch, yaw
 
     # 4. Compute distances in the same frame (both Local)
     pos_dist = torch.norm(current_pos_local - goal_pos, dim=-1, keepdim=True)

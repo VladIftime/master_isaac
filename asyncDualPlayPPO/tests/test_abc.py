@@ -81,15 +81,21 @@ def install_noise_filter():
 def main():
     parser = argparse.ArgumentParser(description="3-Step PPO+ABC Diagnostic Test")
     parser.add_argument(
-        "--step", choices=["1", "2", "3", "4", "5", "6"], required=True,
+        "--step",
+        choices=["1", "2", "3", "4", "5", "6"],
+        required=True,
         help="Which diagnostic step to run (1=Pure PPO, 2=Pure BC, 3=Integration, "
-             "4=GoalDist check, 5=Reward pipeline, 6=Movement detection)",
+        "4=GoalDist check, 5=Reward pipeline, 6=Movement detection)",
     )
     parser.add_argument("--num_envs", type=int, default=64)
     parser.add_argument("--num_iterations", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--pos_threshold", type=float, default=None,
-                        help="Override Bob pos_threshold in metres (default: env default 0.04 m)")
+    parser.add_argument(
+        "--pos_threshold",
+        type=float,
+        default=None,
+        help="Override Bob pos_threshold in metres (default: env default 0.04 m)",
+    )
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -321,10 +327,13 @@ def main():
         print("=" * 70)
 
         env = create_env(use_dummy_alice=True, pos_threshold=args.pos_threshold)
-        bob_ppo = create_bob_agent(env, learn_overrides={
-            "abc_coef": 0.0,
-            "ent_coef": 0.0,
-        })
+        bob_ppo = create_bob_agent(
+            env,
+            learn_overrides={
+                "abc_coef": 0.0,
+                "ent_coef": 0.0,
+            },
+        )
         alice_ppo = create_alice_agent(env)
 
         gripper_state = torch.ones(env.num_envs, 1, device=env.device)
@@ -333,7 +342,9 @@ def main():
 
         thr = env.episode_manager.pos_threshold
         print(f"  pos_threshold = {thr:.3f} m")
-        print(f"\n  {'Iter':>6} | {'SR':>8} | {'Val Loss':>10} | {'Surr Loss':>10} | {'MaxRew':>8}")
+        print(
+            f"\n  {'Iter':>6} | {'SR':>8} | {'Val Loss':>10} | {'Surr Loss':>10} | {'MaxRew':>8}"
+        )
         print("  " + "-" * 60)
 
         for it in range(1, args.num_iterations + 1):
@@ -341,7 +352,7 @@ def main():
             bob_ppo.storage.clear()
 
             obs, info = env.reset()
-            alice_obs = obs[:, :env.alice_obs_dim]
+            alice_obs = obs[:, : env.alice_obs_dim]
             gripper_state.fill_(1.0)
 
             # -- Alice phase: DummyAliceWrapper teleports the block --
@@ -349,26 +360,37 @@ def main():
             for step in range(alice_timesteps):
                 with torch.no_grad():
                     if use_mc:
-                        a_acts, a_lp, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(alice_obs, None)
+                        a_acts, a_lp, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(
+                            alice_obs, None
+                        )
                         a_env, gripper_state = bins_to_env_action(a_acts, gripper_state)
                     else:
-                        a_acts, a_lp, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(alice_obs, None)
+                        a_acts, a_lp, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(
+                            alice_obs, None
+                        )
                         a_env = a_acts
 
                 obs, rew, term, trunc, extras = env.step(a_env)
-                alice_obs_new = obs[:, :env.alice_obs_dim]
+                alice_obs_new = obs[:, : env.alice_obs_dim]
 
                 a_masks = torch.ones(env.num_envs, 1, device=env.device)
                 alice_ppo.storage.add_transitions(
-                    alice_obs, alice_obs_new, a_acts, rew, term | trunc,
-                    a_val, a_lp.unsqueeze(-1) if a_lp.dim() == 1 else a_lp,
-                    a_mu, a_sigma, a_masks,
+                    alice_obs,
+                    alice_obs_new,
+                    a_acts,
+                    rew,
+                    term | trunc,
+                    a_val,
+                    a_lp.unsqueeze(-1) if a_lp.dim() == 1 else a_lp,
+                    a_mu,
+                    a_sigma,
+                    a_masks,
                 )
                 alice_obs = alice_obs_new
 
             # -- Bob phase: learn from sparse reward --
             bob_timesteps = env.episode_manager.bob_timesteps
-            bob_obs = obs[:, env.alice_obs_dim:]
+            bob_obs = obs[:, env.alice_obs_dim :]
             iter_successes = 0
             iter_attempts = 0
 
@@ -377,21 +399,32 @@ def main():
             for step in range(bob_timesteps):
                 with torch.no_grad():
                     if use_mc:
-                        b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(bob_obs, None)
+                        b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(
+                            bob_obs, None
+                        )
                         b_env, gripper_state = bins_to_env_action(b_acts, gripper_state)
                     else:
-                        b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(bob_obs, None)
+                        b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(
+                            bob_obs, None
+                        )
                         b_env = b_acts
 
                 obs, rew, term, trunc, extras = env.step(b_env)
                 iter_rew_max = max(iter_rew_max, rew.max().item())
-                bob_obs_new = obs[:, env.alice_obs_dim:]
+                bob_obs_new = obs[:, env.alice_obs_dim :]
 
                 b_masks = torch.ones(env.num_envs, 1, device=env.device)
                 bob_ppo.storage.add_transitions(
-                    bob_obs, bob_obs_new, b_acts, rew, term | trunc,
-                    b_val, b_lp.unsqueeze(-1) if b_lp.dim() == 1 else b_lp,
-                    b_mu, b_sigma, b_masks,
+                    bob_obs,
+                    bob_obs_new,
+                    b_acts,
+                    rew,
+                    term | trunc,
+                    b_val,
+                    b_lp.unsqueeze(-1) if b_lp.dim() == 1 else b_lp,
+                    b_mu,
+                    b_sigma,
+                    b_masks,
                 )
                 bob_obs = bob_obs_new
 
@@ -423,15 +456,21 @@ def main():
 
             if it % 10 == 0 or it == 1:
                 avg_sr = np.mean(sr_buf) if sr_buf else 0.0
-                print(f"  {it:>6} | {avg_sr:>7.1%} | {val_loss:>10.4f} | {surr_loss:>10.4f} | {max_rew_ever:>8.4f}")
+                print(
+                    f"  {it:>6} | {avg_sr:>7.1%} | {val_loss:>10.4f} | {surr_loss:>10.4f} | {max_rew_ever:>8.4f}"
+                )
 
         # -- Verdict --
         final_sr = np.mean(sr_buf) if sr_buf else 0.0
         print(f"\n  Final rolling SR:  {final_sr:.1%}")
-        print(f"  Max reward seen:   {max_rew_ever:.4f}  (0.0 = reward never fired → check reward pipeline)")
+        print(
+            f"  Max reward seen:   {max_rew_ever:.4f}  (0.0 = reward never fired → check reward pipeline)"
+        )
         passed = final_sr > 0.5
-        print(f"  STEP 1 {'PASSED' if passed else 'FAILED'}: "
-              f"SR {final_sr:.1%} {'>' if passed else '<='} 50% threshold")
+        print(
+            f"  STEP 1 {'PASSED' if passed else 'FAILED'}: "
+            f"SR {final_sr:.1%} {'>' if passed else '<='} 50% threshold"
+        )
         print(f"  (Paper expects SR -> 1.0 with enough iterations)")
 
         simulation_app.close()
@@ -458,18 +497,23 @@ def main():
         print("=" * 70)
 
         env = create_env(use_dummy_alice=True)  # env needed for obs shape
-        bob_ppo = create_bob_agent(env, learn_overrides={
-            "abc_coef": 1.0,
-            "value_loss_coef": 0.0,
-            "ent_coef": 0.0,
-        })
+        bob_ppo = create_bob_agent(
+            env,
+            learn_overrides={
+                "abc_coef": 1.0,
+                "value_loss_coef": 0.0,
+                "ent_coef": 0.0,
+            },
+        )
 
         # ── Inject God Mode trajectory ─────────────────────────
         # Constant action: bin 8 for X (strong positive), bin 5 for rest.
         # _act_dim matches what the abc_buffer stores (num_cat_dims if MC, else env action dim).
         _act_dim = num_cat_dims if use_mc else env.action_space.shape[0]
-        GOD_ACTION = torch.full((_act_dim,), 5.0, device=env.device)  # center = no movement
-        GOD_ACTION[0] = 8.0   # X: bin 8 → positive movement
+        GOD_ACTION = torch.full(
+            (_act_dim,), 5.0, device=env.device
+        )  # center = no movement
+        GOD_ACTION[0] = 8.0  # X: bin 8 → positive movement
 
         print(f"\n  God Mode action (dim={_act_dim}): {GOD_ACTION.tolist()}")
         center = (num_bins - 1) / 2.0
@@ -481,7 +525,7 @@ def main():
         print(f"  Injecting {NUM_FAKE_STEPS} God Mode demo steps into ABC buffer...")
 
         obs, info = env.reset()
-        alice_obs = obs[:, :env.alice_obs_dim]
+        alice_obs = obs[:, : env.alice_obs_dim]
         gripper_state = torch.ones(env.num_envs, 1, device=env.device)
 
         # Step a few times to collect varied obs. goal_states is None until Alice completes,
@@ -489,9 +533,11 @@ def main():
         fake_obs_list = []
         alice_obs_list = []
         for step in range(NUM_FAKE_STEPS // env.num_envs + 2):
-            zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+            zero_act = torch.zeros(
+                env.num_envs, env.action_space.shape[0], device=env.device
+            )
             obs, _, _, _, _ = env.step(zero_act)
-            alice_obs = obs[:, :env.alice_obs_dim]
+            alice_obs = obs[:, : env.alice_obs_dim]
             alice_obs_list.append(alice_obs.clone())
             goal_states = env.episode_manager.goal_states
             if goal_states is not None:
@@ -501,7 +547,9 @@ def main():
         if not fake_obs_list:
             print("  [Step2] goal_states never set; using dummy zero-goal obs")
             all_alice = torch.cat(alice_obs_list, dim=0)
-            fake_goal = torch.zeros(all_alice.shape[0], 12, device=env.device)  # 6D per object × 2 (Euler format)
+            fake_goal = torch.zeros(
+                all_alice.shape[0], 12, device=env.device
+            )  # 6D per object × 2 (Euler format)
             bc_obs = env.construct_bob_observation(all_alice, fake_goal)
             fake_obs_list.append(bc_obs)
 
@@ -517,26 +565,30 @@ def main():
 
         # Compute old_log_probs for clipped ratio ABC
         with torch.no_grad():
-            old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(fake_obs, None, fake_acts)
+            old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(
+                fake_obs, None, fake_acts
+            )
 
         bob_ppo.abc_buffer.add_trajectory(
-            fake_obs,                                                     # observations
-            fake_obs,                                                     # states
-            fake_acts,                                                    # actions
-            torch.zeros(NUM_FAKE_STEPS, device=env.device),               # rewards
-            torch.zeros(NUM_FAKE_STEPS, device=env.device).byte(),        # dones
-            torch.zeros(NUM_FAKE_STEPS, device=env.device),               # values
-            old_lp.view(-1, 1),                                           # log_probs
-            torch.zeros_like(fake_acts),                                  # mu
-            torch.zeros_like(fake_acts),                                  # sigma
-            torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),            # returns
-            torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),            # advantages
+            fake_obs,  # observations
+            fake_obs,  # states
+            fake_acts,  # actions
+            torch.zeros(NUM_FAKE_STEPS, device=env.device),  # rewards
+            torch.zeros(NUM_FAKE_STEPS, device=env.device).byte(),  # dones
+            torch.zeros(NUM_FAKE_STEPS, device=env.device),  # values
+            old_lp.view(-1, 1),  # log_probs
+            torch.zeros_like(fake_acts),  # mu
+            torch.zeros_like(fake_acts),  # sigma
+            torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),  # returns
+            torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),  # advantages
         )
         print(f"  ABC buffer size: {bob_ppo.abc_buffer.size}")
 
         # ── Training loop ──────────────────────────────────────
         print(f"\n  Training Bob with pure ABC for {args.num_iterations} iters...")
-        print(f"  {'Iter':>6} | {'BC Loss':>10} | {'Dim0 Mode':>10} | {'All Match':>10}")
+        print(
+            f"  {'Iter':>6} | {'BC Loss':>10} | {'Dim0 Mode':>10} | {'All Match':>10}"
+        )
         print("  " + "-" * 50)
 
         bc_losses = []
@@ -546,26 +598,32 @@ def main():
             # Fill Bob's rollout storage (needed for update() to run)
             bob_ppo.storage.clear()
             obs, info = env.reset()
-            bob_obs = obs[:, env.alice_obs_dim:]
+            bob_obs = obs[:, env.alice_obs_dim :]
             nsteps = min(32, bob_ppo.storage.num_transitions_per_env)
 
             for step in range(nsteps):
                 with torch.no_grad():
-                    b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(bob_obs, None)
+                    b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(
+                        bob_obs, None
+                    )
                     if use_mc:
                         b_env, gripper_state = bins_to_env_action(b_acts, gripper_state)
                     else:
                         b_env = b_acts
 
                 obs, rew, term, trunc, extras = env.step(b_env)
-                bob_obs_new = obs[:, env.alice_obs_dim:]
+                bob_obs_new = obs[:, env.alice_obs_dim :]
 
                 bob_ppo.storage.add_transitions(
-                    bob_obs, bob_obs_new, b_acts,
+                    bob_obs,
+                    bob_obs_new,
+                    b_acts,
                     torch.zeros(env.num_envs, 1, device=env.device),  # zero reward
-                    term | trunc, b_val,
+                    term | trunc,
+                    b_val,
                     b_lp.unsqueeze(-1) if b_lp.dim() == 1 else b_lp,
-                    b_mu, b_sigma,
+                    b_mu,
+                    b_sigma,
                 )
                 bob_obs = bob_obs_new
 
@@ -583,11 +641,13 @@ def main():
             bob_ppo.abc_buffer.step = 0
             bob_ppo.abc_buffer.full = False
             bob_ppo.abc_buffer.add_trajectory(
-                fake_obs, fake_obs, fake_acts,
+                fake_obs,
+                fake_obs,
+                fake_acts,
                 torch.zeros(NUM_FAKE_STEPS, device=env.device),
                 torch.zeros(NUM_FAKE_STEPS, device=env.device).byte(),
                 torch.zeros(NUM_FAKE_STEPS, device=env.device),
-                new_lp.view(-1, 1),           # ← fresh old_lp: ratio starts at 1
+                new_lp.view(-1, 1),  # ← fresh old_lp: ratio starts at 1
                 torch.zeros_like(fake_acts),
                 torch.zeros_like(fake_acts),
                 torch.zeros(NUM_FAKE_STEPS, 1, device=env.device),
@@ -605,11 +665,19 @@ def main():
             with torch.no_grad():
                 test_acts = bob_ppo.actor_critic.act_inference(fake_obs[:64])
                 dim0_mode = test_acts[:, 0].mode().values.item()
-                all_match = (test_acts == GOD_ACTION.unsqueeze(0)).all(dim=-1).float().mean().item()
+                all_match = (
+                    (test_acts == GOD_ACTION.unsqueeze(0))
+                    .all(dim=-1)
+                    .float()
+                    .mean()
+                    .item()
+                )
                 dim0_modes.append(dim0_mode)
 
             if it % 10 == 0 or it == 1:
-                print(f"  {it:>6} | NLL:{raw_nll:>+8.3f} | BC:{bc_loss:>+8.3f} | Dim0:{dim0_mode:>4.0f} | Match:{all_match:>5.1%}")
+                print(
+                    f"  {it:>6} | NLL:{raw_nll:>+8.3f} | BC:{bc_loss:>+8.3f} | Dim0:{dim0_mode:>4.0f} | Match:{all_match:>5.1%}"
+                )
 
         # -- Verdict --
         print(f"\n  BC Loss:    {bc_losses[0]:+.4f} -> {bc_losses[-1]:+.4f}")
@@ -619,9 +687,11 @@ def main():
 
         passed = bc_decreased and dim0_correct
         print(f"  Dim 0 mode: {final_mode:.0f} (target: {GOD_ACTION[0].item():.0f})")
-        print(f"  STEP 2 {'PASSED' if passed else 'FAILED'}: "
-              f"BC loss {'decreased' if bc_decreased else 'DID NOT decrease'}, "
-              f"Dim 0 {'converged' if dim0_correct else 'DID NOT converge'}")
+        print(
+            f"  STEP 2 {'PASSED' if passed else 'FAILED'}: "
+            f"BC loss {'decreased' if bc_decreased else 'DID NOT decrease'}, "
+            f"Dim 0 {'converged' if dim0_correct else 'DID NOT converge'}"
+        )
 
         simulation_app.close()
         return passed
@@ -647,10 +717,13 @@ def main():
 
         env = create_env(use_dummy_alice=False, pos_threshold=0.20)
         alice_ppo = create_alice_agent(env)
-        bob_ppo = create_bob_agent(env, learn_overrides={
-            "abc_coef": 0.5,
-            "ent_coef": 0.01,
-        })
+        bob_ppo = create_bob_agent(
+            env,
+            learn_overrides={
+                "abc_coef": 0.5,
+                "ent_coef": 0.01,
+            },
+        )
 
         alice_gripper = torch.ones(env.num_envs, 1, device=env.device)
         bob_gripper = torch.ones(env.num_envs, 1, device=env.device)
@@ -658,7 +731,9 @@ def main():
         alice_sr_buf = deque(maxlen=50)
         bob_sr_buf = deque(maxlen=50)
 
-        print(f"\n  {'Iter':>6} | {'Alice Rew':>10} | {'Bob SR':>8} | {'ABC Buf':>8} | {'BC Loss':>10}")
+        print(
+            f"\n  {'Iter':>6} | {'Alice Rew':>10} | {'Bob SR':>8} | {'ABC Buf':>8} | {'BC Loss':>10}"
+        )
         print("  " + "-" * 60)
 
         for it in range(1, args.num_iterations + 1):
@@ -666,7 +741,7 @@ def main():
             bob_ppo.storage.clear()
 
             obs, info = env.reset()
-            alice_obs = obs[:, :env.alice_obs_dim]
+            alice_obs = obs[:, : env.alice_obs_dim]
             alice_gripper.fill_(1.0)
             bob_gripper.fill_(1.0)
 
@@ -677,7 +752,9 @@ def main():
 
             for step in range(alice_timesteps):
                 with torch.no_grad():
-                    a_acts, a_lp, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(alice_obs, None)
+                    a_acts, a_lp, a_val, a_mu, a_sigma = alice_ppo.actor_critic.act(
+                        alice_obs, None
+                    )
                     if use_mc:
                         a_env, alice_gripper = bins_to_env_action(a_acts, alice_gripper)
                     else:
@@ -687,13 +764,20 @@ def main():
                 alice_traj_act.append(a_acts.clone())
 
                 obs, rew, term, trunc, extras = env.step(a_env)
-                alice_obs_new = obs[:, :env.alice_obs_dim]
+                alice_obs_new = obs[:, : env.alice_obs_dim]
 
                 a_masks = torch.ones(env.num_envs, 1, device=env.device)
                 alice_ppo.storage.add_transitions(
-                    alice_obs, alice_obs_new, a_acts, rew, term | trunc,
-                    a_val, a_lp.unsqueeze(-1) if a_lp.dim() == 1 else a_lp,
-                    a_mu, a_sigma, a_masks,
+                    alice_obs,
+                    alice_obs_new,
+                    a_acts,
+                    rew,
+                    term | trunc,
+                    a_val,
+                    a_lp.unsqueeze(-1) if a_lp.dim() == 1 else a_lp,
+                    a_mu,
+                    a_sigma,
+                    a_masks,
                 )
                 alice_obs = alice_obs_new
 
@@ -705,27 +789,36 @@ def main():
             alice_sr_buf.append(n_valid / env.num_envs)
 
             # -- Bob phase --
-            bob_obs = obs[:, env.alice_obs_dim:]
+            bob_obs = obs[:, env.alice_obs_dim :]
             bob_timesteps = env.episode_manager.bob_timesteps
             iter_successes = 0
             iter_attempts = 0
 
             for step in range(bob_timesteps):
                 with torch.no_grad():
-                    b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(bob_obs, None)
+                    b_acts, b_lp, b_val, b_mu, b_sigma = bob_ppo.actor_critic.act(
+                        bob_obs, None
+                    )
                     if use_mc:
                         b_env, bob_gripper = bins_to_env_action(b_acts, bob_gripper)
                     else:
                         b_env = b_acts
 
                 obs, rew, term, trunc, extras = env.step(b_env)
-                bob_obs_new = obs[:, env.alice_obs_dim:]
+                bob_obs_new = obs[:, env.alice_obs_dim :]
 
                 b_masks = torch.ones(env.num_envs, 1, device=env.device)
                 bob_ppo.storage.add_transitions(
-                    bob_obs, bob_obs_new, b_acts, rew, term | trunc,
-                    b_val, b_lp.unsqueeze(-1) if b_lp.dim() == 1 else b_lp,
-                    b_mu, b_sigma, b_masks,
+                    bob_obs,
+                    bob_obs_new,
+                    b_acts,
+                    rew,
+                    term | trunc,
+                    b_val,
+                    b_lp.unsqueeze(-1) if b_lp.dim() == 1 else b_lp,
+                    b_mu,
+                    b_sigma,
+                    b_masks,
                 )
                 bob_obs = bob_obs_new
 
@@ -762,7 +855,9 @@ def main():
                         )
 
                     bob_ppo.abc_buffer.add_trajectory(
-                        bc_obs, bc_obs, traj_a,
+                        bc_obs,
+                        bc_obs,
+                        traj_a,
                         torch.zeros(len(traj_o), device=env.device),
                         torch.zeros(len(traj_o), device=env.device).byte(),
                         torch.zeros(len(traj_o), device=env.device),
@@ -775,13 +870,20 @@ def main():
 
             # -- Alice reward & update --
             alice_outcome_rewards = torch.where(
-                ~env.episode_manager.bob_success & (goal_valid if goal_valid is not None else torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)),
+                ~env.episode_manager.bob_success
+                & (
+                    goal_valid
+                    if goal_valid is not None
+                    else torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+                ),
                 torch.tensor(5.0, device=env.device),
                 torch.tensor(0.0, device=env.device),
             )
             if alice_ppo.storage.step > 0:
                 last_idx = alice_ppo.storage.step - 1
-                alice_ppo.storage.rewards[last_idx].copy_(alice_outcome_rewards.view(-1, 1))
+                alice_ppo.storage.rewards[last_idx].copy_(
+                    alice_outcome_rewards.view(-1, 1)
+                )
                 alice_ppo.storage.dones[last_idx].fill_(1.0)
 
             dummy_val = torch.zeros(env.num_envs, 1, device=env.device)
@@ -812,15 +914,21 @@ def main():
         print(f"  Final Bob success rate:      {avg_bob:.1%}")
         print(f"  ABC buffer size:             {bob_ppo.abc_buffer.size}")
 
-        alice_ok = avg_alice > 0.1  # Alice should set some valid goals with 20cm threshold
-        bob_ok = avg_bob > 0.05    # Bob should stumble into at least a few successes
+        alice_ok = (
+            avg_alice > 0.1
+        )  # Alice should set some valid goals with 20cm threshold
+        bob_ok = avg_bob > 0.05  # Bob should stumble into at least a few successes
         passed = alice_ok and bob_ok
         print(f"\n  STEP 3 {'PASSED' if passed else 'FAILED'}:")
-        print(f"    Alice valid goals: {avg_alice:.1%} {'> 10%' if alice_ok else '<= 10%'}")
+        print(
+            f"    Alice valid goals: {avg_alice:.1%} {'> 10%' if alice_ok else '<= 10%'}"
+        )
         print(f"    Bob SR:            {avg_bob:.1%} {'> 5%' if bob_ok else '<= 5%'}")
         if passed:
             print(f"\n  Full ASP pipeline verified. Scale up to 1024 envs and")
-            print(f"  shrink pos_threshold from 0.20 -> 0.04 as they master the physics.")
+            print(
+                f"  shrink pos_threshold from 0.20 -> 0.04 as they master the physics."
+            )
 
         simulation_app.close()
         return passed
@@ -861,7 +969,9 @@ def main():
 
         for it in range(1, args.num_iterations + 1):
             obs, _ = env.reset()
-            zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+            zero_act = torch.zeros(
+                env.num_envs, env.action_space.shape[0], device=env.device
+            )
 
             # Step through Alice phase
             for _ in range(env.episode_manager.alice_timesteps):
@@ -874,7 +984,9 @@ def main():
             # Count ✗ BUG markers from wrapper prints (we track via extras if available)
             checks_done += env.num_envs
 
-        print(f"\n  STEP 4 SUMMARY: reviewed [DistCheck] lines above ({checks_done} checks)")
+        print(
+            f"\n  STEP 4 SUMMARY: reviewed [DistCheck] lines above ({checks_done} checks)"
+        )
         print(f"  PASS: all lines marked ✓  (pos < 0.01, rot < 0.01)")
         print(f"  FAIL: any line marked ✗ BUG  (frame error in goal_distance)")
 
@@ -918,7 +1030,9 @@ def main():
 
         for it in range(1, args.num_iterations + 1):
             obs, _ = env.reset()
-            zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+            zero_act = torch.zeros(
+                env.num_envs, env.action_space.shape[0], device=env.device
+            )
 
             # Alice phase — zero actions; DummyAliceWrapper (base of DummyBobWrapper)
             # teleports target to fixed goal so goal_states is set
@@ -956,8 +1070,10 @@ def main():
         passed = final_sr > 0.9
         print(f"\n  Final SR:        {final_sr:.1%}  (target > 90%)")
         print(f"  Max reward seen: {max_rew_ever:.4f}")
-        print(f"  STEP 5 {'PASSED' if passed else 'FAILED'}: "
-              f"{'reward fires correctly' if passed else 'reward never fired — check _check_bob_success or pos_threshold'}")
+        print(
+            f"  STEP 5 {'PASSED' if passed else 'FAILED'}: "
+            f"{'reward fires correctly' if passed else 'reward never fired — check _check_bob_success or pos_threshold'}"
+        )
 
         simulation_app.close()
         return passed
@@ -980,7 +1096,9 @@ def main():
         """
         print("\n" + "=" * 70)
         print("  STEP 6: Alice Movement Detection (DummyMovementWrapper)")
-        print("  Teleports target 30 cm during Alice phase; validate_goal must detect it")
+        print(
+            "  Teleports target 30 cm during Alice phase; validate_goal must detect it"
+        )
         print("=" * 70)
 
         env_cfg = AsyncDualPlayEnvCfg()
@@ -993,7 +1111,9 @@ def main():
             bob_timesteps=200,
         )
 
-        zero_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+        zero_act = torch.zeros(
+            env.num_envs, env.action_space.shape[0], device=env.device
+        )
 
         for it in range(1, args.num_iterations + 1):
             obs, _ = env.reset()

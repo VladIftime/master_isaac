@@ -19,8 +19,8 @@ import subprocess
 import torch
 import torch.nn as nn
 
-
 # --- Minimal mock of PPO's save/load (same logic as ppo.py) ---
+
 
 class FakeActorCritic(nn.Module):
     def __init__(self):
@@ -43,6 +43,7 @@ def load_checkpoint(model, path):
 
 
 # --- Test 1: Weight integrity ---
+
 
 def test_weight_integrity():
     print("Test 1: Weight integrity after save/load")
@@ -76,6 +77,7 @@ def test_weight_integrity():
 
 # --- Test 2: Iteration number parsing ---
 
+
 def test_iteration_parsing():
     print("Test 2: Iteration number parsing from filename")
 
@@ -100,6 +102,7 @@ def test_iteration_parsing():
 
 
 # --- Test 3: SLURM auto-resume picks latest checkpoint ---
+
 
 def test_slurm_checkpoint_detection():
     print("Test 3: SLURM auto-resume finds latest checkpoint")
@@ -137,8 +140,14 @@ def test_slurm_checkpoint_detection():
 
         # ls -t sorts by modification time; all created nearly simultaneously,
         # but the last created (15) should be newest
-        if iter_num == "15" and bob_file == "model_15.pt" and alice_file == "model_15.pt":
-            print(f"  PASS: Detected iteration {iter_num}, files: {bob_file}, {alice_file}")
+        if (
+            iter_num == "15"
+            and bob_file == "model_15.pt"
+            and alice_file == "model_15.pt"
+        ):
+            print(
+                f"  PASS: Detected iteration {iter_num}, files: {bob_file}, {alice_file}"
+            )
             return True
         else:
             print(f"  FAIL: Got iter={iter_num}, bob={bob_file}, alice={alice_file}")
@@ -147,6 +156,7 @@ def test_slurm_checkpoint_detection():
 
 
 # --- Test 4: Training resumes at correct iteration ---
+
 
 def test_resume_iteration():
     print("Test 4: bob_updates starts at resume_iteration")
@@ -173,6 +183,7 @@ def test_resume_iteration():
 
 
 # --- Test 5: Entropy annealing correct on resume ---
+
 
 def test_entropy_annealing_on_resume():
     print("Test 5: Entropy annealing correct after resume")

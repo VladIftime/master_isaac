@@ -98,8 +98,8 @@ class PermInvEncoder(nn.Module):
         num_objs = obj_features.shape[1] // self.per_obj_dim
         objs = obj_features.reshape(batch * num_objs, self.per_obj_dim)
         enc = self.obj_encoder(objs).reshape(batch, num_objs, self.emb_dim)
-        pooled, _ = enc.max(dim=1)          # (batch, emb_dim)
-        pooled = self.pool_norm(pooled)     # ← paper's normalization after PI aggregation
+        pooled, _ = enc.max(dim=1)  # (batch, emb_dim)
+        pooled = self.pool_norm(pooled)  # ← paper's normalization after PI aggregation
         return torch.cat([robot_state, pooled], dim=-1)
 
 
@@ -210,10 +210,14 @@ class ActorCritic(nn.Module):
             # With PI encoder: per_obj_dim = 24 = 15 + 7 + 2
             # After goal encoding: per_obj_dim = 15 + K_per_obj (drop raw goal + dist)
             self._ge_robot_dim = model_cfg.get("robot_state_dim", 7)
-            self._ge_obj_state_dim = 14  # pos(3)+euler(3)+linvel(3)+angvel(3)+dist(1)+contact(1)
-            self._ge_goal_dim = 6        # pos(3)+euler(3) per object — Euler matches paper
-            self._ge_dist_dim = 2        # pos_dist(1)+rot_dist(1) per object
-            self._ge_raw_per_obj = self._ge_obj_state_dim + self._ge_goal_dim + self._ge_dist_dim  # 22
+            self._ge_obj_state_dim = (
+                14  # pos(3)+euler(3)+linvel(3)+angvel(3)+dist(1)+contact(1)
+            )
+            self._ge_goal_dim = 6  # pos(3)+euler(3) per object — Euler matches paper
+            self._ge_dist_dim = 2  # pos_dist(1)+rot_dist(1) per object
+            self._ge_raw_per_obj = (
+                self._ge_obj_state_dim + self._ge_goal_dim + self._ge_dist_dim
+            )  # 22
 
             # Bob obs layout: [robot(7) | obj1(14)+goal1(6)+dist1(2) | obj2(14)+goal2(6)+dist2(2)]
 
@@ -286,7 +290,10 @@ class ActorCritic(nn.Module):
                 self.actor_act1 = activation
                 if len(actor_hidden_dim) > 1:
                     self.actor_rest = _build_mlp(
-                        actor_hidden_dim[0], actor_hidden_dim[1:], actor_out_dim, activation
+                        actor_hidden_dim[0],
+                        actor_hidden_dim[1:],
+                        actor_out_dim,
+                        activation,
                     )
                 else:
                     self.actor_rest = nn.Linear(actor_hidden_dim[0], actor_out_dim)
@@ -309,9 +316,11 @@ class ActorCritic(nn.Module):
 
         # --- Print architecture ---
         if self.use_goal_encoder:
-            print(f"[GoalEncoder] K_per_obj={self._ge_K_per_obj}, "
-                  f"objects={self._ge_num_objects}, "
-                  f"variant={self.goal_encoder.variant}")
+            print(
+                f"[GoalEncoder] K_per_obj={self._ge_K_per_obj}, "
+                f"objects={self._ge_num_objects}, "
+                f"variant={self.goal_encoder.variant}"
+            )
         if self.use_lstm:
             if self.use_goal_encoder:
                 print(f"Actor trunk_layer1: {self.actor_trunk_layer1}")
@@ -347,7 +356,9 @@ class ActorCritic(nn.Module):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _encode_obs(self, observations: torch.Tensor, detach_goal_encoder: bool = False) -> tuple:
+    def _encode_obs(
+        self, observations: torch.Tensor, detach_goal_encoder: bool = False
+    ) -> tuple:
         """
         Encode observations for the actor.
 
@@ -372,24 +383,29 @@ class ActorCritic(nn.Module):
         """
         if self.use_goal_encoder and self.use_pi_encoder:
             batch = observations.shape[0]
-            robot = observations[:, :self._ge_robot_dim]
+            robot = observations[:, : self._ge_robot_dim]
 
             # Extract per-object chunks from flat obs
             # Bob obs: [robot(8) | obj1(15)+goal1(7)+dist1(2) | obj2(15)+goal2(7)+dist2(2)]
-            obj_section = observations[:, self._ge_robot_dim:]
-            obj_chunks = obj_section.view(batch, self._ge_num_objects, self._ge_raw_per_obj)
+            obj_section = observations[:, self._ge_robot_dim :]
+            obj_chunks = obj_section.view(
+                batch, self._ge_num_objects, self._ge_raw_per_obj
+            )
 
             # Split each object's chunk
-            obj_states = obj_chunks[:, :, :self._ge_obj_state_dim]     # (B, N, 15)
-            goal_poses = obj_chunks[:, :, self._ge_obj_state_dim:
-                                         self._ge_obj_state_dim + self._ge_goal_dim]  # (B, N, 7)
+            obj_states = obj_chunks[:, :, : self._ge_obj_state_dim]  # (B, N, 15)
+            goal_poses = obj_chunks[
+                :,
+                :,
+                self._ge_obj_state_dim : self._ge_obj_state_dim + self._ge_goal_dim,
+            ]  # (B, N, 7)
             # distances are dropped — encoder subsumes their role
 
             # Extract current object poses (pos+euler) from obj_states for encoder
             current_poses = obj_states[:, :, :6]  # (B, N, 6) — pos(3)+euler(3)
 
             # Flatten for goal encoder: (batch, num_objects * 6)
-            goal_flat    = goal_poses.reshape(batch, -1)
+            goal_flat = goal_poses.reshape(batch, -1)
             current_flat = current_poses.reshape(batch, -1)
 
             # Compute per-object goal embeddings
@@ -417,14 +433,18 @@ class ActorCritic(nn.Module):
             return encoded, g_pooled
 
         elif self.use_pi_encoder:
-            robot = observations[:, :self.robot_state_dim]
-            objs = observations[:, self.robot_state_dim:]
+            robot = observations[:, : self.robot_state_dim]
+            objs = observations[:, self.robot_state_dim :]
             return self.pi_encoder(robot, objs), None
 
         return observations, None
 
-    def _actor_forward(self, observations: torch.Tensor, hidden_state=None,
-                       detach_goal_encoder: bool = False):
+    def _actor_forward(
+        self,
+        observations: torch.Tensor,
+        hidden_state=None,
+        detach_goal_encoder: bool = False,
+    ):
         """
         Returns (raw_output, new_hidden).
         raw_output is (batch, actor_out_dim):
@@ -442,7 +462,9 @@ class ActorCritic(nn.Module):
             if self.use_goal_encoder and g_pooled is not None:
                 # Additive injection: h = act(LN(W1 @ enc + W_g @ g))
                 h1 = self.actor_trunk_layer1(enc)
-                h1 = self.actor_trunk_act1(self._goal_ln(h1 + self._goal_proj(g_pooled)))
+                h1 = self.actor_trunk_act1(
+                    self._goal_ln(h1 + self._goal_proj(g_pooled))
+                )
                 feat = self.actor_trunk_rest(h1)
             else:
                 feat = self.actor_trunk(enc)
@@ -585,7 +607,9 @@ class ActorCritic(nn.Module):
             detach_goal_encoder: if True, detach goal encoder gradients
                                  (used during ABC updates)
         """
-        raw, _ = self._actor_forward(observations, detach_goal_encoder=detach_goal_encoder)
+        raw, _ = self._actor_forward(
+            observations, detach_goal_encoder=detach_goal_encoder
+        )
         dist = self._make_distribution(raw)
         value = self.critic(states if self.asymmetric else observations)
 

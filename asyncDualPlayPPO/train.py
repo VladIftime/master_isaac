@@ -102,12 +102,24 @@ def main():
         "Auto-computed as ceil(bob_timesteps / alice_timesteps) * max(1, 64 // num_envs) "
         "if not specified.",
     )
-    parser.add_argument("--chkpt_alice", type=str, default=None,
-                        help="Path to Alice checkpoint (.pt) for resuming training")
-    parser.add_argument("--chkpt_bob", type=str, default=None,
-                        help="Path to Bob checkpoint (.pt) for resuming training")
-    parser.add_argument("--resume_iteration", type=int, default=0,
-                        help="Starting iteration count when resuming from checkpoint")
+    parser.add_argument(
+        "--chkpt_alice",
+        type=str,
+        default=None,
+        help="Path to Alice checkpoint (.pt) for resuming training",
+    )
+    parser.add_argument(
+        "--chkpt_bob",
+        type=str,
+        default=None,
+        help="Path to Bob checkpoint (.pt) for resuming training",
+    )
+    parser.add_argument(
+        "--resume_iteration",
+        type=int,
+        default=0,
+        help="Starting iteration count when resuming from checkpoint",
+    )
     parser.add_argument(
         "--arm_config",
         type=str,
@@ -150,7 +162,7 @@ def main():
         action="store_true",
         help="Test: use DummyMovementWrapper (teleports target to [0.15,0.5,0.05] "
         "local during Alice's phase). "
-        "Expected: measured_dist ≈ 0.300 and validate_goal says 'Valid Goal'. "
+        "Expected: measured_dist ≈ 0.362 and validate_goal says 'Valid Goal'. "
         "measured_dist ≈ 0.000 means stale initial_states.",
     )
     AppLauncher.add_app_launcher_args(parser)
@@ -333,7 +345,7 @@ def main():
             "[Test] --test_movement: using DummyMovementWrapper "
             "(teleports target to [0.15,0.5,0.05] local during Alice's phase)."
         )
-        print("[Test] Expected: [MoveCheck] measured_dist≈0.300 marked ✓.")
+        print("[Test] Expected: [MoveCheck] measured_dist≈0.362 marked ✓.")
         env = DummyMovementWrapper(
             env=base_env,
             device=base_env.device,
@@ -400,7 +412,7 @@ def main():
     bob_cfg = copy.deepcopy(ppo_cfg["params"])
     if bob_cfg.get("policy", {}).get("use_pi_encoder", False):
         bob_cfg["policy"]["pi_obj_dim"] = 24  # NOTE: ignored when use_goal_encoder=True
-                                              # (per_obj_dim = 15 + K_per_obj = 23 in that path)
+        # (per_obj_dim = 15 + K_per_obj = 23 in that path)
     bob_cfg["policy"]["use_goal_encoder"] = True
 
     bob_ppo = PPOABC(
@@ -572,11 +584,23 @@ def main():
         if bob_ppo.actor_critic.use_goal_encoder:
             with torch.no_grad():
                 sample_obs = current_bob_obs[:8]
-                s_t_batch = torch.cat([sample_obs[:, 8:15], sample_obs[:, 32:39]], dim=-1)
-                s_star_batch = torch.cat([sample_obs[:, 23:30], sample_obs[:, 47:54]], dim=-1)
+                s_t_batch = torch.cat(
+                    [sample_obs[:, 8:15], sample_obs[:, 32:39]], dim=-1
+                )
+                s_star_batch = torch.cat(
+                    [sample_obs[:, 23:30], sample_obs[:, 47:54]], dim=-1
+                )
                 g_sample = bob_ppo.actor_critic.goal_encoder(s_star_batch, s_t_batch)
-                writer.add_scalar("GoalEncoder/embedding_norm", g_sample.norm(dim=-1).mean().item(), bob_updates)
-                writer.add_scalar("GoalEncoder/embedding_std", g_sample.std(dim=-1).mean().item(), bob_updates)
+                writer.add_scalar(
+                    "GoalEncoder/embedding_norm",
+                    g_sample.norm(dim=-1).mean().item(),
+                    bob_updates,
+                )
+                writer.add_scalar(
+                    "GoalEncoder/embedding_std",
+                    g_sample.std(dim=-1).mean().item(),
+                    bob_updates,
+                )
 
         # Paper Table 2: fixed β=0.5 throughout training (no decay).
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
@@ -659,7 +683,9 @@ def main():
         _ALICE_ENT_END = 0.01
         _ALICE_ENT_ANNEAL_ITERS = 100
         frac = min(1.0, bob_updates / _ALICE_ENT_ANNEAL_ITERS)
-        alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (_ALICE_ENT_END - _ALICE_ENT_START)
+        alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (
+            _ALICE_ENT_END - _ALICE_ENT_START
+        )
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
 
         # --- 1. ALICE ROLLOUT PHASE ---
@@ -1027,7 +1053,6 @@ def main():
                 # Goal for this env
                 g = goal_states[eid].unsqueeze(0).expand(len(traj_o), -1)
 
-                # Bob-compatible obs: robot (8) + objects (30) + goal (14) + dist (4) = 56
                 bc_obs = env.construct_bob_observation(traj_o, g)
 
                 # Evaluate Bob's CURRENT policy on Alice's demo to get old_log_probs
@@ -1040,9 +1065,9 @@ def main():
                 if args.test_abc_verbose:
                     g_slice = goal_states[eid]
                     obs_dim = bc_obs.shape[-1]
-                    goal_start = (
-                        obs_dim - 18
-                    )  # layout: alice_obs | goal_states(14) | distances(4)
+                    # Bob obs layout (interleaved): Robot(7) + [Obj(14)+Goal(6)+Dist(2)] × 2 = 51D
+                    # Object 1 goal starts at index 7+14=21, Object 2 goal at 7+36=43
+                    goal_start = 7 + 14  # goal for first object
                     print(
                         f"[ABC Verbose] env={eid} | traj_len={len(traj_o)} | "
                         f"obs_shape={bc_obs.shape} | goal_shape={g_slice.shape} | "
