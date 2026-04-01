@@ -1002,11 +1002,6 @@ def main():
             for _ in range(env.episode_manager.alice_timesteps + 2):
                 obs, _, _, _, _ = env.step(zero_act)
 
-        print(f"\n  STEP 6 SUMMARY: reviewed [MoveCheck] lines above")
-        print(f"  PASS: measured_dist ≈ 0.300 m, marked ✓,  'Valid Goal' lines present")
-        print(f"  FAIL: measured_dist ≈ 0.000  → initial_states bug")
-        print(f"  FAIL: measured_dist ≈ 2.0 m  → env_origins frame bug")
-
         simulation_app.close()
 
     # ── Dispatch ────────────────────────────────────────────────

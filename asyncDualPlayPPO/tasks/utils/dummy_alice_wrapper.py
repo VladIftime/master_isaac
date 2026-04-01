@@ -269,18 +269,34 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
         )
-        # Default target: 30 cm right of the safe-reset position [-0.15, 0.5, 0.05]
+        # Default target: teleport to [0.15, 0.5, 0.05] local.
+        # Safe reset is [-0.15, 0.7, 0.023] (gravity-settled height matches wrapper.py).
         if target_local is None:
             target_local = [0.15, 0.5, 0.05]
         self._target_local = torch.tensor(
             target_local, dtype=torch.float32, device=device
         )
         safe_reset_local = torch.tensor(
-            [-0.15, 0.5, 0.05], dtype=torch.float32, device=device
+            [-0.15, 0.7, 0.023], dtype=torch.float32, device=device
         )
         self._expected_dist = torch.norm(self._target_local - safe_reset_local).item()
 
     def step(self, action):
+        # Snapshot ending Alice envs BEFORE super().step() transitions them to Bob.
+        # phase_step is the count at the END of the previous step, so the last
+        # Alice step has phase_step == alice_timesteps - 1 here.
+        move_snapshots = []
+        if self.episode_manager.initial_states is not None:
+            ending_mask = self.episode_manager.is_alice_phase() & (
+                self.episode_manager.phase_step >= self.episode_manager.alice_timesteps - 1
+            )
+            env_origins = self.env.scene.env_origins
+            for env_id in ending_mask.nonzero(as_tuple=True)[0]:
+                init_pos = self.episode_manager.initial_states[env_id, 0:3].clone()
+                cur_pos_w = self.env.scene["target_object"].data.root_pos_w[env_id].clone()
+                cur_pos_l = cur_pos_w - env_origins[env_id]
+                move_snapshots.append((env_id, init_pos, cur_pos_l))
+
         obs, rew, done, truncated, extras = super().step(action)
 
         # Teleport during Alice's phase, but skip steps 0 and 1.
@@ -307,16 +323,8 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
                 root_states[alice_envs], env_ids=alice_envs
             )
 
-        # Log movement measurement for envs whose Alice phase is about to end
-        ending_mask = self.episode_manager.is_alice_phase() & (
-            self.episode_manager.phase_step >= self.episode_manager.alice_timesteps
-        )
-        for env_id in ending_mask.nonzero(as_tuple=True)[0]:
-            if self.episode_manager.initial_states is None:
-                continue
-            init_pos = self.episode_manager.initial_states[env_id, 0:3]
-            cur_pos_w = self.env.scene["target_object"].data.root_pos_w[env_id]
-            cur_pos_l = cur_pos_w - self.env.scene.env_origins[env_id]
+        # Log movement check using pre-transition snapshots
+        for env_id, init_pos, cur_pos_l in move_snapshots:
             measured = torch.norm(cur_pos_l - init_pos).item()
             ok = abs(measured - self._expected_dist) < 0.05
             status = "✓" if ok else "✗ BUG"
