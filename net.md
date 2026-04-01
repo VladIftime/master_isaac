@@ -52,7 +52,7 @@ Sum* (256+256+512[+512 Bob]) → ReLU → MLP → LSTM → Actor head / Value he
 ```
 ee_pose         = [ee_x, ee_y, ee_z, roll, pitch, yaw]
                     EE position (metres, env-local) + ZYX Euler angles
-                    ─── Euler matches paper; quaternion double-cover avoided via conversion ───
+                    ─── Euler matches paper
 
 gripper_state   = [finger_joint_angle]
                     Raw finger joint position (radians)
@@ -186,9 +186,6 @@ The current implementation uses ZYX Euler angles (roll, pitch, yaw) at observati
 matching the paper's Appendix A.2 ("three Euler angles on three dimensions").
 Quaternions are produced by IsaacSim but converted in `observations.py` before the
 policy ever sees them.
-
-Gimbal lock at pitch = ±90° is not a concern for UR5e table manipulation tasks
-(empirical max pitch < 80°).
 
 The GoalEncoder's φ MLP therefore receives 6D inputs (pos3 + euler3) and computes
 difference embeddings `φ(goal) − φ(current)` that are meaningful under linear arithmetic
