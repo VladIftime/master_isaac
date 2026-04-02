@@ -457,6 +457,23 @@ class AsyncDualPlayEnvWrapper:
             rot_threshold=alice_rot_req,
         )
 
+        # 2b. Minimum XY-displacement filter.
+        # validate_goal passes rotation-only goals (obj spins in place, no XY movement).
+        # When that happens Bob starts the phase with the object already at its goal XY
+        # position → instant success in 1-2 steps with zero learning signal.
+        # Require at least one object to move >7cm in XY (above Bob's 5cm success threshold).
+        _MIN_XY_DISP = 0.07  # 7cm — 2cm margin above Bob's goal_tolerance
+        target_xy_disp = torch.norm(active_goal[:, 0:2] - active_initial[:, 0:2], dim=-1)
+        cube_xy_disp   = torch.norm(active_goal[:, 6:8]  - active_initial[:, 6:8],  dim=-1)
+        sufficient_xy  = (target_xy_disp > _MIN_XY_DISP) | (cube_xy_disp > _MIN_XY_DISP)
+        xy_fail = valid & ~sufficient_xy
+        val_reward = val_reward.clone()
+        val_reward[xy_fail] = 0.0
+        valid = valid & sufficient_xy
+        for i in range(len(env_ids)):
+            if xy_fail[i].item():
+                reasons[i] = "XY Disp Too Small (0.0)"
+
         self.delayed_alice_reward[env_ids] = val_reward
 
         # 3. Logging (Debug coordinate math)

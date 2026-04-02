@@ -358,7 +358,8 @@ def main():
         )
     else:
         env = AsyncDualPlayEnvWrapper(
-            env=base_env, device=base_env.device, arm_config=args.arm_config
+            env=base_env, device=base_env.device, arm_config=args.arm_config,
+            alice_timesteps=150,
         )
 
     # --- Agents ---
