@@ -1,16 +1,17 @@
 #!/bin/bash
+set -o pipefail
 #SBATCH --job-name=asp_high
 #SBATCH --time=05:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=512G
+#SBATCH --mem=1024G
 #SBATCH --output=slurm-%j-high.out
-#SBATCH --signal=B:TERM@120
+#SBATCH --signal=B:TERM@300
 
 NUM_ENVS=4096
 NSTEPS=256
-MAX_ITERATIONS=1000
+MAX_ITERATIONS=300
 SAVE_INTERVAL=5
 EXP_NAME="hpc_high_${NUM_ENVS}env"
 

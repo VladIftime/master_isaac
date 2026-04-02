@@ -287,3 +287,41 @@ class GPUDemonstrationBuffer:
             self.mu[indices],
             self.sigma[indices],
         )
+
+    def save(self, path: str):
+        """Persist buffer contents and cursor state to disk."""
+        torch.save(
+            {
+                "observations": self.observations,
+                "states": self.states,
+                "actions": self.actions,
+                "rewards": self.rewards,
+                "dones": self.dones,
+                "values": self.values,
+                "actions_log_prob": self.actions_log_prob,
+                "mu": self.mu,
+                "sigma": self.sigma,
+                "returns": self.returns,
+                "advantages": self.advantages,
+                "step": self.step,
+                "full": self.full,
+            },
+            path,
+        )
+
+    def load(self, path: str):
+        """Restore buffer contents in-place (keeps same device/capacity)."""
+        data = torch.load(path, map_location=self.device, weights_only=False)
+        self.observations.copy_(data["observations"])
+        self.states.copy_(data["states"])
+        self.actions.copy_(data["actions"])
+        self.rewards.copy_(data["rewards"])
+        self.dones.copy_(data["dones"])
+        self.values.copy_(data["values"])
+        self.actions_log_prob.copy_(data["actions_log_prob"])
+        self.mu.copy_(data["mu"])
+        self.sigma.copy_(data["sigma"])
+        self.returns.copy_(data["returns"])
+        self.advantages.copy_(data["advantages"])
+        self.step = int(data["step"])
+        self.full = bool(data["full"])

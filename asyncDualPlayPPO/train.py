@@ -504,6 +504,10 @@ def main():
     if args.chkpt_bob and os.path.isfile(args.chkpt_bob):
         bob_ppo.load(args.chkpt_bob)
         print(f"[Resume] Loaded Bob from {args.chkpt_bob}")
+        _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
+        if os.path.isfile(_abc_buf_path):
+            bob_ppo.abc_buffer.load(_abc_buf_path)
+            print(f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries) from {_abc_buf_path}")
 
     # --- Agents ---
     alice_updates = 0
@@ -631,6 +635,7 @@ def main():
         if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
             bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
+            bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
