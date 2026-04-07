@@ -159,8 +159,10 @@ class EpisodeManager:
 
     def transition_to_alice(self, env_ids: torch.Tensor):
         """Transition specified environments from Bob to Alice phase (for next goal)"""
-        # Log Bob's completion stats
-        for env_id in env_ids:
+        # Log Bob's completion stats — capped at 3 per call
+        for _log_i, env_id in enumerate(env_ids):
+            if _log_i >= 3:
+                break
             steps = self.phase_step[env_id].item()
             goal_num = self.goal_count[env_id].item()
             success = self.bob_success[env_id].item()
@@ -175,8 +177,10 @@ class EpisodeManager:
 
     def reset_episode(self, env_ids: torch.Tensor, reason: str = "Unknown"):
         """Reset specified environments to start of episode"""
-        # Log detailed reset info for each environment
-        for env_id in env_ids:
+        # Log detailed reset info — capped at 3 per call to avoid log spam at scale
+        for _log_i, env_id in enumerate(env_ids):
+            if _log_i >= 3:
+                break
             phase_name = (
                 "Alice"
                 if self.current_phase[env_id].item() == Phase.ALICE.value

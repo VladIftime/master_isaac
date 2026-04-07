@@ -223,6 +223,7 @@ class AsyncDualPlayEnvWrapper:
             term_dones = tm._term_dones        # (num_envs, num_conditions)
             term_names = tm._term_names        # list[str]
 
+            _earlyend_logged = 0  # cap verbose per-env lines at 3 per step
             for env_id in reset_ids:
                 is_term = terminated[env_id].item()
                 is_trunc = truncated[env_id].item()
@@ -240,35 +241,26 @@ class AsyncDualPlayEnvWrapper:
                 if fired:
                     reason = " | ".join(fired)
                 elif is_term:
-                    # terminated=True but no named condition fired — dump all values
-                    all_vals = [
-                        f"{term_names[i]}={term_dones[env_id, i].item()}"
-                        for i in range(len(term_names))
-                    ]
-                    print(
-                        f"[EarlyEnd DEBUG] Env {env_id.item()} {phase_name} "
-                        f"term_dones=[{', '.join(all_vals)}] "
-                        f"terminated={is_term} truncated={is_trunc}",
-                        flush=True,
-                    )
                     reason = "physics_termination"
                 else:
                     reason = "timeout"
 
-                status = ("TERMINATED" if is_term else "") + (
-                    " TRUNCATED" if is_trunc else ""
-                )
-                max_steps = (
-                    self.episode_manager.alice_timesteps
-                    if is_alice[env_id]
-                    else self.episode_manager.bob_timesteps
-                )
-                print(
-                    f"[EarlyEnd] Env {env_id.item()} [{status.strip()}] "
-                    f"{phase_name} step={phase_step}/{max_steps} goal={goal_num}/5 "
-                    f"reason={reason}",
-                    flush=True,
-                )
+                if _earlyend_logged < 3:
+                    status = ("TERMINATED" if is_term else "") + (
+                        " TRUNCATED" if is_trunc else ""
+                    )
+                    max_steps = (
+                        self.episode_manager.alice_timesteps
+                        if is_alice[env_id]
+                        else self.episode_manager.bob_timesteps
+                    )
+                    print(
+                        f"[EarlyEnd] Env {env_id.item()} [{status.strip()}] "
+                        f"{phase_name} step={phase_step}/{max_steps} goal={goal_num}/5 "
+                        f"reason={reason}",
+                        flush=True,
+                    )
+                    _earlyend_logged += 1
 
                 # Only penalize hard physics terminations (not timeouts)
                 if not is_term:
@@ -482,18 +474,17 @@ class AsyncDualPlayEnvWrapper:
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 3. Logging (Debug coordinate math)
-        start_pos = active_initial[:, 0:3]
-        final_pos = active_goal[:, 0:3]
-        dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
-        dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
-
-        for i, env_id in enumerate(env_ids):
-            print(
-                f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | XY: {dist_xy[i]:.3f}m Z: {dist_z[i]:.3f}m"
-                f" | Local target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}",
-                flush=True,
-            )
+        # 3. Logging — per-env Alice Reward lines commented out (too verbose at scale)
+        # start_pos = active_initial[:, 0:3]
+        # final_pos = active_goal[:, 0:3]
+        # dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
+        # dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
+        # for i, env_id in enumerate(env_ids):
+        #     print(
+        #         f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | XY: {dist_xy[i]:.3f}m Z: {dist_z[i]:.3f}m"
+        #         f" | Local target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}",
+        #         flush=True,
+        #     )
 
         # 4. Storage for Bob (LOCAL)
         self.episode_manager.store_goal_state(active_goal, env_ids)
