@@ -84,7 +84,7 @@
             "testRunnerSelection": {}
         },
         "renderer": {
-            "startupMessageDisplayed": false,
+            "startupMessageDisplayed": true,
             "raytracingOmm": {
                 "enabled": false
             }
