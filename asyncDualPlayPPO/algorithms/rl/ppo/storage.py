@@ -1,3 +1,6 @@
+import random
+from collections import deque
+
 import torch
 from torch.utils.data.sampler import (
     BatchSampler,
@@ -199,6 +202,11 @@ class GPUDemonstrationBuffer:
         self.step = 0
         self.full = False
 
+        # Trajectory-level store for sequential LSTM evaluation in ABC.
+        # Stores dicts {obs:(T,*obs_shape), acts:(T,*act_shape), old_lp:(T,)}.
+        # maxlen=200 keeps the 200 most recent Alice demo trajectories.
+        self._traj_store: deque = deque(maxlen=200)
+
     @property
     def size(self) -> int:
         """Number of valid entries currently in the buffer."""
@@ -211,6 +219,16 @@ class GPUDemonstrationBuffer:
         n = obs.size(0)
         if n == 0:
             return
+
+        # Record this trajectory for sequential LSTM evaluation.
+        # log_probs shape may be (T, 1) or (T,); normalise to (T,).
+        self._traj_store.append(
+            {
+                "obs": obs.clone(),
+                "acts": acts.clone(),
+                "old_lp": log_probs.clone().view(-1),
+            }
+        )
 
         if self.step + n > self.capacity:
             end = self.capacity
@@ -286,6 +304,21 @@ class GPUDemonstrationBuffer:
             self.advantages[indices],
             self.mu[indices],
             self.sigma[indices],
+        )
+
+    def sample_trajectories(self, n_trajs: int):
+        """
+        Return up to n_trajs random trajectory dicts from the trajectory store.
+
+        Each dict has keys:
+          obs    (T, *obs_shape)   — observations
+          acts   (T, *act_shape)   — bin-index actions
+          old_lp (T,)              — log_probs at collection time (for ratio)
+        """
+        if not self._traj_store:
+            return []
+        return random.sample(
+            list(self._traj_store), min(n_trajs, len(self._traj_store))
         )
 
     def save(self, path: str):

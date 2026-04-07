@@ -207,6 +207,16 @@ def main():
         os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml"
     )
     ppo_cfg = load_cfg(ppo_cfg_path)
+    task_cfg = load_cfg(task_cfg_path)
+
+    alice_timesteps = task_cfg.get("alice_timesteps", 150)
+    bob_timesteps = task_cfg.get("bob_timesteps", 200)
+    max_goals_per_episode = task_cfg.get("max_goals_per_episode", 5)
+    print(
+        f"[Config] Episode structure: alice_timesteps={alice_timesteps}, "
+        f"bob_timesteps={bob_timesteps}, max_goals={max_goals_per_episode} "
+        f"(from AsyncDualPlay.yaml)"
+    )
 
     if args.test_hparams:
         # Paper Table 2 reference values
@@ -323,8 +333,8 @@ def main():
         env = DummyBobWrapper(
             env=base_env,
             device=base_env.device,
-            alice_timesteps=100,
-            bob_timesteps=200,
+            alice_timesteps=alice_timesteps,
+            bob_timesteps=bob_timesteps,
             teleport_step=50,
         )
     elif args.dummy_goal_distance:
@@ -336,8 +346,8 @@ def main():
         env = DummyGoalDistanceWrapper(
             env=base_env,
             device=base_env.device,
-            alice_timesteps=100,
-            bob_timesteps=200,
+            alice_timesteps=alice_timesteps,
+            bob_timesteps=bob_timesteps,
             teleport_step=30,
         )
     elif args.test_movement:
@@ -349,17 +359,20 @@ def main():
         env = DummyMovementWrapper(
             env=base_env,
             device=base_env.device,
-            alice_timesteps=100,
-            bob_timesteps=200,
+            alice_timesteps=alice_timesteps,
+            bob_timesteps=bob_timesteps,
         )
     elif args.dummy_alice:
         env = DummyAliceWrapper(
-            env=base_env, device=base_env.device, alice_timesteps=100, bob_timesteps=200
+            env=base_env, device=base_env.device,
+            alice_timesteps=alice_timesteps, bob_timesteps=bob_timesteps,
         )
     else:
         env = AsyncDualPlayEnvWrapper(
             env=base_env, device=base_env.device, arm_config=args.arm_config,
-            alice_timesteps=150,
+            alice_timesteps=alice_timesteps,
+            bob_timesteps=bob_timesteps,
+            max_goals_per_episode=max_goals_per_episode,
         )
 
     # --- Agents ---
@@ -530,6 +543,7 @@ def main():
     bob_rot_err_buf = deque(maxlen=rollout_length)
 
     best_bob_success_rate = -1.0
+    last_alice_mean_rew = 0.0  # used to gate ABC warmup (Fix 3)
 
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     print(f"\n{'='*80}\nTRAINING RUN: {args.exp_name}\nLOG DIRECTORY: {run_dir}")
@@ -537,7 +551,7 @@ def main():
 
     def perform_alice_update():
         """Run a PPO update for Alice after her rollout is complete."""
-        nonlocal alice_updates
+        nonlocal alice_updates, last_alice_mean_rew
 
         # Update whenever Alice has collected any transitions this rollout.
         # (Storage was intentionally oversized to alice_storage_size to avoid overflow;
@@ -552,6 +566,7 @@ def main():
         alice_ppo.storage.clear()
 
         mean_alice_rew = np.mean(alice_rew_buf) if alice_rew_buf else 0.0
+        last_alice_mean_rew = mean_alice_rew  # Fix 3: expose for Bob's ABC gating
         writer.add_scalar("Loss/Alice/Value", loss_val, alice_updates)
         writer.add_scalar("Loss/Alice/Surrogate", loss_surr, alice_updates)
         writer.add_scalar("Reward/Alice", mean_alice_rew, alice_updates)
@@ -612,7 +627,10 @@ def main():
         # Paper Table 2: fixed β=0.5 throughout training (no decay).
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
         bob_ppo.current_learning_iteration = bob_updates
-        loss_val, loss_surr, loss_abc, _ = bob_ppo.update()
+        # Fix 3: pass Alice's mean reward so ABC can be gated until Alice is useful
+        loss_val, loss_surr, loss_abc, _ = bob_ppo.update(
+            alice_mean_rew=last_alice_mean_rew
+        )
         bob_ppo.storage.clear()
 
         mean_bob_rew = np.mean(bob_rew_buf) if bob_rew_buf else 0.0

@@ -28,6 +28,12 @@ params:
     # Alice Behavioral Cloning (ABC) params
     # Paper uses β=0.5; was 0.1 which underweights BC signal
     abc_coef: 0.5
+    # Number of complete Alice trajectories to sample per update for sequential
+    # LSTM evaluation (Fix 1).  Each trajectory runs ~alice_timesteps steps.
+    abc_n_trajs: 16
+    # Delayed activation (Fix 3): ABC is disabled (coef=0) until Alice's mean
+    # reward exceeds this threshold, ensuring demos are worth imitating.
+    abc_warmup_threshold: 1.0
     abc_batch_size: 2048
     aux_coef: 0.1
 

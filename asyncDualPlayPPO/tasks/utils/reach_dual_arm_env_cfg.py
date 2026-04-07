@@ -418,3 +418,9 @@ class ReachDualArmEnvCfg(ManagerBasedRLEnvCfg):
         self.reset_settle_steps = (
             5  # was 200; 200 settle steps × 2048 envs costs ~15 min
         )
+        # PhysX GPU buffer capacities — prevent overflow at 4096 envs with
+        # dense object contact.  Default values are too small and cause PhysX
+        # to silently drop contact pairs, leading to phantom terminations.
+        self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4

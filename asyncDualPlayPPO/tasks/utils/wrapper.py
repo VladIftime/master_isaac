@@ -216,9 +216,12 @@ class AsyncDualPlayEnvWrapper:
             reset_ids = torch.where(dones)[0]
             is_alice = self.episode_manager.is_alice_phase()
 
-            # Build a reason string per env from the termination manager's condition dict.
-            # _term_dones maps condition_name -> bool tensor (one entry per env).
-            term_dones = self.env.termination_manager._term_dones
+            # Build a reason string per env from the termination manager.
+            # IsaacLab stores _term_dones as (num_envs, num_conditions) bool tensor
+            # and condition names in _term_names list.
+            tm = self.env.termination_manager
+            term_dones = tm._term_dones        # (num_envs, num_conditions)
+            term_names = tm._term_names        # list[str]
 
             for env_id in reset_ids:
                 is_term = terminated[env_id].item()
@@ -227,24 +230,27 @@ class AsyncDualPlayEnvWrapper:
                 phase_step = self.episode_manager.phase_step[env_id].item()
                 goal_num = self.episode_manager.goal_count[env_id].item()
 
-                # Collect fired condition names from the termination manager.
-                # _term_dones maps condition_name -> bool tensor (num_envs,).
-                fired = []
-                if isinstance(term_dones, dict):
-                    for cname, cval in term_dones.items():
-                        try:
-                            v = cval[env_id]
-                            # handle 0-dim tensor, plain bool, or scalar
-                            if isinstance(v, torch.Tensor):
-                                v = v.item()
-                            if v:
-                                fired.append(cname)
-                        except Exception:
-                            pass
+                # Collect names of conditions that fired for this env.
+                fired = [
+                    term_names[i]
+                    for i in range(len(term_names))
+                    if term_dones[env_id, i].item()
+                ]
 
                 if fired:
                     reason = " | ".join(fired)
                 elif is_term:
+                    # terminated=True but no named condition fired — dump all values
+                    all_vals = [
+                        f"{term_names[i]}={term_dones[env_id, i].item()}"
+                        for i in range(len(term_names))
+                    ]
+                    print(
+                        f"[EarlyEnd DEBUG] Env {env_id.item()} {phase_name} "
+                        f"term_dones=[{', '.join(all_vals)}] "
+                        f"terminated={is_term} truncated={is_trunc}",
+                        flush=True,
+                    )
                     reason = "physics_termination"
                 else:
                     reason = "timeout"

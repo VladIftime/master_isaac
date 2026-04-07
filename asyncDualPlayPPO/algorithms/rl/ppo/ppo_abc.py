@@ -56,26 +56,40 @@ class PPOABC(PPO):
 
         self.abc_coef = cfg_train["learn"].get("abc_coef", 0.5)
         self.abc_batch_size = cfg_train["learn"].get("abc_batch_size", 2048)
+        # Fix 1: number of full trajectories for sequential LSTM evaluation
+        self.abc_n_trajs = cfg_train["learn"].get("abc_n_trajs", 16)
+        # Fix 3: hold ABC at 0 until Alice's reward crosses this threshold
+        self.abc_warmup_threshold = cfg_train["learn"].get("abc_warmup_threshold", 1.0)
         self.abc_buffer = None
 
     def set_abc_buffer(self, abc_buffer):
         """Attach the demonstration buffer populated by train.py."""
         self.abc_buffer = abc_buffer
 
-    def update(self):
+    def update(self, alice_mean_rew: float = 0.0):
         mean_value_loss = 0
         mean_surrogate_loss = 0
         mean_bc_loss = 0
 
-        # --- ABC: sample ONCE before mini-epochs ---
-        # We sample a fixed batch of Alice demos and reuse it for all epochs.
-        # The BC loss uses standard NLL (negative log-likelihood), not PPO-style
-        # ratio clipping, since we simply want to maximize the probability of
-        # Alice's demonstrated actions under Bob's policy.
-        abc_sample = None
-        if self.abc_buffer is not None and self.abc_buffer.size > 0:
-            abc_batch_size = min(self.abc_batch_size, self.abc_buffer.size)
-            abc_sample = self.abc_buffer.sample(abc_batch_size)
+        # Fix 3: delayed activation — skip ABC until Alice has learned to explore.
+        # If Alice's mean reward is below the warmup threshold her demos carry no
+        # useful signal and ABC would add noise to Bob's gradients.
+        effective_abc_coef = self.abc_coef
+        if alice_mean_rew < self.abc_warmup_threshold:
+            effective_abc_coef = 0.0
+
+        # Fix 1: sample COMPLETE TRAJECTORIES (not random flat steps) once before
+        # mini-epochs so the same demo set is used for all gradient steps.
+        # We then forward the LSTM sequentially through each trajectory so that
+        # hidden state context is correctly threaded (vs the old code which reset
+        # h,c=0 for every step, effectively treating each step as episode-start).
+        abc_trajs = None
+        if (
+            effective_abc_coef > 0.0
+            and self.abc_buffer is not None
+            and len(self.abc_buffer._traj_store) > 0
+        ):
+            abc_trajs = self.abc_buffer.sample_trajectories(self.abc_n_trajs)
 
         for epoch in range(self.num_learning_epochs):
             # FIX Bug 1: regenerate the BatchSampler each epoch.
@@ -172,32 +186,60 @@ class PPOABC(PPO):
                     value_loss = torch.tensor(0.0, device=self.device)
                     entropy_mean = torch.tensor(0.0, device=self.device)
 
-                # --- ABC (Alice Behavioral Cloning) Loss ---
-                # PPO-clipped ratio form from the OpenAI ASP paper:
-                #   ratio = π(a|s;θ) / π(a|s;θ_old)
-                #   L_abc = -min(ratio, clip(ratio, 1-ε, 1+ε))
+                # --- ABC (Alice Behavioral Cloning) Loss — Fix 1: sequential LSTM ---
+                # Evaluate log-probs by threading (h, c) sequentially through each
+                # demo trajectory so the LSTM has correct context at every step.
+                # The old code reset h,c=0 per step → wrong gradients → ABC stuck.
                 #
-                # This is bounded (unlike raw NLL which explodes to ~14 for
-                # 6-dim × 11-bin multi-categorical with a near-uniform policy).
-                # θ_old is the log_prob stored when the demo was added to the
-                # buffer (abc_sample[5] = actions_log_prob).
+                # Trajectories are padded to max length and processed in one batched
+                # loop over time steps (all trajectories run in parallel per step).
+                # PPO-clipped ratio form keeps the loss bounded.
                 #
                 # Goal encoder gradients are detached to prevent ABC from
                 # distorting the learned goal embedding.
                 bc_loss = torch.tensor(0.0, device=self.device)
-                if abc_sample is not None and abc_sample[0].shape[0] > 0:
-                    bc_obs, bc_act = abc_sample[0], abc_sample[2]
-                    bc_old_lp = abc_sample[5].squeeze(-1)  # (N,) stored log_prob
+                if abc_trajs is not None and len(abc_trajs) > 0:
+                    n_t = len(abc_trajs)
+                    max_T = max(t["obs"].shape[0] for t in abc_trajs)
+                    obs_dim = abc_trajs[0]["obs"].shape[-1]
+                    act_dim = abc_trajs[0]["acts"].shape[-1]
 
-                    abc_log_probs, _, _, _, _ = self.actor_critic.evaluate(
-                        bc_obs, None, bc_act, detach_goal_encoder=True
+                    padded_obs = torch.zeros(max_T, n_t, obs_dim, device=self.device)
+                    padded_acts = torch.zeros(max_T, n_t, act_dim, device=self.device)
+                    padded_old_lp = torch.zeros(max_T, n_t, device=self.device)
+                    traj_valid = torch.zeros(
+                        max_T, n_t, dtype=torch.bool, device=self.device
                     )
-                    # Clipped ratio ABC (bounded, stable)
-                    bc_ratio = torch.exp(abc_log_probs - bc_old_lp)
+
+                    for i, traj in enumerate(abc_trajs):
+                        T = traj["obs"].shape[0]
+                        padded_obs[:T, i] = traj["obs"]
+                        padded_acts[:T, i] = traj["acts"]
+                        padded_old_lp[:T, i] = traj["old_lp"]
+                        traj_valid[:T, i] = True
+
+                    h = torch.zeros(
+                        n_t, self.actor_critic.lstm_hidden_size, device=self.device
+                    )
+                    c = torch.zeros(
+                        n_t, self.actor_critic.lstm_hidden_size, device=self.device
+                    )
+
+                    seq_log_probs = []
+                    for t in range(max_T):
+                        raw, (h, c) = self.actor_critic._actor_forward(
+                            padded_obs[t], (h, c), detach_goal_encoder=True
+                        )
+                        dist = self.actor_critic._make_distribution(raw)
+                        lp = dist.log_prob(padded_acts[t].long())  # (n_t,)
+                        seq_log_probs.append(lp)
+
+                    seq_log_probs = torch.stack(seq_log_probs, dim=0)  # (max_T, n_t)
+                    bc_ratio = torch.exp(seq_log_probs - padded_old_lp)
                     bc_clipped = torch.clamp(
                         bc_ratio, 1.0 - self.clip_param, 1.0 + self.clip_param
                     )
-                    bc_loss = -torch.min(bc_ratio, bc_clipped).mean()
+                    bc_loss = -torch.min(bc_ratio, bc_clipped)[traj_valid].mean()
                     mean_bc_loss += bc_loss.item()
                 # --- Auxiliary Distance Prediction Loss ---
                 aux_loss_val = torch.tensor(0.0, device=self.device)
@@ -242,7 +284,7 @@ class PPOABC(PPO):
                     surrogate_loss
                     + self.value_loss_coef * value_loss
                     - self.entropy_coef * entropy_mean
-                    + self.abc_coef * bc_loss
+                    + effective_abc_coef * bc_loss
                     + aux_loss_val
                 )
 
