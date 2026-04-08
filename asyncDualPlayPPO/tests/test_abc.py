@@ -37,6 +37,81 @@ import threading
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 
+def _write_mp4(frames: list, path: str, fps: int) -> None:
+    """Write a list of RGB uint8 (H×W×3) numpy arrays to an MP4 using OpenCV."""
+    import cv2
+
+    if not frames:
+        return
+    H, W = frames[0].shape[:2]
+    writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (W, H))
+    for frame in frames:
+        writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+    writer.release()
+
+
+class _VideoRecorder:
+    """Captures rendered frames via omni.replicator and encodes to MP4.
+
+    Usage:
+        rec = _VideoRecorder(cam_pos=(x, y, z), look_at=(x, y, z))
+        rec.start()
+        for each sim step:
+            base_env.step(...)
+            rec.capture()
+        rec.stop_and_save("out.mp4")
+    """
+
+    def __init__(
+        self,
+        cam_pos: tuple,
+        look_at: tuple,
+        fps: int = 24,
+        resolution: tuple = (1280, 720),
+    ):
+        import omni.replicator.core as rep
+
+        self._rep = rep
+        self._fps = fps
+        self._frames: list = []
+        self.active = False
+
+        cam = rep.create.camera(
+            position=cam_pos,
+            look_at=look_at,
+            focal_length=18.0,
+            clipping_range=(0.01, 10000.0),
+        )
+        rp = rep.create.render_product(cam, resolution)
+        self._annot = rep.AnnotatorRegistry.get_annotator("rgb")
+        self._annot.attach([rp])
+
+    def start(self) -> None:
+        self._frames = []
+        self.active = True
+
+    def capture(self) -> None:
+        """Grab one frame from the render annotator (call after each sim step)."""
+        if not self.active:
+            return
+        data = self._annot.get_data()
+        if data is None:
+            return
+        arr = data["data"] if isinstance(data, dict) else data
+        if arr is None or arr.size == 0:
+            return
+        self._frames.append(arr[:, :, :3].copy())  # RGBA → RGB
+
+    def stop_and_save(self, output_path: str) -> None:
+        self.active = False
+        if not self._frames:
+            print(f"  [VideoRecorder] No frames captured — skipping {output_path}")
+            return
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        _write_mp4(self._frames, output_path, self._fps)
+        print(f"  [VideoRecorder] {len(self._frames)} frames → {output_path}")
+
+
 def install_noise_filter():
     """Filter C-level stderr noise (URDF warnings, Lula, carb) via a pipe thread."""
     _DROP = (
@@ -97,6 +172,11 @@ def main():
         help="ABC gradient steps per iteration (default: 1)",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--record_video",
+        action="store_true",
+        help="Record start (random Bob) and end (converged) episodes to tests/videos/",
+    )
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -253,6 +333,42 @@ def main():
             self.rot_threshold = 0.5
     base_env.episode_manager = _DummyEpisodeManager(2, device)
 
+    # ── Optional video recorder ──────────────────────────────────
+    recorder = None
+    video_dir = os.path.join(script_dir, "videos")
+    if args.record_video:
+        e0 = base_env.scene.env_origins[0].cpu().tolist()
+        e1 = base_env.scene.env_origins[1].cpu().tolist()
+        mid_x = (e0[0] + e1[0]) / 2
+        mid_y = (e0[1] + e1[1]) / 2
+        cam_pos = (mid_x, mid_y - 2.0, 1.5)
+        look_at = (mid_x, mid_y + 0.5, 0.5)
+        recorder = _VideoRecorder(cam_pos=cam_pos, look_at=look_at)
+        print(f"\n  Video recording enabled → {video_dir}/")
+        print(f"    Camera: ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f})")
+        print(f"    Look-at: ({look_at[0]:.2f}, {look_at[1]:.2f}, {look_at[2]:.2f})")
+
+    # ── Capture pre-training episode (random Bob) ────────────────
+    if recorder is not None:
+        print("\n  Capturing START episode (untrained / random Bob)...")
+        recorder.start()
+        obs_dict_rec, _ = base_env.reset()
+        bob_obs_rec = obs_dict_rec["bob_policy"]
+        bob_gripper_rec = torch.ones(1, 1, device=device)
+        for t in range(N):
+            alice_act_rec = alice_env_actions[t].unsqueeze(0)
+            with torch.no_grad():
+                bob_bins_rec, _, _, _, _ = ac.act(bob_obs_rec[1:2], None)
+                bob_act_rec, bob_gripper_rec = bins_to_env_action(bob_bins_rec, bob_gripper_rec)
+            combined_rec = torch.cat([alice_act_rec, bob_act_rec], dim=0)
+            obs_dict_rec, _, term_rec, trunc_rec, _ = base_env.step(combined_rec)
+            recorder.capture()
+            bob_obs_rec = obs_dict_rec["bob_policy"]
+            if (term_rec | trunc_rec).any():
+                obs_dict_rec, _ = base_env.reset()
+                bob_obs_rec = obs_dict_rec["bob_policy"]
+        recorder.stop_and_save(os.path.join(video_dir, "start_random.mp4"))
+
     # ══════════════════════════════════════════════════════════════
     # TRAINING LOOP
     # ══════════════════════════════════════════════════════════════
@@ -364,6 +480,10 @@ def main():
     bob_obs_all = obs_dict["bob_policy"]
     bob_gripper = torch.ones(1, 1, device=device)
 
+    if recorder is not None:
+        print("\n  Capturing END episode (converged Bob)...")
+        recorder.start()
+
     action_diffs = []
     for t in range(N):
         # Env 0: Alice
@@ -381,12 +501,17 @@ def main():
 
         combined = torch.cat([alice_act, bob_act], dim=0)
         obs_dict, _, terminated, truncated, _ = base_env.step(combined)
+        if recorder is not None:
+            recorder.capture()
         bob_obs_all = obs_dict["bob_policy"]
 
         dones = terminated | truncated
         if dones.any():
             obs_dict, _ = base_env.reset()
             bob_obs_all = obs_dict["bob_policy"]
+
+    if recorder is not None:
+        recorder.stop_and_save(os.path.join(video_dir, "end_converged.mp4"))
 
     # ── Results ──
     mean_diff = np.mean(action_diffs)
