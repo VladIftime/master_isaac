@@ -185,3 +185,8 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
         )
         self.sim.dt = 0.01
         self.sim.render_interval = self.decimation
+        # PhysX GPU buffer capacities — required at large num_envs (≥1024).
+        # Without these, PhysX silently drops contacts and the robot falls through the table.
+        self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
