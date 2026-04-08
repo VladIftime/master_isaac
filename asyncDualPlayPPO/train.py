@@ -424,9 +424,6 @@ def main():
     import copy
 
     bob_cfg = copy.deepcopy(ppo_cfg["params"])
-    if bob_cfg.get("policy", {}).get("use_pi_encoder", False):
-        bob_cfg["policy"]["pi_obj_dim"] = 24  # NOTE: ignored when use_goal_encoder=True
-        # (per_obj_dim = 15 + K_per_obj = 23 in that path)
     bob_cfg["policy"]["use_goal_encoder"] = True
 
     bob_ppo = PPOABC(
@@ -452,6 +449,13 @@ def main():
         bob_ppo.model_cfg,
         asymmetric=False,
     ).to(env.device)
+
+    # Scale goal_proj weights down at init: a large W_g saturates ReLUs before training starts.
+    if hasattr(bob_ppo.actor_critic, '_goal_proj') and bob_ppo.actor_critic._goal_proj is not None:
+        with torch.no_grad():
+            bob_ppo.actor_critic._goal_proj.weight.mul_(0.01 / 0.5)
+        print(f"  [Init] goal_proj scale reduced: ||W_g|| = {bob_ppo.actor_critic._goal_proj.weight.norm():.4f}")
+
     bob_ppo.optimizer = torch.optim.Adam(
         bob_ppo.actor_critic.parameters(), lr=bob_ppo.learning_rate
     )
@@ -474,15 +478,14 @@ def main():
     # actions_shape must match policy action dim (4D bin indices for MC, 7D for Gaussian)
     _abc_act_shape = (num_cat_dims,) if use_mc else env.action_space.shape
     bob_ppo.abc_buffer = GPUDemonstrationBuffer(
-        capacity=100000,
+        capacity=50000,
         obs_shape=env.bob_observation_space.shape,
         states_shape=env.bob_observation_space.shape,
         actions_shape=_abc_act_shape,
         device=env.device,
     )
 
-    # --- LSTM hidden state management (Fix 4) ---
-    # act_with_hidden() is always used; for non-LSTM models it returns None hidden.
+    # LSTM hidden states (None for non-LSTM models — act_with_hidden handles both).
     _use_lstm = alice_ppo.actor_critic.use_lstm
     if _use_lstm:
         _lsz = alice_ppo.actor_critic.lstm_hidden_size
@@ -498,14 +501,11 @@ def main():
         alice_hidden = None
         bob_hidden = None
 
-    # --- Sticky gripper state ---
-    # Starts open (+1). Only outer bins (0-2 = close, 8-10 = open) change state;
-    # center bins (3-7) hold previous state to prevent random-policy spassing.
+    # Sticky gripper state: starts open (+1), outer bins change it, center bins hold.
     alice_gripper_state = torch.ones(env.num_envs, 1, device=env.device)
     bob_gripper_state = torch.ones(env.num_envs, 1, device=env.device)
 
-    # --- Historical policy pool (Fix 6) ---
-    # Paper: 20% of rollout envs use a past Alice/Bob policy for stability.
+    # Historical policy pool: 20% of rollout envs use a past policy for stability.
     alice_pool = HistoricalPolicyPool(max_size=5)
     bob_pool = HistoricalPolicyPool(max_size=5)
     HIST_SAVE_INTERVAL = 50  # save snapshot every N bob_updates
@@ -543,7 +543,7 @@ def main():
     bob_rot_err_buf = deque(maxlen=rollout_length)
 
     best_bob_success_rate = -1.0
-    last_alice_mean_rew = 0.0  # used to gate ABC warmup (Fix 3)
+    last_alice_mean_rew = 0.0  # gating value for Bob's ABC loss warmup
 
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     print(f"\n{'='*80}\nTRAINING RUN: {args.exp_name}\nLOG DIRECTORY: {run_dir}")
@@ -553,9 +553,7 @@ def main():
         """Run a PPO update for Alice after her rollout is complete."""
         nonlocal alice_updates, last_alice_mean_rew
 
-        # Update whenever Alice has collected any transitions this rollout.
-        # (Storage was intentionally oversized to alice_storage_size to avoid overflow;
-        #  do NOT compare against storage.num_transitions_per_env here.)
+        # Storage is oversized to alice_storage_size; do NOT gate on num_transitions_per_env.
         if alice_ppo.storage.step == 0:
             return
 
@@ -566,7 +564,7 @@ def main():
         alice_ppo.storage.clear()
 
         mean_alice_rew = np.mean(alice_rew_buf) if alice_rew_buf else 0.0
-        last_alice_mean_rew = mean_alice_rew  # Fix 3: expose for Bob's ABC gating
+        last_alice_mean_rew = mean_alice_rew
         writer.add_scalar("Loss/Alice/Value", loss_val, alice_updates)
         writer.add_scalar("Loss/Alice/Surrogate", loss_surr, alice_updates)
         writer.add_scalar("Reward/Alice", mean_alice_rew, alice_updates)
@@ -624,10 +622,8 @@ def main():
                     bob_updates,
                 )
 
-        # Paper Table 2: fixed β=0.5 throughout training (no decay).
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
         bob_ppo.current_learning_iteration = bob_updates
-        # Fix 3: pass Alice's mean reward so ABC can be gated until Alice is useful
         loss_val, loss_surr, loss_abc, _ = bob_ppo.update(
             alice_mean_rew=last_alice_mean_rew
         )
@@ -678,7 +674,6 @@ def main():
         obs = env.reset()[0]
     print("Environment initialized. Starting training loop...")
 
-    # Target max timesteps from env configuration
     target_alice_timesteps = env.episode_manager.alice_timesteps
 
     while bob_updates < args.max_iterations:
@@ -691,7 +686,6 @@ def main():
             bob_hidden[0].zero_()
             bob_hidden[1].zero_()
 
-        # Periodically snapshot current policies to historical pool (Fix 6)
         if bob_updates > 0 and bob_updates % HIST_SAVE_INTERVAL == 0:
             alice_pool.add(alice_ppo.actor_critic)
             bob_pool.add(bob_ppo.actor_critic)
@@ -701,10 +695,7 @@ def main():
                 flush=True,
             )
 
-        # --- Alice entropy annealing ---
-        # Paper uses fixed ent_coef=0.01 but relies on 1856 parallel envs for diversity.
-        # With fewer envs we anneal from 1.0 → 0.01 over the first 100 iterations so
-        # Alice explores uniformly early on then converges to paper's value.
+        # Alice entropy annealing: 1.0 → 0.01 over first 100 iterations.
         _ALICE_ENT_START = 1.0
         _ALICE_ENT_END = 0.01
         _ALICE_ENT_ANNEAL_ITERS = 100
@@ -722,7 +713,6 @@ def main():
             0,
         ]  # [attempted, succeeded] — moved here so Alice-loop Bob completions are counted
 
-        # Use wrapper's reset/step returned obs or re-compute and slice
         obs_dict = env.env.observation_manager.compute()
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_alice_obs = obs[:, : env.alice_obs_dim]
@@ -731,7 +721,6 @@ def main():
         alice_traj_obs = []  # list of (num_envs, obs_dim)
         alice_traj_act = []  # list of (num_envs, act_dim)
 
-        # Sample a historical Alice policy for ~20% of envs (Fix 6)
         hist_alice = (
             alice_pool.sample_policy(alice_ppo.actor_critic, env.device)
             if alice_pool.size > 0
@@ -850,8 +839,7 @@ def main():
 
             obs_full, rewards, dones, truncated, extras = env.step(a_env_full)
 
-            # Count Bob completions that fire during Alice-phase stepping
-            # (Bob-phase envs are still stepped when the wrapper advances all envs)
+            # Count Bob completions from envs still in Bob phase during this step.
             ep_info_a = extras.get("episode_manager", {})
             if ep_info_a:
                 finished_bob_a = torch.where(ep_info_a["bob_done_this_step"])[0]
@@ -905,7 +893,6 @@ def main():
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_bob_obs = obs[:, env.alice_obs_dim :]
 
-        # Sample a historical Bob policy for ~20% of envs (Fix 6)
         hist_bob = (
             bob_pool.sample_policy(bob_ppo.actor_critic, env.device)
             if bob_pool.size > 0
@@ -918,7 +905,6 @@ def main():
             if len(bob_indices) == 0:
                 break
 
-            # Split active envs: hist_ids use saved policy, curr_ids use current (Fix 6)
             hist_bids, curr_bids = bob_pool.sample_env_subset(
                 bob_indices, frac=HIST_FRAC
             )
@@ -1060,15 +1046,14 @@ def main():
         goal_valid = env.episode_manager.goal_valid
         bob_success = env.episode_manager.bob_success
 
-        # Paper: ABC demos added ONLY when Bob failed (ξ=False).
-        # When Bob succeeds, Alice's trajectory is already learnable — no demo needed.
-        # Providing demos on success wastes buffer capacity and dilutes the BC signal.
+        # Add demos only when Bob failed: success means the goal is already reachable.
+        # Skip trajectories shorter than 50% of alice_timesteps — Alice crashed early.
+        min_demo_steps = max(10, target_alice_timesteps // 2)
         if goal_valid.any():
             valid_ids = torch.where(goal_valid & ~bob_success)[0]
+            skipped_short = 0
             for env_id in valid_ids:
                 eid = env_id.item()
-                # Construct demo trajectory
-                # traj_obs is a list of (num_envs, obs_dim) tensors
                 traj_o = torch.stack(
                     [alice_traj_obs[step][eid] for step in range(len(alice_traj_obs))]
                 )
@@ -1076,13 +1061,15 @@ def main():
                     [alice_traj_act[step][eid] for step in range(len(alice_traj_act))]
                 )
 
-                # Goal for this env
+                if len(traj_o) < min_demo_steps:
+                    skipped_short += 1
+                    continue
+
                 g = goal_states[eid].unsqueeze(0).expand(len(traj_o), -1)
 
                 bc_obs = env.construct_bob_observation(traj_o, g)
 
-                # Evaluate Bob's CURRENT policy on Alice's demo to get old_log_probs
-                # for PPO-style ratio clipping in ppo_abc.py (prevents stale-demo update explosion)
+                # Evaluate current Bob policy on Alice's demo for PPO ratio clipping.
                 with torch.no_grad():
                     old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(
                         bc_obs, None, traj_a
@@ -1103,7 +1090,6 @@ def main():
                         flush=True,
                     )
 
-                # Add to ABC buffer with old_log_probs for ratio clipping
                 bob_ppo.abc_buffer.add_trajectory(
                     bc_obs,
                     bc_obs,
@@ -1119,39 +1105,29 @@ def main():
                 )
 
         # --- 4. ALICE REWARD ASSIGNMENT & UPDATE ---
-        # Alice Reward: she gets ALICE_BOB_FAIL_REWARD if Bob failed AND the goal was valid
         alice_outcome_rewards = torch.where(
             ~bob_success & goal_valid,
             torch.tensor(ALICE_BOB_FAIL_REWARD, device=env.device, dtype=torch.float32),
             torch.tensor(0.0, device=env.device, dtype=torch.float32),
         )
 
-        # Inject outcome reward into Alice's last storage step
         if alice_ppo.storage.step > 0:
             last_idx = alice_ppo.storage.step - 1
             alice_ppo.storage.rewards[last_idx].copy_(alice_outcome_rewards.view(-1, 1))
-            # FIX: Prevent GAE bleeding by forcing the terminal state to be 'done'
-            alice_ppo.storage.dones[last_idx].fill_(1.0)
+            alice_ppo.storage.dones[last_idx].fill_(1.0)  # prevent GAE bleeding
 
             alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
-        # Per-goal success rate accumulated from extras during Bob rollout.
-        # Cannot read from episode_manager here: wrapper resets goals_attempted/goals_succeeded
-        # during Bob→Alice transition (reset_episode call in wrapper.py), so they are 0 by now.
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         bob_success_buf.append(current_sr)
 
-        # Paper Algorithm 1: always update both agents every training step.
-        # The adversarial curriculum requires Alice to keep evolving alongside Bob.
         perform_alice_update()
         perform_bob_update(current_bob_obs)
 
-        # Logging
-        if bob_updates % 1 == 0:
-            print(
-                f"Iteration {bob_updates}: SR={current_sr:.2f} | ABC Buffer: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'}",
-                flush=True,
-            )
+        print(
+            f"Iteration {bob_updates}: SR={current_sr:.2f} | ABC Buffer: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'}",
+            flush=True,
+        )
 
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))

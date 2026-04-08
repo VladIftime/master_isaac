@@ -1,27 +1,30 @@
 """
-Visual ABC (Alice Behavioral Cloning) Loss Test
-================================================
+Test 6: ABC + GoalEncoder Integration (Visual, Isaac Sim)
+==========================================================
 
-Spawns TWO Isaac Lab environments side-by-side (arm, table, objects):
+Re-enables the FULL production architecture:
+  - PI encoder (PermInvEncoder)
+  - Goal encoder (GoalEncoder, difference variant)
+  - LSTM trunk
 
-  Env 0 (LEFT)  — "Alice": Replays a hard-coded trajectory every episode.
-                   The arm sweeps LEFT→RIGHT (increasing X) while staying at
-                   constant height, gripper open. This is the REFERENCE.
+Verifies that the GoalEncoder doesn't destabilize ABC convergence
+when goal_states are properly populated (not zeros).
 
-  Env 1 (RIGHT) — "Bob":   Runs Bob's policy, which starts RANDOM and is
-                   trained via pure ABC loss on Alice's trajectory between
-                   episodes. Over 30–50 iterations, Bob's movement should
-                   converge to match Alice's exactly.
+Critical: goal_proj.weight is initialized with small scale (0.01)
+to prevent the "Initialization Jump" — large random goal embeddings
+would saturate ReLUs in the policy trunk.
 
-At the end of training, both environments replay one final episode
-simultaneously.  If ABC works correctly, both arms should move IDENTICALLY.
+The aux loss (GoalEncoder auxiliary head) is included as a secondary
+objective to keep the encoder grounded in physical reality.
 
 Usage:
-    # From the project root (NOT headless — the whole point is visual!)
-    python asyncDualPlayPPO/tests/test_abc.py --num_iterations 50
+    cd asyncDualPlayPPO
+    python tests/test_abc_goal_encoder.py --num_iterations 200
 
-    # Quick smoke test (fewer iterations, won't fully converge)
-    python asyncDualPlayPPO/tests/test_abc.py --num_iterations 10
+Expected:
+    - NLL should steadily decrease
+    - Match% should reach >50% within 200 iterations
+    - Both arms should converge to the same trajectory visually
 """
 
 import isaaclab.app
@@ -38,7 +41,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 
 def install_noise_filter():
-    """Filter C-level stderr noise (URDF warnings, Lula, carb) via a pipe thread."""
+    """Filter C-level stderr noise."""
     _DROP = (
         b"[Lula] Joint",
         b"Warning: link",
@@ -76,24 +79,18 @@ def install_noise_filter():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visual ABC Test — two envs side by side"
+        description="Test 6: ABC + GoalEncoder Integration"
     )
     parser.add_argument(
-        "--num_iterations",
-        type=int,
-        default=50,
-        help="Number of train-then-replay iterations (default: 50)",
+        "--num_iterations", type=int, default=200,
+        help="Training iterations (default: 200)",
     )
     parser.add_argument(
-        "--episode_steps",
-        type=int,
-        default=80,
-        help="Steps per replay episode (default: 80)",
+        "--episode_steps", type=int, default=80,
+        help="Steps per episode (default: 80)",
     )
     parser.add_argument(
-        "--abc_epochs",
-        type=int,
-        default=1,
+        "--abc_epochs", type=int, default=1,
         help="ABC gradient steps per iteration (default: 1)",
     )
     parser.add_argument("--seed", type=int, default=42)
@@ -111,7 +108,6 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.algorithms.rl.ppo.module import ActorCritic
-    from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
 
     torch.manual_seed(args.seed)
 
@@ -124,17 +120,19 @@ def main():
     pol_cfg = ppo_cfg["params"]["policy"]
     num_cat_dims = pol_cfg.get("num_cat_dims", 6)
     num_bins = pol_cfg.get("num_bins", 11)
+    aux_coef = ppo_cfg["params"]["learn"].get("aux_coef", 0.1)
 
-    # ── Create Environment (2 envs, side by side) ───────────────
+    # ── Create Environment (2 envs) ────────────────────────────
     print("\n" + "=" * 70)
-    print("  VISUAL ABC TEST")
+    print("  TEST 6: ABC + GoalEncoder Integration")
+    print("  Full architecture: PI encoder + Goal encoder + LSTM")
     print("  Env 0 (left):  Alice — hard-coded trajectory (reference)")
-    print("  Env 1 (right): Bob   — policy trained via ABC (should converge)")
+    print("  Env 1 (right): Bob   — full pipeline trained via ABC")
     print("=" * 70)
 
     env_cfg = AsyncDualPlayEnvCfg()
     env_cfg.scene.num_envs = 2
-    env_cfg.scene.env_spacing = 3.0  # wider spacing so both arms visible
+    env_cfg.scene.env_spacing = 3.0
 
     print("\nCreating environment (2 envs)...")
     base_env = ManagerBasedRLEnv(cfg=env_cfg)
@@ -142,8 +140,6 @@ def main():
     print(f"  Device: {device}")
 
     # ── Observation Dimensions ──────────────────────────────────
-    # Alice obs: ee_pose(6) + gripper(1) + obj1_state(14) + obj2_state(14) = 35
-    # Bob obs:   ee_pose(6) + gripper(1) + [obj_state(14)+goal(6)+dist(2)]×2 = 51
     alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["alice_policy"]
     bob_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["bob_policy"]
     alice_obs_dim = alice_dim_info[0] if isinstance(alice_dim_info, (tuple, list)) else alice_dim_info
@@ -157,18 +153,14 @@ def main():
         env_action_dim = base_env.action_space.shape[0]
     print(f"  Env action dim: {env_action_dim}")
 
-    # ── Build Bob's ActorCritic (SIMPLE MLP for test isolation) ──
-    # Disable PI encoder, goal encoder, and LSTM to eliminate
-    # architectural noise. Pure MLP → clean gradient flow → verifies
-    # that the ABC loss math itself is correct.
+    # ── Build Bob's ActorCritic (FULL PRODUCTION ARCHITECTURE) ──
+    # This is the key difference from test_abc.py:
+    #   use_goal_encoder=True, use_pi_encoder=True, use_lstm=True
     model_cfg = copy.deepcopy(pol_cfg)
-    model_cfg["use_goal_encoder"] = False
-    model_cfg["use_pi_encoder"] = False
-    model_cfg["use_lstm"] = False
-    model_cfg["use_multicategorical"] = True  # keep MC (paper's action space)
-    # Smaller MLP for faster convergence on 80-step trajectory
-    model_cfg["pi_hid_sizes"] = [256, 128]
-    model_cfg["vf_hid_sizes"] = [256, 128]
+    model_cfg["use_goal_encoder"] = True
+    model_cfg["use_pi_encoder"] = True
+    model_cfg["use_lstm"] = True
+    model_cfg["use_multicategorical"] = True
 
     ac = ActorCritic(
         obs_shape=(bob_obs_dim,),
@@ -179,16 +171,25 @@ def main():
         asymmetric=False,
     ).to(device)
 
-    optimizer = torch.optim.Adam(ac.parameters(), lr=1e-3)
+    # ────────────────────────────────────────────────────────────
+    # CRITICAL: "Initialization Jump" prevention
+    # ────────────────────────────────────────────────────────────
+    # The goal embedding is additively injected into the actor trunk:
+    #   h = act(LN(W1 @ enc + W_g @ g_pooled))
+    #
+    # At init, if W_g is large, the random goal embedding dominates the
+    # hidden state, saturates ReLUs, and kills gradients.
+    #
+    # Fix: initialize goal_proj with very small scale (0.01) so the goal
+    # starts as a tiny hint rather than a dominant signal.
+    # ────────────────────────────────────────────────────────────
+    if ac._goal_proj is not None:
+        with torch.no_grad():
+            ac._goal_proj.weight.mul_(0.01 / 0.5)  # original gain=0.5, target=0.01
+        print(f"\n  [Init] goal_proj scale reduced: "
+              f"||W_g|| = {ac._goal_proj.weight.norm():.4f}")
 
-    # ── ABC Demo Buffer ─────────────────────────────────────────
-    abc_buffer = GPUDemonstrationBuffer(
-        capacity=100_000,
-        obs_shape=(bob_obs_dim,),
-        states_shape=(bob_obs_dim,),
-        actions_shape=(num_cat_dims,),
-        device=device,
-    )
+    optimizer = torch.optim.Adam(ac.parameters(), lr=1e-3)
 
     # ── bin → env action conversion ─────────────────────────────
     def bins_to_env_action(bin_indices, gripper_state):
@@ -208,16 +209,7 @@ def main():
         env_act = torch.cat([xyz, rot_xy, zeros1, new_gs], dim=-1)
         return env_act, new_gs
 
-    # ── Alice's hard-coded trajectory ───────────────────────────
-    # Design: GENTLE sweep so the arm stays in bounds (no terminations)
-    #
-    # Bin layout (11 bins): 0=full-negative, 5=neutral, 10=full-positive
-    #   X (dim 0): linearly ramp 4→7 over episode_steps  (gentle L→R)
-    #   Y (dim 1): hold at 5                               (no lateral)
-    #   Z (dim 2): hold at 5                               (same height)
-    #   Rx (dim 3): hold at 5                              (no rotation)
-    #   Ry (dim 4): hold at 5                              (no rotation)
-    #   Gripper (dim 5): hold at 5                         (neutral/hold)
+    # ── Alice's hard-coded trajectory (gentle sweep) ────────────
     N = args.episode_steps
     alice_bins = torch.zeros(N, num_cat_dims, device=device)
     alice_bins[:, 0] = torch.linspace(4, 7, N, device=device).round()  # X: gentle L→R
@@ -225,136 +217,198 @@ def main():
     alice_bins[:, 2] = 5.0  # Z: same height
     alice_bins[:, 3] = 5.0  # Rx: neutral
     alice_bins[:, 4] = 5.0  # Ry: neutral
-    alice_bins[:, 5] = 5.0  # Gripper: neutral (hold)
+    alice_bins[:, 5] = 5.0  # Gripper: neutral
 
     print(f"\n  Alice trajectory ({N} steps):")
-    print(f"    X bins (first 10): {alice_bins[:20, 0].long().tolist()}")
+    print(f"    X bins (first 20): {alice_bins[:20, 0].long().tolist()}")
     print(f"    Z bin (constant):  {alice_bins[0, 2].long().item()}")
-    print(f"    Gripper bin:       {alice_bins[0, 5].long().item()} (open)")
+    print(f"    Gripper bin:       {alice_bins[0, 5].long().item()} (neutral)")
 
-    # Pre-convert Alice's full trajectory to env actions (for env 0)
-    alice_gripper_traj = torch.ones(1, 1, device=device)  # starts open
+    # Pre-convert Alice's trajectory to env actions
+    alice_gripper_traj = torch.ones(1, 1, device=device)
     alice_env_actions = []
     for t in range(N):
         act_t, alice_gripper_traj = bins_to_env_action(
             alice_bins[t:t+1], alice_gripper_traj
         )
-        alice_env_actions.append(act_t.squeeze(0))  # (7,)
-    alice_env_actions = torch.stack(alice_env_actions)  # (N, 7)
+        alice_env_actions.append(act_t.squeeze(0))
+    alice_env_actions = torch.stack(alice_env_actions)
 
-    # ── Attach dummy episode_manager for goal_states obs term ───
-    # The observation manager's goal_states term reads env.episode_manager.
-    # We create a minimal stub that returns zeros (no goal during this test).
-    class _DummyEpisodeManager:
+    # ── Fake goal_states (Alice's "final pose" as the goal) ─────
+    # Instead of zeros, populate with a meaningful goal:
+    # the object positions at the END of Alice's trajectory.
+    # This gives the GoalEncoder a non-trivial signal to encode.
+    #
+    # For this test we use a fixed known goal pose:
+    #   obj1 goal: [0.15, 0.5, 0.05, 0, 0, 0]  (target object moved right)
+    #   obj2 goal: [-0.10, 0.5, 0.05, 0, 0, 0]  (cube stays near center)
+    class _GoalEpisodeManager:
         def __init__(self, num_envs, device):
+            # Goal layout: [obj1_pos(3), obj1_euler(3), obj2_pos(3), obj2_euler(3)] = 12D
             self.goal_states = torch.zeros(num_envs, 12, device=device)
-            self.goal_valid = torch.zeros(num_envs, dtype=torch.bool, device=device)
+            # Object 1 goal (target_object moved to the right)
+            self.goal_states[:, 0] = 0.15   # x
+            self.goal_states[:, 1] = 0.5    # y
+            self.goal_states[:, 2] = 0.05   # z
+            # Object 2 goal (cube near center)
+            self.goal_states[:, 6] = -0.10  # x
+            self.goal_states[:, 7] = 0.5    # y
+            self.goal_states[:, 8] = 0.05   # z
+            # Euler angles all zero (no rotation goal)
+            self.goal_valid = torch.ones(num_envs, dtype=torch.bool, device=device)
             self.pos_threshold = 0.04
             self.rot_threshold = 0.5
-    base_env.episode_manager = _DummyEpisodeManager(2, device)
+
+    base_env.episode_manager = _GoalEpisodeManager(2, device)
 
     # ══════════════════════════════════════════════════════════════
     # TRAINING LOOP
     # ══════════════════════════════════════════════════════════════
     print(f"\n  Training for {args.num_iterations} iterations "
-          f"({args.abc_epochs} ABC gradient step(s) each, raw NLL loss)...")
-    print(f"\n  {'Iter':>6} | {'NLL':>10} | {'X mode':>8} | {'Z mode':>8} | {'Gr mode':>8} | {'Match%':>8}")
+          f"(raw NLL + aux_coef={aux_coef})...")
+    print(f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'X md':>6} | "
+          f"{'Z md':>6} | {'Gr md':>6} | {'Match%':>8}")
     print("  " + "-" * 65)
 
     nll_history = []
+    aux_history = []
 
     for it in range(1, args.num_iterations + 1):
-        # ── Phase A: Replay episode (Alice on env 0, Bob on env 1) ──
+        # ── Phase A: Replay episode ──
         obs_dict, info = base_env.reset()
-        alice_obs_all = obs_dict["alice_policy"]  # (2, alice_obs_dim)
-        bob_obs_all = obs_dict["bob_policy"]      # (2, bob_obs_dim)
+        bob_obs_all = obs_dict["bob_policy"]
 
         bob_gripper = torch.ones(1, 1, device=device)
-
-        # Collect Alice's (bob-format obs, action) pairs for ABC
         demo_obs_list = []
         demo_act_list = []
-        episode_corrupted = False  # flag if env 0 terminates
+        episode_corrupted = False
 
         for t in range(N):
-            # ── Construct per-env actions ──
             # Env 0: Alice's hard-coded action
-            alice_act = alice_env_actions[t].unsqueeze(0)  # (1, 7)
+            alice_act = alice_env_actions[t].unsqueeze(0)
 
-            # Env 1: Bob's current policy
-            bob_obs_t = bob_obs_all[1:2]  # (1, bob_obs_dim)
+            # Env 1: Bob's policy (with LSTM hidden state management)
+            bob_obs_t = bob_obs_all[1:2]
             with torch.no_grad():
                 bob_bins, _, _, _, _ = ac.act(bob_obs_t, None)
                 bob_act, bob_gripper = bins_to_env_action(bob_bins, bob_gripper)
 
-            # Combine: (2, 7) actions
             combined_action = torch.cat([alice_act, bob_act], dim=0)
 
-            # ── Collect demo data (env 0's bob-obs + Alice's bin actions) ──
-            # Only collect if env 0 hasn't been reset mid-episode
+            # Collect demo (env 0's obs + Alice's actions)
             if not episode_corrupted:
-                demo_obs_list.append(bob_obs_all[0:1].clone())  # env 0's bob obs
-                demo_act_list.append(alice_bins[t:t+1].clone())   # Alice's bin indices
+                demo_obs_list.append(bob_obs_all[0:1].clone())
+                demo_act_list.append(alice_bins[t:t+1].clone())
 
-            # ── Step both environments ──
-            obs_dict, rewards_t, terminated, truncated, extras = base_env.step(
-                combined_action
-            )
-            alice_obs_all = obs_dict["alice_policy"]
+            # Step
+            obs_dict, _, terminated, truncated, _ = base_env.step(combined_action)
             bob_obs_all = obs_dict["bob_policy"]
 
-            # Handle physics terminations — skip demo collection after reset
             dones = terminated | truncated
             if dones.any():
                 if dones[0].item():
                     episode_corrupted = True
-                    print(f"  [iter {it}] Env 0 terminated at step {t} — skipping demo")
                 obs_dict, _ = base_env.reset()
-                alice_obs_all = obs_dict["alice_policy"]
                 bob_obs_all = obs_dict["bob_policy"]
 
-        # ── Phase B: Train Bob via ABC (raw NLL) ──
+        # ── Phase B: Train via ABC + Aux loss ──
         if episode_corrupted or len(demo_obs_list) < 10:
-            # Skip training if env 0 was reset (corrupted obs sequence)
             nll_history.append(nll_history[-1] if nll_history else 20.0)
+            aux_history.append(aux_history[-1] if aux_history else 1.0)
+            if episode_corrupted:
+                print(f"  [iter {it}] Env 0 terminated — skipping training")
             continue
 
-        demo_obs = torch.cat(demo_obs_list, dim=0)    # (<=N, bob_obs_dim)
-        demo_acts = torch.cat(demo_act_list, dim=0)    # (<=N, num_cat_dims)
+        demo_obs = torch.cat(demo_obs_list, dim=0)   # (T, obs_dim)
+        demo_acts = torch.cat(demo_act_list, dim=0)   # (T, num_cat_dims)
         T = demo_obs.shape[0]
 
-        # Raw NLL loss: direct -log_prob(alice_actions | obs)
-        # Much more stable than clipped ratio for pure BC
         for _ in range(args.abc_epochs):
-            log_probs, _, _, _, _ = ac.evaluate(demo_obs, None, demo_acts)
-            bc_loss = -log_probs.mean()  # raw NLL
+            # ── Sequential LSTM ABC loss ──
+            # Process trajectory step-by-step, carrying (h,c) forward.
+            # This is critical: batch evaluate() resets h,c=0 for every obs,
+            # so the LSTM can't distinguish step 0 from step 79.
+            # Sequential processing gives the LSTM temporal context.
+            h = torch.zeros(1, ac.lstm_hidden_size, device=device)
+            c = torch.zeros(1, ac.lstm_hidden_size, device=device)
+
+            seq_lps = []
+            for step in range(T):
+                obs_t = demo_obs[step:step+1]  # (1, obs_dim)
+                # _actor_forward returns (raw, (h_detach, c_detach))
+                # We use h_detach, c_detach for the NEXT step (TBPTT-1),
+                # but gradients still flow through the current step's LSTM.
+                raw, (h, c) = ac._actor_forward(obs_t, (h, c))
+                dist = ac._make_distribution(raw)
+                lp = dist.log_prob(demo_acts[step:step+1].long())
+                seq_lps.append(lp)
+
+            bc_loss = -torch.stack(seq_lps).mean()  # raw NLL
+
+            # ── Aux loss: GoalEncoder distance prediction ──
+            aux_loss_val = torch.tensor(0.0, device=device)
+            if ac.goal_encoder is not None and ac.goal_encoder.use_aux_loss:
+                robot_dim = ac._ge_robot_dim
+                obj_section = demo_obs[:, robot_dim:]
+                obj_chunks = obj_section.view(
+                    T, ac._ge_num_objects, ac._ge_raw_per_obj
+                )
+                goal_poses = obj_chunks[
+                    :, :,
+                    ac._ge_obj_state_dim : ac._ge_obj_state_dim + ac._ge_goal_dim
+                ]
+                current_poses = obj_chunks[:, :, :6]
+
+                goal_flat = goal_poses.reshape(T, -1)
+                current_flat = current_poses.reshape(T, -1)
+
+                aux_total, _, _ = ac.goal_encoder.aux_loss(
+                    goal_flat, current_flat
+                )
+                aux_loss_val = aux_total
+
+            total_loss = bc_loss + aux_coef * aux_loss_val
 
             optimizer.zero_grad()
-            bc_loss.backward()
+            total_loss.backward()
             nn.utils.clip_grad_norm_(ac.parameters(), 1.0)
             optimizer.step()
 
-        # ── Evaluate convergence ──
+        # ── Evaluate (also sequential for fair NLL measurement) ──
         with torch.no_grad():
-            eval_lp, _, _, _, _ = ac.evaluate(demo_obs, None, demo_acts)
-            raw_nll = -eval_lp.mean().item()
-            greedy = ac.act_inference(demo_obs)
+            h_eval = torch.zeros(1, ac.lstm_hidden_size, device=device)
+            c_eval = torch.zeros(1, ac.lstm_hidden_size, device=device)
+            eval_lps = []
+            eval_greedy = []
+            for step in range(T):
+                obs_t = demo_obs[step:step+1]
+                raw, (h_eval, c_eval) = ac._actor_forward(obs_t, (h_eval, c_eval))
+                dist = ac._make_distribution(raw)
+                eval_lps.append(dist.log_prob(demo_acts[step:step+1].long()))
+                # Greedy: argmax per dim
+                logits = raw.view(1, ac.num_cat_dims, ac.num_bins)
+                eval_greedy.append(logits.argmax(dim=-1).squeeze(0))  # (num_cat_dims,)
+
+            raw_nll = -torch.stack(eval_lps).mean().item()
+            greedy = torch.stack(eval_greedy)  # (T, num_cat_dims)
             x_mode = greedy[:, 0].mode().values.item()
             z_mode = greedy[:, 2].mode().values.item()
             gr_mode = greedy[:, 5].mode().values.item()
-            all_match = (
-                (greedy == demo_acts).all(dim=-1).float().mean().item()
-            )
+            all_match = (greedy == demo_acts).all(dim=-1).float().mean().item()
+
         nll_history.append(raw_nll)
+        aux_val = aux_loss_val.item() if isinstance(aux_loss_val, torch.Tensor) else aux_loss_val
+        aux_history.append(aux_val)
 
         if it % 5 == 0 or it == 1:
             print(
-                f"  {it:>6} | {raw_nll:>+10.3f} | {x_mode:>8.0f} | "
-                f"{z_mode:>8.0f} | {gr_mode:>8.0f} | {all_match:>7.1%}"
+                f"  {it:>6} | {raw_nll:>+8.3f} | {aux_val:>8.4f} | "
+                f"{x_mode:>6.0f} | {z_mode:>6.0f} | {gr_mode:>6.0f} | "
+                f"{all_match:>7.1%}"
             )
 
     # ══════════════════════════════════════════════════════════════
-    # FINAL VERIFICATION EPISODE
+    # FINAL VERIFICATION
     # ══════════════════════════════════════════════════════════════
     print(f"\n{'=' * 70}")
     print("  FINAL EPISODE — Both envs should now move IDENTICALLY")
@@ -366,16 +420,13 @@ def main():
 
     action_diffs = []
     for t in range(N):
-        # Env 0: Alice
         alice_act = alice_env_actions[t].unsqueeze(0)
 
-        # Env 1: Bob (greedy / deterministic)
         bob_obs_t = bob_obs_all[1:2]
         with torch.no_grad():
             bob_bins = ac.act_inference(bob_obs_t)
             bob_act, bob_gripper = bins_to_env_action(bob_bins, bob_gripper)
 
-        # Measure difference between Alice and Bob env actions
         diff = (alice_act - bob_act).abs().mean().item()
         action_diffs.append(diff)
 
@@ -396,28 +447,42 @@ def main():
     print(f"\n  NLL:         {nll_history[0]:+.3f} → {final_nll:+.3f}  "
           f"({'✓ decreased' if nll_decreased else '✗ DID NOT decrease'})")
     print(f"  Action diff: {mean_diff:.4f}  "
-          f"({'✓ small' if mean_diff < 0.3 else '✗ large — ABC did not converge'})")
+          f"({'✓ small' if mean_diff < 0.3 else '✗ large'})")
 
     with torch.no_grad():
-        final_greedy = ac.act_inference(demo_obs)
+        h_f = torch.zeros(1, ac.lstm_hidden_size, device=device)
+        c_f = torch.zeros(1, ac.lstm_hidden_size, device=device)
+        final_greedy_list = []
+        for step in range(T):
+            obs_t = demo_obs[step:step+1]
+            raw, (h_f, c_f) = ac._actor_forward(obs_t, (h_f, c_f))
+            logits = raw.view(1, ac.num_cat_dims, ac.num_bins)
+            final_greedy_list.append(logits.argmax(dim=-1).squeeze(0))
+        final_greedy = torch.stack(final_greedy_list)
         z_mode = final_greedy[:, 2].mode().values.item()
         gr_mode = final_greedy[:, 5].mode().values.item()
+        final_match = (final_greedy == demo_acts).all(dim=-1).float().mean().item()
 
     print(f"  Z mode:      {z_mode:.0f} (target: 5)  "
           f"{'✓' if abs(z_mode - 5) < 1 else '✗'}")
     print(f"  Gripper mode:{gr_mode:.0f} (target: 5)  "
           f"{'✓' if abs(gr_mode - 5) < 1 else '✗'}")
+    print(f"  Final Match: {final_match:.1%}  "
+          f"({'✓ >50%' if final_match > 0.5 else '✗ <50% — GoalEncoder may be destabilizing'})")
 
-    passed = nll_decreased and mean_diff < 0.5
+    if aux_history:
+        print(f"  Aux loss:    {aux_history[0]:.4f} → {aux_history[-1]:.4f}")
+
+    passed = nll_decreased and final_match > 0.5
     print(f"\n  {'PASSED ✓' if passed else 'FAILED ✗'}: "
-          f"{'Bob successfully replicated Alice trajectory' if passed else 'ABC did not converge — check gradient flow'}")
+          f"{'GoalEncoder + LSTM + PI encoder works with ABC!' if passed else 'GoalEncoder destabilized training'}")
 
-    if passed:
-        print("  → Watch the viewport: both arms should be moving the same way!")
+    if not passed and final_match < 0.3:
+        print("  → TIP: Try reducing aux_coef or further shrinking goal_proj init scale")
 
-    # Keep the simulation running for visual inspection
-    print("\n  Replaying final episode continuously for visual inspection...")
-    print("  (Close the window or Ctrl+C to exit)\n")
+    # ── Continuous replay for visual inspection ──
+    print("\n  Replaying continuously for visual inspection...")
+    print("  (Close window or Ctrl+C to exit)\n")
 
     try:
         while simulation_app.is_running():

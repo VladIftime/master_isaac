@@ -45,9 +45,6 @@ def robot_out_of_bounds(
 
     out_of_bounds = z_violation | x_violation | y_violation
 
-    if out_of_bounds.any():
-        print(f"[Termination] Robot out of bounds: {out_of_bounds.sum().item()} envs")
-
     return out_of_bounds
 
 
@@ -90,8 +87,5 @@ def objects_out_of_bounds(
             )
         except KeyError:
             pass
-
-    if out_of_bounds.any():
-        print(f"[Termination] Objects out of bounds: {out_of_bounds.sum().item()} envs")
 
     return out_of_bounds

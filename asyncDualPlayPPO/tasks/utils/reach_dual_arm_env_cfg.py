@@ -383,9 +383,9 @@ class TerminationsCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["wrist_3_link"]),
             "table_z": 0.0,
-            "margin": 0.0,
-            "x_range": (-0.8, 0.8),
-            "y_range": (-0.8, 0.8),
+            "margin": -0.05,
+            "x_range": (-1.0, 1.0),
+            "y_range": (-1.0, 1.0),
         },
     )
 
