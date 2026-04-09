@@ -13,7 +13,8 @@ NUM_ENVS=512
 NSTEPS=256
 MAX_ITERATIONS=300
 SAVE_INTERVAL=5
-EXP_NAME="hpc_high_${NUM_ENVS}env"
+NUM_OBJECTS=1
+EXP_NAME="hpc_high_${NUM_ENVS}env_${NUM_OBJECTS}obj"
 
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
@@ -86,6 +87,7 @@ apptainer exec --nv \
     --save_interval  "$SAVE_INTERVAL" \
     --exp_name       "$EXP_NAME" \
     --arm_config     rotated \
+    --num_objects    "$NUM_OBJECTS" \
     --headless \
     $RESUME_ARGS \
     2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
