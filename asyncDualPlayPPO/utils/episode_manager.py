@@ -255,3 +255,83 @@ class EpisodeManager:
         bob_succeeded = self.bob_success
 
         return invalid_goal | (max_goals_reached & ~bob_succeeded) | bob_succeeded
+
+    # ------------------------------------------------------------------
+    # Checkpoint helpers
+    # ------------------------------------------------------------------
+
+    def state_dict(self) -> dict:
+        """Return all per-env state tensors as a CPU dict for checkpointing.
+
+        Included tensors control phase routing and goal tracking:
+          - current_phase  : 0=Alice, 1=Bob per env
+          - phase_step     : steps elapsed in the current phase
+          - goal_count     : goals attempted this episode
+          - goal_valid     : whether the current goal is valid
+          - bob_success    : whether Bob succeeded on the current goal
+          - bob_ever_failed
+          - completion_given
+          - goals_attempted / goals_succeeded (episode-level success-rate)
+          - initial_states : safe-reset object poses recorded at episode start
+          - goal_states    : Alice's target poses stored after Alice phase
+        """
+        sd = {
+            "current_phase":    self.current_phase.cpu(),
+            "phase_step":       self.phase_step.cpu(),
+            "goal_count":       self.goal_count.cpu(),
+            "goal_valid":       self.goal_valid.cpu(),
+            "bob_success":      self.bob_success.cpu(),
+            "bob_ever_failed":  self.bob_ever_failed.cpu(),
+            "completion_given": self.completion_given.cpu(),
+            "max_contact_force": self.max_contact_force.cpu(),
+            "goals_attempted":  self.goals_attempted.cpu(),
+            "goals_succeeded":  self.goals_succeeded.cpu(),
+        }
+        if self.initial_states is not None:
+            sd["initial_states"] = self.initial_states.cpu()
+        if self.goal_states is not None:
+            sd["goal_states"] = self.goal_states.cpu()
+        if self.prev_obj_success is not None:
+            sd["prev_obj_success"] = self.prev_obj_success.cpu()
+        return sd
+
+    def load_state_dict(self, sd: dict) -> None:
+        """Restore per-env state from a dict produced by :meth:`state_dict`.
+
+        Safe to call after :meth:`__init__`; restores all tensors in-place
+        to the correct device so training resumes exactly where it left off.
+        """
+        def _load(key: str, dest: torch.Tensor) -> torch.Tensor:
+            """Copy a saved CPU tensor back to *dest* (device-agnostic)."""
+            if key in sd:
+                dest.copy_(sd[key].to(self.device))
+            return dest
+
+        _load("current_phase",    self.current_phase)
+        _load("phase_step",       self.phase_step)
+        _load("goal_count",       self.goal_count)
+        _load("goal_valid",       self.goal_valid)
+        _load("bob_success",      self.bob_success)
+        _load("bob_ever_failed",  self.bob_ever_failed)
+        _load("completion_given", self.completion_given)
+        _load("max_contact_force", self.max_contact_force)
+        _load("goals_attempted",  self.goals_attempted)
+        _load("goals_succeeded",  self.goals_succeeded)
+
+        if "initial_states" in sd:
+            self.initial_states = sd["initial_states"].to(self.device)
+        if "goal_states" in sd:
+            self.goal_states = sd["goal_states"].to(self.device)
+        if "prev_obj_success" in sd:
+            if self.prev_obj_success is None:
+                self.prev_obj_success = sd["prev_obj_success"].to(self.device)
+            else:
+                self.prev_obj_success.copy_(sd["prev_obj_success"].to(self.device))
+
+        n_bob = int((self.current_phase == 1).sum().item())
+        n_alice = int((self.current_phase == 0).sum().item())
+        print(
+            f"[EpisodeManager] State restored: {n_alice} Alice-phase envs, "
+            f"{n_bob} Bob-phase envs",
+            flush=True,
+        )

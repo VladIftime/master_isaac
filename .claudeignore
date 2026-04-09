@@ -1,0 +1,10 @@
+*.sif
+*.log
+*.pt
+*.out
+runs/
+*.pyc
+__pycache__/
+*.lock
+*.urdf
+.venv

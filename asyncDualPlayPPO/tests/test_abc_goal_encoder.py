@@ -349,8 +349,8 @@ def main():
         e1 = base_env.scene.env_origins[1].cpu().tolist()
         mid_x = (e0[0] + e1[0]) / 2
         mid_y = (e0[1] + e1[1]) / 2
-        cam_pos = (mid_x, mid_y - 2.0, 1.5)
-        look_at = (mid_x, mid_y + 0.5, 0.5)
+        cam_pos = (mid_x, mid_y + 2.0, 1.5)
+        look_at = (mid_x, mid_y - 0.5, 0.5)
         recorder = _VideoRecorder(cam_pos=cam_pos, look_at=look_at)
         print(f"\n  Video recording enabled → {video_dir}/")
         print(f"    Camera: ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f})")

@@ -125,8 +125,7 @@ env_cfg = AsyncDualPlayEnvCfg()
 env_cfg.scene.num_envs = args.num_envs
 
 if args.arm_config == "rotated":
-    env_cfg.scene.robot.init_state.joint_pos["left_shoulder_pan_joint"] = -1.57
-    env_cfg.scene.robot.init_state.joint_pos["right_shoulder_pan_joint"] = 1.57
+    env_cfg.scene.robot.init_state.joint_pos["shoulder_pan_joint"] = -1.57
 
 print("[Optuna] Creating environment (once)...")
 base_env = ManagerBasedRLEnv(cfg=env_cfg)

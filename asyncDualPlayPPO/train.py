@@ -317,10 +317,14 @@ def main():
 
     if args.arm_config == "rotated":
         print(
-            "[Config] Rotated arm configuration: left shoulder −90°, right shoulder +90°"
+            "[Config] Rotated arm configuration: shoulder −90°"
         )
-        env_cfg.scene.robot.init_state.joint_pos["left_shoulder_pan_joint"] = -1.57
-        env_cfg.scene.robot.init_state.joint_pos["right_shoulder_pan_joint"] = 1.57
+        env_cfg.scene.robot.init_state.joint_pos["shoulder_pan_joint"] = 1.57
+        env_cfg.scene.robot.init_state.joint_pos["elbow_joint"] = 2.356
+        env_cfg.scene.robot.init_state.joint_pos["wrist_1_joint"] = -0.785
+        env_cfg.scene.robot.init_state.joint_pos["wrist_2_joint"] = 1.57
+        env_cfg.scene.robot.init_state.joint_pos["wrist_3_joint"] = 0
+        
 
     print("Creating environment (suppressing URDF/Lula warnings)...")
     with SuppressAllOutput():
@@ -522,6 +526,14 @@ def main():
         if os.path.isfile(_abc_buf_path):
             bob_ppo.abc_buffer.load(_abc_buf_path)
             print(f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries) from {_abc_buf_path}")
+            
+        _ep_mgr_path = args.chkpt_bob.replace("model_", "episode_manager_")
+        if os.path.isfile(_ep_mgr_path):
+            ep_sd = torch.load(_ep_mgr_path, map_location=env.device)
+            env.episode_manager.load_state_dict(ep_sd)
+            print(f"[Resume] Loaded EpisodeManager state from {_ep_mgr_path}")
+        else:
+            print(f"[Resume] WARNING: EpisodeManager checkpoint not found at {_ep_mgr_path}. Envs will start fresh.")
 
     # --- Agents ---
     alice_updates = 0
@@ -651,11 +663,13 @@ def main():
             bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
+            torch.save(env.episode_manager.state_dict(), os.path.join(bob_ppo.log_dir, f"episode_manager_{bob_updates+1}.pt"))
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
             bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_best.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
+            torch.save(env.episode_manager.state_dict(), os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"))
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -1131,6 +1145,7 @@ def main():
 
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))
+    torch.save(env.episode_manager.state_dict(), os.path.join(bob_ppo.log_dir, "episode_manager_final.pt"))
     print("  ✓ Saved final models")
     writer.close()
 
