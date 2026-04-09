@@ -58,12 +58,11 @@ class EpisodeManager:
         # Goal storage
         self.initial_states: Optional[torch.Tensor] = None  # Stored at Alice start
         self.goal_states: Optional[torch.Tensor] = None  # Stored after Alice phase
-        self.goal_valid = torch.zeros(num_envs, dtype=torch.bool, device=device)
-
+        self.goal_count = torch.zeros(self.num_envs, dtype=torch.long, device=device)
+        self.goal_valid = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
+        self.alice_base_reward = torch.zeros(self.num_envs, dtype=torch.float32, device=device)
+        self.bob_success = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
         # Success tracking
-        self.bob_success = torch.zeros(
-            num_envs, dtype=torch.bool, device=device
-        )  # Current goal success
         self.bob_ever_failed = torch.zeros(
             num_envs, dtype=torch.bool, device=device
         )  # Has Bob failed at any point in episode?
@@ -200,6 +199,7 @@ class EpisodeManager:
         self.phase_step[env_ids] = 0
         self.goal_count[env_ids] = 0
         self.goal_valid[env_ids] = False
+        self.alice_base_reward[env_ids] = 0.0
         self.bob_success[env_ids] = False
         self.bob_ever_failed[env_ids] = False  # Reset episode-level failure tracking
         self.bob_success_this_step[env_ids] = False
@@ -232,6 +232,10 @@ class EpisodeManager:
     def mark_goal_valid(self, env_ids: torch.Tensor, valid: torch.Tensor):
         """Mark goals as valid/invalid"""
         self.goal_valid[env_ids] = valid
+
+    def mark_alice_base_reward(self, env_ids: torch.Tensor, rewards: torch.Tensor):
+        """Store Alice's base reward (e.g. +1.0 or penalty)"""
+        self.alice_base_reward[env_ids] = rewards.clone()
 
     def mark_bob_success(self, env_ids: torch.Tensor, success: torch.Tensor):
         """Mark Bob's success/failure"""
@@ -280,6 +284,7 @@ class EpisodeManager:
             "phase_step":       self.phase_step.cpu(),
             "goal_count":       self.goal_count.cpu(),
             "goal_valid":       self.goal_valid.cpu(),
+            "alice_base_reward": self.alice_base_reward.cpu(),
             "bob_success":      self.bob_success.cpu(),
             "bob_ever_failed":  self.bob_ever_failed.cpu(),
             "completion_given": self.completion_given.cpu(),
@@ -318,8 +323,12 @@ class EpisodeManager:
         _load("goals_attempted",  self.goals_attempted)
         _load("goals_succeeded",  self.goals_succeeded)
 
+        if "alice_base_reward" in sd:
+            self.alice_base_reward.copy_(sd["alice_base_reward"].to(self.device))
+            
         if "initial_states" in sd:
-            self.initial_states = sd["initial_states"].to(self.device)
+            self.initial_states = sd["initial_states"].to(self.device).clone()
+            
         if "goal_states" in sd:
             self.goal_states = sd["goal_states"].to(self.device)
         if "prev_obj_success" in sd:

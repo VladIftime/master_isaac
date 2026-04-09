@@ -137,7 +137,7 @@ def validate_goal(
         ),
     )
 
-    valid = is_valid
+    valid = is_valid | out_of_zone
 
     reasons = ["Unknown"] * batch_size
     for i in range(batch_size):

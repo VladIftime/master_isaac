@@ -1146,11 +1146,10 @@ def main():
                 )
 
         # --- 4. ALICE REWARD ASSIGNMENT & UPDATE ---
-        alice_outcome_rewards = torch.where(
-            ~bob_success & goal_valid,
-            torch.tensor(ALICE_BOB_FAIL_REWARD, device=env.device, dtype=torch.float32),
-            torch.tensor(0.0, device=env.device, dtype=torch.float32),
-        )
+        alice_outcome_rewards = torch.zeros(env.num_envs, device=env.device)
+        alice_outcome_rewards[goal_valid] = env.episode_manager.alice_base_reward[goal_valid]
+        bob_failed = (~bob_success) & goal_valid
+        alice_outcome_rewards[bob_failed] += ALICE_BOB_FAIL_REWARD
 
         if alice_ppo.storage.step > 0:
             last_idx = alice_ppo.storage.step - 1

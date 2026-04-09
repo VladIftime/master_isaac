@@ -96,7 +96,7 @@ def reset_objects_to_fixed_safe_pose(
     if num_resets == 0:
         return
 
-    print(f"[Reset] Resetting objects to safe pose for {num_resets} envs")
+    # print(f"[Reset] Resetting objects to safe pose for {num_resets} envs")
 
     env_origins = env.scene.env_origins[env_ids]
     identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=env.device)
@@ -132,7 +132,7 @@ def reset_robot_joints(
     if len(env_ids) == 0:
         return
 
-    print(f"[Reset] Resetting robot arm joints for {len(env_ids)} envs")
+    # print(f"[Reset] Resetting robot arm joints for {len(env_ids)} envs")
 
     try:
         robot = env.scene["robot"]

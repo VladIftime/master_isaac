@@ -507,6 +507,7 @@ class AsyncDualPlayEnvWrapper:
         # 4. Storage for Bob (LOCAL)
         self.episode_manager.store_goal_state(active_goal, env_ids)
         self.episode_manager.mark_goal_valid(env_ids, valid)
+        self.episode_manager.mark_alice_base_reward(env_ids, val_reward)
 
         # 5. Transition logic
         successful_goal = valid
