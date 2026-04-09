@@ -349,8 +349,8 @@ def main():
         e1 = base_env.scene.env_origins[1].cpu().tolist()
         mid_x = (e0[0] + e1[0]) / 2
         mid_y = (e0[1] + e1[1]) / 2
-        cam_pos = (mid_x, mid_y + 2.0, 1.5)
-        look_at = (mid_x, mid_y - 0.5, 0.5)
+        cam_pos = (mid_x, mid_y + 5.5, 1.5)
+        look_at = (mid_x, mid_y + 0.5, 0.5)
         recorder = _VideoRecorder(cam_pos=cam_pos, look_at=look_at)
         print(f"\n  Video recording enabled → {video_dir}/")
         print(f"    Camera: ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f})")
@@ -375,7 +375,7 @@ def main():
             if (term_rec | trunc_rec).any():
                 obs_dict_rec, _ = base_env.reset()
                 bob_obs_rec = obs_dict_rec["bob_policy"]
-        recorder.stop_and_save(os.path.join(video_dir, "start_random.mp4"))
+        recorder.stop_and_save(os.path.join(video_dir, "start_random_abc_encoder.mp4"))
 
     # ══════════════════════════════════════════════════════════════
     # TRAINING LOOP
@@ -562,7 +562,7 @@ def main():
             bob_obs_all = obs_dict["bob_policy"]
 
     if recorder is not None:
-        recorder.stop_and_save(os.path.join(video_dir, "end_converged.mp4"))
+        recorder.stop_and_save(os.path.join(video_dir, "end_converged_abc_encoder.mp4"))
 
     # ── Results ──
     mean_diff = np.mean(action_diffs)

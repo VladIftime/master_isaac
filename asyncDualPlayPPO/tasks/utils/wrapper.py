@@ -152,9 +152,31 @@ class AsyncDualPlayEnvWrapper:
         # Buffer to hold Alice's rewards until her cycle ends (either Alice failed or Bob finished)
         self.delayed_alice_reward = torch.zeros(env.num_envs, device=self.device)
 
+        # Per-iteration aggregate stats (reset each iteration via reset_iter_stats())
+        self._iter_stats = self._make_iter_stats()
+
         print(f"[AsyncDualPlayEnvWrapper] Initialized (task-space mode)")
         print(f"  Alice obs: {self.alice_obs_dim}, Bob obs: {self.bob_obs_dim}")
         print(f"  Robot state: {self.robot_state_dim} (EE pose 6 euler + gripper 1)")
+
+    # ------------------------------------------------------------------
+    # Per-iteration stats helpers
+    # ------------------------------------------------------------------
+
+    def _make_iter_stats(self) -> dict:
+        return {
+            "invalid_goals": 0,
+            "valid_goals": 0,
+            "bob_successes": 0,
+            "bob_failures": 0,
+            "terminations": {},        # reason -> count
+        }
+
+    def reset_iter_stats(self):
+        self._iter_stats = self._make_iter_stats()
+
+    def get_iter_stats(self) -> dict:
+        return dict(self._iter_stats)
 
     @property
     def num_envs(self):
@@ -223,13 +245,8 @@ class AsyncDualPlayEnvWrapper:
             term_dones = tm._term_dones        # (num_envs, num_conditions)
             term_names = tm._term_names        # list[str]
 
-            _earlyend_logged = 0  # cap verbose per-env lines at 3 per step
             for env_id in reset_ids:
                 is_term = terminated[env_id].item()
-                is_trunc = truncated[env_id].item()
-                phase_name = "Alice" if is_alice[env_id] else "Bob"
-                phase_step = self.episode_manager.phase_step[env_id].item()
-                goal_num = self.episode_manager.goal_count[env_id].item()
 
                 # Collect names of conditions that fired for this env.
                 fired = [
@@ -245,22 +262,10 @@ class AsyncDualPlayEnvWrapper:
                 else:
                     reason = "timeout"
 
-                if _earlyend_logged < 3:
-                    status = ("TERMINATED" if is_term else "") + (
-                        " TRUNCATED" if is_trunc else ""
-                    )
-                    max_steps = (
-                        self.episode_manager.alice_timesteps
-                        if is_alice[env_id]
-                        else self.episode_manager.bob_timesteps
-                    )
-                    print(
-                        f"[EarlyEnd] Env {env_id.item()} [{status.strip()}] "
-                        f"{phase_name} step={phase_step}/{max_steps} goal={goal_num}/5 "
-                        f"reason={reason}",
-                        flush=True,
-                    )
-                    _earlyend_logged += 1
+                # Accumulate termination counts for the iteration summary
+                self._iter_stats["terminations"][reason] = (
+                    self._iter_stats["terminations"].get(reason, 0) + 1
+                )
 
                 # Only penalize hard physics terminations (not timeouts)
                 if not is_term:
@@ -374,10 +379,6 @@ class AsyncDualPlayEnvWrapper:
             ]
             self.delayed_alice_reward[completion_ids] = 0.0
 
-            for idx, env_id in enumerate(completion_ids):
-                print(
-                    f"[BobComplete] Env {env_id.item()}: Goal {completion_goals[idx].item()}/5 @ step {completion_steps[idx].item()}/600"
-                )
 
             can_continue = (
                 self.episode_manager.goal_count[completion_ids]
@@ -474,17 +475,27 @@ class AsyncDualPlayEnvWrapper:
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 3. Logging — per-env Alice Reward lines commented out (too verbose at scale)
-        # start_pos = active_initial[:, 0:3]
-        # final_pos = active_goal[:, 0:3]
-        # dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
-        # dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
-        # for i, env_id in enumerate(env_ids):
-        #     print(
-        #         f"[Alice Reward] Env {env_id.item()}: {reasons[i]} | XY: {dist_xy[i]:.3f}m Z: {dist_z[i]:.3f}m"
-        #         f" | Local target: {start_pos[i].tolist()} -> {final_pos[i].tolist()}",
-        #         flush=True,
-        #     )
+        # 3. Per-env Alice reward events + aggregate goal counts
+        start_pos = active_initial[:, 0:3]
+        final_pos = active_goal[:, 0:3]
+        dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
+        dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
+        for i, env_id in enumerate(env_ids):
+            rew = val_reward[i].item()
+            if valid[i].item():
+                self._iter_stats["valid_goals"] += 1
+                print(
+                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} valid goal | "
+                    f"XY={dist_xy[i]:.3f}m Z={dist_z[i]:.3f}m",
+                    flush=True,
+                )
+            else:
+                self._iter_stats["invalid_goals"] += 1
+                print(
+                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} invalid goal "
+                    f"({reasons[i]}) | XY={dist_xy[i]:.3f}m",
+                    flush=True,
+                )
 
         # 4. Storage for Bob (LOCAL)
         self.episode_manager.store_goal_state(active_goal, env_ids)
@@ -556,15 +567,11 @@ class AsyncDualPlayEnvWrapper:
         )
         self.delayed_alice_reward[env_ids] += outcome_rewards
 
-        # --- 3. Logging ---
-        if len(env_ids) > 0:
-            first_env = env_ids[0].item()
-            steps_used = self.episode_manager.phase_step[first_env].item()
-            status = "SUCCESS" if success[0].item() else "FAILURE"
-            print(
-                f"[Phase] Env {first_env}: Bob {status} | Steps: {steps_used}/{self.episode_manager.bob_timesteps} | Alice Outcome Reward: {outcome_rewards[0].item():.1f}",
-                flush=True,
-            )
+        # --- 3. Aggregate success/failure counts ---
+        n_success = int(success.sum().item())
+        n_failure = len(env_ids) - n_success
+        self._iter_stats["bob_successes"] += n_success
+        self._iter_stats["bob_failures"] += n_failure
 
         # --- 4. Transition Logic ---
         # Paper: Alice continues for all max_goals_per_episode goals even if Bob fails some.
@@ -577,7 +584,6 @@ class AsyncDualPlayEnvWrapper:
         # Bob -> Alice (next goal)
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
-            print(f"[Phase] Bob->Alice Transition for {len(continue_ids)} envs")
             self.episode_manager.transition_to_alice(continue_ids)
             reset_objects_to_fixed_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
@@ -620,9 +626,6 @@ class AsyncDualPlayEnvWrapper:
         # Environments that can continue get new Alice phase
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
-            print(
-                f"[Phase] Bob->Alice Transition (Early Success) for {len(continue_ids)} envs"
-            )
             self.episode_manager.transition_to_alice(continue_ids)
             reset_objects_to_fixed_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
@@ -966,28 +969,8 @@ class AsyncDualPlayEnvWrapper:
             all_success & completion_not_given & (bob_phase_steps > 0) & is_bob_phase
         )
 
-        # Debug: log positions when completion fires (LOCAL frame for both curr and goal)
-        if should_give_completion.any():
-            comp_ids = torch.where(should_give_completion)[0]
-            env_origins = self.env.scene.env_origins
-            for env_id in comp_ids:
-                t_pos = pos_dists[env_id, 0].item()
-                c_pos = pos_dists[env_id, 1].item()
-                t_curr_l = (
-                    self.env.scene["target_object"].data.root_pos_w[env_id]
-                    - env_origins[env_id]
-                ).tolist()
-                t_goal = self.episode_manager.goal_states[env_id, 0:3].tolist()
-                c_curr_l = (
-                    self.env.scene["cube"].data.root_pos_w[env_id] - env_origins[env_id]
-                ).tolist()
-                c_goal = self.episode_manager.goal_states[env_id, 6:9].tolist()
-                print(
-                    f"[BobSuccess] Env {env_id.item()} step={bob_phase_steps[env_id].item()}: "
-                    f"target dist={t_pos:.4f} (curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]}) | "
-                    f"cube dist={c_pos:.4f} (curr={[round(x,3) for x in c_curr_l]} goal={[round(x,3) for x in c_goal]})",
-                    flush=True,
-                )
+        # Per-env reward event logging (after delta and completion are known)
+        _OBJ_NAMES = ["target", "cube"]
 
         completion_bonus = torch.where(
             should_give_completion,
@@ -1001,6 +984,43 @@ class AsyncDualPlayEnvWrapper:
         )
 
         rewards = step_rewards + completion_bonus
+
+        # Per-env reward event logging — print every non-zero Bob reward
+        env_origins = self.env.scene.env_origins
+        for env_id in torch.where(rewards != 0)[0]:
+            eid = env_id.item()
+            step = bob_phase_steps[eid].item()
+            rew = rewards[eid].item()
+            if should_give_completion[eid]:
+                t_curr_l = (
+                    self.env.scene["target_object"].data.root_pos_w[eid]
+                    - env_origins[eid]
+                ).tolist()
+                t_goal = self.episode_manager.goal_states[eid, 0:3].tolist()
+                c_curr_l = (
+                    self.env.scene["cube"].data.root_pos_w[eid] - env_origins[eid]
+                ).tolist()
+                c_goal = self.episode_manager.goal_states[eid, 6:9].tolist()
+                print(
+                    f"  [BobRew] Env {eid} step={step}: {rew:+.0f} COMPLETION | "
+                    f"target dist={pos_dists[eid,0]:.3f} "
+                    f"(curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]}) | "
+                    f"cube dist={pos_dists[eid,1]:.3f} "
+                    f"(curr={[round(x,3) for x in c_curr_l]} goal={[round(x,3) for x in c_goal]})",
+                    flush=True,
+                )
+            else:
+                parts = []
+                for obj_idx, obj_name in enumerate(_OBJ_NAMES):
+                    d = delta[eid, obj_idx].item()
+                    if d > 0:
+                        parts.append(f"+1 {obj_name} at goal (dist={pos_dists[eid,obj_idx]:.3f}m)")
+                    elif d < 0:
+                        parts.append(f"-1 {obj_name} left goal (dist={pos_dists[eid,obj_idx]:.3f}m)")
+                print(
+                    f"  [BobRew] Env {eid} step={step}: {rew:+.0f} | {' | '.join(parts)}",
+                    flush=True,
+                )
 
         # Update prev_obj_success only for Bob-phase envs to avoid Alice-phase
         # envs carrying stale success state into their first Bob step.

@@ -85,7 +85,7 @@ apptainer exec --nv \
     --max_iterations "$MAX_ITERATIONS" \
     --save_interval  "$SAVE_INTERVAL" \
     --exp_name       "$EXP_NAME" \
-    --arm_config     default \
+    --arm_config     rotated \
     --headless \
     $RESUME_ARGS \
     2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \

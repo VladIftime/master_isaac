@@ -692,7 +692,10 @@ def main():
 
     while bob_updates < args.max_iterations:
 
-        # --- 0. SETUP: reset LSTM hidden states and snapshot policies ---
+        # --- 0. SETUP: reset per-iteration stats, LSTM hidden states, snapshot policies ---
+        if hasattr(env, "reset_iter_stats"):
+            env.reset_iter_stats()
+
         if alice_hidden is not None:
             alice_hidden[0].zero_()
             alice_hidden[1].zero_()
@@ -1138,8 +1141,17 @@ def main():
         perform_alice_update()
         perform_bob_update(current_bob_obs)
 
+        # --- Iteration aggregate summary ---
+        _stats = env.get_iter_stats() if hasattr(env, "get_iter_stats") else {}
+        _term_str = "  ".join(
+            f"{k}={v}" for k, v in sorted(_stats.get("terminations", {}).items())
+        ) or "none"
         print(
-            f"Iteration {bob_updates}: SR={current_sr:.2f} | ABC Buffer: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'}",
+            f"[Iter {bob_updates}] SR={current_sr:.2f} | "
+            f"Goals valid={_stats.get('valid_goals', 0)} invalid={_stats.get('invalid_goals', 0)} | "
+            f"Bob succ={_stats.get('bob_successes', 0)} fail={_stats.get('bob_failures', 0)} | "
+            f"Terminations: {_term_str} | "
+            f"ABC buf: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'}",
             flush=True,
         )
 
