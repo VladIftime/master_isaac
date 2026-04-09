@@ -18,8 +18,9 @@ params:
     noptepochs: 3
     nminibatches: 4
 
-    # Lowered to prevent entropy bonus from pushing large Cartesian deltas.
-    ent_coef: 0.01
+    # Lowered to prevent entropy bonus from pushing large Cartesian deltas,
+    # but raised to 0.05 (from 0.01) to prevent lazy agent policy collapse.
+    ent_coef: 0.05
     gamma: 0.998
     lam: 0.95
     max_grad_norm: 1.0

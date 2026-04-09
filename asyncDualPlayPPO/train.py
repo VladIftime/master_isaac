@@ -736,15 +736,16 @@ def main():
                 flush=True,
             )
 
-        # Alice entropy annealing: 1.0 → 0.01 over first 100 iterations.
+        # Alice entropy annealing: 1.0 → 0.05 over first 1000 iterations.
         _ALICE_ENT_START = 1.0
-        _ALICE_ENT_END = 0.01
-        _ALICE_ENT_ANNEAL_ITERS = 100
+        _ALICE_ENT_END = 0.05
+        _ALICE_ENT_ANNEAL_ITERS = 1000
         frac = min(1.0, bob_updates / _ALICE_ENT_ANNEAL_ITERS)
         alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (
             _ALICE_ENT_END - _ALICE_ENT_START
         )
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
+        print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f}", flush=True)
 
         # --- 1. ALICE ROLLOUT PHASE ---
         alice_ppo.storage.clear()
