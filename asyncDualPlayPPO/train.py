@@ -127,6 +127,13 @@ def main():
         choices=["default", "rotated"],
     )
     parser.add_argument(
+        "--num_objects",
+        type=int,
+        default=1,
+        choices=[1, 2],
+        help="Number of manipulated objects: 1=target only, 2=target+cube. Default=1.",
+    )
+    parser.add_argument(
         "--dummy_alice", action="store_true", help="Use dummy Alice wrapper"
     )
     parser.add_argument(
@@ -315,6 +322,14 @@ def main():
     env_cfg = AsyncDualPlayEnvCfg()
     env_cfg.scene.num_envs = args.num_envs
 
+    if args.num_objects == 1:
+        print("[Config] num_objects=1: removing cube from scene and observations.")
+        env_cfg.scene.cube = None
+        env_cfg.observations.alice_policy.cube_state = None
+        env_cfg.observations.bob_policy.cube_state = None
+        env_cfg.observations.bob_policy.cube_goal_state = None
+        env_cfg.observations.bob_policy.cube_goal_distance = None
+
     if args.arm_config == "rotated":
         print(
             "[Config] Rotated arm configuration: shoulder −90°"
@@ -377,6 +392,7 @@ def main():
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
             max_goals_per_episode=max_goals_per_episode,
+            num_objects=args.num_objects,
         )
 
     # --- Agents ---
@@ -429,6 +445,7 @@ def main():
 
     bob_cfg = copy.deepcopy(ppo_cfg["params"])
     bob_cfg["policy"]["use_goal_encoder"] = True
+    bob_cfg["policy"]["num_objects"] = args.num_objects
 
     bob_ppo = PPOABC(
         vec_env=env,
@@ -614,14 +631,21 @@ def main():
         if bob_ppo.actor_critic.use_goal_encoder:
             with torch.no_grad():
                 sample_obs = current_bob_obs[:8]
-                # Bob obs layout: robot(7) | obj1_state(14) | obj2_state(14) |
-                #                 obj1_goal(6) | obj2_goal(6) | obj1_dist(2) | obj2_dist(2)
-                # Current poses: first 6D (pos+euler) of each object_state
-                s_t_batch = torch.cat(
-                    [sample_obs[:, 7:13], sample_obs[:, 21:27]], dim=-1
-                )
-                # Goal poses: obj1_goal + obj2_goal
-                s_star_batch = sample_obs[:, 35:47]
+                # Bob obs layout (1 obj, 29D): robot(7) | obj1_state(14) | obj1_goal(6) | obj1_dist(2)
+                # Bob obs layout (2 obj, 51D): robot(7) | obj1_state(14) | obj2_state(14) |
+                #                              obj1_goal(6) | obj2_goal(6) | obj1_dist(2) | obj2_dist(2)
+                _robot_dim = 7
+                _obj_state_dim = 14
+                _goal_dim = 6
+                if args.num_objects == 1:
+                    s_t_batch = sample_obs[:, _robot_dim : _robot_dim + _goal_dim]
+                    _goal_start = _robot_dim + _obj_state_dim
+                    s_star_batch = sample_obs[:, _goal_start : _goal_start + _goal_dim]
+                else:
+                    s_t_batch = torch.cat(
+                        [sample_obs[:, 7:13], sample_obs[:, 21:27]], dim=-1
+                    )
+                    s_star_batch = sample_obs[:, 35:47]
                 g_sample = bob_ppo.actor_critic.goal_encoder(s_star_batch, s_t_batch)
                 writer.add_scalar(
                     "GoalEncoder/embedding_norm",

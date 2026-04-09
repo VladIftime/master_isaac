@@ -66,8 +66,12 @@ class AsyncDualPlayEnvWrapper:
         )  # identity rotation (ZYX Euler)
         _t_pos = torch.tensor([-0.15, 0.7, 0.023], device=device)
         _c_pos = torch.tensor([-0.25, 0.7, 0.023], device=device)
-        # Shape (12,): [t_pos(3), t_euler(3), c_pos(3), c_euler(3)] — Euler format matches _extract_object_states
-        self._safe_reset_state = torch.cat([_t_pos, _id_euler, _c_pos, _id_euler])
+        # Shape (6,) for 1 object, (12,) for 2 objects.
+        # Layout: [t_pos(3), t_euler(3)] or [t_pos(3), t_euler(3), c_pos(3), c_euler(3)]
+        if num_objects == 1:
+            self._safe_reset_state = torch.cat([_t_pos, _id_euler])
+        else:
+            self._safe_reset_state = torch.cat([_t_pos, _id_euler, _c_pos, _id_euler])
 
         # Bob's success threshold (5cm)
         self.goal_tolerance = 0.05
@@ -145,8 +149,8 @@ class AsyncDualPlayEnvWrapper:
             "z_min": -0.2,
         }
         self.placement_bounds = {
-            "x_range": (-0.6, 0.6),
-            "y_range": (0.3, 0.9),
+            "x_range": (-0.75, 0.75),
+            "y_range": (0.2, 1.0),
         }
 
         # Buffer to hold Alice's rewards until her cycle ends (either Alice failed or Bob finished)
@@ -419,7 +423,7 @@ class AsyncDualPlayEnvWrapper:
             "goal_states": (
                 self.episode_manager.goal_states.clone()
                 if self.episode_manager.goal_states is not None
-                else torch.zeros((self.num_envs, 12), device=self.device)
+                else torch.zeros((self.num_envs, self.num_objects * 6), device=self.device)
             ),
             "max_contact_force": self.episode_manager.max_contact_force.clone(),
         }
@@ -463,8 +467,11 @@ class AsyncDualPlayEnvWrapper:
         # Require at least one object to move >7cm in XY (above Bob's 5cm success threshold).
         _MIN_XY_DISP = 0.07  # 7cm — 2cm margin above Bob's goal_tolerance
         target_xy_disp = torch.norm(active_goal[:, 0:2] - active_initial[:, 0:2], dim=-1)
-        cube_xy_disp   = torch.norm(active_goal[:, 6:8]  - active_initial[:, 6:8],  dim=-1)
-        sufficient_xy  = (target_xy_disp > _MIN_XY_DISP) | (cube_xy_disp > _MIN_XY_DISP)
+        if self.num_objects == 2:
+            cube_xy_disp  = torch.norm(active_goal[:, 6:8] - active_initial[:, 6:8], dim=-1)
+            sufficient_xy = (target_xy_disp > _MIN_XY_DISP) | (cube_xy_disp > _MIN_XY_DISP)
+        else:
+            sufficient_xy = target_xy_disp > _MIN_XY_DISP
         xy_fail = valid & ~sufficient_xy
         val_reward = val_reward.clone()
         val_reward[xy_fail] = 0.0
@@ -522,14 +529,15 @@ class AsyncDualPlayEnvWrapper:
                 env_ids=valid_env_ids,
             )
 
-            # Reset Cube (Local -> World) — cube starts at indices 6:12 in 12D layout
-            c_pos_local = start_states[:, 6:9]
-            c_quat = _euler_xyz_to_quat(start_states[:, 9:12])
-            pos2_global = c_pos_local + origins
-            self.env.scene["cube"].write_root_pose_to_sim(
-                torch.cat([pos2_global, c_quat], dim=-1),
-                env_ids=valid_env_ids,
-            )
+            # Reset Cube (Local -> World) — only when cube is present (num_objects==2)
+            if self.num_objects == 2:
+                c_pos_local = start_states[:, 6:9]
+                c_quat = _euler_xyz_to_quat(start_states[:, 9:12])
+                pos2_global = c_pos_local + origins
+                self.env.scene["cube"].write_root_pose_to_sim(
+                    torch.cat([pos2_global, c_quat], dim=-1),
+                    env_ids=valid_env_ids,
+                )
 
             reset_robot_joints(self.env, valid_env_ids)
             self.env.scene.write_data_to_sim()
@@ -703,32 +711,28 @@ class AsyncDualPlayEnvWrapper:
         return success, max_pos_err, max_rot_err
 
     def _extract_object_states(self, obs_dict: Dict) -> torch.Tensor:
-        """Extract object states in the LOCAL frame as Euler poses (12 dims total).
+        """Extract object states in the LOCAL frame as Euler poses.
 
-        Returns [pos(3)+euler(3)] per object = 6D per object, 12D total.
+        Returns [pos(3)+euler(3)] per object = 6D per object.
+        Total: 6D (num_objects=1) or 12D (num_objects=2).
         Matching the paper's rotation representation (ZYX Euler angles).
         """
         from .observations import _quat_to_euler_xyz
 
-        # 1. Pull RAW world data from the scene
         t_pos_w = self.env.scene["target_object"].data.root_pos_w
         t_quat_w = self.env.scene["target_object"].data.root_quat_w
+        env_origins = self.env.scene.env_origins
+        t_pos_l = t_pos_w - env_origins
+        t_euler = _quat_to_euler_xyz(t_quat_w)  # (N, 3)
+
+        if self.num_objects == 1:
+            return torch.cat([t_pos_l, t_euler], dim=-1)  # 6D
+
         c_pos_w = self.env.scene["cube"].data.root_pos_w
         c_quat_w = self.env.scene["cube"].data.root_quat_w
-
-        env_origins = self.env.scene.env_origins
-
-        # 2. TRANSFORM: World -> Local
-        t_pos_l = t_pos_w - env_origins
         c_pos_l = c_pos_w - env_origins
-
-        # 3. Convert quaternion -> Euler angles (paper representation)
-        t_euler = _quat_to_euler_xyz(t_quat_w)  # (N, 3)
         c_euler = _quat_to_euler_xyz(c_quat_w)  # (N, 3)
-
-        # 4. Concatenate: [Target_Pos(3), Target_Euler(3), Cube_Pos(3), Cube_Euler(3)]
-        # Total = 12 dims per environment
-        return torch.cat([t_pos_l, t_euler, c_pos_l, c_euler], dim=-1)
+        return torch.cat([t_pos_l, t_euler, c_pos_l, c_euler], dim=-1)  # 12D
 
     def _get_alice_observations(self, obs_dict: Dict) -> torch.Tensor:
         """Get Alice's observations from policy group"""
@@ -895,20 +899,18 @@ class AsyncDualPlayEnvWrapper:
         # if self.episode_manager.goal_states is not None:
         #     print(f"[DEBUG bob_sparse entry] goal_states[0,0:3]={self.episode_manager.goal_states[0, 0:3].tolist()}", flush=True)
 
-        # Get goal distances for both objects
-        # target_object distances
+        # Get goal distances per object
         target_dists = goal_distance(
             self.env, object_cfg=SceneEntityCfg("target_object")
         )
-        # cube distances
-        cube_dists = goal_distance(self.env, object_cfg=SceneEntityCfg("cube"))
-
-        # Concatenate: (num_envs, 2) + (num_envs, 2) -> (num_envs, 4)
-        # Each is [pos_dist, rot_dist] so we have [target_pos, target_rot, cube_pos, cube_rot]
-        all_dists = torch.cat([target_dists, cube_dists], dim=1)
+        if self.num_objects == 2:
+            cube_dists = goal_distance(self.env, object_cfg=SceneEntityCfg("cube"))
+            all_dists = torch.cat([target_dists, cube_dists], dim=1)
+        else:
+            all_dists = target_dists  # (num_envs, 2): [pos_dist, rot_dist]
 
         batch_size = all_dists.shape[0]
-        num_objects = 2  # target_object and cube
+        num_objects = self.num_objects
 
         # Reshape: (num_envs, 2, 2) -> [obj_idx, (pos, rot)]
         dists = all_dists.view(batch_size, num_objects, 2)
@@ -970,7 +972,7 @@ class AsyncDualPlayEnvWrapper:
         )
 
         # Per-env reward event logging (after delta and completion are known)
-        _OBJ_NAMES = ["target", "cube"]
+        _OBJ_NAMES = ["target", "cube"][: self.num_objects]
 
         completion_bonus = torch.where(
             should_give_completion,
@@ -989,6 +991,8 @@ class AsyncDualPlayEnvWrapper:
         env_origins = self.env.scene.env_origins
         for env_id in torch.where(rewards != 0)[0]:
             eid = env_id.item()
+            if not is_bob_phase[eid].item():
+                continue
             step = bob_phase_steps[eid].item()
             rew = rewards[eid].item()
             if should_give_completion[eid]:
@@ -997,18 +1001,21 @@ class AsyncDualPlayEnvWrapper:
                     - env_origins[eid]
                 ).tolist()
                 t_goal = self.episode_manager.goal_states[eid, 0:3].tolist()
-                c_curr_l = (
-                    self.env.scene["cube"].data.root_pos_w[eid] - env_origins[eid]
-                ).tolist()
-                c_goal = self.episode_manager.goal_states[eid, 6:9].tolist()
-                print(
+                msg = (
                     f"  [BobRew] Env {eid} step={step}: {rew:+.0f} COMPLETION | "
                     f"target dist={pos_dists[eid,0]:.3f} "
-                    f"(curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]}) | "
-                    f"cube dist={pos_dists[eid,1]:.3f} "
-                    f"(curr={[round(x,3) for x in c_curr_l]} goal={[round(x,3) for x in c_goal]})",
-                    flush=True,
+                    f"(curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]})"
                 )
+                if self.num_objects == 2:
+                    c_curr_l = (
+                        self.env.scene["cube"].data.root_pos_w[eid] - env_origins[eid]
+                    ).tolist()
+                    c_goal = self.episode_manager.goal_states[eid, 6:9].tolist()
+                    msg += (
+                        f" | cube dist={pos_dists[eid,1]:.3f} "
+                        f"(curr={[round(x,3) for x in c_curr_l]} goal={[round(x,3) for x in c_goal]})"
+                    )
+                print(msg, flush=True)
             else:
                 parts = []
                 for obj_idx, obj_name in enumerate(_OBJ_NAMES):
