@@ -1,42 +1,69 @@
 #!/bin/bash
-#SBATCH --job-name=asp_smoke
-#SBATCH --time=01:00:00
-#SBATCH --partition=gpushort
-#SBATCH --gpus-per-node=a100:1       # A100  40 GB — V100 lacks sm_80 support for this container
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --output=slurm-%j-smoke.out
+#SBATCH --job-name=asp_50k
+#SBATCH --time=05:00:00
+#SBATCH --partition=gpu
+#SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=16G
+#SBATCH --output=slurm-%j-50k.out
+#SBATCH --signal=B:TERM@120
+set -o pipefail
 
-# ── What this script is for ──────────────────────────────────────────────────
-# Fast smoke-test to verify the ABC fix is working.  20 min on a V100.
-#
-# What to check in the output:
-#   1. ABC loss should NOT be flat at -1.016 — expect variation (-3 to -5 range)
-#   2. Bob's Rew should show non-zero values
-#   3. No "[Alice Update] Skipped" messages (both agents always update now)
-#   4. Bob SR should start climbing within ~50 iterations
-#
-# nsteps = 256 (min safe value above bob_timesteps=200, saves memory+time)
-# num_envs = 64 (small enough for fast iterations, large enough for signal)
-# max_iterations = 100 (enough to see if ABC loss moves)
-# save_interval = 50 (only 2 checkpoints to minimize I/O)
-# ─────────────────────────────────────────────────────────────────────────────
-
-LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
-mkdir -p "$LOCAL_RUNS"
-
-NUM_ENVS=64
+NUM_ENVS=512
 NSTEPS=256
+MAX_ITERATIONS=50000
+SAVE_INTERVAL=500
+NUM_OBJECTS=1
+EXP_NAME="hpc_low_${NUM_ENVS}env_${NUM_OBJECTS}obj"
 
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
+NFS_RUN_DIR="$PROJECT_ROOT/runs/$EXP_NAME"
+LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
+mkdir -p "$LOCAL_RUNS"
+
+# --- Ensure sync + resubmit on ANY exit (time limit, OOM, signal) ---
+cleanup() {
+    echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
+    rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/" 2>/dev/null
+    echo "[INFO] Sync complete."
+
+    if [ ! -f "$NFS_RUN_DIR/bob/model_final.pt" ]; then
+        NEXT_JOB=$(sbatch "$PROJECT_ROOT/hpc/train_low.slurm" 2>/dev/null | awk '{print $4}')
+        echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
+    else
+        echo "[INFO] Training complete — no resubmission needed."
+    fi
+}
+trap cleanup EXIT
+
+# --- Auto-resume: find latest checkpoint on NFS ---
+RESUME_ARGS=""
+if [ -d "$NFS_RUN_DIR/bob" ] && [ -d "$NFS_RUN_DIR/alice" ]; then
+    # Find highest iteration number checkpoint (sort numerically, not by mtime)
+    LATEST_BOB=$(ls "$NFS_RUN_DIR/bob"/model_*.pt 2>/dev/null | grep -v best | grep -v final \
+        | sed 's/.*model_//' | sed 's/\.pt//' | sort -n | tail -1)
+    if [ -n "$LATEST_BOB" ]; then
+        ITER_NUM="$LATEST_BOB"
+        BOB_FILE="model_${ITER_NUM}.pt"
+        ALICE_FILE="model_${ITER_NUM}.pt"
+        if [ -f "$NFS_RUN_DIR/bob/$BOB_FILE" ] && [ -f "$NFS_RUN_DIR/alice/$ALICE_FILE" ]; then
+            echo "[INFO] Resuming from iteration $ITER_NUM"
+            echo "[INFO]   Alice: $NFS_RUN_DIR/alice/$ALICE_FILE"
+            echo "[INFO]   Bob:   $NFS_RUN_DIR/bob/$BOB_FILE"
+
+            # Copy existing run data to local scratch so container sees it
+            rsync -a --no-perms "$NFS_RUN_DIR/" "$LOCAL_RUNS/$EXP_NAME/"
+
+            RESUME_ARGS="--chkpt_alice runs/$EXP_NAME/alice/$ALICE_FILE --chkpt_bob runs/$EXP_NAME/bob/$BOB_FILE --resume_iteration $ITER_NUM"
+        fi
+    fi
+fi
 
 echo "[INFO] Job ID:        $SLURM_JOB_ID"
 echo "[INFO] Node:          $SLURMD_NODENAME"
-echo "[INFO] GPU:           V100 32 GB"
-echo "[INFO] Envs × nsteps: ${NUM_ENVS} × ${NSTEPS} = $(( NUM_ENVS * NSTEPS )) buffer slots"
+echo "[INFO] Envs × nsteps: ${NUM_ENVS} × ${NSTEPS}"
 echo "[INFO] Local runs:    $LOCAL_RUNS"
-echo "[INFO] Mode:          SMOKE TEST — verifying ABC fix"
 
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found!"
@@ -54,26 +81,14 @@ apptainer exec --nv \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
     "$SIF_IMAGE" \
     /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train.py \
-    --num_envs      "$NUM_ENVS" \
-    --nsteps        "$NSTEPS" \
-    --max_iterations 100 \
-    --save_interval  50 \
-    --exp_name      "smoke_abc_fix" \
-    --arm_config    default \
+    --num_envs       "$NUM_ENVS" \
+    --nsteps         "$NSTEPS" \
+    --max_iterations "$MAX_ITERATIONS" \
+    --save_interval  "$SAVE_INTERVAL" \
+    --exp_name       "$EXP_NAME" \
+    --arm_config     rotated \
+    --num_objects    "$NUM_OBJECTS" \
     --headless \
+    $RESUME_ARGS \
     2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
                    -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
-
-# ── Sync results back to NFS ─────────────────────────────────────────────────
-echo "[INFO] Syncing results from $LOCAL_RUNS → $PROJECT_ROOT/runs ..."
-rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/"
-echo "[INFO] Sync complete."
-
-# ── Quick summary ─────────────────────────────────────────────────────────────
-echo ""
-echo "=== SMOKE TEST CHECKLIST ==="
-echo "Grep the output for these:"
-echo "  grep 'ABC'        → loss should vary, NOT stuck at -1.016"
-echo "  grep 'BobSuccess' → should appear within first 100 iters"
-echo "  grep 'Skipped'    → should be ZERO matches (Alice always updates)"
-echo "==========================="
