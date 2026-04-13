@@ -393,6 +393,8 @@ def main():
             bob_timesteps=bob_timesteps,
             max_goals_per_episode=max_goals_per_episode,
             num_objects=args.num_objects,
+            shaping_gamma=ppo_cfg["params"]["learn"].get("gamma", 0.99),
+            shaping_coef=ppo_cfg["params"]["learn"].get("shaping_coef", 1.0),
         )
 
     # --- Agents ---

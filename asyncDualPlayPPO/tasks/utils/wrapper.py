@@ -49,11 +49,19 @@ class AsyncDualPlayEnvWrapper:
         num_objects: int = 2,  # target_object and cube
         device: str = "cuda",
         arm_config: str = "default",
+        shaping_gamma: float = 0.99,
+        shaping_coef: float = 1.0,
     ):
         self.env = env
         self.device = device
         self.num_objects = num_objects
         self.arm_config = arm_config
+        # Potential-based shaping: F(s,a,s') = γ·Φ(s') − Φ(s), Φ(s) = −Σ pos_dist_i(s)
+        # shaping_gamma must match PPO gamma for the theorem to hold exactly.
+        self.shaping_gamma = shaping_gamma
+        self.shaping_coef = shaping_coef
+        # Stores pos_dists from the *previous* Bob step per env; None until Bob phase starts.
+        self.prev_pos_dists: Optional[torch.Tensor] = None
 
         # Safe reset positions (LOCAL frame) for initial_states tracking.
         # Objects are physically spawned at z=0.05 (events.py) but gravity settles
@@ -919,6 +927,45 @@ class AsyncDualPlayEnvWrapper:
         pos_dists = dists[..., 0]  # (num_envs, num_objects)
         rot_dists = dists[..., 1]
 
+        # ------------------------------------------------------------------
+        # Potential-based shaping reward (Ng et al. 1999)
+        #   Φ(s)  = −Σ_i pos_dist_i(s)          [more negative = farther from goal]
+        #   F     = γ·Φ(s') − Φ(s)
+        #         = Σ_i pos_dist_old_i − γ·Σ_i pos_dist_new_i
+        #
+        # Key properties:
+        #   • Positive when Bob reduces total distance (reward for progress).
+        #   • Negative when Bob increases total distance (penalty for regress).
+        #   • Telescopes to Φ(s_T) − Φ(s_0) over a full episode, so the total
+        #     shaping magnitude stays bounded and never dominates the +5 sparse bonus.
+        #   • On first Bob step: F = 0 (prev = curr by definition).
+        #   • Only applied to Bob-phase envs; Alice-phase envs get 0.
+        # ------------------------------------------------------------------
+        phi_curr = -pos_dists.sum(dim=1)  # (num_envs,)  Φ(s')
+
+        if self.prev_pos_dists is None:
+            # First step ever — initialize, no shaping signal yet.
+            self.prev_pos_dists = pos_dists.clone()
+
+        phi_prev = -self.prev_pos_dists.sum(dim=1)  # (num_envs,)  Φ(s)
+        shaping = self.shaping_gamma * phi_curr - phi_prev  # F(s, a, s')
+
+        # Zero shaping on the very first step of each Bob phase (prev wasn't from Bob).
+        # Using the same is_first_step mask already computed below.
+        bob_phase_steps = self.episode_manager.phase_step
+        is_bob_phase = self.episode_manager.is_bob_phase()
+        is_first_step = (bob_phase_steps == 1) & is_bob_phase
+
+        shaping = torch.where(is_first_step, torch.zeros_like(shaping), shaping)
+        shaping = torch.where(is_bob_phase, shaping, torch.zeros_like(shaping))
+
+        # Update prev_pos_dists only for Bob-phase envs.
+        new_prev = self.prev_pos_dists.clone()
+        new_prev[is_bob_phase] = pos_dists[is_bob_phase]
+        # On first Bob step, prev was stale (from Alice) — overwrite immediately.
+        new_prev[is_first_step] = pos_dists[is_first_step]
+        self.prev_pos_dists = new_prev
+
         # Success thresholds
         pos_threshold = self.episode_manager.pos_threshold
         rot_threshold = self.episode_manager.rot_threshold
@@ -946,9 +993,7 @@ class AsyncDualPlayEnvWrapper:
         # If an object (like the secondary cube) is untouched by Alice, its start position is its goal position.
         # It will be evaluated as "True" on step 1, but we don't want to give Bob a free +1 reward for it.
         # Restrict to Bob-phase envs only (Alice-phase envs at step 1 must not interfere).
-        bob_phase_steps = self.episode_manager.phase_step
-        is_bob_phase = self.episode_manager.is_bob_phase()
-        is_first_step = (bob_phase_steps == 1) & is_bob_phase
+        # NOTE: bob_phase_steps, is_bob_phase, is_first_step already computed above in the shaping block.
         if is_first_step.any():
             first_step_mask = is_first_step.unsqueeze(1).expand_as(prev_success)
             prev_success = torch.where(first_step_mask, obj_success, prev_success)
@@ -986,7 +1031,7 @@ class AsyncDualPlayEnvWrapper:
             self.episode_manager.completion_given | should_give_completion
         )
 
-        rewards = step_rewards + completion_bonus
+        rewards = step_rewards + completion_bonus + self.shaping_coef * shaping
 
         # Per-env reward event logging — print every non-zero Bob reward
         env_origins = self.env.scene.env_origins
