@@ -1,0 +1,389 @@
+Loading user config located at: '/home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/data/Kit/Isaac-Sim/5.0/user.config.json'
+[Info] [carb] Logging to file: /home/vlad/env_isaaclab/lib/python3.11/site-packages/isaacsim/kit/logs/Kit/Isaac-Sim/5.0/kit_20260413_135613.log
+2026-04-13T11:56:13Z [4ms] [Warning] [omni.ext.plugin] [ext: extensions] Extensions config 'extension.toml' doesn't exist '/home/vlad/IsaacLab/source/extensions' or '/home/vlad/IsaacLab/source/extensions/config'
+[0.060s] [ext: omni.kit.async_engine-0.0.3] startup
+[0.179s] [ext: omni.metrics.core-0.0.3] startup
+[0.180s] [ext: omni.client.lib-1.1.0] startup
+[0.194s] [ext: omni.blobkey-1.1.2] startup
+[0.195s] [ext: omni.stats-1.0.1] startup
+[0.195s] [ext: omni.datastore-0.0.0] startup
+[0.201s] [ext: omni.client-1.3.0] startup
+[0.257s] [ext: omni.ujitso.default-1.0.0] startup
+[0.259s] [ext: omni.hsscclient-1.1.2] startup
+[0.263s] [ext: omni.gpu_foundation.shadercache.vulkan-1.0.0] startup
+[0.266s] [ext: omni.assets.plugins-0.0.0] startup
+[0.268s] [ext: omni.gpu_foundation-0.0.0] startup
+[0.277s] [ext: carb.windowing.plugins-1.0.0] startup
+[0.294s] [ext: omni.kit.renderer.init-0.0.0] startup
+
+|---------------------------------------------------------------------------------------------|
+| Driver Version: 580.126.09    | Graphics API: Vulkan
+|=============================================================================================|
+| GPU | Name                             | Active | LDA | GPU Memory | Vendor-ID | LUID       |
+|     |                                  |        |     |            | Device-ID | UUID       |
+|     |                                  |        |     |            | Bus-ID    |            |
+|---------------------------------------------------------------------------------------------|
+| 0   | NVIDIA GeForce RTX 3060 Ti       | Yes: 0 |     | 8438    MB | 10de      | 0          |
+|     |                                  |        |     |            | 2489      | b137bb7e.. |
+|     |                                  |        |     |            | b         |            |
+|=============================================================================================|
+| OS: 22.04.5 LTS (Jammy Jellyfish) ubuntu, Version: 22.04.5, Kernel: 6.8.0-107-generic
+| XServer Vendor: The X.Org Foundation, XServer Version: 12101004 (1.21.1.4)
+| Processor: AMD Ryzen 7 3700X 8-Core Processor
+| Cores: 8 | Logical Cores: 16
+|---------------------------------------------------------------------------------------------|
+| Total Memory (MB): 32000 | Free Memory: 19710
+| Total Page/Swap (MB): 2047 | Free Page/Swap: 883
+|---------------------------------------------------------------------------------------------|
+2026-04-13T11:56:14Z [1,164ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
+[1.400s] [ext: omni.materialx.libs-1.0.7] startup
+[1.408s] [ext: omni.usd.config-1.0.6] startup
+[1.412s] [ext: omni.gpucompute.plugins-0.0.0] startup
+[1.413s] [ext: omni.usd.libs-1.0.1] startup
+[1.494s] [ext: omni.mdl-56.0.3] startup
+[1.577s] [ext: omni.iray.libs-0.0.0] startup
+[1.585s] [ext: omni.mdl.neuraylib-0.2.12] startup
+[1.587s] [ext: omni.kit.usd.mdl-1.1.5] startup
+[1.681s] [ext: omni.kit.telemetry-0.5.2] startup
+[1.711s] [ext: omni.kit.pipapi-0.0.0] startup
+[1.713s] [ext: omni.kit.loop-isaac-1.3.7] startup
+[1.714s] [ext: omni.kit.test-2.0.1] startup
+[1.762s] [ext: omni.appwindow-1.1.10] startup
+[2.751s] [ext: omni.kit.renderer.core-1.1.0] startup
+[15.327s] [ext: omni.kit.renderer.capture-0.0.0] startup
+[15.330s] [ext: omni.kit.renderer.imgui-2.0.5] startup
+[15.409s] [ext: omni.ui-2.27.1] startup
+[15.418s] [ext: omni.kit.mainwindow-1.0.3] startup
+[15.419s] [ext: carb.audio-0.1.0] startup
+[15.426s] [ext: omni.uiaudio-1.0.0] startup
+[15.427s] [ext: omni.kit.uiapp-0.0.0] startup
+[15.427s] [ext: omni.usd.schema.metrics.assembler-107.3.1] startup
+[15.429s] [ext: omni.usd.schema.audio-0.0.0] startup
+[15.432s] [ext: omni.usd_resolver-1.0.0] startup
+[15.436s] [ext: omni.usd.core-1.5.3] startup
+[15.438s] [ext: omni.usd.schema.omni_sensors-0.0.0] startup
+[15.454s] [ext: omni.usd.schema.anim-0.0.0] startup
+[15.470s] [ext: omni.usd.schema.physx-107.3.26] startup
+[15.503s] [ext: isaacsim.robot.schema-3.6.0] startup
+[15.510s] [ext: omni.usd.schema.omniscripting-1.0.0] startup
+[15.513s] [ext: omni.usd.schema.omnigraph-1.0.0] startup
+[15.518s] [ext: omni.usd.schema.semantics-0.0.0] startup
+[15.520s] [ext: omni.usd.schema.geospatial-0.0.0] startup
+[15.522s] [ext: omni.kit.window.popup_dialog-2.0.24] startup
+[15.525s] [ext: omni.activity.core-1.0.3] startup
+[15.526s] [ext: omni.kit.widget.nucleus_connector-2.0.1] startup
+[15.528s] [ext: omni.kit.usd_undo-0.1.8] startup
+[15.529s] [ext: omni.graph.exec-0.9.6] startup
+[15.529s] [ext: omni.kit.actions.core-1.0.0] startup
+[15.532s] [ext: usdrt.scenegraph-7.6.1] startup
+[15.576s] [ext: omni.resourcemonitor-107.0.1] startup
+[15.579s] [ext: omni.kit.exec.core-0.13.4] startup
+[15.580s] [ext: omni.timeline-1.0.14] startup
+[15.582s] [ext: omni.kit.commands-1.4.10] startup
+[15.585s] [ext: omni.kit.audiodeviceenum-1.0.2] startup
+[15.587s] [ext: omni.hydra.usdrt_delegate-7.5.1] startup
+[15.593s] [ext: omni.hydra.scene_delegate-0.3.4] startup
+[15.597s] [ext: omni.usd-1.13.10] startup
+[15.622s] [ext: omni.kit.asset_converter-5.0.17] startup
+[15.634s] [ext: omni.usd.schema.omni_lens_distortion-0.0.0] startup
+[15.635s] [ext: omni.usd.schema.render_settings.rtx-0.0.0] startup
+[15.636s] [ext: omni.index.libs-380600.8087.0] startup
+[15.636s] [ext: omni.volume-0.5.2] startup
+[15.638s] [ext: omni.ujitso.client-0.0.0] startup
+[15.639s] [ext: omni.index-1.0.1] startup
+[15.640s] [ext: omni.hydra.rtx.shadercache.vulkan-1.0.0] startup
+[15.641s] [ext: omni.hydra.rtx-1.0.0] startup
+2026-04-13T11:56:29Z [15,636ms] [Warning] [omni.log] Source: omni.hydra was already registered.
+[15.679s] [ext: omni.kit.notification_manager-1.0.10] startup
+[15.681s] [ext: omni.kit.clipboard-1.0.5] startup
+[15.682s] [ext: omni.kit.viewport.legacy_gizmos-1.0.19] startup
+[15.684s] [ext: omni.kit.raycast.query-1.1.0] startup
+[15.688s] [ext: omni.kit.menu.core-1.1.2] startup
+[15.689s] [ext: omni.kit.widget.options_menu-1.1.6] startup
+[15.692s] [ext: omni.kit.helper.file_utils-0.1.9] startup
+[15.693s] [ext: omni.kit.widget.path_field-2.0.11] startup
+[15.694s] [ext: omni.kit.widget.context_menu-1.2.5] startup
+[15.695s] [ext: omni.kit.widget.options_button-1.0.3] startup
+[15.696s] [ext: omni.kit.widget.filebrowser-2.12.3] startup
+[15.700s] [ext: omni.kit.widget.browser_bar-2.0.10] startup
+[15.701s] [ext: omni.kit.usd.layers-2.2.11] startup
+[15.708s] [ext: omni.ui.scene-1.11.5] startup
+[15.713s] [ext: omni.kit.viewport.registry-104.0.6] startup
+[15.713s] [ext: omni.kit.window.filepicker-2.13.4] startup
+[15.726s] [ext: omni.kit.menu.utils-2.0.5] startup
+[15.733s] [ext: omni.kit.context_menu-1.8.6] startup
+[15.734s] [ext: omni.kit.viewport.scene_camera_model-1.0.6] startup
+[15.739s] [ext: omni.kit.hydra_texture-1.4.6] startup
+[15.742s] [ext: omni.kit.window.file_importer-1.1.18] startup
+[15.744s] [ext: omni.kit.widget.searchable_combobox-1.0.6] startup
+[15.744s] [ext: omni.kit.window.drop_support-1.0.5] startup
+[15.745s] [ext: omni.kit.widget.viewport-107.1.3] startup
+[15.748s] [ext: omni.kit.material.library-2.0.7] startup
+[15.752s] [ext: omni.hydra.engine.stats-1.0.3] startup
+[15.754s] [ext: omni.kit.widget.settings-1.2.6] startup
+[15.756s] [ext: omni.kit.viewport.window-107.2.0] startup
+[15.770s] [ext: omni.kit.window.preferences-1.8.0] startup
+[15.774s] [ext: omni.kit.widget.toolbar-2.0.1] startup
+[15.779s] [ext: omni.kit.viewport.utility-1.1.2] startup
+[15.780s] [ext: omni.kit.manipulator.transform-107.0.0] startup
+[15.783s] [ext: omni.kit.manipulator.tool.snap-1.5.13] startup
+[15.788s] [ext: omni.kit.manipulator.selector-1.1.3] startup
+[15.789s] [ext: omni.kit.viewport.manipulator.transform-107.0.4] startup
+[15.790s] [ext: omni.kit.manipulator.viewport-107.0.1] startup
+[15.791s] [ext: omni.kit.primitive.mesh-1.0.17] startup
+[15.794s] [ext: omni.kit.manipulator.prim.core-107.0.8] startup
+[15.799s] [ext: omni.fabric.commands-1.1.6] startup
+[15.802s] [ext: omni.kit.manipulator.prim.usd-107.0.3] startup
+[15.803s] [ext: omni.kit.manipulator.prim.fabric-107.0.4] startup
+[15.804s] [ext: omni.debugdraw-0.1.4] startup
+[15.807s] [ext: omni.kit.property.adapter.core-1.0.2] startup
+[15.809s] [ext: omni.kit.manipulator.prim-107.0.0] startup
+[15.809s] [ext: omni.usdphysics-107.3.26] startup
+[15.811s] [ext: omni.kit.manipulator.selection-106.0.1] startup
+[15.812s] [ext: omni.kit.hotkeys.core-1.3.10] startup
+[15.814s] [ext: omni.kit.property.adapter.usd-1.0.2] startup
+[15.814s] [ext: omni.kit.widget.searchfield-1.1.8] startup
+[15.816s] [ext: omni.kit.widget.filter-1.1.4] startup
+[15.816s] [ext: omni.kit.property.adapter.fabric-1.0.3] startup
+[15.817s] [ext: omni.kit.widget.highlight_label-1.0.3] startup
+[15.818s] [ext: omni.kit.window.file_exporter-1.0.33] startup
+[15.819s] [ext: omni.kit.stage_template.core-1.1.22] startup
+[15.819s] [ext: omni.kit.widget.stage-3.1.4] startup
+[15.828s] [ext: omni.kit.widget.prompt-1.0.7] startup
+[15.829s] [ext: omni.kit.window.property-1.12.1] startup
+[15.831s] [ext: omni.kvdb-107.3.26] startup
+[15.833s] [ext: omni.kit.window.file-2.0.5] startup
+[15.835s] [ext: omni.kit.window.content_browser_registry-0.0.6] startup
+[15.836s] [ext: omni.kit.viewport.menubar.core-107.2.1] startup
+[15.849s] [ext: omni.kit.viewport.actions-107.0.2] startup
+[15.853s] [ext: omni.kit.window.content_browser-3.1.3] startup
+[15.864s] [ext: omni.kit.viewport.menubar.display-107.0.3] startup
+[15.866s] [ext: omni.kit.widget.layers-1.8.6] startup
+[15.876s] [ext: omni.kit.property.usd-4.5.12] startup
+[15.885s] [ext: omni.physx.foundation-107.3.26] startup
+[15.887s] [ext: omni.localcache-107.3.26] startup
+[15.889s] [ext: omni.convexdecomposition-107.3.26] startup
+[15.891s] [ext: omni.usdphysics.ui-107.3.26] startup
+[15.917s] [ext: omni.physx.cooking-107.3.26] startup
+[15.920s] [ext: omni.usd.metrics.assembler-107.3.1] startup
+[15.924s] [ext: omni.physx-107.3.26] startup
+[15.935s] [ext: omni.physics-107.3.26] startup
+[15.940s] [ext: omni.physx.commands-107.3.26] startup
+[15.946s] [ext: omni.physics.stageupdate-107.3.26] startup
+[15.948s] [ext: omni.inspect-1.0.2] startup
+[15.949s] [ext: omni.physx.ui-107.3.26] startup
+[15.980s] [ext: omni.graph.core-2.184.5] startup
+[15.983s] [ext: omni.physics.physx-107.3.26] startup
+2026-04-13T11:56:29Z [15,960ms] [Warning] [carb] Acquiring non optional plugin interface which is not listed as dependency: [omni::physx::IPhysxBenchmarks v1.0] (plugin: <default plugin>), by client: omni.physics.physx.plugin. Add it to CARB_PLUGIN_IMPL_DEPS() macro of a client.
+[15.985s] [ext: isaacsim.core.deprecation_manager-0.2.7] startup
+[15.985s] [ext: omni.physics.tensors-107.3.26] startup
+[15.990s] [ext: omni.kit.numpy.common-0.1.3] startup
+[15.992s] [ext: isaacsim.core.version-2.0.6] startup
+[15.992s] [ext: omni.warp.core-1.8.2] startup
+[16.203s] [ext: omni.usd.metrics.assembler.physics-107.3.26] startup
+[16.205s] [ext: omni.isaac.dynamic_control-2.0.7] startup
+2026-04-13T11:56:29Z [16,185ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
+[16.210s] [ext: isaacsim.storage.native-1.5.1] startup
+[16.211s] [ext: isaacsim.core.utils-3.5.1] startup
+[16.214s] [ext: omni.graph.tools-1.79.2] startup
+[16.234s] [ext: omni.graph.action_core-1.1.7] startup
+[16.236s] [ext: omni.graph-1.141.2] startup
+[16.276s] [ext: omni.physx.tensors-107.3.26] startup
+[16.280s] [ext: omni.graph.action_nodes-1.50.4] startup
+[16.284s] [ext: isaacsim.core.simulation_manager-1.4.4] startup
+[17.942s] [ext: omni.kit.usd.collect-2.4.5] startup
+[17.946s] [ext: omni.kit.stage_templates-2.0.0] startup
+[17.949s] [ext: isaacsim.core.prims-0.6.1] startup
+[17.974s] [ext: omni.kit.usdz_export-1.0.9] startup
+[17.979s] [ext: isaacsim.core.api-4.8.0] startup
+[17.988s] [ext: omni.kit.tool.asset_importer-4.3.2] startup
+[17.996s] [ext: omni.graph.action-1.130.0] startup
+[17.998s] [ext: omni.kit.selection-0.1.6] startup
+[18.002s] [ext: omni.ui_query-1.1.8] startup
+[18.003s] [ext: omni.kit.stagerecorder.core-107.0.3] startup
+[18.006s] [ext: omni.kit.widget.text_editor-1.1.1] startup
+[18.008s] [ext: omni.kit.ui_test-1.3.7] startup
+[18.010s] [ext: omni.kit.stagerecorder.ui-107.0.1] startup
+[18.013s] [ext: omni.kit.window.extensions-1.4.27] startup
+[18.019s] [ext: omni.graph.visualization.nodes-2.1.3] startup
+[18.028s] [ext: omni.kit.stagerecorder.bundle-105.0.2] startup
+[18.029s] [ext: isaacsim.gui.components-1.2.1] startup
+[18.035s] [ext: isaacsim.gui.menu-2.4.4] startup
+[18.054s] [ext: isaacsim.app.about-2.0.11] startup
+[18.057s] [ext: isaacsim.asset.importer.mjcf-2.5.13] startup
+[18.100s] [ext: semantics.schema.editor-2.0.2] startup
+2026-04-13T11:56:31Z [18,083ms] [Warning] [pxr.Semantics] pxr.Semantics is deprecated - please use Semantics instead
+[18.109s] [ext: omni.kit.widget.graph-2.0.0] startup
+[18.116s] [ext: semantics.schema.property-2.0.1] startup
+[18.117s] [ext: omni.kit.graph.delegate.default-1.2.3] startup
+[18.119s] [ext: isaacsim.core.cloner-1.4.10] startup
+[18.121s] [ext: omni.kit.graph.editor.core-1.5.3] startup
+[18.124s] [ext: omni.kit.graph.usd.commands-1.3.1] startup
+[18.125s] [ext: omni.kit.widget.material_preview-1.0.16] startup
+[18.127s] [ext: omni.graph.image.core-0.6.1] startup
+[18.128s] [ext: omni.graph.scriptnode-1.50.0] startup
+[18.131s] [ext: omni.kit.widget.stage_icons-1.0.8] startup
+[18.133s] [ext: omni.kit.window.material_graph-1.9.1] startup
+[18.143s] [ext: omni.graph.image.nodes-1.3.1] startup
+[18.145s] [ext: omni.kit.menu.create-2.0.1] startup
+[18.149s] [ext: omni.kit.window.stage-2.6.1] startup
+[18.159s] [ext: omni.kit.viewport.menubar.settings-107.0.3] startup
+[18.164s] [ext: omni.graph.nodes-1.170.10] startup
+[18.174s] [ext: omni.graph.ui_nodes-1.50.5] startup
+[18.178s] [ext: isaacsim.util.debug_draw-3.1.0] startup
+[18.181s] [ext: omni.syntheticdata-0.6.13] startup
+[18.213s] [ext: omni.kit.scripting-107.3.2] startup
+[18.223s] [ext: omni.videoencoding-0.1.2] startup
+[18.225s] [ext: omni.warp-1.8.2] startup
+[18.231s] [ext: omni.sensors.nv.common-3.0.0] startup
+[18.247s] [ext: isaacsim.sensors.physx-2.3.2] startup
+[18.258s] [ext: isaacsim.replicator.behavior-1.1.16] startup
+[18.263s] [ext: omni.sensors.net-1.0.0] startup
+[18.267s] [ext: omni.replicator.core-1.12.27] startup
+2026-04-13T11:56:31Z [18,401ms] [Warning] [omni.graph.core.plugin] Found duplicate of category 'Replicator' - was 'Annotators', adding 'Fabric Reader'
+2026-04-13T11:56:31Z [18,401ms] [Warning] [omni.graph.core.plugin] Category 'Replicator' not accepted on node type 'omni.replicator.core.FabricReader' in extension 'omni.replicator.core'
+2026-04-13T11:56:31Z [18,402ms] [Warning] [omni.replicator.core.scripts.extension] No material configuration file, adding configuration to material settings directly.
+[18.430s] [ext: omni.sensors.nv.materials-2.0.0] startup
+[18.453s] [ext: isaacsim.simulation_app-2.12.2] startup
+[18.455s] [ext: omni.anim.curve.core-1.3.1] startup
+[18.473s] [ext: omni.kit.manipulator.camera-106.0.4] startup
+[18.503s] [ext: isaacsim.core.nodes-3.4.3] startup
+[18.524s] [ext: omni.sensors.nv.ids-2.0.0] startup
+[18.532s] [ext: omni.sensors.nv.lidar-3.0.0] startup
+[18.541s] [ext: omni.sensors.nv.wpm-3.0.0] startup
+[18.545s] [ext: omni.kit.property.audio-1.0.16] startup
+[18.549s] [ext: omni.kit.property.camera-1.0.10] startup
+[18.552s] [ext: omni.kit.property.light-1.0.12] startup
+[18.571s] [ext: omni.kit.property.geometry-2.0.4] startup
+[18.582s] [ext: omni.sensors.nv.radar-3.0.0] startup
+[18.589s] [ext: isaacsim.gui.property-1.1.3] startup
+[18.599s] [ext: omni.kit.property.render-1.2.1] startup
+[18.613s] [ext: omni.hydra.scene_api-0.1.2] startup
+[18.628s] [ext: isaacsim.test.docstring-1.1.0] startup
+[18.639s] [ext: isaacsim.core.experimental.utils-0.3.0] startup
+[18.656s] [ext: omni.kit.widget.zoombar-1.0.6] startup
+[18.662s] [ext: omni.kit.property.transform-1.5.13] startup
+[18.680s] [ext: omni.kit.property.material-1.11.9] startup
+[18.710s] [ext: isaacsim.core.experimental.prims-0.8.1] startup
+[18.793s] [ext: omni.kit.browser.core-2.3.13] startup
+[18.808s] [ext: omni.kit.property.bundle-1.4.1] startup
+[18.812s] [ext: isaacsim.sensors.rtx-15.8.4] startup
+[18.824s] [ext: omni.kit.viewport.menubar.camera-107.0.6] startup
+[18.856s] [ext: isaacsim.robot.surface_gripper-3.3.1] startup
+[18.861s] [ext: omni.kit.browser.folder.core-1.10.9] startup
+[18.894s] [ext: isaacsim.sensors.physics-0.4.3] startup
+[18.913s] [ext: omni.kit.tool.collect-2.2.18] startup
+[18.922s] [ext: omni.kit.menu.stage-1.2.7] startup
+[18.927s] [ext: isaacsim.robot.manipulators-3.3.6] startup
+[18.933s] [ext: omni.kit.viewport.menubar.lighting-107.3.1] startup
+[19.023s] [ext: omni.kit.viewport.menubar.render-107.0.10] startup
+[19.155s] [ext: isaacsim.robot.policy.examples-4.1.11] startup
+[19.163s] [ext: isaacsim.examples.browser-0.2.1] startup
+[19.337s] [ext: isaacsim.asset.importer.urdf-2.4.30] startup
+[19.533s] [ext: omni.kit.window.console-1.1.4] startup
+[19.550s] [ext: omni.physx.demos-107.3.26] startup
+[19.591s] [ext: omni.kit.property.physx-107.3.26] startup
+[19.627s] [ext: omni.rtx.window.settings-0.6.19] startup
+[19.634s] [ext: omni.ocio-0.1.1] startup
+[19.637s] [ext: omni.replicator.replicator_yaml-2.0.11] startup
+[19.640s] [ext: omni.asset_validator.core-1.1.6] startup
+[19.696s] [ext: omni.physx.vehicle-107.3.26] startup
+[19.713s] [ext: omni.rtx.settings.core-0.6.5] startup
+[19.719s] [ext: omni.kit.window.script_editor-2.0.1] startup
+[19.722s] [ext: isaacsim.robot.wheeled_robots-4.0.24] startup
+[19.728s] [ext: omni.kit.window.toolbar-2.0.0] startup
+[19.735s] [ext: omni.physx.asset_validator-107.3.26] startup
+[19.742s] [ext: omni.physx.camera-107.3.26] startup
+[19.755s] [ext: omni.physx.cct-107.3.26] startup
+[19.768s] [ext: omni.physx.graph-107.3.26] startup
+[19.788s] [ext: omni.physx.supportui-107.3.26] startup
+[19.814s] [ext: omni.physx.telemetry-107.3.26] startup
+[19.820s] [ext: omni.kit.window.status_bar-0.1.9] startup
+[19.828s] [ext: omni.usd.metrics.assembler.ui-107.3.1] startup
+[19.847s] [ext: isaacsim.asset.browser-1.3.23] startup
+[19.944s] [ext: isaacsim.core.throttling-2.2.2] startup
+[19.948s] [ext: omni.kit.ui.actions-1.0.5] startup
+[19.951s] [ext: omni.physx.bundle-107.3.26] startup
+[19.952s] [ext: isaacsim.sensors.camera-1.3.6] startup
+[19.957s] [ext: isaaclab-0.47.1] startup
+[20.192s] [ext: isaaclab_assets-0.2.2] startup
+[20.443s] [ext: isaaclab_tasks-0.11.1] startup
+[22.222s] [ext: omni.kit.menu.common-2.0.1] startup
+[22.223s] [ext: isaaclab_rl-0.4.2] startup
+[22.225s] [ext: isaaclab_mimic-1.0.14] startup
+[22.226s] [ext: isaaclab.python-2.2.1] startup
+[22.228s] Simulation App Starting
+2026-04-13T11:56:36Z [22,565ms] [Warning] [omni.fabric.plugin] Warning: attribute viewportHandle not found for bucket id 9
+
+[22.915s] app ready
+[26.014s] Simulation App Startup Complete
+[26.035s] [ext: isaacsim.robot_motion.lula-4.0.8] startup
+[26.057s] [ext: isaacsim.robot_motion.motion_generation-8.0.26] startup
+2026-04-13T11:56:40Z [26,556ms] [Warning] [isaaclab.envs.manager_based_env] Seed not set for the environment. The environment creation may not be deterministic.
+[26.590s] [ext: omni.physx.fabric-107.3.26] startup
+2026-04-13T11:56:40Z [26,672ms] [Warning] [isaacsim.asset.importer.urdf] The path base_link-base_fixed_joint is not a valid usd path, modifying to base_link_base_fixed_joint
+2026-04-13T11:56:40Z [26,672ms] [Warning] [isaacsim.asset.importer.urdf] The path wrist_3_link-tool0_fixed_joint is not a valid usd path, modifying to wrist_3_link_tool0_fixed_joint
+2026-04-13T11:56:40Z [26,673ms] [Warning] [isaacsim.asset.importer.urdf] link base has no body properties (mass, inertia, or collisions) and is being merged into base_link
+2026-04-13T11:56:40Z [26,673ms] [Warning] [isaacsim.asset.importer.urdf] link ee_link has no body properties (mass, inertia, or collisions) and is being merged into wrist_3_link
+2026-04-13T11:56:40Z [26,673ms] [Warning] [isaacsim.asset.importer.urdf] link left_inner_finger_pad has no body properties (mass, inertia, or collisions) and is being merged into left_inner_finger
+2026-04-13T11:56:40Z [26,673ms] [Warning] [isaacsim.asset.importer.urdf] link grasp_convenient_link has no body properties (mass, inertia, or collisions) and is being merged into robotiq_arg2f_base_link
+2026-04-13T11:56:40Z [26,673ms] [Warning] [isaacsim.asset.importer.urdf] link right_inner_finger_pad has no body properties (mass, inertia, or collisions) and is being merged into right_inner_finger
+2026-04-13T11:56:40Z [26,673ms] [Warning] [isaacsim.asset.importer.urdf] link tool0 has no body properties (mass, inertia, or collisions) and is being merged into wrist_3_link
+2026-04-13T11:56:40Z [26,701ms] [Warning] [isaacsim.asset.importer.urdf] No mass specified for link world
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@ <0x5f7f27270af0>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@ <0x5f7f27279140>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@ <0x5f7f27270af0>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:40Z [26,702ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@ <0x5f7f27279140>)
+
+2026-04-13T11:56:40Z [26,704ms] [Warning] [isaacsim.asset.importer.urdf] Link world has no colliders, and no inertia was imported; assigning a small isotropic inertia matrix
+2026-04-13T11:56:41Z [27,627ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,628ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,631ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,633ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,634ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,636ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,638ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,639ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,641ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,643ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,645ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,646ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,649ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,650ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,652ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f2725f260>)
+
+2026-04-13T11:56:41Z [27,654ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </ur5e/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @/tmp/IsaacLab/usd_20260413_135640_1238/ur5e_robotiq_140.usd@ <0x5f7f27259b20>)
+
+2026-04-13T11:56:41Z [27,769ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </World/envs/env_0/RobotUnified/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @anon:0x5f7f1b32baa0:World0.usd@ <0x5f7f1b3324b0>)
+
+2026-04-13T11:56:42Z [28,884ms] [Warning] [omni.usd] Warning: in _ReportErrors at line 3172 of /builds/omniverse/usd-ci/USD/pxr/usd/usd/stage.cpp -- In </World/envs/env_1/RobotUnified/world/visuals>: Unresolved reference prim path @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_physics.usd@</visuals/world> introduced by @/tmp/IsaacLab/usd_20260413_135640_1238/configuration/ur5e_robotiq_140_base.usd@</ur5e/world/visuals> (recomposing stage on stage @anon:0x5f7f1b32baa0:World0.usd@ <0x5f7f1b3324b0>)
+
+2026-04-13T11:56:43Z [29,852ms] [Warning] [omni.fabric.plugin] getAttributeCount called on non-existent path /World/envs/env_1/RobotUnified/right_inner_finger/visuals/mesh_1
+getTypes called on non-existent path /World2026-04-13T11:56:43Z [29,852ms] [Warning] [omni.fabric.plugin] /envs/env_1/RobotUnified/right_inner_finger/visuals/mesh_1
+2026-04-13T11:56:45Z [31,583ms] [Warning] [omni.syntheticdata.plugin] OgnSdPostRenderVarToHost : rendervar copy from texture directly to host buffer is counter-performant. Please use copy from texture to device buffer first.
+2026-04-13T11:56:48Z [35,442ms] [Warning] [carb] Client gpu.foundation.plugin has acquired [gpu::unstable::IMemoryBudgetManagerFactory v0.1] 100 times. Consider accessing this interface with carb::getCachedInterface() (Performance warning)

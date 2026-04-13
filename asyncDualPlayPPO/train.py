@@ -331,15 +331,12 @@ def main():
         env_cfg.observations.bob_policy.cube_goal_distance = None
 
     if args.arm_config == "rotated":
-        print(
-            "[Config] Rotated arm configuration: shoulder −90°"
-        )
+        print("[Config] Rotated arm configuration: shoulder −90°")
         env_cfg.scene.robot.init_state.joint_pos["shoulder_pan_joint"] = 1.57
         env_cfg.scene.robot.init_state.joint_pos["elbow_joint"] = 2.356
         env_cfg.scene.robot.init_state.joint_pos["wrist_1_joint"] = -0.785
         env_cfg.scene.robot.init_state.joint_pos["wrist_2_joint"] = 1.57
         env_cfg.scene.robot.init_state.joint_pos["wrist_3_joint"] = 0
-        
 
     print("Creating environment (suppressing URDF/Lula warnings)...")
     with SuppressAllOutput():
@@ -383,12 +380,16 @@ def main():
         )
     elif args.dummy_alice:
         env = DummyAliceWrapper(
-            env=base_env, device=base_env.device,
-            alice_timesteps=alice_timesteps, bob_timesteps=bob_timesteps,
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=alice_timesteps,
+            bob_timesteps=bob_timesteps,
         )
     else:
         env = AsyncDualPlayEnvWrapper(
-            env=base_env, device=base_env.device, arm_config=args.arm_config,
+            env=base_env,
+            device=base_env.device,
+            arm_config=args.arm_config,
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
             max_goals_per_episode=max_goals_per_episode,
@@ -474,10 +475,15 @@ def main():
     ).to(env.device)
 
     # Scale goal_proj weights down at init: a large W_g saturates ReLUs before training starts.
-    if hasattr(bob_ppo.actor_critic, '_goal_proj') and bob_ppo.actor_critic._goal_proj is not None:
+    if (
+        hasattr(bob_ppo.actor_critic, "_goal_proj")
+        and bob_ppo.actor_critic._goal_proj is not None
+    ):
         with torch.no_grad():
             bob_ppo.actor_critic._goal_proj.weight.mul_(0.01 / 0.5)
-        print(f"  [Init] goal_proj scale reduced: ||W_g|| = {bob_ppo.actor_critic._goal_proj.weight.norm():.4f}")
+        print(
+            f"  [Init] goal_proj scale reduced: ||W_g|| = {bob_ppo.actor_critic._goal_proj.weight.norm():.4f}"
+        )
 
     bob_ppo.optimizer = torch.optim.Adam(
         bob_ppo.actor_critic.parameters(), lr=bob_ppo.learning_rate
@@ -544,15 +550,19 @@ def main():
         _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
         if os.path.isfile(_abc_buf_path):
             bob_ppo.abc_buffer.load(_abc_buf_path)
-            print(f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries) from {_abc_buf_path}")
-            
+            print(
+                f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries) from {_abc_buf_path}"
+            )
+
         _ep_mgr_path = args.chkpt_bob.replace("model_", "episode_manager_")
         if os.path.isfile(_ep_mgr_path):
             ep_sd = torch.load(_ep_mgr_path, map_location=env.device)
             env.episode_manager.load_state_dict(ep_sd)
             print(f"[Resume] Loaded EpisodeManager state from {_ep_mgr_path}")
         else:
-            print(f"[Resume] WARNING: EpisodeManager checkpoint not found at {_ep_mgr_path}. Envs will start fresh.")
+            print(
+                f"[Resume] WARNING: EpisodeManager checkpoint not found at {_ep_mgr_path}. Envs will start fresh."
+            )
 
     # --- Agents ---
     alice_updates = 0
@@ -689,13 +699,19 @@ def main():
             bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
-            torch.save(env.episode_manager.state_dict(), os.path.join(bob_ppo.log_dir, f"episode_manager_{bob_updates+1}.pt"))
+            torch.save(
+                env.episode_manager.state_dict(),
+                os.path.join(bob_ppo.log_dir, f"episode_manager_{bob_updates+1}.pt"),
+            )
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
             bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_best.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
-            torch.save(env.episode_manager.state_dict(), os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"))
+            torch.save(
+                env.episode_manager.state_dict(),
+                os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"),
+            )
 
         bob_rew_buf.clear()
         bob_success_buf.clear()
@@ -741,7 +757,7 @@ def main():
         # Alice entropy annealing: 1.0 → 0.05 over first 1000 iterations.
         _ALICE_ENT_START = 1.0
         _ALICE_ENT_END = 0.05
-        _ALICE_ENT_ANNEAL_ITERS = 1000
+        _ALICE_ENT_ANNEAL_ITERS = 300
         frac = min(1.0, bob_updates / _ALICE_ENT_ANNEAL_ITERS)
         alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (
             _ALICE_ENT_END - _ALICE_ENT_START
@@ -1150,7 +1166,9 @@ def main():
 
         # --- 4. ALICE REWARD ASSIGNMENT & UPDATE ---
         alice_outcome_rewards = torch.zeros(env.num_envs, device=env.device)
-        alice_outcome_rewards[goal_valid] = env.episode_manager.alice_base_reward[goal_valid]
+        alice_outcome_rewards[goal_valid] = env.episode_manager.alice_base_reward[
+            goal_valid
+        ]
         bob_failed = (~bob_success) & goal_valid
         alice_outcome_rewards[bob_failed] += ALICE_BOB_FAIL_REWARD
 
@@ -1169,9 +1187,12 @@ def main():
 
         # --- Iteration aggregate summary ---
         _stats = env.get_iter_stats() if hasattr(env, "get_iter_stats") else {}
-        _term_str = "  ".join(
-            f"{k}={v}" for k, v in sorted(_stats.get("terminations", {}).items())
-        ) or "none"
+        _term_str = (
+            "  ".join(
+                f"{k}={v}" for k, v in sorted(_stats.get("terminations", {}).items())
+            )
+            or "none"
+        )
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | "
             f"Goals valid={_stats.get('valid_goals', 0)} invalid={_stats.get('invalid_goals', 0)} | "
@@ -1183,7 +1204,10 @@ def main():
 
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))
-    torch.save(env.episode_manager.state_dict(), os.path.join(bob_ppo.log_dir, "episode_manager_final.pt"))
+    torch.save(
+        env.episode_manager.state_dict(),
+        os.path.join(bob_ppo.log_dir, "episode_manager_final.pt"),
+    )
     print("  ✓ Saved final models")
     writer.close()
 

@@ -162,15 +162,21 @@ def main():
         description="Test 7: Potential-Based Shaping + ABC — Push Trajectory"
     )
     parser.add_argument(
-        "--num_iterations", type=int, default=200,
+        "--num_iterations",
+        type=int,
+        default=200,
         help="Training iterations (default: 200)",
     )
     parser.add_argument(
-        "--episode_steps", type=int, default=150,
+        "--episode_steps",
+        type=int,
+        default=150,
         help="Steps per episode (default: 150, matches push trajectory length)",
     )
     parser.add_argument(
-        "--abc_epochs", type=int, default=1,
+        "--abc_epochs",
+        type=int,
+        default=1,
         help="ABC gradient steps per iteration (default: 1)",
     )
     parser.add_argument("--seed", type=int, default=42)
@@ -225,10 +231,18 @@ def main():
     print(f"  Device: {device}")
 
     # ── Observation Dimensions ──────────────────────────────────
-    alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["alice_policy"]
+    alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim[
+        "alice_policy"
+    ]
     bob_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["bob_policy"]
-    alice_obs_dim = alice_dim_info[0] if isinstance(alice_dim_info, (tuple, list)) else alice_dim_info
-    bob_obs_dim = bob_dim_info[0] if isinstance(bob_dim_info, (tuple, list)) else bob_dim_info
+    alice_obs_dim = (
+        alice_dim_info[0]
+        if isinstance(alice_dim_info, (tuple, list))
+        else alice_dim_info
+    )
+    bob_obs_dim = (
+        bob_dim_info[0] if isinstance(bob_dim_info, (tuple, list)) else bob_dim_info
+    )
     print(f"  Alice obs dim: {alice_obs_dim}, Bob obs dim: {bob_obs_dim}")
 
     # ── Action space ────────────────────────────────────────────
@@ -258,8 +272,10 @@ def main():
     if ac._goal_proj is not None:
         with torch.no_grad():
             ac._goal_proj.weight.mul_(0.01 / 0.5)
-        print(f"\n  [Init] goal_proj scale reduced: "
-              f"||W_g|| = {ac._goal_proj.weight.norm():.4f}")
+        print(
+            f"\n  [Init] goal_proj scale reduced: "
+            f"||W_g|| = {ac._goal_proj.weight.norm():.4f}"
+        )
 
     optimizer = torch.optim.Adam(ac.parameters(), lr=1e-3)
 
@@ -314,12 +330,12 @@ def main():
     push_bins = torch.zeros(N, num_cat_dims, device=device)
 
     # Phase 1: position left + descend (steps 0-59)
-    push_bins[:60, 0] = 3   # X: negative — move arm to left of cube
-    push_bins[:60, 1] = 5   # Y: neutral
-    push_bins[:60, 2] = 3   # Z: descend aggressively to contact height
-    push_bins[:60, 3] = 5   # Rx: neutral
-    push_bins[:60, 4] = 5   # Ry: neutral
-    push_bins[:60, 5] = 5   # Gripper: open
+    push_bins[:60, 0] = 3  # X: negative — move arm to left of cube
+    push_bins[:60, 1] = 5  # Y: neutral
+    push_bins[:60, 2] = 3  # Z: descend aggressively to contact height
+    push_bins[:60, 3] = 5  # Rx: neutral
+    push_bins[:60, 4] = 5  # Ry: neutral
+    push_bins[:60, 5] = 5  # Gripper: open
 
     # Phase 2: sweep right through cube (steps 60-119)
     push_bins[60:120, 0] = 8  # X: positive — sweep through cube, pushing it right
@@ -330,24 +346,28 @@ def main():
     push_bins[60:120, 5] = 5  # Gripper: open (EE face pushes cube)
 
     # Phase 3: retreat up (steps 120-149)
-    push_bins[120:, 0] = 5   # X: neutral
-    push_bins[120:, 1] = 5   # Y: neutral
-    push_bins[120:, 2] = 7   # Z: rise clear
-    push_bins[120:, 3] = 5   # Rx: neutral
-    push_bins[120:, 4] = 5   # Ry: neutral
-    push_bins[120:, 5] = 5   # Gripper: open
+    push_bins[120:, 0] = 5  # X: neutral
+    push_bins[120:, 1] = 5  # Y: neutral
+    push_bins[120:, 2] = 7  # Z: rise clear
+    push_bins[120:, 3] = 5  # Rx: neutral
+    push_bins[120:, 4] = 5  # Ry: neutral
+    push_bins[120:, 5] = 5  # Gripper: open
 
     print(f"\n  Push trajectory ({N} steps, 3 phases):")
-    print(f"    Phase 1 (0-59):   Position left + descend — X={push_bins[0,0].int()}, Z={push_bins[0,2].int()}")
+    print(
+        f"    Phase 1 (0-59):   Position left + descend — X={push_bins[0,0].int()}, Z={push_bins[0,2].int()}"
+    )
     print(f"    Phase 2 (60-119): Sweep right through cube — X={push_bins[60,0].int()}")
-    print(f"    Phase 3 (120-149): Retreat up              — Z={push_bins[120,2].int()}")
+    print(
+        f"    Phase 3 (120-149): Retreat up              — Z={push_bins[120,2].int()}"
+    )
 
     # Pre-convert push trajectory to env actions
     demo_gripper_traj = torch.ones(1, 1, device=device)
     demo_env_actions = []
     for t in range(N):
         act_t, demo_gripper_traj = bins_to_env_action(
-            push_bins[t:t+1], demo_gripper_traj
+            push_bins[t : t + 1], demo_gripper_traj
         )
         demo_env_actions.append(act_t.squeeze(0))
     demo_env_actions = torch.stack(demo_env_actions)  # (N, env_action_dim)
@@ -365,15 +385,15 @@ def main():
         def __init__(self, num_envs, device):
             self.goal_states = torch.zeros(num_envs, 12, device=device)
             # Object 1 (target_object): stays near default
-            self.goal_states[:, 0] = -0.25   # x  — unchanged
-            self.goal_states[:, 1] =  0.70   # y  — unchanged
-            self.goal_states[:, 2] =  0.05   # z
+            self.goal_states[:, 0] = -0.25  # x  — unchanged
+            self.goal_states[:, 1] = 0.70  # y  — unchanged
+            self.goal_states[:, 2] = 0.05  # z
             # Euler angles for obj1: all zero (no rotation goal)
 
             # Object 2 (cube): pushed ~0.20m in +X
-            self.goal_states[:, 6] = -0.05   # x  — pushed from -0.25 to -0.05
-            self.goal_states[:, 7] =  0.65   # y  — slight Y change
-            self.goal_states[:, 8] =  0.05   # z
+            self.goal_states[:, 6] = -0.05  # x  — pushed from -0.25 to -0.05
+            self.goal_states[:, 7] = 0.65  # y  — slight Y change
+            self.goal_states[:, 8] = 0.05  # z
             # Euler angles for obj2: all zero (no rotation goal)
 
             self.goal_valid = torch.ones(num_envs, dtype=torch.bool, device=device)
@@ -384,11 +404,18 @@ def main():
 
     goal_mgr = base_env.episode_manager
     cube_disp = float(
-        torch.norm(goal_mgr.goal_states[0, 6:9] - torch.tensor([-0.25, 0.70, 0.05], device=device))
+        torch.norm(
+            goal_mgr.goal_states[0, 6:9]
+            - torch.tensor([-0.25, 0.70, 0.05], device=device)
+        )
     )
     print(f"\n  Goal: cube displaced {cube_disp:.3f} m from default")
-    print(f"    Default: [-0.25, 0.70]  →  Goal: [{goal_mgr.goal_states[0,6]:.2f}, {goal_mgr.goal_states[0,7]:.2f}]")
-    print(f"    Valid goal? {'YES ✓' if cube_disp > 0.07 else 'NO ✗'} (threshold: 0.07m)")
+    print(
+        f"    Default: [-0.25, 0.70]  →  Goal: [{goal_mgr.goal_states[0,6]:.2f}, {goal_mgr.goal_states[0,7]:.2f}]"
+    )
+    print(
+        f"    Valid goal? {'YES ✓' if cube_disp > 0.07 else 'NO ✗'} (threshold: 0.07m)"
+    )
 
     # ── Optional video recorder ──────────────────────────────────
     recorder = None
@@ -418,7 +445,9 @@ def main():
             # Env 0 (left): untrained Bob
             with torch.no_grad():
                 bob_bins_rec, _, _, _, _ = ac.act(bob_obs_rec[0:1], None)
-                bob_act_rec, bob_gripper_rec = bins_to_env_action(bob_bins_rec, bob_gripper_rec)
+                bob_act_rec, bob_gripper_rec = bins_to_env_action(
+                    bob_bins_rec, bob_gripper_rec
+                )
             # Action order: [env0 (Bob), env1 (demo)]
             combined_rec = torch.cat([bob_act_rec, demo_act_rec], dim=0)
             obs_dict_rec, _, term_rec, trunc_rec, _ = base_env.step(combined_rec)
@@ -432,10 +461,14 @@ def main():
     # ══════════════════════════════════════════════════════════════
     # TRAINING LOOP
     # ══════════════════════════════════════════════════════════════
-    print(f"\n  Training for {args.num_iterations} iterations "
-          f"(raw NLL + aux_coef={aux_coef})...")
-    print(f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'X md':>6} | "
-          f"{'Y md':>6} | {'Gr md':>6} | {'Match%':>8}")
+    print(
+        f"\n  Training for {args.num_iterations} iterations "
+        f"(raw NLL + aux_coef={aux_coef})..."
+    )
+    print(
+        f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'X md':>6} | "
+        f"{'Y md':>6} | {'Gr md':>6} | {'Match%':>8}"
+    )
     print("  " + "-" * 65)
 
     nll_history = []
@@ -447,8 +480,8 @@ def main():
         bob_obs_all = obs_dict["bob_policy"]
 
         bob_gripper = torch.ones(1, 1, device=device)
-        demo_obs_list = []    # observations from env 1 (RIGHT / demo side)
-        demo_act_list = []    # push bin actions (ground truth)
+        demo_obs_list = []  # observations from env 1 (RIGHT / demo side)
+        demo_act_list = []  # push bin actions (ground truth)
         episode_corrupted = False
 
         for t in range(N):
@@ -467,7 +500,9 @@ def main():
             # Collect demo: env 1's current observation + the push bins
             if not episode_corrupted:
                 demo_obs_list.append(bob_obs_all[1:2].clone())  # env 1 obs (RIGHT)
-                demo_act_list.append(push_bins[t:t+1].clone())   # push bins at step t
+                demo_act_list.append(
+                    push_bins[t : t + 1].clone()
+                )  # push bins at step t
 
             # Step simulation
             obs_dict, _, terminated, truncated, _ = base_env.step(combined_action)
@@ -489,7 +524,7 @@ def main():
                 print(f"  [iter {it}] Demo env (right) terminated — skipping training")
             continue
 
-        demo_obs = torch.cat(demo_obs_list, dim=0)   # (T, obs_dim)
+        demo_obs = torch.cat(demo_obs_list, dim=0)  # (T, obs_dim)
         demo_acts = torch.cat(demo_act_list, dim=0)  # (T, num_cat_dims)
         T = demo_obs.shape[0]
 
@@ -502,10 +537,10 @@ def main():
 
             seq_lps = []
             for step in range(T):
-                obs_t = demo_obs[step:step+1]  # (1, obs_dim)
+                obs_t = demo_obs[step : step + 1]  # (1, obs_dim)
                 raw, (h, c) = ac._actor_forward(obs_t, (h, c))
                 dist = ac._make_distribution(raw)
-                lp = dist.log_prob(demo_acts[step:step+1].long())
+                lp = dist.log_prob(demo_acts[step : step + 1].long())
                 seq_lps.append(lp)
 
             bc_loss = -torch.stack(seq_lps).mean()  # raw NLL
@@ -515,12 +550,9 @@ def main():
             if ac.goal_encoder is not None and ac.goal_encoder.use_aux_loss:
                 robot_dim = ac._ge_robot_dim
                 obj_section = demo_obs[:, robot_dim:]
-                obj_chunks = obj_section.view(
-                    T, ac._ge_num_objects, ac._ge_raw_per_obj
-                )
+                obj_chunks = obj_section.view(T, ac._ge_num_objects, ac._ge_raw_per_obj)
                 goal_poses = obj_chunks[
-                    :, :,
-                    ac._ge_obj_state_dim : ac._ge_obj_state_dim + ac._ge_goal_dim
+                    :, :, ac._ge_obj_state_dim : ac._ge_obj_state_dim + ac._ge_goal_dim
                 ]
                 current_poses = obj_chunks[:, :, :6]
 
@@ -544,10 +576,10 @@ def main():
             eval_lps = []
             eval_greedy = []
             for step in range(T):
-                obs_t = demo_obs[step:step+1]
+                obs_t = demo_obs[step : step + 1]
                 raw, (h_eval, c_eval) = ac._actor_forward(obs_t, (h_eval, c_eval))
                 dist = ac._make_distribution(raw)
-                eval_lps.append(dist.log_prob(demo_acts[step:step+1].long()))
+                eval_lps.append(dist.log_prob(demo_acts[step : step + 1].long()))
                 logits = raw.view(1, ac.num_cat_dims, ac.num_bins)
                 eval_greedy.append(logits.argmax(dim=-1).squeeze(0))
 
@@ -559,7 +591,11 @@ def main():
             all_match = (greedy == demo_acts).all(dim=-1).float().mean().item()
 
         nll_history.append(raw_nll)
-        aux_val = aux_loss_val.item() if isinstance(aux_loss_val, torch.Tensor) else aux_loss_val
+        aux_val = (
+            aux_loss_val.item()
+            if isinstance(aux_loss_val, torch.Tensor)
+            else aux_loss_val
+        )
         aux_history.append(aux_val)
 
         if it % 5 == 0 or it == 1:
@@ -608,24 +644,30 @@ def main():
             bob_obs_all = obs_dict["bob_policy"]
 
     if recorder is not None:
-        recorder.stop_and_save(os.path.join(video_dir, "end_converged_shaping_push.mp4"))
+        recorder.stop_and_save(
+            os.path.join(video_dir, "end_converged_shaping_push.mp4")
+        )
 
     # ── Results ──
     mean_diff = np.mean(action_diffs)
     final_nll = nll_history[-1] if nll_history else float("inf")
     nll_decreased = len(nll_history) >= 2 and nll_history[-1] < nll_history[0]
 
-    print(f"\n  NLL:         {nll_history[0]:+.3f} → {final_nll:+.3f}  "
-          f"({'✓ decreased' if nll_decreased else '✗ DID NOT decrease'})")
-    print(f"  Action diff: {mean_diff:.4f}  "
-          f"({'✓ small' if mean_diff < 0.3 else '✗ large'})")
+    print(
+        f"\n  NLL:         {nll_history[0]:+.3f} → {final_nll:+.3f}  "
+        f"({'✓ decreased' if nll_decreased else '✗ DID NOT decrease'})"
+    )
+    print(
+        f"  Action diff: {mean_diff:.4f}  "
+        f"({'✓ small' if mean_diff < 0.3 else '✗ large'})"
+    )
 
     with torch.no_grad():
         h_f = torch.zeros(1, ac.lstm_hidden_size, device=device)
         c_f = torch.zeros(1, ac.lstm_hidden_size, device=device)
         final_greedy_list = []
         for step in range(T):
-            obs_t = demo_obs[step:step+1]
+            obs_t = demo_obs[step : step + 1]
             raw, (h_f, c_f) = ac._actor_forward(obs_t, (h_f, c_f))
             logits = raw.view(1, ac.num_cat_dims, ac.num_bins)
             final_greedy_list.append(logits.argmax(dim=-1).squeeze(0))
@@ -637,25 +679,37 @@ def main():
         push_x_mode = push_phase_greedy[:, 0].mode().values.item()
 
         final_match = (final_greedy == demo_acts).all(dim=-1).float().mean().item()
-        push_match = (push_phase_greedy == push_phase_target).all(dim=-1).float().mean().item()
+        push_match = (
+            (push_phase_greedy == push_phase_target).all(dim=-1).float().mean().item()
+        )
 
-    print(f"  X mode (push): {push_x_mode:.0f} (target: 8 during push phase)  "
-          f"{'✓' if abs(push_x_mode - 8) < 1 else '✗'}")
-    print(f"  Push match:    {push_match:.1%}  "
-          f"({'✓ >50%' if push_match > 0.5 else '✗ <50%'})")
-    print(f"  Final Match:   {final_match:.1%}  "
-          f"({'✓ >50%' if final_match > 0.5 else '✗ <50%'})")
+    print(
+        f"  X mode (push): {push_x_mode:.0f} (target: 8 during push phase)  "
+        f"{'✓' if abs(push_x_mode - 8) < 1 else '✗'}"
+    )
+    print(
+        f"  Push match:    {push_match:.1%}  "
+        f"({'✓ >50%' if push_match > 0.5 else '✗ <50%'})"
+    )
+    print(
+        f"  Final Match:   {final_match:.1%}  "
+        f"({'✓ >50%' if final_match > 0.5 else '✗ <50%'})"
+    )
 
     if aux_history:
         print(f"  Aux loss:    {aux_history[0]:.4f} → {aux_history[-1]:.4f}")
 
     passed = nll_decreased and final_match > 0.5
-    print(f"\n  {'PASSED ✓' if passed else 'FAILED ✗'}: "
-          f"{'Bob learned to push the cube via ABC!' if passed else 'ABC did not converge on push trajectory'}")
+    print(
+        f"\n  {'PASSED ✓' if passed else 'FAILED ✗'}: "
+        f"{'Bob learned to push the cube via ABC!' if passed else 'ABC did not converge on push trajectory'}"
+    )
 
     if not passed and final_match < 0.3:
         print("  → TIP: Try --num_iterations 500 or --abc_epochs 3")
-        print("  → TIP: Reduce aux_coef in ppo_continuous.yaml if GoalEncoder dominates")
+        print(
+            "  → TIP: Reduce aux_coef in ppo_continuous.yaml if GoalEncoder dominates"
+        )
 
     # ── Continuous replay for visual inspection ──────────────────
     print("\n  Replaying continuously for visual inspection...")

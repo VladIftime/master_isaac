@@ -181,7 +181,7 @@ class AsyncDualPlayEnvWrapper:
             "valid_goals": 0,
             "bob_successes": 0,
             "bob_failures": 0,
-            "terminations": {},        # reason -> count
+            "terminations": {},  # reason -> count
         }
 
     def reset_iter_stats(self):
@@ -254,8 +254,8 @@ class AsyncDualPlayEnvWrapper:
             # IsaacLab stores _term_dones as (num_envs, num_conditions) bool tensor
             # and condition names in _term_names list.
             tm = self.env.termination_manager
-            term_dones = tm._term_dones        # (num_envs, num_conditions)
-            term_names = tm._term_names        # list[str]
+            term_dones = tm._term_dones  # (num_envs, num_conditions)
+            term_names = tm._term_names  # list[str]
 
             for env_id in reset_ids:
                 is_term = terminated[env_id].item()
@@ -391,7 +391,6 @@ class AsyncDualPlayEnvWrapper:
             ]
             self.delayed_alice_reward[completion_ids] = 0.0
 
-
             can_continue = (
                 self.episode_manager.goal_count[completion_ids]
                 < self.episode_manager.max_goals
@@ -431,7 +430,9 @@ class AsyncDualPlayEnvWrapper:
             "goal_states": (
                 self.episode_manager.goal_states.clone()
                 if self.episode_manager.goal_states is not None
-                else torch.zeros((self.num_envs, self.num_objects * 6), device=self.device)
+                else torch.zeros(
+                    (self.num_envs, self.num_objects * 6), device=self.device
+                )
             ),
             "max_contact_force": self.episode_manager.max_contact_force.clone(),
         }
@@ -474,10 +475,16 @@ class AsyncDualPlayEnvWrapper:
         # position → instant success in 1-2 steps with zero learning signal.
         # Require at least one object to move >7cm in XY (above Bob's 5cm success threshold).
         _MIN_XY_DISP = 0.07  # 7cm — 2cm margin above Bob's goal_tolerance
-        target_xy_disp = torch.norm(active_goal[:, 0:2] - active_initial[:, 0:2], dim=-1)
+        target_xy_disp = torch.norm(
+            active_goal[:, 0:2] - active_initial[:, 0:2], dim=-1
+        )
         if self.num_objects == 2:
-            cube_xy_disp  = torch.norm(active_goal[:, 6:8] - active_initial[:, 6:8], dim=-1)
-            sufficient_xy = (target_xy_disp > _MIN_XY_DISP) | (cube_xy_disp > _MIN_XY_DISP)
+            cube_xy_disp = torch.norm(
+                active_goal[:, 6:8] - active_initial[:, 6:8], dim=-1
+            )
+            sufficient_xy = (target_xy_disp > _MIN_XY_DISP) | (
+                cube_xy_disp > _MIN_XY_DISP
+            )
         else:
             sufficient_xy = target_xy_disp > _MIN_XY_DISP
         xy_fail = valid & ~sufficient_xy
@@ -1067,9 +1074,13 @@ class AsyncDualPlayEnvWrapper:
                 for obj_idx, obj_name in enumerate(_OBJ_NAMES):
                     d = delta[eid, obj_idx].item()
                     if d > 0:
-                        parts.append(f"+1 {obj_name} at goal (dist={pos_dists[eid,obj_idx]:.3f}m)")
+                        parts.append(
+                            f"+1 {obj_name} at goal (dist={pos_dists[eid,obj_idx]:.3f}m)"
+                        )
                     elif d < 0:
-                        parts.append(f"-1 {obj_name} left goal (dist={pos_dists[eid,obj_idx]:.3f}m)")
+                        parts.append(
+                            f"-1 {obj_name} left goal (dist={pos_dists[eid,obj_idx]:.3f}m)"
+                        )
                 print(
                     f"  [BobRew] Env {eid} step={step}: {rew:+.0f} | {' | '.join(parts)}",
                     flush=True,

@@ -36,6 +36,7 @@ import sys
 import copy
 import yaml
 import threading
+from collections import deque
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -157,18 +158,42 @@ def main():
         description="Test 6: ABC + GoalEncoder Integration"
     )
     parser.add_argument(
-        "--num_iterations", type=int, default=200,
-        help="Training iterations (default: 200)",
+        "--max_iterations",
+        type=int,
+        default=2000,
+        help="Safety cap on training iterations (default: 2000)",
     )
     parser.add_argument(
-        "--episode_steps", type=int, default=80,
-        help="Steps per episode (default: 80)",
+        "--episode_steps",
+        type=int,
+        default=100,
+        help="Steps per episode (default: 100)",
     )
     parser.add_argument(
-        "--abc_epochs", type=int, default=1,
+        "--abc_epochs",
+        type=int,
+        default=1,
         help="ABC gradient steps per iteration (default: 1)",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--success_window",
+        type=int,
+        default=10,
+        help="Rolling window size for success rate (default: 10)",
+    )
+    parser.add_argument(
+        "--success_threshold",
+        type=float,
+        default=0.8,
+        help="Rolling success rate to consider policy converged (default: 0.8)",
+    )
+    parser.add_argument(
+        "--eval_episodes",
+        type=int,
+        default=50,
+        help="Frozen eval episodes after training converges (default: 50)",
+    )
     parser.add_argument(
         "--record_video",
         action="store_true",
@@ -220,10 +245,18 @@ def main():
     print(f"  Device: {device}")
 
     # ── Observation Dimensions ──────────────────────────────────
-    alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["alice_policy"]
+    alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim[
+        "alice_policy"
+    ]
     bob_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["bob_policy"]
-    alice_obs_dim = alice_dim_info[0] if isinstance(alice_dim_info, (tuple, list)) else alice_dim_info
-    bob_obs_dim = bob_dim_info[0] if isinstance(bob_dim_info, (tuple, list)) else bob_dim_info
+    alice_obs_dim = (
+        alice_dim_info[0]
+        if isinstance(alice_dim_info, (tuple, list))
+        else alice_dim_info
+    )
+    bob_obs_dim = (
+        bob_dim_info[0] if isinstance(bob_dim_info, (tuple, list)) else bob_dim_info
+    )
     print(f"  Alice obs dim: {alice_obs_dim}, Bob obs dim: {bob_obs_dim}")
 
     # ── Action space ────────────────────────────────────────────
@@ -266,8 +299,10 @@ def main():
     if ac._goal_proj is not None:
         with torch.no_grad():
             ac._goal_proj.weight.mul_(0.01 / 0.5)  # original gain=0.5, target=0.01
-        print(f"\n  [Init] goal_proj scale reduced: "
-              f"||W_g|| = {ac._goal_proj.weight.norm():.4f}")
+        print(
+            f"\n  [Init] goal_proj scale reduced: "
+            f"||W_g|| = {ac._goal_proj.weight.norm():.4f}"
+        )
 
     optimizer = torch.optim.Adam(ac.parameters(), lr=1e-3)
 
@@ -292,9 +327,18 @@ def main():
     # ── Alice's hard-coded trajectory (gentle sweep) ────────────
     N = args.episode_steps
     alice_bins = torch.zeros(N, num_cat_dims, device=device)
-    alice_bins[:, 0] = torch.linspace(4, 7, N, device=device).round()  # X: gentle L→R
-    alice_bins[:, 1] = 5.0  # Y: neutral
-    alice_bins[:, 2] = 5.0  # Z: same height
+    alice_bins[:, 0] = 5.0  # X: neutral
+
+    PUSH_STEP = int(N * (1 / 2))
+    alice_bins[:PUSH_STEP, 1] = torch.linspace(5, 6, PUSH_STEP, device=device).round()
+    alice_bins[PUSH_STEP:, 1] = 7.0
+
+    DROP_STEP = int(N * (1 / 2))
+    alice_bins[:DROP_STEP, 2] = torch.linspace(
+        3, 5, DROP_STEP, device=device
+    ).round()  # Z: gentle up to down
+    alice_bins[DROP_STEP:, 2] = 5.0
+
     alice_bins[:, 3] = 5.0  # Rx: neutral
     alice_bins[:, 4] = 5.0  # Ry: neutral
     alice_bins[:, 5] = 5.0  # Gripper: neutral
@@ -309,55 +353,115 @@ def main():
     alice_env_actions = []
     for t in range(N):
         act_t, alice_gripper_traj = bins_to_env_action(
-            alice_bins[t:t+1], alice_gripper_traj
+            alice_bins[t : t + 1], alice_gripper_traj
         )
         alice_env_actions.append(act_t.squeeze(0))
     alice_env_actions = torch.stack(alice_env_actions)
 
-    # ── Fake goal_states (Alice's "final pose" as the goal) ─────
-    # Instead of zeros, populate with a meaningful goal:
-    # the object positions at the END of Alice's trajectory.
-    # This gives the GoalEncoder a non-trivial signal to encode.
-    #
-    # For this test we use a fixed known goal pose:
-    #   obj1 goal: [0.15, 0.5, 0.05, 0, 0, 0]  (target object moved right)
-    #   obj2 goal: [-0.10, 0.5, 0.05, 0, 0, 0]  (cube stays near center)
+    # ── Discover actual goal by running Alice's trajectory once ────
+    # Instead of hardcoding target positions, run a warmup episode where
+    # Alice executes her full trajectory and Bob does nothing.  At the end
+    # we read where each object actually landed (in environment-local frame)
+    # and store that as the goal.  This automatically tracks any future
+    # changes to Alice's trajectory without manual updates.
+
     class _GoalEpisodeManager:
         def __init__(self, num_envs, device):
-            # Goal layout: [obj1_pos(3), obj1_euler(3), obj2_pos(3), obj2_euler(3)] = 12D
+            # Goal layout: [target_object(0:6), cube(6:12)] = [pos(3)+euler(3)] each
             self.goal_states = torch.zeros(num_envs, 12, device=device)
-            # Object 1 goal (target_object moved to the right)
-            self.goal_states[:, 0] = 0.15   # x
-            self.goal_states[:, 1] = 0.5    # y
-            self.goal_states[:, 2] = 0.05   # z
-            # Object 2 goal (cube near center)
-            self.goal_states[:, 6] = -0.10  # x
-            self.goal_states[:, 7] = 0.5    # y
-            self.goal_states[:, 8] = 0.05   # z
-            # Euler angles all zero (no rotation goal)
-            self.goal_valid = torch.ones(num_envs, dtype=torch.bool, device=device)
+            self.goal_valid = torch.zeros(num_envs, dtype=torch.bool, device=device)
             self.pos_threshold = 0.04
             self.rot_threshold = 0.5
 
     base_env.episode_manager = _GoalEpisodeManager(2, device)
 
-    # ── Optional video recorder ──────────────────────────────────
-    recorder = None
+    def _read_pose_local(env, object_name, env_idx):
+        """Return [pos(3), euler(3)] in environment-local frame for env_idx.
+
+        Matches the convention used by object_states() and goal_states() in
+        observations.py: positions are world-space minus env_origins, rotation
+        is ZYX Euler (roll, pitch, yaw) converted from the world quaternion.
+        """
+        obj = env.scene[object_name]
+        pos_w = obj.data.root_pos_w
+        quat_w = obj.data.root_quat_w
+        # Handle optional instance dimension
+        if pos_w.dim() == 3:
+            pos_w, quat_w = pos_w[:, 0], quat_w[:, 0]
+        p = pos_w[env_idx] - env.scene.env_origins[env_idx]
+        # Inline quat(w,x,y,z) → ZYX Euler so we don't import private helpers
+        q = quat_w[env_idx]
+        w_q, x_q, y_q, z_q = q[0], q[1], q[2], q[3]
+        roll = torch.atan2(2 * (w_q * x_q + y_q * z_q), 1 - 2 * (x_q * x_q + y_q * y_q))
+        pitch = torch.asin((2 * (w_q * y_q - z_q * x_q)).clamp(-1.0, 1.0))
+        yaw = torch.atan2(2 * (w_q * z_q + x_q * y_q), 1 - 2 * (y_q * y_q + z_q * z_q))
+        euler = torch.stack([roll, pitch, yaw])
+        return torch.cat([p, euler])  # (6,)
+
+    print("\n  [Warmup] Running Alice's trajectory to discover real goal state...")
+    warmup_obs, _ = base_env.reset()
+    warmup_terminated_early = False
+    for t in range(N):
+        alice_act_w = alice_env_actions[t].unsqueeze(0)
+        bob_act_w = torch.zeros(1, env_action_dim, device=device)
+        combined_w = torch.cat([alice_act_w, bob_act_w], dim=0)
+        warmup_obs, _, term_w, trunc_w, _ = base_env.step(combined_w)
+        if (term_w | trunc_w).any():
+            print("  [Warmup] Episode terminated early — goal captured at step", t)
+            warmup_terminated_early = True
+            break
+
+    # Read env-0 final object poses in local frame.
+    # Both envs share the same layout (just different origins), so one
+    # measurement drives goal_states for all envs.
+    tgt_pose = _read_pose_local(base_env, "target_object", 0)
+    cube_pose = _read_pose_local(base_env, "cube", 0)
+    goal_12d = torch.cat([tgt_pose, cube_pose])  # (12,)
+    base_env.episode_manager.goal_states[:] = goal_12d.unsqueeze(0)
+    base_env.episode_manager.goal_valid[:] = True
+
+    print(f"  [Warmup] Goal discovered (local frame):")
+    print(
+        f"    target_object: pos={tgt_pose[:3].cpu().tolist()}  "
+        f"euler={tgt_pose[3:].cpu().tolist()}"
+    )
+    print(
+        f"    cube:          pos={cube_pose[:3].cpu().tolist()}  "
+        f"euler={cube_pose[3:].cpu().tolist()}"
+    )
+
+    def _bob_achieved_goal():
+        """Check whether Bob's objects (env 1) are within threshold of the goal.
+
+        Reads live physics state — call after the last env.step() of an episode,
+        before the next reset.  Returns (achieved, tgt_dist, cube_dist).
+        """
+        import math as _math
+
+        thr = base_env.episode_manager.pos_threshold
+        tgt_c = _read_pose_local(base_env, "target_object", 1)
+        cube_c = _read_pose_local(base_env, "cube", 1)
+        tgt_g = base_env.episode_manager.goal_states[1, 0:6]
+        cube_g = base_env.episode_manager.goal_states[1, 6:12]
+        tgt_dist = (tgt_c[:3] - tgt_g[:3]).norm().item()
+        cube_dist = (cube_c[:3] - cube_g[:3]).norm().item()
+        achieved = tgt_dist < thr and cube_dist < thr
+        return achieved, tgt_dist, cube_dist
+
+    # ── Video recorder (always created — used for goal-achievement recording) ──
     video_dir = os.path.join(script_dir, "videos")
-    if args.record_video:
-        e0 = base_env.scene.env_origins[0].cpu().tolist()
-        e1 = base_env.scene.env_origins[1].cpu().tolist()
-        mid_x = (e0[0] + e1[0]) / 2
-        mid_y = (e0[1] + e1[1]) / 2
-        cam_pos = (mid_x, mid_y + 5.5, 1.5)
-        look_at = (mid_x, mid_y + 0.5, 0.5)
-        recorder = _VideoRecorder(cam_pos=cam_pos, look_at=look_at)
-        print(f"\n  Video recording enabled → {video_dir}/")
-        print(f"    Camera: ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f})")
-        print(f"    Look-at: ({look_at[0]:.2f}, {look_at[1]:.2f}, {look_at[2]:.2f})")
+    e0 = base_env.scene.env_origins[0].cpu().tolist()
+    e1 = base_env.scene.env_origins[1].cpu().tolist()
+    mid_x = (e0[0] + e1[0]) / 2
+    mid_y = (e0[1] + e1[1]) / 2
+    cam_pos = (mid_x, mid_y + 5.5, 1.5)
+    look_at = (mid_x, mid_y + 0.5, 0.5)
+    recorder = _VideoRecorder(cam_pos=cam_pos, look_at=look_at)
+    print(f"\n  Recorder ready → {video_dir}/")
+    print(f"    Camera: ({cam_pos[0]:.2f}, {cam_pos[1]:.2f}, {cam_pos[2]:.2f})")
 
     # ── Capture pre-training episode (random Bob) ────────────────
-    if recorder is not None:
+    if args.record_video:
         print("\n  Capturing START episode (untrained / random Bob)...")
         recorder.start()
         obs_dict_rec, _ = base_env.reset()
@@ -367,7 +471,9 @@ def main():
             alice_act_rec = alice_env_actions[t].unsqueeze(0)
             with torch.no_grad():
                 bob_bins_rec, _, _, _, _ = ac.act(bob_obs_rec[1:2], None)
-                bob_act_rec, bob_gripper_rec = bins_to_env_action(bob_bins_rec, bob_gripper_rec)
+                bob_act_rec, bob_gripper_rec = bins_to_env_action(
+                    bob_bins_rec, bob_gripper_rec
+                )
             combined_rec = torch.cat([alice_act_rec, bob_act_rec], dim=0)
             obs_dict_rec, _, term_rec, trunc_rec, _ = base_env.step(combined_rec)
             recorder.capture()
@@ -378,26 +484,45 @@ def main():
         recorder.stop_and_save(os.path.join(video_dir, "start_random_abc_encoder.mp4"))
 
     # ══════════════════════════════════════════════════════════════
-    # TRAINING LOOP
+    # TRAINING LOOP  (runs until Bob achieves both goals)
     # ══════════════════════════════════════════════════════════════
-    print(f"\n  Training for {args.num_iterations} iterations "
-          f"(raw NLL + aux_coef={aux_coef})...")
-    print(f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'X md':>6} | "
-          f"{'Z md':>6} | {'Gr md':>6} | {'Match%':>8}")
-    print("  " + "-" * 65)
+    thr = base_env.episode_manager.pos_threshold
+    print(
+        f"\n  Training until rolling success rate >= {args.success_threshold:.0%} "
+        f"over last {args.success_window} episodes"
+    )
+    print(
+        f"  pos_threshold={thr:.3f}m | max_iterations={args.max_iterations} | "
+        f"aux_coef={aux_coef}"
+    )
+    print(
+        f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'Match%':>8} | "
+        f"{'TgtD':>6} | {'CubD':>6} | {'WinRate':>8} | {'Status':>8}"
+    )
+    print("  " + "-" * 80)
 
     nll_history = []
     aux_history = []
+    it = 0
+    converged = False
+    convergence_iter = None
+    success_window = deque(maxlen=args.success_window)  # True/False per episode
 
-    for it in range(1, args.num_iterations + 1):
+    while it < args.max_iterations and not converged:
+        it += 1
         # ── Phase A: Replay episode ──
         obs_dict, info = base_env.reset()
         bob_obs_all = obs_dict["bob_policy"]
 
         bob_gripper = torch.ones(1, 1, device=device)
         demo_obs_list = []
+        bob_obs_list = []  # Bob's actual env-1 observations (for match% eval)
         demo_act_list = []
         episode_corrupted = False
+        bob_terminated_early = False  # track so we don't check goal on a reset state
+
+        h_bob = torch.zeros(1, ac.lstm_hidden_size, device=device)
+        c_bob = torch.zeros(1, ac.lstm_hidden_size, device=device)
 
         for t in range(N):
             # Env 0: Alice's hard-coded action
@@ -406,15 +531,20 @@ def main():
             # Env 1: Bob's policy (with LSTM hidden state management)
             bob_obs_t = bob_obs_all[1:2]
             with torch.no_grad():
-                bob_bins, _, _, _, _ = ac.act(bob_obs_t, None)
+                bob_bins, _, _, _, _, (h_bob, c_bob) = ac.act_with_hidden(
+                    bob_obs_t, None, (h_bob, c_bob)
+                )
                 bob_act, bob_gripper = bins_to_env_action(bob_bins, bob_gripper)
 
             combined_action = torch.cat([alice_act, bob_act], dim=0)
 
-            # Collect demo (env 0's obs + Alice's actions)
+            # Collect demo (env 0's obs + Alice's actions) and Bob's actual obs
             if not episode_corrupted:
-                demo_obs_list.append(bob_obs_all[0:1].clone())
-                demo_act_list.append(alice_bins[t:t+1].clone())
+                demo_obs_list.append(bob_obs_all[0:1].clone())  # Alice's obs (training)
+                bob_obs_list.append(
+                    bob_obs_all[1:2].clone()
+                )  # Bob's obs   (eval match%)
+                demo_act_list.append(alice_bins[t : t + 1].clone())
 
             # Step
             obs_dict, _, terminated, truncated, _ = base_env.step(combined_action)
@@ -424,6 +554,8 @@ def main():
             if dones.any():
                 if dones[0].item():
                     episode_corrupted = True
+                if dones[1].item():
+                    bob_terminated_early = True
                 obs_dict, _ = base_env.reset()
                 bob_obs_all = obs_dict["bob_policy"]
 
@@ -435,8 +567,13 @@ def main():
                 print(f"  [iter {it}] Env 0 terminated — skipping training")
             continue
 
-        demo_obs = torch.cat(demo_obs_list, dim=0)   # (T, obs_dim)
-        demo_acts = torch.cat(demo_act_list, dim=0)   # (T, num_cat_dims)
+        demo_obs = torch.cat(
+            demo_obs_list, dim=0
+        )  # (T, obs_dim) Alice's obs — training
+        bob_obs = torch.cat(
+            bob_obs_list, dim=0
+        )  # (T, obs_dim) Bob's obs  — match% eval
+        demo_acts = torch.cat(demo_act_list, dim=0)  # (T, num_cat_dims)
         T = demo_obs.shape[0]
 
         for _ in range(args.abc_epochs):
@@ -450,13 +587,13 @@ def main():
 
             seq_lps = []
             for step in range(T):
-                obs_t = demo_obs[step:step+1]  # (1, obs_dim)
+                obs_t = demo_obs[step : step + 1]  # (1, obs_dim)
                 # _actor_forward returns (raw, (h_detach, c_detach))
                 # We use h_detach, c_detach for the NEXT step (TBPTT-1),
                 # but gradients still flow through the current step's LSTM.
                 raw, (h, c) = ac._actor_forward(obs_t, (h, c))
                 dist = ac._make_distribution(raw)
-                lp = dist.log_prob(demo_acts[step:step+1].long())
+                lp = dist.log_prob(demo_acts[step : step + 1].long())
                 seq_lps.append(lp)
 
             bc_loss = -torch.stack(seq_lps).mean()  # raw NLL
@@ -466,21 +603,16 @@ def main():
             if ac.goal_encoder is not None and ac.goal_encoder.use_aux_loss:
                 robot_dim = ac._ge_robot_dim
                 obj_section = demo_obs[:, robot_dim:]
-                obj_chunks = obj_section.view(
-                    T, ac._ge_num_objects, ac._ge_raw_per_obj
-                )
+                obj_chunks = obj_section.view(T, ac._ge_num_objects, ac._ge_raw_per_obj)
                 goal_poses = obj_chunks[
-                    :, :,
-                    ac._ge_obj_state_dim : ac._ge_obj_state_dim + ac._ge_goal_dim
+                    :, :, ac._ge_obj_state_dim : ac._ge_obj_state_dim + ac._ge_goal_dim
                 ]
                 current_poses = obj_chunks[:, :, :6]
 
                 goal_flat = goal_poses.reshape(T, -1)
                 current_flat = current_poses.reshape(T, -1)
 
-                aux_total, _, _ = ac.goal_encoder.aux_loss(
-                    goal_flat, current_flat
-                )
+                aux_total, _, _ = ac.goal_encoder.aux_loss(goal_flat, current_flat)
                 aux_loss_val = aux_total
 
             total_loss = bc_loss + aux_coef * aux_loss_val
@@ -490,22 +622,31 @@ def main():
             nn.utils.clip_grad_norm_(ac.parameters(), 1.0)
             optimizer.step()
 
-        # ── Evaluate (also sequential for fair NLL measurement) ──
+        # ── Evaluate ──
         with torch.no_grad():
+            # NLL: measured on Alice's obs (mirrors the training objective)
             h_eval = torch.zeros(1, ac.lstm_hidden_size, device=device)
             c_eval = torch.zeros(1, ac.lstm_hidden_size, device=device)
             eval_lps = []
-            eval_greedy = []
             for step in range(T):
-                obs_t = demo_obs[step:step+1]
+                obs_t = demo_obs[step : step + 1]
                 raw, (h_eval, c_eval) = ac._actor_forward(obs_t, (h_eval, c_eval))
                 dist = ac._make_distribution(raw)
-                eval_lps.append(dist.log_prob(demo_acts[step:step+1].long()))
-                # Greedy: argmax per dim
+                eval_lps.append(dist.log_prob(demo_acts[step : step + 1].long()))
+            raw_nll = -torch.stack(eval_lps).mean().item()
+
+            # Match%: measured on Bob's ACTUAL env-1 observations.
+            # This is the real generalization metric — does Bob, from his own
+            # (potentially diverged) state, still choose Alice's actions?
+            h_bob = torch.zeros(1, ac.lstm_hidden_size, device=device)
+            c_bob = torch.zeros(1, ac.lstm_hidden_size, device=device)
+            eval_greedy = []
+            for step in range(T):
+                obs_t = bob_obs[step : step + 1]
+                raw, (h_bob, c_bob) = ac._actor_forward(obs_t, (h_bob, c_bob))
                 logits = raw.view(1, ac.num_cat_dims, ac.num_bins)
                 eval_greedy.append(logits.argmax(dim=-1).squeeze(0))  # (num_cat_dims,)
 
-            raw_nll = -torch.stack(eval_lps).mean().item()
             greedy = torch.stack(eval_greedy)  # (T, num_cat_dims)
             x_mode = greedy[:, 0].mode().values.item()
             z_mode = greedy[:, 2].mode().values.item()
@@ -513,97 +654,205 @@ def main():
             all_match = (greedy == demo_acts).all(dim=-1).float().mean().item()
 
         nll_history.append(raw_nll)
-        aux_val = aux_loss_val.item() if isinstance(aux_loss_val, torch.Tensor) else aux_loss_val
+        aux_val = (
+            aux_loss_val.item()
+            if isinstance(aux_loss_val, torch.Tensor)
+            else aux_loss_val
+        )
         aux_history.append(aux_val)
 
-        if it % 5 == 0 or it == 1:
+        # ── Goal check: read live physics state for Bob's env ──
+        # Only valid if Bob's env ran to the end of the episode (no early reset).
+        tgt_dist = cube_dist = float("inf")
+        episode_success = False
+        if not bob_terminated_early:
+            episode_success, tgt_dist, cube_dist = _bob_achieved_goal()
+
+        success_window.append(episode_success)
+        win_rate = sum(success_window) / len(success_window) if success_window else 0.0
+
+        # Check convergence: window must be full AND rate >= threshold
+        if (
+            len(success_window) == args.success_window
+            and win_rate >= args.success_threshold
+        ):
+            converged = True
+            convergence_iter = it
+
+        status = "CONVERGED" if converged else ("GOAL" if episode_success else "      ")
+
+        if it % 5 == 0 or it == 1 or episode_success or converged:
             print(
                 f"  {it:>6} | {raw_nll:>+8.3f} | {aux_val:>8.4f} | "
-                f"{x_mode:>6.0f} | {z_mode:>6.0f} | {gr_mode:>6.0f} | "
-                f"{all_match:>7.1%}"
+                f"{all_match:>8.1%} | {tgt_dist:>6.3f} | {cube_dist:>6.3f} | "
+                f"{win_rate:>8.1%} | {status}"
             )
 
     # ══════════════════════════════════════════════════════════════
-    # FINAL VERIFICATION
+    # RESULT
     # ══════════════════════════════════════════════════════════════
+    final_nll = nll_history[-1] if nll_history else float("inf")
+    nll_decreased = len(nll_history) >= 2 and nll_history[-1] < nll_history[0]
+
     print(f"\n{'=' * 70}")
-    print("  FINAL EPISODE — Both envs should now move IDENTICALLY")
+    if converged:
+        print(
+            f"  CONVERGED at iteration {convergence_iter}  "
+            f"(win rate {args.success_threshold:.0%} over last {args.success_window} eps)"
+        )
+    else:
+        print(
+            f"  Max iterations ({args.max_iterations}) reached — policy did NOT converge."
+        )
+        final_win_rate = (
+            sum(success_window) / len(success_window) if success_window else 0.0
+        )
+        print(
+            f"  Final win rate: {final_win_rate:.1%} over last {len(success_window)} episodes"
+        )
+    print(
+        f"  NLL: {nll_history[0]:+.3f} → {final_nll:+.3f}  "
+        f"({'decreased' if nll_decreased else 'DID NOT decrease'})"
+    )
+    if aux_history:
+        print(f"  Aux loss: {aux_history[0]:.4f} → {aux_history[-1]:.4f}")
     print(f"{'=' * 70}")
 
+    # ══════════════════════════════════════════════════════════════
+    # FROZEN EVALUATION PHASE
+    # ══════════════════════════════════════════════════════════════
+    print(
+        f"\n  Running frozen eval: {args.eval_episodes} episodes (no gradient updates)..."
+    )
+    eval_successes = 0
+    eval_tgt_dists = []
+    eval_cube_dists = []
+
+    for ep in range(args.eval_episodes):
+        obs_dict_e, _ = base_env.reset()
+        bob_obs_e = obs_dict_e["bob_policy"]
+        bob_gripper_e = torch.ones(1, 1, device=device)
+        bob_term_early_e = False
+
+        h_bob_e = torch.zeros(1, ac.lstm_hidden_size, device=device)
+        c_bob_e = torch.zeros(1, ac.lstm_hidden_size, device=device)
+
+        for t in range(N):
+            alice_act_e = alice_env_actions[t].unsqueeze(0)
+            with torch.no_grad():
+                bob_bins_e, _, _, _, _, (h_bob_e, c_bob_e) = ac.act_with_hidden(
+                    bob_obs_e[1:2], None, (h_bob_e, c_bob_e)
+                )
+                bob_act_e, bob_gripper_e = bins_to_env_action(bob_bins_e, bob_gripper_e)
+
+            combined_e = torch.cat([alice_act_e, bob_act_e], dim=0)
+            obs_dict_e, _, term_e, trunc_e, _ = base_env.step(combined_e)
+            bob_obs_e = obs_dict_e["bob_policy"]
+
+            dones_e = term_e | trunc_e
+            if dones_e.any():
+                if dones_e[1].item():
+                    bob_term_early_e = True
+                obs_dict_e, _ = base_env.reset()
+                bob_obs_e = obs_dict_e["bob_policy"]
+
+        ep_success = False
+        ep_tgt_dist = ep_cube_dist = float("inf")
+        if not bob_term_early_e:
+            ep_success, ep_tgt_dist, ep_cube_dist = _bob_achieved_goal()
+
+        if ep_success:
+            eval_successes += 1
+        eval_tgt_dists.append(ep_tgt_dist)
+        eval_cube_dists.append(ep_cube_dist)
+
+        if (ep + 1) % 10 == 0 or (ep + 1) == args.eval_episodes:
+            print(
+                f"    Ep {ep+1:>3}/{args.eval_episodes}  "
+                f"success={eval_successes}/{ep+1}  "
+                f"({eval_successes/(ep+1):.1%})  "
+                f"avg_tgt={sum(eval_tgt_dists)/(ep+1):.3f}  "
+                f"avg_cube={sum(eval_cube_dists)/(ep+1):.3f}"
+            )
+
+    final_success_rate = eval_successes / args.eval_episodes
+    finite_tgt = [d for d in eval_tgt_dists if d < float("inf")]
+    finite_cube = [d for d in eval_cube_dists if d < float("inf")]
+    avg_tgt = sum(finite_tgt) / len(finite_tgt) if finite_tgt else float("inf")
+    avg_cube = sum(finite_cube) / len(finite_cube) if finite_cube else float("inf")
+
+    print(f"\n{'=' * 70}")
+    print(f"  EVAL RESULT over {args.eval_episodes} episodes:")
+    print(
+        f"    Success rate : {final_success_rate:.1%}  ({eval_successes}/{args.eval_episodes})"
+    )
+    print(f"    Avg tgt dist : {avg_tgt:.4f} m")
+    print(f"    Avg cube dist: {avg_cube:.4f} m")
+    print(f"{'=' * 70}")
+
+    # ── Record the post-eval episode ──────────────────────────────
+    print(f"\n  Recording {'converged' if converged else 'final'} episode...")
+    recorder.start()
     obs_dict, _ = base_env.reset()
     bob_obs_all = obs_dict["bob_policy"]
     bob_gripper = torch.ones(1, 1, device=device)
 
-    if recorder is not None:
-        print("\n  Capturing END episode (converged Bob)...")
-        recorder.start()
-
     action_diffs = []
+    bob_bins_traj = []
+
+    h_bob_rec = torch.zeros(1, ac.lstm_hidden_size, device=device)
+    c_bob_rec = torch.zeros(1, ac.lstm_hidden_size, device=device)
+
     for t in range(N):
         alice_act = alice_env_actions[t].unsqueeze(0)
-
         bob_obs_t = bob_obs_all[1:2]
         with torch.no_grad():
-            bob_bins = ac.act_inference(bob_obs_t)
+            bob_bins, _, _, _, _, (h_bob_rec, c_bob_rec) = ac.act_with_hidden(
+                bob_obs_t, None, (h_bob_rec, c_bob_rec)
+            )
             bob_act, bob_gripper = bins_to_env_action(bob_bins, bob_gripper)
 
-        diff = (alice_act - bob_act).abs().mean().item()
-        action_diffs.append(diff)
+        bob_bins_traj.append(bob_bins.squeeze(0).long().cpu().tolist())
+        action_diffs.append((alice_act - bob_act).abs().mean().item())
 
         combined = torch.cat([alice_act, bob_act], dim=0)
         obs_dict, _, terminated, truncated, _ = base_env.step(combined)
-        if recorder is not None:
-            recorder.capture()
+        recorder.capture()
         bob_obs_all = obs_dict["bob_policy"]
-
-        dones = terminated | truncated
-        if dones.any():
+        if (terminated | truncated).any():
             obs_dict, _ = base_env.reset()
             bob_obs_all = obs_dict["bob_policy"]
 
-    if recorder is not None:
-        recorder.stop_and_save(os.path.join(video_dir, "end_converged_abc_encoder.mp4"))
+    video_name = (
+        f"converged_iter{convergence_iter}.mp4" if converged else f"final_iter{it}.mp4"
+    )
+    recorder.stop_and_save(os.path.join(video_dir, video_name))
 
-    # ── Results ──
-    mean_diff = np.mean(action_diffs)
-    final_nll = nll_history[-1] if nll_history else float("inf")
-    nll_decreased = len(nll_history) >= 2 and nll_history[-1] < nll_history[0]
+    # ── Print full trajectory comparison ─────────────────────────
+    alice_bins_list = alice_bins.long().cpu().tolist()
+    dim_names = ["X ", "Y ", "Z ", "Rx", "Ry", "Gr"]
+    print(f"\n  {'Step':>4}  {'':4}  " + "  ".join(f"{d:>4}" for d in dim_names))
+    print("  " + "-" * (6 + 4 + len(dim_names) * 6))
+    for t in range(N):
+        a = alice_bins_list[t]
+        b = bob_bins_traj[t]
+        match_step = all(a[d] == b[d] for d in range(num_cat_dims))
+        tag = "  " if match_step else "!!"
+        print(
+            f"  {t:>4}  {tag}  "
+            + "  ".join(
+                (
+                    f"\033[92m{b[d]:>4}\033[0m"
+                    if a[d] == b[d]
+                    else f"\033[91m{b[d]:>4}\033[0m"
+                )
+                for d in range(num_cat_dims)
+            )
+            + "   Alice: "
+            + " ".join(f"{a[d]:>2}" for d in range(num_cat_dims))
+        )
 
-    print(f"\n  NLL:         {nll_history[0]:+.3f} → {final_nll:+.3f}  "
-          f"({'✓ decreased' if nll_decreased else '✗ DID NOT decrease'})")
-    print(f"  Action diff: {mean_diff:.4f}  "
-          f"({'✓ small' if mean_diff < 0.3 else '✗ large'})")
-
-    with torch.no_grad():
-        h_f = torch.zeros(1, ac.lstm_hidden_size, device=device)
-        c_f = torch.zeros(1, ac.lstm_hidden_size, device=device)
-        final_greedy_list = []
-        for step in range(T):
-            obs_t = demo_obs[step:step+1]
-            raw, (h_f, c_f) = ac._actor_forward(obs_t, (h_f, c_f))
-            logits = raw.view(1, ac.num_cat_dims, ac.num_bins)
-            final_greedy_list.append(logits.argmax(dim=-1).squeeze(0))
-        final_greedy = torch.stack(final_greedy_list)
-        z_mode = final_greedy[:, 2].mode().values.item()
-        gr_mode = final_greedy[:, 5].mode().values.item()
-        final_match = (final_greedy == demo_acts).all(dim=-1).float().mean().item()
-
-    print(f"  Z mode:      {z_mode:.0f} (target: 5)  "
-          f"{'✓' if abs(z_mode - 5) < 1 else '✗'}")
-    print(f"  Gripper mode:{gr_mode:.0f} (target: 5)  "
-          f"{'✓' if abs(gr_mode - 5) < 1 else '✗'}")
-    print(f"  Final Match: {final_match:.1%}  "
-          f"({'✓ >50%' if final_match > 0.5 else '✗ <50% — GoalEncoder may be destabilizing'})")
-
-    if aux_history:
-        print(f"  Aux loss:    {aux_history[0]:.4f} → {aux_history[-1]:.4f}")
-
-    passed = nll_decreased and final_match > 0.5
-    print(f"\n  {'PASSED ✓' if passed else 'FAILED ✗'}: "
-          f"{'GoalEncoder + LSTM + PI encoder works with ABC!' if passed else 'GoalEncoder destabilized training'}")
-
-    if not passed and final_match < 0.3:
-        print("  → TIP: Try reducing aux_coef or further shrinking goal_proj init scale")
+    print(f"\n  Mean action diff: {np.mean(action_diffs):.4f}")
 
     # ── Continuous replay for visual inspection ──
     print("\n  Replaying continuously for visual inspection...")

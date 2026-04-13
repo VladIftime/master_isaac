@@ -224,10 +224,18 @@ def main():
     # ── Observation Dimensions ──────────────────────────────────
     # Alice obs: ee_pose(6) + gripper(1) + obj1_state(14) + obj2_state(14) = 35
     # Bob obs:   ee_pose(6) + gripper(1) + [obj_state(14)+goal(6)+dist(2)]×2 = 51
-    alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["alice_policy"]
+    alice_dim_info = base_env.unwrapped.observation_manager.group_obs_dim[
+        "alice_policy"
+    ]
     bob_dim_info = base_env.unwrapped.observation_manager.group_obs_dim["bob_policy"]
-    alice_obs_dim = alice_dim_info[0] if isinstance(alice_dim_info, (tuple, list)) else alice_dim_info
-    bob_obs_dim = bob_dim_info[0] if isinstance(bob_dim_info, (tuple, list)) else bob_dim_info
+    alice_obs_dim = (
+        alice_dim_info[0]
+        if isinstance(alice_dim_info, (tuple, list))
+        else alice_dim_info
+    )
+    bob_obs_dim = (
+        bob_dim_info[0] if isinstance(bob_dim_info, (tuple, list)) else bob_dim_info
+    )
     print(f"  Alice obs dim: {alice_obs_dim}, Bob obs dim: {bob_obs_dim}")
 
     # ── Action space ────────────────────────────────────────────
@@ -317,7 +325,7 @@ def main():
     alice_env_actions = []
     for t in range(N):
         act_t, alice_gripper_traj = bins_to_env_action(
-            alice_bins[t:t+1], alice_gripper_traj
+            alice_bins[t : t + 1], alice_gripper_traj
         )
         alice_env_actions.append(act_t.squeeze(0))  # (7,)
     alice_env_actions = torch.stack(alice_env_actions)  # (N, 7)
@@ -331,6 +339,7 @@ def main():
             self.goal_valid = torch.zeros(num_envs, dtype=torch.bool, device=device)
             self.pos_threshold = 0.04
             self.rot_threshold = 0.5
+
     base_env.episode_manager = _DummyEpisodeManager(2, device)
 
     # ── Optional video recorder ──────────────────────────────────
@@ -359,7 +368,9 @@ def main():
             alice_act_rec = alice_env_actions[t].unsqueeze(0)
             with torch.no_grad():
                 bob_bins_rec, _, _, _, _ = ac.act(bob_obs_rec[1:2], None)
-                bob_act_rec, bob_gripper_rec = bins_to_env_action(bob_bins_rec, bob_gripper_rec)
+                bob_act_rec, bob_gripper_rec = bins_to_env_action(
+                    bob_bins_rec, bob_gripper_rec
+                )
             combined_rec = torch.cat([alice_act_rec, bob_act_rec], dim=0)
             obs_dict_rec, _, term_rec, trunc_rec, _ = base_env.step(combined_rec)
             recorder.capture()
@@ -372,9 +383,13 @@ def main():
     # ══════════════════════════════════════════════════════════════
     # TRAINING LOOP
     # ══════════════════════════════════════════════════════════════
-    print(f"\n  Training for {args.num_iterations} iterations "
-          f"({args.abc_epochs} ABC gradient step(s) each, raw NLL loss)...")
-    print(f"\n  {'Iter':>6} | {'NLL':>10} | {'X mode':>8} | {'Z mode':>8} | {'Gr mode':>8} | {'Match%':>8}")
+    print(
+        f"\n  Training for {args.num_iterations} iterations "
+        f"({args.abc_epochs} ABC gradient step(s) each, raw NLL loss)..."
+    )
+    print(
+        f"\n  {'Iter':>6} | {'NLL':>10} | {'X mode':>8} | {'Z mode':>8} | {'Gr mode':>8} | {'Match%':>8}"
+    )
     print("  " + "-" * 65)
 
     nll_history = []
@@ -383,7 +398,7 @@ def main():
         # ── Phase A: Replay episode (Alice on env 0, Bob on env 1) ──
         obs_dict, info = base_env.reset()
         alice_obs_all = obs_dict["alice_policy"]  # (2, alice_obs_dim)
-        bob_obs_all = obs_dict["bob_policy"]      # (2, bob_obs_dim)
+        bob_obs_all = obs_dict["bob_policy"]  # (2, bob_obs_dim)
 
         bob_gripper = torch.ones(1, 1, device=device)
 
@@ -410,7 +425,9 @@ def main():
             # Only collect if env 0 hasn't been reset mid-episode
             if not episode_corrupted:
                 demo_obs_list.append(bob_obs_all[0:1].clone())  # env 0's bob obs
-                demo_act_list.append(alice_bins[t:t+1].clone())   # Alice's bin indices
+                demo_act_list.append(
+                    alice_bins[t : t + 1].clone()
+                )  # Alice's bin indices
 
             # ── Step both environments ──
             obs_dict, rewards_t, terminated, truncated, extras = base_env.step(
@@ -435,8 +452,8 @@ def main():
             nll_history.append(nll_history[-1] if nll_history else 20.0)
             continue
 
-        demo_obs = torch.cat(demo_obs_list, dim=0)    # (<=N, bob_obs_dim)
-        demo_acts = torch.cat(demo_act_list, dim=0)    # (<=N, num_cat_dims)
+        demo_obs = torch.cat(demo_obs_list, dim=0)  # (<=N, bob_obs_dim)
+        demo_acts = torch.cat(demo_act_list, dim=0)  # (<=N, num_cat_dims)
         T = demo_obs.shape[0]
 
         # Raw NLL loss: direct -log_prob(alice_actions | obs)
@@ -458,9 +475,7 @@ def main():
             x_mode = greedy[:, 0].mode().values.item()
             z_mode = greedy[:, 2].mode().values.item()
             gr_mode = greedy[:, 5].mode().values.item()
-            all_match = (
-                (greedy == demo_acts).all(dim=-1).float().mean().item()
-            )
+            all_match = (greedy == demo_acts).all(dim=-1).float().mean().item()
         nll_history.append(raw_nll)
 
         if it % 5 == 0 or it == 1:
@@ -518,24 +533,34 @@ def main():
     final_nll = nll_history[-1] if nll_history else float("inf")
     nll_decreased = len(nll_history) >= 2 and nll_history[-1] < nll_history[0]
 
-    print(f"\n  NLL:         {nll_history[0]:+.3f} → {final_nll:+.3f}  "
-          f"({'✓ decreased' if nll_decreased else '✗ DID NOT decrease'})")
-    print(f"  Action diff: {mean_diff:.4f}  "
-          f"({'✓ small' if mean_diff < 0.3 else '✗ large — ABC did not converge'})")
+    print(
+        f"\n  NLL:         {nll_history[0]:+.3f} → {final_nll:+.3f}  "
+        f"({'✓ decreased' if nll_decreased else '✗ DID NOT decrease'})"
+    )
+    print(
+        f"  Action diff: {mean_diff:.4f}  "
+        f"({'✓ small' if mean_diff < 0.3 else '✗ large — ABC did not converge'})"
+    )
 
     with torch.no_grad():
         final_greedy = ac.act_inference(demo_obs)
         z_mode = final_greedy[:, 2].mode().values.item()
         gr_mode = final_greedy[:, 5].mode().values.item()
 
-    print(f"  Z mode:      {z_mode:.0f} (target: 5)  "
-          f"{'✓' if abs(z_mode - 5) < 1 else '✗'}")
-    print(f"  Gripper mode:{gr_mode:.0f} (target: 5)  "
-          f"{'✓' if abs(gr_mode - 5) < 1 else '✗'}")
+    print(
+        f"  Z mode:      {z_mode:.0f} (target: 5)  "
+        f"{'✓' if abs(z_mode - 5) < 1 else '✗'}"
+    )
+    print(
+        f"  Gripper mode:{gr_mode:.0f} (target: 5)  "
+        f"{'✓' if abs(gr_mode - 5) < 1 else '✗'}"
+    )
 
     passed = nll_decreased and mean_diff < 0.5
-    print(f"\n  {'PASSED ✓' if passed else 'FAILED ✗'}: "
-          f"{'Bob successfully replicated Alice trajectory' if passed else 'ABC did not converge — check gradient flow'}")
+    print(
+        f"\n  {'PASSED ✓' if passed else 'FAILED ✗'}: "
+        f"{'Bob successfully replicated Alice trajectory' if passed else 'ABC did not converge — check gradient flow'}"
+    )
 
     if passed:
         print("  → Watch the viewport: both arms should be moving the same way!")

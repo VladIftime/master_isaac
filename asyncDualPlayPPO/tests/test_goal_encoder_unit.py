@@ -28,8 +28,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 from asyncDualPlayPPO.algorithms.goal_encoder import GoalEncoder
 
-
 # ── Fixtures ────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def device():
@@ -52,6 +52,7 @@ def encoder(device):
 
 # ── Test 1: Zero-Difference Property ───────────────────────────────────
 
+
 class TestZeroDifference:
     """When goal == current, the difference embedding g should be ≈ 0."""
 
@@ -68,10 +69,12 @@ class TestZeroDifference:
         max_norm = g_norm.max().item()
         mean_norm = g_norm.mean().item()
 
-        print(f"\n  [Zero-Diff] max ||g|| = {max_norm:.6f}, mean ||g|| = {mean_norm:.6f}")
-        assert max_norm < 0.01, (
-            f"Embedding should be ~0 when goal==current, got max ||g|| = {max_norm:.6f}"
+        print(
+            f"\n  [Zero-Diff] max ||g|| = {max_norm:.6f}, mean ||g|| = {mean_norm:.6f}"
         )
+        assert (
+            max_norm < 0.01
+        ), f"Embedding should be ~0 when goal==current, got max ||g|| = {max_norm:.6f}"
 
     def test_per_object_embeddings_are_zero(self, encoder, device):
         """Per-object embeddings (before pooling) should also be ~0."""
@@ -90,6 +93,7 @@ class TestZeroDifference:
 
 # ── Test 2: Embedding Magnitude Scales with Distance ──────────────────
 
+
 class TestDistanceScaling:
     """As goal moves farther from current, ||g|| should increase."""
 
@@ -97,8 +101,20 @@ class TestDistanceScaling:
         """Position displacement: ||g|| should grow with increasing X offset."""
         # Fix current at table center
         current = torch.tensor(
-            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0,   # object 1
-             -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],  # object 2
+            [
+                0.0,
+                0.5,
+                0.05,
+                0.0,
+                0.0,
+                0.0,  # object 1
+                -0.1,
+                0.5,
+                0.05,
+                0.0,
+                0.0,
+                0.0,
+            ],  # object 2
             device=device,
         )
 
@@ -107,8 +123,8 @@ class TestDistanceScaling:
 
         for d in distances:
             goal = current.clone()
-            goal[0] += d   # shift object 1 in +X
-            goal[6] += d   # shift object 2 in +X
+            goal[0] += d  # shift object 1 in +X
+            goal[6] += d  # shift object 2 in +X
 
             with torch.no_grad():
                 g = encoder(
@@ -125,12 +141,15 @@ class TestDistanceScaling:
         for i in range(len(norms) - 1):
             if norms[i + 1] <= norms[i] * 0.95:  # 5% tolerance
                 violations += 1
-                print(f"    ✗ ||g[{distances[i+1]}]|| = {norms[i+1]:.4f} <= ||g[{distances[i]}]|| = {norms[i]:.4f}")
+                print(
+                    f"    ✗ ||g[{distances[i+1]}]|| = {norms[i+1]:.4f} <= ||g[{distances[i]}]|| = {norms[i]:.4f}"
+                )
 
         assert violations == 0, f"Monotonicity violated {violations} times"
 
         # Correlation check
         import numpy as np
+
         corr = np.corrcoef(distances, norms)[0, 1]
         print(f"  [Distance Scaling] Pearson correlation: {corr:.4f}")
         assert corr > 0.9, f"Correlation between distance and ||g|| too low: {corr:.4f}"
@@ -138,8 +157,7 @@ class TestDistanceScaling:
     def test_monotonic_scaling_rotation(self, encoder, device):
         """Rotation displacement: ||g|| should grow with increasing yaw offset."""
         current = torch.tensor(
-            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0,
-             -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
+            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0, -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
             device=device,
         )
 
@@ -148,7 +166,7 @@ class TestDistanceScaling:
 
         for a in angles:
             goal = current.clone()
-            goal[5] += a   # yaw offset object 1
+            goal[5] += a  # yaw offset object 1
             goal[11] += a  # yaw offset object 2
 
             with torch.no_grad():
@@ -162,6 +180,7 @@ class TestDistanceScaling:
         print(f"  [Rotation Scaling] ||g||:        {[f'{n:.4f}' for n in norms]}")
 
         import numpy as np
+
         corr = np.corrcoef(angles, norms)[0, 1]
         print(f"  [Rotation Scaling] Pearson correlation: {corr:.4f}")
         assert corr > 0.85, f"Rotation correlation too low: {corr:.4f}"
@@ -169,24 +188,24 @@ class TestDistanceScaling:
 
 # ── Test 3: Directional Sensitivity ────────────────────────────────────
 
+
 class TestDirectionalSensitivity:
     """Goals in opposite directions should produce distinct embeddings."""
 
     def test_opposite_x_directions(self, encoder, device):
         """+X vs -X goals should have low cosine similarity."""
         current = torch.tensor(
-            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0,
-             -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
+            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0, -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
             device=device,
         ).unsqueeze(0)
 
         goal_pos_x = current.clone()
-        goal_pos_x[0, 0] += 0.2   # +X obj1
-        goal_pos_x[0, 6] += 0.2   # +X obj2
+        goal_pos_x[0, 0] += 0.2  # +X obj1
+        goal_pos_x[0, 6] += 0.2  # +X obj2
 
         goal_neg_x = current.clone()
-        goal_neg_x[0, 0] -= 0.2   # -X obj1
-        goal_neg_x[0, 6] -= 0.2   # -X obj2
+        goal_neg_x[0, 0] -= 0.2  # -X obj1
+        goal_neg_x[0, 6] -= 0.2  # -X obj2
 
         with torch.no_grad():
             g_pos = encoder(goal_pos_x, current)
@@ -194,21 +213,20 @@ class TestDirectionalSensitivity:
 
         cos_sim = torch.nn.functional.cosine_similarity(g_pos, g_neg, dim=-1).item()
         print(f"\n  [Directional] +X vs -X cosine similarity: {cos_sim:.4f}")
-        assert cos_sim < 0.5, (
-            f"Opposite directions should produce distinct embeddings, got cos_sim={cos_sim:.4f}"
-        )
+        assert (
+            cos_sim < 0.5
+        ), f"Opposite directions should produce distinct embeddings, got cos_sim={cos_sim:.4f}"
 
     def test_opposite_z_directions(self, encoder, device):
         """+Z (lift) vs -Z (push down) should have low cosine similarity."""
         current = torch.tensor(
-            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0,
-             -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
+            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0, -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
             device=device,
         ).unsqueeze(0)
 
         goal_up = current.clone()
-        goal_up[0, 2] += 0.15   # +Z obj1
-        goal_up[0, 8] += 0.15   # +Z obj2
+        goal_up[0, 2] += 0.15  # +Z obj1
+        goal_up[0, 8] += 0.15  # +Z obj2
 
         goal_down = current.clone()
         goal_down[0, 2] -= 0.03  # -Z obj1 (small to stay above table)
@@ -220,15 +238,14 @@ class TestDirectionalSensitivity:
 
         cos_sim = torch.nn.functional.cosine_similarity(g_up, g_down, dim=-1).item()
         print(f"  [Directional] +Z vs -Z cosine similarity: {cos_sim:.4f}")
-        assert cos_sim < 0.5, (
-            f"Opposite vertical goals should be distinct, got cos_sim={cos_sim:.4f}"
-        )
+        assert (
+            cos_sim < 0.5
+        ), f"Opposite vertical goals should be distinct, got cos_sim={cos_sim:.4f}"
 
     def test_orthogonal_directions(self, encoder, device):
         """X movement vs Z movement should produce reasonably different embeddings."""
         current = torch.tensor(
-            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0,
-             -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
+            [0.0, 0.5, 0.05, 0.0, 0.0, 0.0, -0.1, 0.5, 0.05, 0.0, 0.0, 0.0],
             device=device,
         ).unsqueeze(0)
 
@@ -248,12 +265,13 @@ class TestDirectionalSensitivity:
         print(f"  [Directional] X vs Z cosine similarity: {cos_sim:.4f}")
         # These aren't strictly opposite, so we allow higher similarity
         # but they should still be distinguishable
-        assert cos_sim < 0.95, (
-            f"X vs Z goals should be somewhat distinct, got cos_sim={cos_sim:.4f}"
-        )
+        assert (
+            cos_sim < 0.95
+        ), f"X vs Z goals should be somewhat distinct, got cos_sim={cos_sim:.4f}"
 
 
 # ── Test 4: Aux Loss Convergence ──────────────────────────────────────
+
 
 class TestAuxLossConvergence:
     """The auxiliary head should learn to predict distances from embeddings."""
@@ -310,16 +328,20 @@ class TestAuxLossConvergence:
             final_loss, final_pos, final_rot = enc.aux_loss(goals_test, currents_test)
         final_loss_val = final_loss.item()
 
-        print(f"\n  [Aux Loss] Initial: {initial_loss_val:.4f} → Final: {final_loss_val:.4f}")
-        print(f"  [Aux Loss] Pos MSE: {final_pos.item():.6f}, Rot MSE: {final_rot.item():.6f}")
+        print(
+            f"\n  [Aux Loss] Initial: {initial_loss_val:.4f} → Final: {final_loss_val:.4f}"
+        )
+        print(
+            f"  [Aux Loss] Pos MSE: {final_pos.item():.6f}, Rot MSE: {final_rot.item():.6f}"
+        )
         print(f"  [Aux Loss] Ratio: {final_loss_val / initial_loss_val:.4f}")
 
-        assert final_loss_val < initial_loss_val, (
-            f"Aux loss did not decrease: {initial_loss_val:.4f} → {final_loss_val:.4f}"
-        )
-        assert final_loss_val < initial_loss_val * 0.25, (
-            f"Aux loss did not decrease enough: final/initial = {final_loss_val/initial_loss_val:.2f} (want < 0.25)"
-        )
+        assert (
+            final_loss_val < initial_loss_val
+        ), f"Aux loss did not decrease: {initial_loss_val:.4f} → {final_loss_val:.4f}"
+        assert (
+            final_loss_val < initial_loss_val * 0.25
+        ), f"Aux loss did not decrease enough: final/initial = {final_loss_val/initial_loss_val:.2f} (want < 0.25)"
 
     def test_aux_predictions_are_accurate(self, device):
         """After training, aux head should predict distances within 2cm / 0.1 rad."""
@@ -382,6 +404,7 @@ class TestAuxLossConvergence:
 
 # ── Test 5: Permutation Invariance ────────────────────────────────────
 
+
 class TestPermutationInvariance:
     """Swapping object order should not change the pooled embedding."""
 
@@ -397,7 +420,7 @@ class TestPermutationInvariance:
         obj2_curr = torch.randn(batch, 6, device=device) * 0.3
 
         # Normal order: [obj1, obj2]
-        goals_normal = torch.cat([obj1_goal, obj2_goal], dim=-1)     # (batch, 12)
+        goals_normal = torch.cat([obj1_goal, obj2_goal], dim=-1)  # (batch, 12)
         currents_normal = torch.cat([obj1_curr, obj2_curr], dim=-1)  # (batch, 12)
 
         # Swapped order: [obj2, obj1]
@@ -438,7 +461,9 @@ class TestPermutationInvariance:
             g_per_obj_normal = encoder.encode_per_object(goals_normal, currents_normal)
             g_sum_normal = g_per_obj_normal.sum(dim=1)  # (batch, K)
 
-            g_per_obj_swapped = encoder.encode_per_object(goals_swapped, currents_swapped)
+            g_per_obj_swapped = encoder.encode_per_object(
+                goals_swapped, currents_swapped
+            )
             g_sum_swapped = g_per_obj_swapped.sum(dim=1)
 
         diff = (g_sum_normal - g_sum_swapped).abs().max().item()
