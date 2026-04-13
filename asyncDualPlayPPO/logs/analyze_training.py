@@ -5,8 +5,8 @@ extracts training updates, writes a clean summary CSV, and plots metrics.
 """
 
 import re
-import os
 import csv
+import shutil
 from pathlib import Path
 from collections import defaultdict
 
@@ -14,8 +14,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-LOG_DIR = Path(__file__).parent / "train_100426"
-OUT_DIR = Path(__file__).parent / "train_100426"
+LOG_DIR = None
+OUT_DIR = None
 
 # --- Patterns ---
 ALICE_RE = re.compile(
@@ -30,13 +30,13 @@ BOB_RE = re.compile(
 )
 CHAIN_RE = re.compile(r"chained next job:\s*(\d+)")
 RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
-JOB_ID_RE = re.compile(r"slurm-(\d+)-high[_\-\w]*\.out")
+JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-.*)?\.out")
 
 
 def parse_logs():
     """Parse all log files and return per-job data."""
     jobs = {}
-    for f in LOG_DIR.glob("slurm-*-high*.out"):
+    for f in LOG_DIR.glob("slurm-*-*.out"):
         m = JOB_ID_RE.match(f.name)
         if not m:
             continue
@@ -90,6 +90,7 @@ def parse_logs():
             })
 
         jobs[job_id] = {
+            "path": f,
             "resume_iter": resume_iter,
             "chain_next": chain_next,
             "alice": alice_updates,
@@ -168,8 +169,8 @@ def assign_global_iters(chains, jobs):
     return alice_records, bob_records
 
 
-def write_csv(alice_records, bob_records):
-    out_path = OUT_DIR / "training_updates.csv"
+def write_csv(alice_records, bob_records, out_dir):
+    out_path = out_dir / "training_updates.csv"
     fieldnames = ["agent", "chain", "job_id", "global_iter", "loss", "val", "rew", "entropy_coef", "abc", "sr"]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -193,7 +194,7 @@ def smooth(vals, window=5):
     return result
 
 
-def plot_metrics(alice_records, bob_records):
+def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
     n_chains = max(
         (max(r["chain"] for r in alice_records) if alice_records else 0),
         (max(r["chain"] for r in bob_records) if bob_records else 0),
@@ -210,24 +211,25 @@ def plot_metrics(alice_records, bob_records):
             xs = [r["global_iter"] for r in records]
             ys = smooth([r[key] for r in records])
             ax.plot(xs, ys, color=color, label=label, linewidth=1.5)
-        ax.set_title(title)
+        ax.set_title(title + title_suffix)
         ax.set_xlabel("Global Iteration")
         ax.set_ylabel(ylabel)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
     # Build per-chain record lists
-    a_by_chain = [[r for r in alice_records if r["chain"] == c] for c in range(n_chains)]
-    b_by_chain = [[r for r in bob_records  if r["chain"] == c] for c in range(n_chains)]
-    a_labels = [f"Alice C{c}" for c in range(n_chains)]
-    b_labels = [f"Bob C{c}"   for c in range(n_chains)]
+    all_chain_indices = sorted(list(set([r["chain"] for r in alice_records] + [r["chain"] for r in bob_records])))
+    a_by_chain = [[r for r in alice_records if r["chain"] == c] for c in all_chain_indices]
+    b_by_chain = [[r for r in bob_records  if r["chain"] == c] for c in all_chain_indices]
+    a_labels = [f"Alice C{c}" for c in all_chain_indices]
+    b_labels = [f"Bob C{c}"   for c in all_chain_indices]
 
     # --- Figure: Loss ---
     fig, ax = plt.subplots(figsize=(10, 5))
     plot_single(ax, a_by_chain, a_labels, alice_colors, "loss", "Loss", "Policy Loss — Alice & Bob")
     plot_single(ax, b_by_chain, b_labels, bob_colors,   "loss", "Loss", "Policy Loss — Alice & Bob")
     plt.tight_layout()
-    p = OUT_DIR / "plot_loss.png"
+    p = out_dir / "plot_loss.png"
     fig.savefig(p, dpi=150); plt.close(fig)
     print(f"[INFO] Saved {p}")
 
@@ -236,7 +238,7 @@ def plot_metrics(alice_records, bob_records):
     plot_single(ax, a_by_chain, a_labels, alice_colors, "val", "Value Loss", "Value Loss — Alice & Bob")
     plot_single(ax, b_by_chain, b_labels, bob_colors,   "val", "Value Loss", "Value Loss — Alice & Bob")
     plt.tight_layout()
-    p = OUT_DIR / "plot_value_loss.png"
+    p = out_dir / "plot_value_loss.png"
     fig.savefig(p, dpi=150); plt.close(fig)
     print(f"[INFO] Saved {p}")
 
@@ -245,7 +247,7 @@ def plot_metrics(alice_records, bob_records):
     plot_single(ax, a_by_chain, a_labels, alice_colors, "rew", "Reward", "Mean Episode Reward — Alice & Bob")
     plot_single(ax, b_by_chain, b_labels, bob_colors,   "rew", "Reward", "Mean Episode Reward — Alice & Bob")
     plt.tight_layout()
-    p = OUT_DIR / "plot_reward.png"
+    p = out_dir / "plot_reward.png"
     fig.savefig(p, dpi=150); plt.close(fig)
     print(f"[INFO] Saved {p}")
 
@@ -253,7 +255,7 @@ def plot_metrics(alice_records, bob_records):
     fig, ax = plt.subplots(figsize=(10, 5))
     plot_single(ax, b_by_chain, b_labels, bob_colors, "sr", "Success Rate", "Bob — Success Rate")
     plt.tight_layout()
-    p = OUT_DIR / "plot_bob_sr.png"
+    p = out_dir / "plot_bob_sr.png"
     fig.savefig(p, dpi=150); plt.close(fig)
     print(f"[INFO] Saved {p}")
 
@@ -261,7 +263,7 @@ def plot_metrics(alice_records, bob_records):
     fig, ax = plt.subplots(figsize=(10, 5))
     plot_single(ax, b_by_chain, b_labels, bob_colors, "abc", "ABC", "Bob — ABC Metric")
     plt.tight_layout()
-    p = OUT_DIR / "plot_bob_abc.png"
+    p = out_dir / "plot_bob_abc.png"
     fig.savefig(p, dpi=150); plt.close(fig)
     print(f"[INFO] Saved {p}")
 
@@ -275,7 +277,7 @@ def plot_metrics(alice_records, bob_records):
         plot_single(ax, a_ent_by_chain, a_labels, alice_colors,
                     "entropy_coef", "Entropy Coef", "Alice — Entropy Coefficient")
         plt.tight_layout()
-        p = OUT_DIR / "plot_alice_entropy.png"
+        p = out_dir / "plot_alice_entropy.png"
         fig.savefig(p, dpi=150); plt.close(fig)
         print(f"[INFO] Saved {p}")
 
@@ -296,7 +298,7 @@ def plot_metrics(alice_records, bob_records):
     nrows = (len(specs) + ncols - 1) // ncols
     fig, axes = plt.subplots(nrows, ncols, figsize=(18, 5 * nrows))
     axes = axes.flatten()
-    fig.suptitle("Training Overview", fontsize=15)
+    fig.suptitle("Training Overview" + title_suffix, fontsize=15)
 
     for i, (recs, labels, colors, key, ylabel, title) in enumerate(specs):
         plot_single(axes[i], recs, labels, colors, key, ylabel, title)
@@ -305,12 +307,25 @@ def plot_metrics(alice_records, bob_records):
         axes[j].set_visible(False)
 
     plt.tight_layout()
-    p = OUT_DIR / "plot_overview.png"
+    p = out_dir / "plot_overview.png"
     fig.savefig(p, dpi=150); plt.close(fig)
     print(f"[INFO] Saved {p}")
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Analyze training logs")
+    parser.add_argument("--log-dir", type=str, default=str(Path(__file__).parent / "train_130426"),
+                        help="Directory containing the slurm log files (default: logs/train_130426)")
+    parser.add_argument("--out-dir", type=str, default=None,
+                        help="Output directory (defaults to log_dir)")
+    args = parser.parse_args()
+
+    global LOG_DIR, OUT_DIR
+    LOG_DIR = Path(args.log_dir)
+    OUT_DIR = Path(args.out_dir) if args.out_dir else LOG_DIR
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] Scanning {LOG_DIR} ...")
     jobs = parse_logs()
     print(f"[INFO] Found {len(jobs)} job log files")
@@ -323,17 +338,31 @@ def main():
     alice_records, bob_records = assign_global_iters(chains, jobs)
     print(f"[INFO] Alice updates: {len(alice_records)}, Bob updates: {len(bob_records)}")
 
-    csv_path = write_csv(alice_records, bob_records)
+    # Process each chain separately
+    for i, ch in enumerate(chains):
+        chain_dir = OUT_DIR / f"chain_{i}"
+        chain_dir.mkdir(parents=True, exist_ok=True)
 
-    # Also write a human-readable summary
-    summary_path = OUT_DIR / "training_updates.txt"
-    with open(summary_path, "w") as f:
-        f.write("=== TRAINING UPDATES SUMMARY ===\n\n")
-        for i, ch in enumerate(chains):
+        print(f"[INFO] Processing Chain {i} in {chain_dir} ...")
+
+        # Copy original slurm logs for this chain
+        for job_id in ch:
+            job_path = jobs[job_id]["path"]
+            shutil.copy2(job_path, chain_dir / job_path.name)
+
+        # Filter records for this chain
+        a_c = [r for r in alice_records if r["chain"] == i]
+        b_c = [r for r in bob_records if r["chain"] == i]
+
+        # Write CSV for this chain
+        write_csv(a_c, b_c, chain_dir)
+
+        # Write human-readable summary for this chain
+        summary_path = chain_dir / "training_updates.txt"
+        with open(summary_path, "w") as f:
+            f.write(f"=== TRAINING UPDATES SUMMARY (Chain {i}) ===\n\n")
             f.write(f"--- Chain {i} ({len(ch)} jobs) ---\n")
-            a_c = [r for r in alice_records if r["chain"] == i]
-            b_c = [r for r in bob_records if r["chain"] == i]
-            for j, (ar, br) in enumerate(zip(a_c, b_c)):
+            for ar, br in zip(a_c, b_c):
                 ent = ar.get("entropy_coef")
                 ent_str = f"  Ent={ent:.4f}" if ent is not None else ""
                 f.write(
@@ -342,10 +371,14 @@ def main():
                     f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  Rew={br['rew']:.4f}  "
                     f"ABC={br['abc']:.4f}  SR={br['sr']:.4f}\n"
                 )
-            f.write("\n")
-    print(f"[INFO] Wrote {summary_path}")
+        print(f"[INFO] Wrote {summary_path}")
 
-    plot_metrics(alice_records, bob_records)
+        # Plot metrics for this chain
+        plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})")
+
+    # Final overall overview in the root output dir (optional but good for comparison)
+    print(f"[INFO] Generating overall comparison overview in {OUT_DIR} ...")
+    plot_metrics(alice_records, bob_records, OUT_DIR, title_suffix=" (Overview)")
     print("[INFO] Done.")
 
 
