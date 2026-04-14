@@ -385,6 +385,7 @@ class AsyncDualPlayEnvWrapper:
             completion_goals = self.episode_manager.goal_count[completion_ids].clone()
 
             self._handle_bob_success_transition(completion_ids)
+            self._iter_stats["bob_successes"] += len(completion_ids)
 
             extras["alice_total_reward"][completion_ids] = self.delayed_alice_reward[
                 completion_ids
@@ -1048,6 +1049,8 @@ class AsyncDualPlayEnvWrapper:
                 continue
             step = bob_phase_steps[eid].item()
             rew = rewards[eid].item()
+            if abs(rew) < 0.5:
+                continue
             if should_give_completion[eid]:
                 t_curr_l = (
                     self.env.scene["target_object"].data.root_pos_w[eid]

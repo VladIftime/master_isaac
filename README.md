@@ -22,7 +22,7 @@ The core training framework. Two agents — **Alice** and **Bob** — play an ad
 
 **Alice Behavioral Cloning (ABC)**: When Bob fails a goal, Alice's trajectory for that sub-goal is stored in a BC replay buffer. Bob's PPO loss is augmented with a clipped imitation loss (ε=0.2, β=0.5) that clones Alice's actions, bootstrapping Bob's exploration.
 
-**Historical policy pool**: 20% of episodes pit each agent against a randomly sampled past version of the opponent, preventing policy collapse.
+**Historical policy pool**: 20% of episodes pit each agent against a randomly sampled past version of the opponent, improving training stability. The pool holds the 5 most recent snapshots.
 
 ---
 
@@ -95,8 +95,8 @@ Episode Manager:
 | 51D Bob obs (interleaved) | Object state + goal + distance interleaved per-object; easier for encoder to associate |
 | Alice entropy 1.0 → 0.01 over 100 iters | Annealed faster than paper (1856 envs → smaller batch) |
 | ABC filter: Bob-failure only | Follows paper §3.3; avoids cloning trivial successes |
-| Historical pool 20% | Exact paper ratio; sampled uniformly from past 50 checkpoints |
-| Success threshold 0.04 m / ~2° | Paper Table 1 values |
+| Historical pool 20% | Paper ratio; pool holds last 5 snapshots (max_size=5 in HistoricalPolicyPool) |
+| Success threshold 0.05 m (pos), ~2° (rot) | 0.04 m from paper; relaxed to 0.05 m in wrapper |
 
 ---
 
@@ -104,22 +104,59 @@ Episode Manager:
 
 ```
 asyncDualPlayPPO/
-├── train.py                        # Main training loop (Alice+Bob PPO, ABC, historical pool)
+├── train.py                            # Main training loop (Alice+Bob PPO, ABC, historical pool)
+├── run_diagnostic_tests.sh             # Three-test diagnostic suite (headless, logs to runs/diag_*)
+├── optuna_sweep.py                     # Hyperparameter sweep with Optuna
+├── buffers.py                          # Low-level buffer utilities
+├── test_checkpoint_chain.py            # Checkpoint save/load smoke test
+│
+├── cfg/
+│   ├── ppo/ppo_continuous.yaml         # PPO + ABC hyperparameters
+│   └── task/AsyncDualPlay.yaml         # Episode structure (timesteps, goals per episode)
+│
+├── algorithms/
+│   ├── goal_encoder.py                 # GoalEncoder φ MLP + aux distance-prediction head
+│   └── rl/ppo/
+│       ├── module.py                   # ActorCritic, PermInvEncoder, MultiCategorical
+│       ├── ppo.py                      # Base PPO (Alice)
+│       ├── ppo_abc.py                  # PPOABC: PPO + Alice Behavioral Cloning (Bob)
+│       └── storage.py                  # RolloutStorage + GPUDemonstrationBuffer
+│
 ├── tasks/
+│   ├── async_dual_play.py              # IsaacLab env config (scene, observations, rewards)
 │   └── utils/
-│       ├── wrapper.py              # AsyncDualPlayEnvWrapper: phase management, rewards, ABC
-│       ├── observations.py         # Observation functions (EE, objects, goals, distances)
-│       ├── dummy_alice_wrapper.py  # Diagnostic wrappers for testing reward/goal pipeline
-│       └── ppo_abc.py              # Bob's PPO extended with ABC behavioral cloning loss
-├── hpc/
-│   ├── train_high.slurm            # Production HPC job (A100, 512 envs)
-│   └── test_diag.slurm             # Diagnostic test suite (4 targeted checks)
+│       ├── wrapper.py                  # AsyncDualPlayEnvWrapper: phase management, rewards
+│       ├── observations.py             # Observation functions (EE, objects, goals, distances)
+│       ├── rewards.py                  # Alice reward constants + reward functions
+│       ├── events.py                   # Reset events (objects, robot joints)
+│       ├── terminations.py             # Episode termination conditions
+│       ├── dummy_alice_wrapper.py      # Diagnostic wrappers (DummyBob, DummyGoalDistance, …)
+│       └── base/events.py              # Base reset event helpers
+│
+├── utils/
+│   ├── episode_manager.py              # EpisodeManager: phase tracking, goal storage
+│   ├── goal_validator.py               # validate_goal: movement threshold check
+│   └── historical_pool.py             # HistoricalPolicyPool: past-5-snapshot ring buffer
+│
 ├── tests/
-│   └── test_abc.py                 # Step-by-step unit tests for the full pipeline
+│   ├── test_abc.py                     # End-to-end ABC pipeline tests
+│   └── test_abc_goal_encoder.py        # Goal encoder integration tests
+│
+├── hpc/
+│   ├── train_high.slurm                # Production HPC job (A100, 512 envs)
+│   ├── train_medium.slurm              # Medium-scale HPC job
+│   ├── train_low.slurm                 # Small-scale HPC job
+│   └── run_interactive.sh              # Interactive session helper
+│
+├── extras/                             # Offline analysis / visualisation scripts
+│   ├── visualize_logs.py
+│   ├── plot_results.py
+│   ├── diagnose_logs.py
+│   └── extract_updates.py
+│
 └── paper-async/
-    ├── asymetric-self-play.pdf     # OpenAI ASP paper (Plappert et al. 2021)
-    ├── asymetric-self-play_charlie.pdf  # Charlie/HSP paper (Sukhbaatar et al. 2018)
-    └── README.md                   # This file
+    ├── asymetric-self-play.pdf         # OpenAI ASP paper (Plappert et al. 2021)
+    └── asymetric-self-play_charlie.pdf # Charlie/HSP paper (Sukhbaatar et al. 2018)
 ```
 
 ---
@@ -136,14 +173,21 @@ python train.py --num_envs 16 --max_iterations 500 --exp_name test_run --headles
 sbatch hpc/train_high.slurm
 ```
 
-### Diagnostic tests
+### Diagnostic tests (3-test suite)
 ```bash
-sbatch hpc/test_diag.slurm
-# or locally:
-python tests/test_abc.py --step 5 --num_envs 16 --num_iterations 10 --headless
-```
+# Locally (from master_isaac/):
+bash asyncDualPlayPPO/run_diagnostic_tests.sh
 
-Steps: 1=Pure PPO, 4=goal distance check, 5=reward pipeline, 6=movement detection.
+# Individual tests:
+# Test 1 — reward pipeline (DummyBobWrapper teleports target→goal, expect SR > 0)
+python -m asyncDualPlayPPO.train --headless --num_envs 16 --max_iterations 50 --test_bob_reward
+
+# Test 2 — Alice exploration sandbox (watch ValidGoals climb)
+python -m asyncDualPlayPPO.train --headless --num_envs 32 --max_iterations 200
+
+# Test 3 — PPO vs ABC balance (watch Loss/Bob/ABC vs Loss/Bob/Surrogate)
+python -m asyncDualPlayPPO.train --headless --num_envs 64 --max_iterations 300
+```
 
 ---
 

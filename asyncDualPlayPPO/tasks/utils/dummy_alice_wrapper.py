@@ -67,7 +67,8 @@ class DummyBobWrapper(DummyAliceWrapper):
     """
 
     def __init__(
-        self, env, device, alice_timesteps=100, bob_timesteps=200, teleport_step=50
+        self, env, device, alice_timesteps=100, bob_timesteps=200, teleport_step=50,
+        num_objects=2,
     ):
         # DummyAliceWrapper has no __init__, so call the grandparent directly
         # to avoid linter confusion with object.__init__
@@ -77,6 +78,7 @@ class DummyBobWrapper(DummyAliceWrapper):
             device=device,
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
+            num_objects=num_objects,
         )
         self.teleport_step = teleport_step
 
@@ -149,6 +151,7 @@ class DummyGoalDistanceWrapper(DummyAliceWrapper):
         alice_timesteps=100,
         bob_timesteps=200,
         teleport_step=30,
+        num_objects=2,
     ):
         AsyncDualPlayEnvWrapper.__init__(
             self,
@@ -156,6 +159,7 @@ class DummyGoalDistanceWrapper(DummyAliceWrapper):
             device=device,
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
+            num_objects=num_objects,
         )
         self.teleport_step = teleport_step
 
@@ -261,6 +265,7 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
         alice_timesteps=100,
         bob_timesteps=200,
         target_local=None,
+        num_objects=2,
     ):
         AsyncDualPlayEnvWrapper.__init__(
             self,
@@ -268,6 +273,7 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
             device=device,
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
+            num_objects=num_objects,
         )
         # Default target: teleport to [0.15, 0.5, 0.05] local.
         # Safe reset is [-0.15, 0.7, 0.023] (gravity-settled height matches wrapper.py).

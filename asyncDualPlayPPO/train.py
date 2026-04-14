@@ -352,6 +352,7 @@ def main():
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
             teleport_step=50,
+            num_objects=args.num_objects,
         )
     elif args.dummy_goal_distance:
         print(
@@ -365,6 +366,7 @@ def main():
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
             teleport_step=30,
+            num_objects=args.num_objects,
         )
     elif args.test_movement:
         print(
@@ -377,6 +379,7 @@ def main():
             device=base_env.device,
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
+            num_objects=args.num_objects,
         )
     elif args.dummy_alice:
         env = DummyAliceWrapper(
@@ -384,6 +387,7 @@ def main():
             device=base_env.device,
             alice_timesteps=alice_timesteps,
             bob_timesteps=bob_timesteps,
+            num_objects=args.num_objects,
         )
     else:
         env = AsyncDualPlayEnvWrapper(
@@ -1193,12 +1197,22 @@ def main():
             )
             or "none"
         )
+
+        # TensorBoard diagnostics for Tests 2 & 3
+        _valid_goals = _stats.get("valid_goals", 0)
+        writer.add_scalar("Metrics/Alice/ValidGoals", _valid_goals, bob_updates)
+        _abc_buf_size = bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else bob_ppo.abc_buffer.capacity
+        writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
+        _abc_warm = 1.0 if last_alice_mean_rew >= bob_ppo.abc_warmup_threshold else 0.0
+        writer.add_scalar("Metrics/ABC/IsWarm", _abc_warm, bob_updates)
+
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | "
-            f"Goals valid={_stats.get('valid_goals', 0)} invalid={_stats.get('invalid_goals', 0)} | "
+            f"Goals valid={_valid_goals} invalid={_stats.get('invalid_goals', 0)} | "
             f"Bob succ={_stats.get('bob_successes', 0)} fail={_stats.get('bob_failures', 0)} | "
             f"Terminations: {_term_str} | "
-            f"ABC buf: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'}",
+            f"ABC buf: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'} | "
+            f"ABC warm: {'YES' if _abc_warm else 'NO'}",
             flush=True,
         )
 
