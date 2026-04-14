@@ -583,7 +583,7 @@ def main():
     rollout_length = ppo_cfg["params"]["learn"]["nsteps"] * args.num_envs
     alice_rew_buf = deque(maxlen=rollout_length)
     bob_rew_buf = deque(maxlen=rollout_length)
-    bob_success_buf = deque(maxlen=rollout_length)
+    bob_success_buf = deque(maxlen=200)
     bob_pos_err_buf = deque(maxlen=rollout_length)
     bob_rot_err_buf = deque(maxlen=rollout_length)
 
@@ -758,10 +758,10 @@ def main():
                 flush=True,
             )
 
-        # Alice entropy annealing: 1.0 → 0.05 over first 1000 iterations.
+        # Alice entropy annealing: 1.0 → 0.05 over first 300 iterations.
         _ALICE_ENT_START = 1.0
         _ALICE_ENT_END = 0.05
-        _ALICE_ENT_ANNEAL_ITERS = 300
+        _ALICE_ENT_ANNEAL_ITERS = 450
         frac = min(1.0, bob_updates / _ALICE_ENT_ANNEAL_ITERS)
         alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (
             _ALICE_ENT_END - _ALICE_ENT_START

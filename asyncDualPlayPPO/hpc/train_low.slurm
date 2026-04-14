@@ -6,7 +6,9 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=16G
 #SBATCH --output=slurm-%j-50k.out
-#SBATCH --signal=B:TERM@120
+#SBATCH --signal=B:USR1@120
+WILL_RESUBMIT=false
+trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
 NUM_ENVS=512
@@ -28,11 +30,11 @@ cleanup() {
     rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/" 2>/dev/null
     echo "[INFO] Sync complete."
 
-    if [ ! -f "$NFS_RUN_DIR/bob/model_final.pt" ]; then
+    if [ ! -f "$NFS_RUN_DIR/bob/model_final.pt" ] && [ "$WILL_RESUBMIT" = "true" ]; then
         NEXT_JOB=$(sbatch "$PROJECT_ROOT/hpc/train_low.slurm" 2>/dev/null | awk '{print $4}')
         echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
     else
-        echo "[INFO] Training complete — no resubmission needed."
+        echo "[INFO] Training complete or stop requested — no resubmission."
     fi
 }
 trap cleanup EXIT
@@ -92,3 +94,8 @@ apptainer exec --nv \
     $RESUME_ARGS \
     2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
                    -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Training command failed; will resubmit."
+    WILL_RESUBMIT=true
+fi
