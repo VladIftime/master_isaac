@@ -213,7 +213,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=sim_utils.CuboidCfg(
             size=(1.52, 0.02, 0.001),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.05, 0.05, 0.05)),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.05, 0.05, 0.05)
+            ),
         ),
     )
 
@@ -224,7 +226,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=sim_utils.CuboidCfg(
             size=(1.52, 0.02, 0.001),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.05, 0.05, 0.05)),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.05, 0.05, 0.05)
+            ),
         ),
     )
 
@@ -235,7 +239,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=sim_utils.CuboidCfg(
             size=(0.02, 0.82, 0.001),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.05, 0.05, 0.05)),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.05, 0.05, 0.05)
+            ),
         ),
     )
 
@@ -246,7 +252,9 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=sim_utils.CuboidCfg(
             size=(0.02, 0.82, 0.001),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.05, 0.05, 0.05)),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.05, 0.05, 0.05)
+            ),
         ),
     )
 

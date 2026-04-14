@@ -60,7 +60,9 @@ class EpisodeManager:
         self.goal_states: Optional[torch.Tensor] = None  # Stored after Alice phase
         self.goal_count = torch.zeros(self.num_envs, dtype=torch.long, device=device)
         self.goal_valid = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
-        self.alice_base_reward = torch.zeros(self.num_envs, dtype=torch.float32, device=device)
+        self.alice_base_reward = torch.zeros(
+            self.num_envs, dtype=torch.float32, device=device
+        )
         self.bob_success = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
         # Success tracking
         self.bob_ever_failed = torch.zeros(
@@ -280,17 +282,17 @@ class EpisodeManager:
           - goal_states    : Alice's target poses stored after Alice phase
         """
         sd = {
-            "current_phase":    self.current_phase.cpu(),
-            "phase_step":       self.phase_step.cpu(),
-            "goal_count":       self.goal_count.cpu(),
-            "goal_valid":       self.goal_valid.cpu(),
+            "current_phase": self.current_phase.cpu(),
+            "phase_step": self.phase_step.cpu(),
+            "goal_count": self.goal_count.cpu(),
+            "goal_valid": self.goal_valid.cpu(),
             "alice_base_reward": self.alice_base_reward.cpu(),
-            "bob_success":      self.bob_success.cpu(),
-            "bob_ever_failed":  self.bob_ever_failed.cpu(),
+            "bob_success": self.bob_success.cpu(),
+            "bob_ever_failed": self.bob_ever_failed.cpu(),
             "completion_given": self.completion_given.cpu(),
             "max_contact_force": self.max_contact_force.cpu(),
-            "goals_attempted":  self.goals_attempted.cpu(),
-            "goals_succeeded":  self.goals_succeeded.cpu(),
+            "goals_attempted": self.goals_attempted.cpu(),
+            "goals_succeeded": self.goals_succeeded.cpu(),
         }
         if self.initial_states is not None:
             sd["initial_states"] = self.initial_states.cpu()
@@ -306,29 +308,30 @@ class EpisodeManager:
         Safe to call after :meth:`__init__`; restores all tensors in-place
         to the correct device so training resumes exactly where it left off.
         """
+
         def _load(key: str, dest: torch.Tensor) -> torch.Tensor:
             """Copy a saved CPU tensor back to *dest* (device-agnostic)."""
             if key in sd:
                 dest.copy_(sd[key].to(self.device))
             return dest
 
-        _load("current_phase",    self.current_phase)
-        _load("phase_step",       self.phase_step)
-        _load("goal_count",       self.goal_count)
-        _load("goal_valid",       self.goal_valid)
-        _load("bob_success",      self.bob_success)
-        _load("bob_ever_failed",  self.bob_ever_failed)
+        _load("current_phase", self.current_phase)
+        _load("phase_step", self.phase_step)
+        _load("goal_count", self.goal_count)
+        _load("goal_valid", self.goal_valid)
+        _load("bob_success", self.bob_success)
+        _load("bob_ever_failed", self.bob_ever_failed)
         _load("completion_given", self.completion_given)
         _load("max_contact_force", self.max_contact_force)
-        _load("goals_attempted",  self.goals_attempted)
-        _load("goals_succeeded",  self.goals_succeeded)
+        _load("goals_attempted", self.goals_attempted)
+        _load("goals_succeeded", self.goals_succeeded)
 
         if "alice_base_reward" in sd:
             self.alice_base_reward.copy_(sd["alice_base_reward"].to(self.device))
-            
+
         if "initial_states" in sd:
             self.initial_states = sd["initial_states"].to(self.device).clone()
-            
+
         if "goal_states" in sd:
             self.goal_states = sd["goal_states"].to(self.device)
         if "prev_obj_success" in sd:

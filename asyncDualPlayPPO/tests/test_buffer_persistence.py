@@ -29,7 +29,9 @@ def _fill_buffer(buf: GPUDemonstrationBuffer, n: int):
     sigmas = acts.clone() * 0.1 + 0.01
     ret = rews.clone() + 1.0
     adv = rews.clone() - 0.5
-    buf.add_trajectory(obs, states, acts, rews, dones, vals, log_probs, mus, sigmas, ret, adv)
+    buf.add_trajectory(
+        obs, states, acts, rews, dones, vals, log_probs, mus, sigmas, ret, adv
+    )
 
 
 def test_save_load_partial():
@@ -54,7 +56,9 @@ def test_save_load_partial():
 
         assert buf2.step == n, f"step mismatch: {buf2.step} != {n}"
         assert not buf2.full
-        assert torch.allclose(buf2.observations[:n], buf.observations[:n]), "observations mismatch"
+        assert torch.allclose(
+            buf2.observations[:n], buf.observations[:n]
+        ), "observations mismatch"
         assert torch.allclose(buf2.actions[:n], buf.actions[:n]), "actions mismatch"
         assert torch.allclose(buf2.returns[:n], buf.returns[:n]), "returns mismatch"
     finally:
@@ -84,7 +88,9 @@ def test_save_load_full_wraparound():
 
         assert buf2.full
         assert buf2.step == buf.step
-        assert torch.allclose(buf2.observations, buf.observations), "observations mismatch"
+        assert torch.allclose(
+            buf2.observations, buf.observations
+        ), "observations mismatch"
         assert torch.allclose(buf2.actions, buf.actions), "actions mismatch"
     finally:
         os.unlink(path)

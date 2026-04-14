@@ -11,6 +11,7 @@ from pathlib import Path
 from collections import defaultdict
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -58,36 +59,42 @@ def parse_logs():
         for am in ALICE_RE.finditer(text):
             it = int(am.group(2))
             matched_iters.add(it)
-            alice_updates.append({
-                "local_iter": it,
-                "entropy_coef": float(am.group(1)),
-                "loss": float(am.group(3)),
-                "val": float(am.group(4)),
-                "rew": float(am.group(5)),
-            })
+            alice_updates.append(
+                {
+                    "local_iter": it,
+                    "entropy_coef": float(am.group(1)),
+                    "loss": float(am.group(3)),
+                    "val": float(am.group(4)),
+                    "rew": float(am.group(5)),
+                }
+            )
         # Fallback for lines without an entropy header
         for am in ALICE_NO_ENT_RE.finditer(text):
             it = int(am.group(1))
             if it not in matched_iters:
-                alice_updates.append({
-                    "local_iter": it,
-                    "entropy_coef": None,
-                    "loss": float(am.group(2)),
-                    "val": float(am.group(3)),
-                    "rew": float(am.group(4)),
-                })
+                alice_updates.append(
+                    {
+                        "local_iter": it,
+                        "entropy_coef": None,
+                        "loss": float(am.group(2)),
+                        "val": float(am.group(3)),
+                        "rew": float(am.group(4)),
+                    }
+                )
         alice_updates.sort(key=lambda x: x["local_iter"])
 
         bob_updates = []
         for bm in BOB_RE.finditer(text):
-            bob_updates.append({
-                "local_iter": int(bm.group(1)),
-                "loss": float(bm.group(2)),
-                "val": float(bm.group(3)),
-                "rew": float(bm.group(4)),
-                "abc": float(bm.group(5)),
-                "sr": float(bm.group(6)),
-            })
+            bob_updates.append(
+                {
+                    "local_iter": int(bm.group(1)),
+                    "loss": float(bm.group(2)),
+                    "val": float(bm.group(3)),
+                    "rew": float(bm.group(4)),
+                    "abc": float(bm.group(5)),
+                    "sr": float(bm.group(6)),
+                }
+            )
 
         jobs[job_id] = {
             "path": f,
@@ -144,20 +151,24 @@ def assign_global_iters(chains, jobs):
                 global_iter = job["resume_iter"]
 
             for upd in job["alice"]:
-                alice_records.append({
-                    "chain": chain_idx,
-                    "job_id": job_id,
-                    "global_iter": global_iter + upd["local_iter"],
-                    **{k: v for k, v in upd.items() if k != "local_iter"},
-                })
+                alice_records.append(
+                    {
+                        "chain": chain_idx,
+                        "job_id": job_id,
+                        "global_iter": global_iter + upd["local_iter"],
+                        **{k: v for k, v in upd.items() if k != "local_iter"},
+                    }
+                )
 
             for upd in job["bob"]:
-                bob_records.append({
-                    "chain": chain_idx,
-                    "job_id": job_id,
-                    "global_iter": global_iter + upd["local_iter"],
-                    **{k: v for k, v in upd.items() if k != "local_iter"},
-                })
+                bob_records.append(
+                    {
+                        "chain": chain_idx,
+                        "job_id": job_id,
+                        "global_iter": global_iter + upd["local_iter"],
+                        **{k: v for k, v in upd.items() if k != "local_iter"},
+                    }
+                )
 
             # Advance by number of local updates done
             n = max(len(job["alice"]), len(job["bob"]), 1)
@@ -171,7 +182,18 @@ def assign_global_iters(chains, jobs):
 
 def write_csv(alice_records, bob_records, out_dir):
     out_path = out_dir / "training_updates.csv"
-    fieldnames = ["agent", "chain", "job_id", "global_iter", "loss", "val", "rew", "entropy_coef", "abc", "sr"]
+    fieldnames = [
+        "agent",
+        "chain",
+        "job_id",
+        "global_iter",
+        "loss",
+        "val",
+        "rew",
+        "entropy_coef",
+        "abc",
+        "sr",
+    ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -249,14 +271,17 @@ def smooth(vals, window=5):
 
 
 def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
-    n_chains = max(
-        (max(r["chain"] for r in alice_records) if alice_records else 0),
-        (max(r["chain"] for r in bob_records) if bob_records else 0),
-    ) + 1
+    n_chains = (
+        max(
+            (max(r["chain"] for r in alice_records) if alice_records else 0),
+            (max(r["chain"] for r in bob_records) if bob_records else 0),
+        )
+        + 1
+    )
 
     # Alice = blues, Bob = reds/oranges per chain
     alice_colors = ["tab:blue", "cornflowerblue", "navy", "steelblue"]
-    bob_colors   = ["tab:red", "tomato", "darkred", "salmon"]
+    bob_colors = ["tab:red", "tomato", "darkred", "salmon"]
 
     def plot_single(ax, records_list, labels, colors, key, ylabel, title):
         for records, label, color in zip(records_list, labels, colors):
@@ -272,45 +297,107 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
         ax.grid(True, alpha=0.3)
 
     # Build per-chain record lists
-    all_chain_indices = sorted(list(set([r["chain"] for r in alice_records] + [r["chain"] for r in bob_records])))
-    a_by_chain = [[r for r in alice_records if r["chain"] == c] for c in all_chain_indices]
-    b_by_chain = [[r for r in bob_records  if r["chain"] == c] for c in all_chain_indices]
+    all_chain_indices = sorted(
+        list(
+            set([r["chain"] for r in alice_records] + [r["chain"] for r in bob_records])
+        )
+    )
+    a_by_chain = [
+        [r for r in alice_records if r["chain"] == c] for c in all_chain_indices
+    ]
+    b_by_chain = [
+        [r for r in bob_records if r["chain"] == c] for c in all_chain_indices
+    ]
     a_labels = [f"Alice C{c}" for c in all_chain_indices]
-    b_labels = [f"Bob C{c}"   for c in all_chain_indices]
+    b_labels = [f"Bob C{c}" for c in all_chain_indices]
 
     # --- Figure: Loss ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "loss", "Loss", "Policy Loss — Alice & Bob")
-    plot_single(ax, b_by_chain, b_labels, bob_colors,   "loss", "Loss", "Policy Loss — Alice & Bob")
+    plot_single(
+        ax,
+        a_by_chain,
+        a_labels,
+        alice_colors,
+        "loss",
+        "Loss",
+        "Policy Loss — Alice & Bob",
+    )
+    plot_single(
+        ax,
+        b_by_chain,
+        b_labels,
+        bob_colors,
+        "loss",
+        "Loss",
+        "Policy Loss — Alice & Bob",
+    )
     plt.tight_layout()
     p = out_dir / "plot_loss.png"
-    fig.savefig(p, dpi=150); plt.close(fig)
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
     print(f"[INFO] Saved {p}")
 
     # --- Figure: Value Loss ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "val", "Value Loss", "Value Loss — Alice & Bob")
-    plot_single(ax, b_by_chain, b_labels, bob_colors,   "val", "Value Loss", "Value Loss — Alice & Bob")
+    plot_single(
+        ax,
+        a_by_chain,
+        a_labels,
+        alice_colors,
+        "val",
+        "Value Loss",
+        "Value Loss — Alice & Bob",
+    )
+    plot_single(
+        ax,
+        b_by_chain,
+        b_labels,
+        bob_colors,
+        "val",
+        "Value Loss",
+        "Value Loss — Alice & Bob",
+    )
     plt.tight_layout()
     p = out_dir / "plot_value_loss.png"
-    fig.savefig(p, dpi=150); plt.close(fig)
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
     print(f"[INFO] Saved {p}")
 
     # --- Figure: Reward ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "rew", "Reward", "Mean Episode Reward — Alice & Bob")
-    plot_single(ax, b_by_chain, b_labels, bob_colors,   "rew", "Reward", "Mean Episode Reward — Alice & Bob")
+    plot_single(
+        ax,
+        a_by_chain,
+        a_labels,
+        alice_colors,
+        "rew",
+        "Reward",
+        "Mean Episode Reward — Alice & Bob",
+    )
+    plot_single(
+        ax,
+        b_by_chain,
+        b_labels,
+        bob_colors,
+        "rew",
+        "Reward",
+        "Mean Episode Reward — Alice & Bob",
+    )
     plt.tight_layout()
     p = out_dir / "plot_reward.png"
-    fig.savefig(p, dpi=150); plt.close(fig)
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
     print(f"[INFO] Saved {p}")
 
     # --- Figure: Bob SR ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, b_by_chain, b_labels, bob_colors, "sr", "Success Rate", "Bob — Success Rate")
+    plot_single(
+        ax, b_by_chain, b_labels, bob_colors, "sr", "Success Rate", "Bob — Success Rate"
+    )
     plt.tight_layout()
     p = out_dir / "plot_bob_sr.png"
-    fig.savefig(p, dpi=150); plt.close(fig)
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
     print(f"[INFO] Saved {p}")
 
     # --- Figure: Bob ABC ---
@@ -318,34 +405,49 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
     plot_single(ax, b_by_chain, b_labels, bob_colors, "abc", "ABC", "Bob — ABC Metric")
     plt.tight_layout()
     p = out_dir / "plot_bob_abc.png"
-    fig.savefig(p, dpi=150); plt.close(fig)
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
     print(f"[INFO] Saved {p}")
 
     # --- Figure: Alice Entropy Coef ---
     a_ent_by_chain = [
-        [r for r in recs if r.get("entropy_coef") is not None]
-        for recs in a_by_chain
+        [r for r in recs if r.get("entropy_coef") is not None] for recs in a_by_chain
     ]
     if any(a_ent_by_chain):
         fig, ax = plt.subplots(figsize=(10, 5))
-        plot_single(ax, a_ent_by_chain, a_labels, alice_colors,
-                    "entropy_coef", "Entropy Coef", "Alice — Entropy Coefficient")
+        plot_single(
+            ax,
+            a_ent_by_chain,
+            a_labels,
+            alice_colors,
+            "entropy_coef",
+            "Entropy Coef",
+            "Alice — Entropy Coefficient",
+        )
         plt.tight_layout()
         p = out_dir / "plot_alice_entropy.png"
-        fig.savefig(p, dpi=150); plt.close(fig)
+        fig.savefig(p, dpi=150)
+        plt.close(fig)
         print(f"[INFO] Saved {p}")
 
     # --- Overview: all metrics in one figure ---
     specs = [
-        (a_by_chain, a_labels, alice_colors, "loss",         "Loss",         "Policy Loss (Alice)"),
-        (b_by_chain, b_labels, bob_colors,   "loss",         "Loss",         "Policy Loss (Bob)"),
-        (a_by_chain, a_labels, alice_colors, "val",          "Value Loss",   "Value Loss (Alice)"),
-        (b_by_chain, b_labels, bob_colors,   "val",          "Value Loss",   "Value Loss (Bob)"),
-        (a_by_chain, a_labels, alice_colors, "rew",          "Reward",       "Reward (Alice)"),
-        (b_by_chain, b_labels, bob_colors,   "rew",          "Reward",       "Reward (Bob)"),
-        (b_by_chain, b_labels, bob_colors,   "sr",           "SR",           "Success Rate (Bob)"),
-        (b_by_chain, b_labels, bob_colors,   "abc",          "ABC",          "ABC (Bob)"),
-        (a_ent_by_chain, a_labels, alice_colors, "entropy_coef", "Ent Coef", "Entropy Coef (Alice)"),
+        (a_by_chain, a_labels, alice_colors, "loss", "Loss", "Policy Loss (Alice)"),
+        (b_by_chain, b_labels, bob_colors, "loss", "Loss", "Policy Loss (Bob)"),
+        (a_by_chain, a_labels, alice_colors, "val", "Value Loss", "Value Loss (Alice)"),
+        (b_by_chain, b_labels, bob_colors, "val", "Value Loss", "Value Loss (Bob)"),
+        (a_by_chain, a_labels, alice_colors, "rew", "Reward", "Reward (Alice)"),
+        (b_by_chain, b_labels, bob_colors, "rew", "Reward", "Reward (Bob)"),
+        (b_by_chain, b_labels, bob_colors, "sr", "SR", "Success Rate (Bob)"),
+        (b_by_chain, b_labels, bob_colors, "abc", "ABC", "ABC (Bob)"),
+        (
+            a_ent_by_chain,
+            a_labels,
+            alice_colors,
+            "entropy_coef",
+            "Ent Coef",
+            "Entropy Coef (Alice)",
+        ),
     ]
 
     ncols = 3
@@ -362,17 +464,27 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
 
     plt.tight_layout()
     p = out_dir / "plot_overview.png"
-    fig.savefig(p, dpi=150); plt.close(fig)
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
     print(f"[INFO] Saved {p}")
 
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Analyze training logs")
-    parser.add_argument("--log-dir", type=str, default=str(Path(__file__).parent / "train_130426"),
-                        help="Directory containing the slurm log files (default: logs/train_130426)")
-    parser.add_argument("--out-dir", type=str, default=None,
-                        help="Output directory (defaults to log_dir)")
+    parser.add_argument(
+        "--log-dir",
+        type=str,
+        default=str(Path(__file__).parent / "train_130426"),
+        help="Directory containing the slurm log files (default: logs/train_130426)",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=str,
+        default=None,
+        help="Output directory (defaults to log_dir)",
+    )
     args = parser.parse_args()
 
     global LOG_DIR, OUT_DIR
@@ -390,7 +502,9 @@ def main():
         print(f"       Chain {i}: {len(ch)} jobs  [{ch[0]} → ... → {ch[-1]}]")
 
     alice_records, bob_records = assign_global_iters(chains, jobs)
-    print(f"[INFO] Alice updates: {len(alice_records)}, Bob updates: {len(bob_records)}")
+    print(
+        f"[INFO] Alice updates: {len(alice_records)}, Bob updates: {len(bob_records)}"
+    )
 
     # Process each chain separately
     for i, ch in enumerate(chains):
