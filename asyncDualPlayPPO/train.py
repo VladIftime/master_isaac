@@ -4,6 +4,7 @@ from isaaclab.app import AppLauncher
 import gc
 import math
 import os
+import signal
 import sys
 import threading
 import yaml
@@ -565,7 +566,7 @@ def main():
             )
 
     # --- Agents ---
-    alice_updates = 0
+    alice_updates = args.resume_iteration  # keep in sync with bob_updates so logs show global iters
     bob_updates = args.resume_iteration
 
     if args.num_envs < 32:
@@ -724,6 +725,17 @@ def main():
         # IsaacSim's PhysX heap is not affected, but this helps with Python objects.
         if bob_updates % 10 == 0:
             gc.collect()
+
+    # --- Graceful shutdown on SIGTERM (sent by SLURM at the hard time limit) ---
+    _shutdown_requested = False
+
+    def _sigterm_handler(signum, frame):
+        nonlocal _shutdown_requested
+        print("[INFO] SIGTERM received — will save emergency checkpoint after current iteration.",
+              flush=True)
+        _shutdown_requested = True
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
     print("Initializing environment (suppressing URDF/Lula warnings)...")
     with SuppressAllOutput():
@@ -1184,6 +1196,20 @@ def main():
 
         perform_alice_update()
         perform_bob_update(current_bob_obs)
+
+        # --- Emergency checkpoint on SIGTERM (SLURM hard kill) ---
+        if _shutdown_requested:
+            _ckpt_iter = bob_updates  # already incremented inside perform_bob_update
+            print(f"[INFO] Emergency checkpoint at iteration {_ckpt_iter}", flush=True)
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{_ckpt_iter}.pt"))
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{_ckpt_iter}.pt"))
+            bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
+            torch.save(
+                env.episode_manager.state_dict(),
+                os.path.join(bob_ppo.log_dir, f"episode_manager_{_ckpt_iter}.pt"),
+            )
+            print(f"[INFO] Emergency checkpoint saved — exiting cleanly.", flush=True)
+            break
 
         # --- Iteration aggregate summary ---
         _stats = env.get_iter_stats() if hasattr(env, "get_iter_stats") else {}

@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """
-Parses all slurm log files in long_trainining/, traces the two job chains,
-extracts training updates, writes a clean summary CSV, and plots metrics.
+Parses slurm log files across one or more training-run directories,
+traces job chains, stitches them together, deduplicates overlapping
+iterations at run boundaries, writes clean CSVs/TXTs, and plots metrics.
+
+Usage (single dir):
+    python analyze_training.py --log-dir logs/train_140426
+
+Usage (stitch prior run + current):
+    python analyze_training.py \
+        --log-dir logs/train_140426 \
+        --prior-dirs logs/train_130426 \
+        --out-dir logs/combined
 """
 
 import re
@@ -14,9 +24,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-LOG_DIR = None
-OUT_DIR = None
 
 # --- Patterns ---
 ALICE_RE = re.compile(
@@ -31,13 +38,15 @@ BOB_RE = re.compile(
 )
 CHAIN_RE = re.compile(r"chained next job:\s*(\d+)")
 RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
+# Explicit anchor emitted by train_high.slurm after the checkpoint detection block
+GLOBAL_START_RE = re.compile(r"Global iteration start:\s*(\d+)")
 JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-.*)?\.out")
 
 
-def parse_logs():
-    """Parse all log files and return per-job data."""
+def parse_logs(log_dir: Path) -> dict:
+    """Parse all slurm log files in log_dir (recursively) and return per-job data dict."""
     jobs = {}
-    for f in LOG_DIR.glob("slurm-*-*.out"):
+    for f in log_dir.rglob("slurm-*-*.out"):
         m = JOB_ID_RE.match(f.name)
         if not m:
             continue
@@ -45,9 +54,14 @@ def parse_logs():
         text = f.read_text(errors="replace")
 
         resume_iter = None
-        rm = RESUME_RE.search(text)
-        if rm:
-            resume_iter = int(rm.group(1))
+        # Prefer the explicit anchor line emitted by train_high.slurm
+        gm = GLOBAL_START_RE.search(text)
+        if gm:
+            resume_iter = int(gm.group(1))
+        else:
+            rm = RESUME_RE.search(text)
+            if rm:
+                resume_iter = int(rm.group(1))
 
         chain_next = None
         cm = CHAIN_RE.search(text)
@@ -106,7 +120,21 @@ def parse_logs():
     return jobs
 
 
-def trace_chains(jobs):
+def parse_all_dirs(log_dirs: list[Path]) -> dict:
+    """Parse multiple directories and merge jobs into one dict."""
+    all_jobs = {}
+    for d in log_dirs:
+        jobs = parse_logs(d)
+        overlap = set(jobs.keys()) & set(all_jobs.keys())
+        if overlap:
+            print(f"[WARN] Job IDs {overlap} appear in multiple dirs — keeping first occurrence.")
+        for jid, data in jobs.items():
+            if jid not in all_jobs:
+                all_jobs[jid] = data
+    return all_jobs
+
+
+def trace_chains(jobs: dict) -> list[list[int]]:
     """
     Find root jobs (not pointed to by any other job) and trace forward chains.
     Returns list of chains, each chain is an ordered list of job_ids.
@@ -132,55 +160,118 @@ def trace_chains(jobs):
     return chains
 
 
-def assign_global_iters(chains, jobs):
+def merge_all_chains(chains: list[list[int]]) -> list[list[int]]:
+    """
+    Collapse all chains into a single chain ordered by job ID.
+
+    Use when a job was killed before its EXIT trap could run (so no
+    'chained next job' line was printed), causing the next job to appear
+    as an unlinked root.  Ordering by job ID preserves submission order.
+    """
+    flat = sorted(jid for chain in chains for jid in chain)
+    return [flat]
+
+
+def cross_check_job(job_id: int, job: dict):
+    """
+    Sanity-check a single job: compare the slurm-reported resume_iter against
+    the first iteration numbers actually printed in the update logs.
+    Since train.py now initialises both alice_updates and bob_updates to
+    resume_iteration, the first logged iter should equal resume_iter exactly.
+    Prints warnings for any mismatch so problems are visible without stopping
+    the analysis.
+    """
+    ri = job["resume_iter"]
+    if ri is None:
+        ri = 0  # fresh start assumed when no anchor is present
+
+    issues = []
+
+    if job["alice"]:
+        first_a = job["alice"][0]["local_iter"]
+        if first_a != ri:
+            issues.append(
+                f"Alice first iter={first_a} but resume_iter={ri} "
+                f"(delta={first_a - ri:+d})"
+            )
+
+    if job["bob"]:
+        first_b = job["bob"][0]["local_iter"]
+        if first_b != ri:
+            issues.append(
+                f"Bob first iter={first_b} but resume_iter={ri} "
+                f"(delta={first_b - ri:+d})"
+            )
+
+    if issues:
+        print(f"[WARN] Job {job_id} iteration mismatch:")
+        for msg in issues:
+            print(f"       {msg}")
+    else:
+        if job["alice"] or job["bob"]:
+            print(f"[OK]   Job {job_id} iteration anchor matches resume_iter={ri}")
+
+
+def assign_global_iters(
+    chains: list[list[int]], jobs: dict
+) -> tuple[list[dict], list[dict]]:
     """
     Assign global iteration numbers.
-    Uses resume_iter if available; otherwise increments sequentially from 0.
-    Returns list of records with global_iter assigned.
+
+    Since train.py now keeps alice_updates and bob_updates both initialised to
+    resume_iteration, every update line already contains the *global* iteration
+    number.  We therefore use local_iter directly — no resume-offset arithmetic
+    needed.  Deduplication via seen-sets handles any overlap at job boundaries
+    (e.g. when a job is killed before checkpointing and its successor replays
+    some iterations from the last saved checkpoint).
     """
     alice_records = []
     bob_records = []
 
     for chain_idx, chain in enumerate(chains):
-        global_iter = 0
+        seen_alice_iters: set[int] = set()
+        seen_bob_iters: set[int] = set()
+
         for job_id in chain:
             job = jobs[job_id]
 
-            # If this job resumed from a checkpoint, use that as base
-            if job["resume_iter"] is not None:
-                global_iter = job["resume_iter"]
+            # Cross-check: slurm anchor vs. actual log numbers
+            cross_check_job(job_id, job)
 
             for upd in job["alice"]:
+                g = upd["local_iter"]   # already the global iteration number
+                if g in seen_alice_iters:
+                    continue
+                seen_alice_iters.add(g)
                 alice_records.append(
                     {
                         "chain": chain_idx,
                         "job_id": job_id,
-                        "global_iter": global_iter + upd["local_iter"],
+                        "global_iter": g,
                         **{k: v for k, v in upd.items() if k != "local_iter"},
                     }
                 )
 
             for upd in job["bob"]:
+                g = upd["local_iter"]   # already the global iteration number
+                if g in seen_bob_iters:
+                    continue
+                seen_bob_iters.add(g)
                 bob_records.append(
                     {
                         "chain": chain_idx,
                         "job_id": job_id,
-                        "global_iter": global_iter + upd["local_iter"],
+                        "global_iter": g,
                         **{k: v for k, v in upd.items() if k != "local_iter"},
                     }
                 )
 
-            # Advance by number of local updates done
-            n = max(len(job["alice"]), len(job["bob"]), 1)
-            global_iter += n
-
-    # Sort by chain then iter
     alice_records.sort(key=lambda x: (x["chain"], x["global_iter"]))
     bob_records.sort(key=lambda x: (x["chain"], x["global_iter"]))
     return alice_records, bob_records
 
 
-def write_csv(alice_records, bob_records, out_dir):
+def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path):
     out_path = out_dir / "training_updates.csv"
     fieldnames = [
         "agent",
@@ -205,8 +296,8 @@ def write_csv(alice_records, bob_records, out_dir):
     return out_path
 
 
-def write_raw_logs(chain, jobs, out_dir):
-    """Concatenate the raw slurm .out files for all jobs in the chain into raw_logs.txt."""
+def write_raw_logs(chain: list[int], jobs: dict, out_dir: Path):
+    """Concatenate the raw slurm .out files for all jobs in the chain."""
     out_path = out_dir / "raw_logs.txt"
     with open(out_path, "w") as fout:
         for job_id in chain:
@@ -219,47 +310,60 @@ def write_raw_logs(chain, jobs, out_dir):
     print(f"[INFO] Wrote {out_path}")
 
 
-def write_raw_csv(chain_idx, chain, jobs, out_dir):
-    """Write all raw parsed update records (local_iter, before global assignment) to raw_parsed.csv."""
+def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
+    """Write all raw parsed update records (local_iter) to raw_parsed.csv."""
     out_path = out_dir / "raw_parsed.csv"
-    alice_fields = ["agent", "chain", "job_id", "local_iter", "loss", "val", "rew", "entropy_coef"]
-    bob_fields   = ["agent", "chain", "job_id", "local_iter", "loss", "val", "rew", "abc", "sr"]
-    all_fields   = ["agent", "chain", "job_id", "local_iter", "loss", "val", "rew", "entropy_coef", "abc", "sr"]
+    all_fields = [
+        "agent",
+        "chain",
+        "job_id",
+        "local_iter",
+        "loss",
+        "val",
+        "rew",
+        "entropy_coef",
+        "abc",
+        "sr",
+    ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=all_fields)
         writer.writeheader()
         for job_id in chain:
             job = jobs[job_id]
             for upd in job["alice"]:
-                writer.writerow({
-                    "agent": "alice",
-                    "chain": chain_idx,
-                    "job_id": job_id,
-                    "local_iter": upd["local_iter"],
-                    "loss": upd["loss"],
-                    "val": upd["val"],
-                    "rew": upd["rew"],
-                    "entropy_coef": upd.get("entropy_coef", "") if upd.get("entropy_coef") is not None else "",
-                    "abc": "",
-                    "sr": "",
-                })
+                writer.writerow(
+                    {
+                        "agent": "alice",
+                        "chain": chain_idx,
+                        "job_id": job_id,
+                        "local_iter": upd["local_iter"],
+                        "loss": upd["loss"],
+                        "val": upd["val"],
+                        "rew": upd["rew"],
+                        "entropy_coef": upd.get("entropy_coef") or "",
+                        "abc": "",
+                        "sr": "",
+                    }
+                )
             for upd in job["bob"]:
-                writer.writerow({
-                    "agent": "bob",
-                    "chain": chain_idx,
-                    "job_id": job_id,
-                    "local_iter": upd["local_iter"],
-                    "loss": upd["loss"],
-                    "val": upd["val"],
-                    "rew": upd["rew"],
-                    "entropy_coef": "",
-                    "abc": upd["abc"],
-                    "sr": upd["sr"],
-                })
+                writer.writerow(
+                    {
+                        "agent": "bob",
+                        "chain": chain_idx,
+                        "job_id": job_id,
+                        "local_iter": upd["local_iter"],
+                        "loss": upd["loss"],
+                        "val": upd["val"],
+                        "rew": upd["rew"],
+                        "entropy_coef": "",
+                        "abc": upd["abc"],
+                        "sr": upd["sr"],
+                    }
+                )
     print(f"[INFO] Wrote {out_path}")
 
 
-def smooth(vals, window=5):
+def smooth(vals: list, window: int = 5) -> list:
     if len(vals) < window:
         return vals
     result = []
@@ -270,14 +374,15 @@ def smooth(vals, window=5):
     return result
 
 
-def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
-    n_chains = (
-        max(
-            (max(r["chain"] for r in alice_records) if alice_records else 0),
-            (max(r["chain"] for r in bob_records) if bob_records else 0),
-        )
-        + 1
-    )
+def plot_metrics(
+    alice_records: list[dict],
+    bob_records: list[dict],
+    out_dir: Path,
+    title_suffix: str = "",
+):
+    if not alice_records and not bob_records:
+        print("[WARN] No records to plot.")
+        return
 
     # Alice = blues, Bob = reds/oranges per chain
     alice_colors = ["tab:blue", "cornflowerblue", "navy", "steelblue"]
@@ -296,41 +401,20 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
-    # Build per-chain record lists
     all_chain_indices = sorted(
-        list(
-            set([r["chain"] for r in alice_records] + [r["chain"] for r in bob_records])
+        set(
+            [r["chain"] for r in alice_records] + [r["chain"] for r in bob_records]
         )
     )
-    a_by_chain = [
-        [r for r in alice_records if r["chain"] == c] for c in all_chain_indices
-    ]
-    b_by_chain = [
-        [r for r in bob_records if r["chain"] == c] for c in all_chain_indices
-    ]
+    a_by_chain = [[r for r in alice_records if r["chain"] == c] for c in all_chain_indices]
+    b_by_chain = [[r for r in bob_records if r["chain"] == c] for c in all_chain_indices]
     a_labels = [f"Alice C{c}" for c in all_chain_indices]
     b_labels = [f"Bob C{c}" for c in all_chain_indices]
 
     # --- Figure: Loss ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(
-        ax,
-        a_by_chain,
-        a_labels,
-        alice_colors,
-        "loss",
-        "Loss",
-        "Policy Loss — Alice & Bob",
-    )
-    plot_single(
-        ax,
-        b_by_chain,
-        b_labels,
-        bob_colors,
-        "loss",
-        "Loss",
-        "Policy Loss — Alice & Bob",
-    )
+    plot_single(ax, a_by_chain, a_labels, alice_colors, "loss", "Loss", "Policy Loss — Alice & Bob")
+    plot_single(ax, b_by_chain, b_labels, bob_colors, "loss", "Loss", "Policy Loss — Alice & Bob")
     plt.tight_layout()
     p = out_dir / "plot_loss.png"
     fig.savefig(p, dpi=150)
@@ -339,24 +423,8 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
 
     # --- Figure: Value Loss ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(
-        ax,
-        a_by_chain,
-        a_labels,
-        alice_colors,
-        "val",
-        "Value Loss",
-        "Value Loss — Alice & Bob",
-    )
-    plot_single(
-        ax,
-        b_by_chain,
-        b_labels,
-        bob_colors,
-        "val",
-        "Value Loss",
-        "Value Loss — Alice & Bob",
-    )
+    plot_single(ax, a_by_chain, a_labels, alice_colors, "val", "Value Loss", "Value Loss — Alice & Bob")
+    plot_single(ax, b_by_chain, b_labels, bob_colors, "val", "Value Loss", "Value Loss — Alice & Bob")
     plt.tight_layout()
     p = out_dir / "plot_value_loss.png"
     fig.savefig(p, dpi=150)
@@ -365,24 +433,8 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
 
     # --- Figure: Reward ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(
-        ax,
-        a_by_chain,
-        a_labels,
-        alice_colors,
-        "rew",
-        "Reward",
-        "Mean Episode Reward — Alice & Bob",
-    )
-    plot_single(
-        ax,
-        b_by_chain,
-        b_labels,
-        bob_colors,
-        "rew",
-        "Reward",
-        "Mean Episode Reward — Alice & Bob",
-    )
+    plot_single(ax, a_by_chain, a_labels, alice_colors, "rew", "Reward", "Mean Episode Reward — Alice & Bob")
+    plot_single(ax, b_by_chain, b_labels, bob_colors, "rew", "Reward", "Mean Episode Reward — Alice & Bob")
     plt.tight_layout()
     p = out_dir / "plot_reward.png"
     fig.savefig(p, dpi=150)
@@ -391,9 +443,7 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
 
     # --- Figure: Bob SR ---
     fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(
-        ax, b_by_chain, b_labels, bob_colors, "sr", "Success Rate", "Bob — Success Rate"
-    )
+    plot_single(ax, b_by_chain, b_labels, bob_colors, "sr", "Success Rate", "Bob — Success Rate")
     plt.tight_layout()
     p = out_dir / "plot_bob_sr.png"
     fig.savefig(p, dpi=150)
@@ -469,88 +519,147 @@ def plot_metrics(alice_records, bob_records, out_dir, title_suffix=""):
     print(f"[INFO] Saved {p}")
 
 
+def write_summary_txt(chain_idx: int, chain: list[int], a_c: list[dict], b_c: list[dict], out_dir: Path):
+    """Write human-readable per-chain summary."""
+    summary_path = out_dir / "training_updates.txt"
+    # Build a lookup: global_iter → bob record
+    bob_by_iter = {r["global_iter"]: r for r in b_c}
+    with open(summary_path, "w") as f:
+        f.write(f"=== TRAINING UPDATES SUMMARY (Chain {chain_idx}) ===\n\n")
+        f.write(f"Jobs in chain: {' → '.join(str(j) for j in chain)}\n\n")
+        for ar in a_c:
+            g = ar["global_iter"]
+            ent = ar.get("entropy_coef")
+            ent_str = f"  Ent={ent:.4f}" if ent is not None else ""
+            br = bob_by_iter.get(g)
+            if br:
+                bob_str = (
+                    f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  "
+                    f"Rew={br['rew']:.4f}  ABC={br['abc']:.4f}  SR={br['sr']:.4f}"
+                )
+            else:
+                bob_str = "[Bob]   —"
+            f.write(
+                f"  Iter {g:5d} | "
+                f"[Alice] Loss={ar['loss']:+.4f}  Val={ar['val']:.4f}  Rew={ar['rew']:.4f}{ent_str}  || "
+                f"{bob_str}\n"
+            )
+        # Any Bob-only iters (when Bob counter > Alice)
+        alice_iters = {r["global_iter"] for r in a_c}
+        for br in b_c:
+            if br["global_iter"] not in alice_iters:
+                g = br["global_iter"]
+                f.write(
+                    f"  Iter {g:5d} | [Alice] —  || "
+                    f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  "
+                    f"Rew={br['rew']:.4f}  ABC={br['abc']:.4f}  SR={br['sr']:.4f}\n"
+                )
+    print(f"[INFO] Wrote {summary_path}")
+
+
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Analyze training logs")
+    parser = argparse.ArgumentParser(
+        description="Analyze and stitch training logs across SLURM job chains."
+    )
     parser.add_argument(
         "--log-dir",
         type=str,
-        default=str(Path(__file__).parent / "train_130426"),
-        help="Directory containing the slurm log files (default: logs/train_130426)",
+        default=str(Path(__file__).parent / "train_140426"),
+        help="Primary directory containing slurm log files.",
+    )
+    parser.add_argument(
+        "--prior-dirs",
+        type=str,
+        nargs="*",
+        default=[],
+        help="One or more earlier run directories to prepend (oldest first). "
+             "E.g. --prior-dirs logs/train_130426 logs/train_100426",
     )
     parser.add_argument(
         "--out-dir",
         type=str,
         default=None,
-        help="Output directory (defaults to log_dir)",
+        help="Output directory (defaults to --log-dir).",
+    )
+    parser.add_argument(
+        "--merge-chains",
+        action="store_true",
+        default=False,
+        help="Collapse all discovered chains into one, ordered by job ID. "
+             "Use when a job was killed before its EXIT trap ran (so no "
+             "'chained next job' link was printed) and the successor job "
+             "appears as an unlinked root.",
     )
     args = parser.parse_args()
 
-    global LOG_DIR, OUT_DIR
-    LOG_DIR = Path(args.log_dir)
-    OUT_DIR = Path(args.out_dir) if args.out_dir else LOG_DIR
+    log_dir = Path(args.log_dir)
+    prior_dirs = [Path(d) for d in args.prior_dirs]
+    out_dir = Path(args.out_dir) if args.out_dir else log_dir
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"[INFO] Scanning {LOG_DIR} ...")
-    jobs = parse_logs()
-    print(f"[INFO] Found {len(jobs)} job log files")
+    # Parse all directories — prior dirs first so chain-next links work
+    all_dirs = prior_dirs + [log_dir]
+    print(f"[INFO] Scanning {len(all_dirs)} director(ies):")
+    for d in all_dirs:
+        print(f"       {d}")
+
+    jobs = parse_all_dirs(all_dirs)
+    print(f"[INFO] Found {len(jobs)} job log files total")
 
     chains = trace_chains(jobs)
-    print(f"[INFO] Found {len(chains)} chain(s):")
+    print(f"[INFO] Found {len(chains)} chain(s) before merging:")
     for i, ch in enumerate(chains):
         print(f"       Chain {i}: {len(ch)} jobs  [{ch[0]} → ... → {ch[-1]}]")
+
+    if args.merge_chains and len(chains) > 1:
+        chains = merge_all_chains(chains)
+        print(f"[INFO] --merge-chains: collapsed to {len(chains)} chain(s):")
+        for i, ch in enumerate(chains):
+            print(f"       Chain {i}: {len(ch)} jobs  [{ch[0]} → ... → {ch[-1]}]")
 
     alice_records, bob_records = assign_global_iters(chains, jobs)
     print(
         f"[INFO] Alice updates: {len(alice_records)}, Bob updates: {len(bob_records)}"
     )
+    if alice_records:
+        print(
+            f"[INFO] Alice global iter range: {alice_records[0]['global_iter']} "
+            f"→ {alice_records[-1]['global_iter']}"
+        )
+    if bob_records:
+        print(
+            f"[INFO] Bob   global iter range: {bob_records[0]['global_iter']} "
+            f"→ {bob_records[-1]['global_iter']}"
+        )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # Process each chain separately
     for i, ch in enumerate(chains):
-        chain_dir = OUT_DIR / f"chain_{i}"
+        chain_dir = out_dir / f"chain_{i}"
         chain_dir.mkdir(parents=True, exist_ok=True)
-
         print(f"[INFO] Processing Chain {i} in {chain_dir} ...")
 
         # Copy original slurm logs for this chain
         for job_id in ch:
             job_path = jobs[job_id]["path"]
-            shutil.copy2(job_path, chain_dir / job_path.name)
+            dest = chain_dir / job_path.name
+            if not dest.exists():
+                shutil.copy2(job_path, dest)
 
-        # Filter records for this chain
         a_c = [r for r in alice_records if r["chain"] == i]
         b_c = [r for r in bob_records if r["chain"] == i]
 
-        # Write raw outputs for this chain
-        write_raw_logs(ch, jobs, chain_dir)
         write_raw_csv(i, ch, jobs, chain_dir)
-
-        # Write processed CSV for this chain
         write_csv(a_c, b_c, chain_dir)
-
-        # Write human-readable summary for this chain
-        summary_path = chain_dir / "training_updates.txt"
-        with open(summary_path, "w") as f:
-            f.write(f"=== TRAINING UPDATES SUMMARY (Chain {i}) ===\n\n")
-            f.write(f"--- Chain {i} ({len(ch)} jobs) ---\n")
-            for ar, br in zip(a_c, b_c):
-                ent = ar.get("entropy_coef")
-                ent_str = f"  Ent={ent:.4f}" if ent is not None else ""
-                f.write(
-                    f"  Iter {ar['global_iter']:4d} | "
-                    f"[Alice] Loss={ar['loss']:+.4f}  Val={ar['val']:.4f}  Rew={ar['rew']:.4f}{ent_str}  || "
-                    f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  Rew={br['rew']:.4f}  "
-                    f"ABC={br['abc']:.4f}  SR={br['sr']:.4f}\n"
-                )
-        print(f"[INFO] Wrote {summary_path}")
-
-        # Plot metrics for this chain
+        write_summary_txt(i, ch, a_c, b_c, chain_dir)
         plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})")
 
-    # Final overall overview in the root output dir (optional but good for comparison)
-    print(f"[INFO] Generating overall comparison overview in {OUT_DIR} ...")
-    plot_metrics(alice_records, bob_records, OUT_DIR, title_suffix=" (Overview)")
+    # Overall overview across all chains
+    print(f"[INFO] Generating overall overview in {out_dir} ...")
+    plot_metrics(alice_records, bob_records, out_dir, title_suffix=" (Overview)")
+    write_csv(alice_records, bob_records, out_dir)
     print("[INFO] Done.")
 
 
