@@ -183,6 +183,60 @@ def write_csv(alice_records, bob_records, out_dir):
     return out_path
 
 
+def write_raw_logs(chain, jobs, out_dir):
+    """Concatenate the raw slurm .out files for all jobs in the chain into raw_logs.txt."""
+    out_path = out_dir / "raw_logs.txt"
+    with open(out_path, "w") as fout:
+        for job_id in chain:
+            job_path = jobs[job_id]["path"]
+            fout.write(f"{'='*72}\n")
+            fout.write(f" Job {job_id}  ({job_path.name})\n")
+            fout.write(f"{'='*72}\n")
+            fout.write(job_path.read_text(errors="replace"))
+            fout.write("\n")
+    print(f"[INFO] Wrote {out_path}")
+
+
+def write_raw_csv(chain_idx, chain, jobs, out_dir):
+    """Write all raw parsed update records (local_iter, before global assignment) to raw_parsed.csv."""
+    out_path = out_dir / "raw_parsed.csv"
+    alice_fields = ["agent", "chain", "job_id", "local_iter", "loss", "val", "rew", "entropy_coef"]
+    bob_fields   = ["agent", "chain", "job_id", "local_iter", "loss", "val", "rew", "abc", "sr"]
+    all_fields   = ["agent", "chain", "job_id", "local_iter", "loss", "val", "rew", "entropy_coef", "abc", "sr"]
+    with open(out_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=all_fields)
+        writer.writeheader()
+        for job_id in chain:
+            job = jobs[job_id]
+            for upd in job["alice"]:
+                writer.writerow({
+                    "agent": "alice",
+                    "chain": chain_idx,
+                    "job_id": job_id,
+                    "local_iter": upd["local_iter"],
+                    "loss": upd["loss"],
+                    "val": upd["val"],
+                    "rew": upd["rew"],
+                    "entropy_coef": upd.get("entropy_coef", "") if upd.get("entropy_coef") is not None else "",
+                    "abc": "",
+                    "sr": "",
+                })
+            for upd in job["bob"]:
+                writer.writerow({
+                    "agent": "bob",
+                    "chain": chain_idx,
+                    "job_id": job_id,
+                    "local_iter": upd["local_iter"],
+                    "loss": upd["loss"],
+                    "val": upd["val"],
+                    "rew": upd["rew"],
+                    "entropy_coef": "",
+                    "abc": upd["abc"],
+                    "sr": upd["sr"],
+                })
+    print(f"[INFO] Wrote {out_path}")
+
+
 def smooth(vals, window=5):
     if len(vals) < window:
         return vals
@@ -354,7 +408,11 @@ def main():
         a_c = [r for r in alice_records if r["chain"] == i]
         b_c = [r for r in bob_records if r["chain"] == i]
 
-        # Write CSV for this chain
+        # Write raw outputs for this chain
+        write_raw_logs(ch, jobs, chain_dir)
+        write_raw_csv(i, ch, jobs, chain_dir)
+
+        # Write processed CSV for this chain
         write_csv(a_c, b_c, chain_dir)
 
         # Write human-readable summary for this chain
