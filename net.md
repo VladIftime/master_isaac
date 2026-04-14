@@ -126,7 +126,7 @@ GoalEncoder (φ MLP, shared across objects):                                 │
   input per object: current_pose(6D) + goal_pose(6D)                       │
   φ: Linear(6→64) → Tanh → Linear(64→K=8)   ← no final activation        │
   g_i = φ(goal_i) − φ(current_i)  [difference variant]                    │
-  g_pooled = sum-pool(g_0, g_1)              → 8D  (additive injection)    │
+  g_pooled = max-pool(g_0, g_1)              → 8D  (additive injection)    │
                                                                              │
 PI Embedding (PermInvEncoder):                                              │
   input: ONLY obj_states (14D each) — goal enters via additive injection   │ concat
@@ -168,7 +168,7 @@ PI Embedding (PermInvEncoder):                                              │
 | **Goal encoding** | Raw PI embedding on goal states | **GoalEncoder → K=8 latent** per object |
 | **GoalEncoder φ activation** | — | **Tanh** (paper §2.4) |
 | **GoalEncoder input** | — | **6D Euler pose** (pos3 + euler3) |
-| **GoalEncoder pooling** | — | **Sum-pool** (g = Σ g_i; "AND" semantics) |
+| **GoalEncoder pooling** | — | **Max-pool** (g = max(g_0, g_1); same as PI encoder) |
 | **Additive goal injection** | ❌ | ✅ `h = ReLU(LN(W·enc + Wg·g))` |
 | **PI encoder per-obj input** | 14D obj state | **14D obj state only** (goal separated out) |
 | **Pooling (PI encoder)** | Sum-pool | **Max-pool** (more robust, standard DeepSets) |

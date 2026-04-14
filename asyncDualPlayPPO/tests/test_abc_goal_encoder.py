@@ -71,7 +71,7 @@ class _VideoRecorder:
         cam_pos: tuple,
         look_at: tuple,
         fps: int = 24,
-        resolution: tuple = (1280, 720),
+        resolution: tuple = (1920, 1080),
     ):
         import omni.replicator.core as rep
 
