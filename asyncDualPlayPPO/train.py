@@ -647,12 +647,19 @@ def main():
         """Run a PPO + ABC update for Bob after his rollout is complete."""
         nonlocal bob_updates, best_bob_success_rate
 
-        if bob_ppo.storage.step == 0:
-            # No Bob transitions collected (e.g. Alice produced no valid goals).
+        total_bob_transitions = bob_ppo.storage.step * env.num_envs
+        if total_bob_transitions < bob_ppo.num_mini_batches:
+            # Too few Bob transitions to fill even one mini-batch
+            # (storage.step==0: no valid goals; or step>0 but Bob won instantly).
             # Still increment bob_updates to prevent deadlock — paper Algorithm 1
             # always advances both agents per training step.
+            reason = (
+                "no Bob transitions"
+                if bob_ppo.storage.step == 0
+                else f"only {total_bob_transitions} transitions < {bob_ppo.num_mini_batches} mini-batches"
+            )
             print(
-                f"  [Bob Update {bob_updates}] SKIPPED (no Bob transitions)",
+                f"  [Bob Update {bob_updates}] SKIPPED ({reason})",
                 flush=True,
             )
             bob_rew_buf.clear()

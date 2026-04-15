@@ -358,7 +358,7 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
 #   alice_pos_req = 0.02m  (prod: 0.05m) — within ~1 std-dev of random-policy
 #                                           action noise; early Alice stumbles
 #                                           into successes more frequently.
-#   _MIN_XY_DISP  = 0.03m (prod: 0.07m) — kept consistent with lower req.
+#   _MIN_XY_DISP  = 0.05m (prod: 0.07m) — must stay > Bob's pos_threshold=0.04m.
 #
 # Also prints a [AliceDisp] summary line each Alice phase end so you can
 # distinguish two failure modes:
@@ -373,10 +373,13 @@ class DiagnosticAliceWrapper(AsyncDualPlayEnvWrapper):
     Do NOT use for full training runs.
     """
 
-    # Relaxed thresholds — test-only
-    _ALICE_POS_REQ = 0.02   # m  (production: 0.05)
+    # Relaxed thresholds — test-only.
+    # INVARIANT: _MIN_XY_DISP must be > Bob's pos_threshold (0.04m).
+    # If Alice's goal XY displacement ≤ Bob's success radius, Bob starts inside
+    # the goal zone and wins in 1 step, leaving storage too small for a mini-batch.
+    _ALICE_POS_REQ = 0.02   # m  (production: 0.05) — easy 3D movement requirement
     _ALICE_ROT_REQ = 0.25   # rad (unchanged)
-    _MIN_XY_DISP   = 0.03   # m  (production: 0.07)
+    _MIN_XY_DISP   = 0.05   # m  (production: 0.07) — must stay > pos_threshold=0.04
 
     def _handle_alice_completion(self, obs_dict, env_ids):
         """Override of parent — same logic, different thresholds + [AliceDisp] log."""
