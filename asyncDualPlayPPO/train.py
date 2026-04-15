@@ -138,6 +138,13 @@ def main():
         "--dummy_alice", action="store_true", help="Use dummy Alice wrapper"
     )
     parser.add_argument(
+        "--diag_alice_exploration",
+        action="store_true",
+        help="Test 2: use DiagnosticAliceWrapper — real Alice policy with relaxed "
+        "thresholds (alice_pos_req=0.02m, MIN_XY_DISP=0.03m) and verbose "
+        "[AliceDisp] logging. Do NOT use for full training.",
+    )
+    parser.add_argument(
         "--test_bob_reward",
         action="store_true",
         help="Test: use DummyBobWrapper (teleports target→goal at step 50). "
@@ -192,6 +199,7 @@ def main():
         DummyBobWrapper,
         DummyGoalDistanceWrapper,
         DummyMovementWrapper,
+        DiagnosticAliceWrapper,
     )
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
@@ -376,6 +384,19 @@ def main():
         )
         print("[Test] Expected: [MoveCheck] measured_dist≈0.362 marked ✓.")
         env = DummyMovementWrapper(
+            env=base_env,
+            device=base_env.device,
+            alice_timesteps=alice_timesteps,
+            bob_timesteps=bob_timesteps,
+            num_objects=args.num_objects,
+        )
+    elif args.diag_alice_exploration:
+        print(
+            "[Test] --diag_alice_exploration: using DiagnosticAliceWrapper "
+            "(real Alice policy, alice_pos_req=0.02m, MIN_XY_DISP=0.03m)."
+        )
+        print("[Test] Watch [AliceDisp] lines to diagnose valid-goal failure mode.")
+        env = DiagnosticAliceWrapper(
             env=base_env,
             device=base_env.device,
             alice_timesteps=alice_timesteps,

@@ -1,14 +1,19 @@
 #!/bin/bash
-# Combined suite — run all three tests sequentially in one job.
-# For individual submissions use: test1_ppo_reward.slurm,
-#   test2_alice_exploration.slurm, test3_asp_tug_of_war.slurm
-#SBATCH --job-name=asp_diag
+#SBATCH --job-name=asp_diag_t3
 #SBATCH --time=05:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=16G
-#SBATCH --output=slurm-%j-diag.out
+#SBATCH --output=slurm-%j-diag-t3.out
+
+# TEST 3 — PPO vs ABC Tug-of-War (Mini-ASP)
+# Verifies loss magnitudes are balanced and ABC warmup fires.
+#
+# What to watch in TensorBoard:
+#   Loss/Bob/Surrogate vs Loss/Bob/ABC  — should be within ~10×
+#   Metrics/ABC/IsWarm                  — crosses 1.0 once Alice reward > abc_warmup_threshold
+#   Metrics/ABC/BufferSize              — fills as Alice succeeds
 
 set -o pipefail
 
@@ -19,7 +24,6 @@ TS="$(date +%Y%m%d_%H%M%S)"
 EXP_ROOT="diag_hpc_$TS"
 NFS_DIAG_DIR="$PROJECT_ROOT/runs/$EXP_ROOT"
 
-# Local scratch for high-performance I/O during test
 LOCAL_RUNS="${TMPDIR:-/tmp}/diag_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS"
 
@@ -31,9 +35,7 @@ echo "[INFO] NFS Output:     $NFS_DIAG_DIR"
 cleanup() {
     echo ""
     echo "[INFO] Syncing all diagnostic results to NFS..."
-    # Ensure the parent runs directory exists
     mkdir -p "$PROJECT_ROOT/runs"
-    # Sync everything from local scratch to NFS diag directory
     rsync -a --no-perms "$LOCAL_RUNS/" "$NFS_DIAG_DIR/" 2>/dev/null
     echo "[INFO] Sync complete. Results available in: $NFS_DIAG_DIR"
 }
@@ -53,10 +55,6 @@ run_test_hpc() {
     echo "  ARGS: ${args[*]}"
     echo "══════════════════════════════════════════════════════════════════════"
 
-    # We map $LOCAL_RUNS to /workspace/isaaclab/logs inside the container.
-    # train.py uses logs/ internally or the --exp_name path relative to it.
-    # However, hpc scripts bind $LOCAL_RUNS to $PROJECT_ROOT/runs.
-    
     apptainer exec --nv \
         --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
         --bind "$LOCAL_RUNS":"$PROJECT_ROOT/runs" \
@@ -72,7 +70,7 @@ run_test_hpc() {
         "${args[@]}" \
         2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
                        -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
-    
+
     local exit_code=$?
     if [[ $exit_code -eq 0 ]]; then
         echo "  → Test ${test_num} PASSED"
@@ -81,31 +79,13 @@ run_test_hpc() {
     fi
 }
 
-# ── Execute Suite ────────────────────────────────────────────────────────────
-
+# ── Preflight ────────────────────────────────────────────────────────────────
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found at $PROJECT_ROOT!"
     exit 1
 fi
 
-# TEST 1 — PPO Reward Pipeline - PASSED
-# run_test_hpc 1 "PPO Reward Pipeline" \
-#     --num_envs 16 \
-#     --max_iterations 50 \
-#     --save_interval 0 \
-#     --test_bob_reward
-
-# TEST 2 — Alice Exploration Sandbox
-# Uses DiagnosticAliceWrapper: alice_pos_req=0.02m, _MIN_XY_DISP=0.03m.
-# Watch [AliceDisp] lines: avg XY ≈ 0.00 → Alice not touching object;
-#                          avg XY > 0.02 but valid=0 → filter/frame bug.
-run_test_hpc 2 "Alice Exploration Sandbox" \
-    --num_envs 32 \
-    --max_iterations 200 \
-    --save_interval 0 \
-    --diag_alice_exploration
-
-# TEST 3 — PPO vs ABC Tug-of-War (Mini-ASP)
+# ── Execute ──────────────────────────────────────────────────────────────────
 run_test_hpc 3 "PPO vs ABC Tug-of-War" \
     --num_envs 64 \
     --max_iterations 300 \
@@ -113,5 +93,5 @@ run_test_hpc 3 "PPO vs ABC Tug-of-War" \
 
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
-echo "  DIAGNOSTIC SUITE COMPLETE"
+echo "  TEST 3 COMPLETE"
 echo "══════════════════════════════════════════════════════════════════════"

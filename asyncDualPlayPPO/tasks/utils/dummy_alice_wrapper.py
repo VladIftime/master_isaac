@@ -2,6 +2,8 @@ import torch
 from isaaclab.managers import SceneEntityCfg
 from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
 from asyncDualPlayPPO.tasks.utils.observations import goal_distance, _euler_xyz_to_quat
+from asyncDualPlayPPO.utils.goal_validator import validate_goal
+from asyncDualPlayPPO.tasks.utils.events import reset_objects_to_fixed_safe_pose, reset_robot_joints
 
 
 class DummyAliceWrapper(AsyncDualPlayEnvWrapper):
@@ -346,3 +348,151 @@ class DummyMovementWrapper(AsyncDualPlayEnvWrapper):
             )
 
         return obs, rew, done, truncated, extras
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DiagnosticAliceWrapper
+# Use for TEST 2 (Alice Exploration Sandbox) only — NOT for full training.
+#
+# Identical to AsyncDualPlayEnvWrapper except _handle_alice_completion uses:
+#   alice_pos_req = 0.02m  (prod: 0.05m) — within ~1 std-dev of random-policy
+#                                           action noise; early Alice stumbles
+#                                           into successes more frequently.
+#   _MIN_XY_DISP  = 0.03m (prod: 0.07m) — kept consistent with lower req.
+#
+# Also prints a [AliceDisp] summary line each Alice phase end so you can
+# distinguish two failure modes:
+#   avg XY ≈ 0.000 and not-moved = N/N  → Alice not touching object at all
+#                                          (physics/reset bug)
+#   avg XY > 0.02  but valid = 0        → filter or frame-mismatch bug
+#   valid count rising                   → PPO buffer functioning, ready for T3
+# ─────────────────────────────────────────────────────────────────────────────
+class DiagnosticAliceWrapper(AsyncDualPlayEnvWrapper):
+    """
+    Diagnostic wrapper for Test 2 — relaxed thresholds + verbose logging.
+    Do NOT use for full training runs.
+    """
+
+    # Relaxed thresholds — test-only
+    _ALICE_POS_REQ = 0.02   # m  (production: 0.05)
+    _ALICE_ROT_REQ = 0.25   # rad (unchanged)
+    _MIN_XY_DISP   = 0.03   # m  (production: 0.07)
+
+    def _handle_alice_completion(self, obs_dict, env_ids):
+        """Override of parent — same logic, different thresholds + [AliceDisp] log."""
+        goal_state    = self._extract_object_states(obs_dict)
+        initial_state = self.episode_manager.initial_states
+
+        active_goal    = goal_state[env_ids]     # (N, 12) Euler local
+        active_initial = initial_state[env_ids]  # (N, 12) Euler local
+
+        # 1. Validate goal with relaxed movement threshold
+        valid, val_reward, reasons = validate_goal(
+            active_initial,
+            active_goal,
+            self.table_bounds,
+            self.placement_bounds,
+            pos_threshold=self._ALICE_POS_REQ,
+            rot_threshold=self._ALICE_ROT_REQ,
+        )
+
+        # 2. Relaxed XY-displacement filter (consistent with _ALICE_POS_REQ)
+        target_xy_disp = torch.norm(
+            active_goal[:, 0:2] - active_initial[:, 0:2], dim=-1
+        )
+        if self.num_objects == 2:
+            cube_xy_disp = torch.norm(
+                active_goal[:, 6:8] - active_initial[:, 6:8], dim=-1
+            )
+            sufficient_xy = (target_xy_disp > self._MIN_XY_DISP) | (
+                cube_xy_disp > self._MIN_XY_DISP
+            )
+        else:
+            sufficient_xy = target_xy_disp > self._MIN_XY_DISP
+        xy_fail    = valid & ~sufficient_xy
+        val_reward = val_reward.clone()
+        val_reward[xy_fail] = 0.0
+        valid      = valid & sufficient_xy
+        for i in range(len(env_ids)):
+            if xy_fail[i].item():
+                reasons[i] = "XY Disp Too Small (0.0)"
+
+        self.delayed_alice_reward[env_ids] = val_reward
+
+        # 3. Per-env logging + aggregate counts
+        start_pos = active_initial[:, 0:3]
+        final_pos = active_goal[:, 0:3]
+        dist_xy   = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
+        dist_z    = (final_pos[:, 2] - start_pos[:, 2]).abs()
+        for i, env_id in enumerate(env_ids):
+            rew = val_reward[i].item()
+            if valid[i].item():
+                self._iter_stats["valid_goals"] += 1
+                print(
+                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} valid goal | "
+                    f"XY={dist_xy[i]:.3f}m Z={dist_z[i]:.3f}m",
+                    flush=True,
+                )
+            else:
+                self._iter_stats["invalid_goals"] += 1
+                print(
+                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} invalid goal "
+                    f"({reasons[i]}) | XY={dist_xy[i]:.3f}m",
+                    flush=True,
+                )
+
+        # Verbose displacement summary — key diagnostic output
+        disp_3d     = torch.norm(final_pos - start_pos, dim=-1)
+        n_total     = len(env_ids)
+        n_valid     = valid.sum().item()
+        n_not_moved = (disp_3d <= self._ALICE_POS_REQ).sum().item()
+        print(
+            f"  [AliceDisp] {n_valid}/{n_total} valid | "
+            f"avg 3D={disp_3d.mean():.3f}m  avg XY={dist_xy.mean():.3f}m  "
+            f"max XY={dist_xy.max():.3f}m | "
+            f"not-moved(≤{self._ALICE_POS_REQ:.2f}m): {n_not_moved}/{n_total}",
+            flush=True,
+        )
+
+        # 4. Store goal + marks for Bob
+        self.episode_manager.store_goal_state(active_goal, env_ids)
+        self.episode_manager.mark_goal_valid(env_ids, valid)
+        self.episode_manager.mark_alice_base_reward(env_ids, val_reward)
+
+        # 5. Transition valid envs to Bob
+        valid_env_ids = env_ids[valid]
+        if len(valid_env_ids) > 0:
+            self.episode_manager.transition_to_bob(valid_env_ids)
+            start_states = self.episode_manager.initial_states[valid_env_ids]
+            origins      = self.env.scene.env_origins[valid_env_ids]
+
+            t_pos_local = start_states[:, 0:3]
+            t_quat      = _euler_xyz_to_quat(start_states[:, 3:6])
+            self.env.scene["target_object"].write_root_pose_to_sim(
+                torch.cat([t_pos_local + origins, t_quat], dim=-1),
+                env_ids=valid_env_ids,
+            )
+            if self.num_objects == 2:
+                c_pos_local = start_states[:, 6:9]
+                c_quat      = _euler_xyz_to_quat(start_states[:, 9:12])
+                self.env.scene["cube"].write_root_pose_to_sim(
+                    torch.cat([c_pos_local + origins, c_quat], dim=-1),
+                    env_ids=valid_env_ids,
+                )
+            reset_robot_joints(self.env, valid_env_ids)
+            self.env.scene.write_data_to_sim()
+
+        # 6. Reset invalid envs
+        invalid_env_ids = env_ids[~valid]
+        if len(invalid_env_ids) > 0:
+            self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Invalid Goal")
+            reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
+            reset_robot_joints(self.env, invalid_env_ids)
+            self.episode_manager.initial_states[invalid_env_ids] = (
+                self._safe_reset_state.unsqueeze(0)
+                .expand(len(invalid_env_ids), -1)
+                .clone()
+            )
+            self.env.scene.write_data_to_sim()
+
+        return valid, invalid_env_ids
