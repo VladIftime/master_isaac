@@ -99,10 +99,13 @@ run_test 1 "PPO Reward Pipeline (--test_bob_reward)" \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TEST 2 — Alice Exploration Sandbox
-# Verifies Alice generates valid goals before entropy collapses.
-#   Watch: Metrics/Alice/ValidGoals should climb.
-#          Alice/EntropyCoef anneals 1.0 → 0.05 over 300 iters (safe here).
-#          Policy/mean_noise_std in Alice's TensorBoard run.
+# Uses DiagnosticAliceWrapper: alice_pos_req=0.02m, MIN_XY_DISP=0.03m.
+# Thresholds are relaxed vs production (0.05m / 0.07m) so an untrained
+# Alice stumbles into valid goals within ~1 std-dev of random action noise.
+#   Watch: Metrics/Alice/ValidGoals should climb from iter 1.
+#          [AliceDisp] lines in the log — two failure modes:
+#            avg XY ≈ 0.000, not-moved = N/N  → Alice not touching object
+#            avg XY > 0.02   but valid = 0    → filter or frame-mismatch bug
 # ─────────────────────────────────────────────────────────────────────────────
 run_test 2 "Alice Exploration Sandbox" \
     python -m asyncDualPlayPPO.train \
@@ -110,7 +113,8 @@ run_test 2 "Alice Exploration Sandbox" \
         --num_envs 32 \
         --max_iterations 200 \
         --exp_name "diag_${TS}/test2_alice_exploration" \
-        --save_interval 0
+        --save_interval 0 \
+        --diag_alice_exploration
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TEST 3 — PPO vs ABC Tug-of-War (Mini-ASP)
