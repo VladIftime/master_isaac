@@ -87,17 +87,17 @@ echo "TensorBoard: tensorboard --logdir $LOG_DIR"
 #   DummyBobWrapper teleports target→goal at Bob step 50.
 #   Expected: Reward/Bob > 0 and Metrics/Bob/SuccessRate > 0 from iteration 1.
 # 50 iterations is enough to confirm; stop early if SR reaches 1.0.
-# ─────────────────────────────────────────────────────────────────────────────
-run_test 1 "PPO Reward Pipeline (--test_bob_reward)" \
-    python -m asyncDualPlayPPO.train \
-        --headless \
-        --num_envs 16 \
-        --max_iterations 50 \
-        --exp_name "diag_${TS}/test1_reward_pipeline" \
-        --save_interval 0 \
-        --test_bob_reward
+# # ─────────────────────────────────────────────────────────────────────────────
+# run_test 1 "PPO Reward Pipeline (--test_bob_reward)" \
+#     python -m asyncDualPlayPPO.train \
+#         --headless \
+#         --num_envs 16 \
+#         --max_iterations 50 \
+#         --exp_name "diag_${TS}/test1_reward_pipeline" \
+#         --save_interval 0 \
+#         --test_bob_reward
 
-# ─────────────────────────────────────────────────────────────────────────────
+# # ─────────────────────────────────────────────────────────────────────────────
 # TEST 2 — Alice Exploration Sandbox
 # Uses DiagnosticAliceWrapper: alice_pos_req=0.02m, MIN_XY_DISP=0.03m.
 # Thresholds are relaxed vs production (0.05m / 0.07m) so an untrained
@@ -111,7 +111,7 @@ run_test 2 "Alice Exploration Sandbox" \
     python -m asyncDualPlayPPO.train \
         --headless \
         --num_envs 32 \
-        --max_iterations 200 \
+        --max_iterations 5000 \
         --exp_name "diag_${TS}/test2_alice_exploration" \
         --save_interval 0 \
         --diag_alice_exploration
@@ -122,16 +122,16 @@ run_test 2 "Alice Exploration Sandbox" \
 #   Watch: Loss/Bob/Surrogate vs Loss/Bob/ABC (should be within ~10×).
 #          Metrics/ABC/IsWarm crosses 1.0 once Alice's reward > abc_warmup_threshold.
 #          Metrics/ABC/BufferSize fills as Alice succeeds.
-# ─────────────────────────────────────────────────────────────────────────────
-run_test 3 "PPO vs ABC Tug-of-War (Mini-ASP)" \
-    python -m asyncDualPlayPPO.train \
-        --headless \
-        --num_envs 64 \
-        --max_iterations 300 \
-        --exp_name "diag_${TS}/test3_ppo_abc_balance" \
-        --save_interval 0
+# # ─────────────────────────────────────────────────────────────────────────────
+# run_test 3 "PPO vs ABC Tug-of-War (Mini-ASP)" \
+#     python -m asyncDualPlayPPO.train \
+#         --headless \
+#         --num_envs 64 \
+#         --max_iterations 300 \
+#         --exp_name "diag_${TS}/test3_ppo_abc_balance" \
+#         --save_interval 0
 
-# ── Summary ──────────────────────────────────────────────────────────────────
+# # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════════════════════════════════"
 echo "  DIAGNOSTIC SUITE COMPLETE"

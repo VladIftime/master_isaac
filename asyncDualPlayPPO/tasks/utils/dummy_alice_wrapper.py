@@ -422,39 +422,33 @@ class DiagnosticAliceWrapper(AsyncDualPlayEnvWrapper):
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 3. Per-env logging + aggregate counts
+        # 3. Per-env phase-end log + aggregate stats.
         start_pos = active_initial[:, 0:3]
         final_pos = active_goal[:, 0:3]
+        disp_3d   = torch.norm(final_pos - start_pos, dim=-1)
         dist_xy   = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
-        dist_z    = (final_pos[:, 2] - start_pos[:, 2]).abs()
         for i, env_id in enumerate(env_ids):
-            rew = val_reward[i].item()
-            if valid[i].item():
-                self._iter_stats["valid_goals"] += 1
-                print(
-                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} valid goal | "
-                    f"XY={dist_xy[i]:.3f}m Z={dist_z[i]:.3f}m",
-                    flush=True,
-                )
-            else:
-                self._iter_stats["invalid_goals"] += 1
-                print(
-                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} invalid goal "
-                    f"({reasons[i]}) | XY={dist_xy[i]:.3f}m",
-                    flush=True,
-                )
+            dense_acc = self._alice_dense_accum[env_id].item()
+            outcome   = "valid" if valid[i].item() else f"invalid ({reasons[i]})"
+            print(
+                f"  [AliceEnd] Env {env_id.item():>2}: "
+                f"dense={dense_acc:.3f} | outcome={outcome} {val_reward[i].item():+.1f} | "
+                f"XY={dist_xy[i]:.3f}m",
+                flush=True,
+            )
+        self._alice_dense_accum[env_ids] = 0.0
 
-        # Verbose displacement summary — key diagnostic output
-        disp_3d     = torch.norm(final_pos - start_pos, dim=-1)
-        n_total     = len(env_ids)
-        n_valid     = valid.sum().item()
-        n_not_moved = (disp_3d <= self._ALICE_POS_REQ).sum().item()
-        print(
-            f"  [AliceDisp] {n_valid}/{n_total} valid | "
-            f"avg 3D={disp_3d.mean():.3f}m  avg XY={dist_xy.mean():.3f}m  "
-            f"max XY={dist_xy.max():.3f}m | "
-            f"not-moved(≤{self._ALICE_POS_REQ:.2f}m): {n_not_moved}/{n_total}",
-            flush=True,
+        n = len(env_ids)
+        self._iter_stats["valid_goals"]   += int(valid.sum().item())
+        self._iter_stats["invalid_goals"] += int((~valid).sum().item())
+        self._iter_stats["alice_total"]   += n
+        self._iter_stats["alice_disp_3d_sum"] += disp_3d.sum().item()
+        self._iter_stats["alice_disp_xy_sum"] += dist_xy.sum().item()
+        self._iter_stats["alice_disp_xy_max"]  = max(
+            self._iter_stats["alice_disp_xy_max"], dist_xy.max().item()
+        )
+        self._iter_stats["alice_not_moved"] += int(
+            (disp_3d <= self._ALICE_POS_REQ).sum().item()
         )
 
         # 4. Store goal + marks for Bob

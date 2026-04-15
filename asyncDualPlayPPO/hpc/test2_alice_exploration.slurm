@@ -97,6 +97,7 @@ fi
 
 # ── Execute ──────────────────────────────────────────────────────────────────
 run_test_hpc 2 "Alice Exploration Sandbox" \
+    --headless \
     --num_envs 32 \
     --max_iterations 200 \
     --save_interval 0 \

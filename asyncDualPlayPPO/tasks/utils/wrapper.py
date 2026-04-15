@@ -164,6 +164,9 @@ class AsyncDualPlayEnvWrapper:
         # Buffer to hold Alice's rewards until her cycle ends (either Alice failed or Bob finished)
         self.delayed_alice_reward = torch.zeros(env.num_envs, device=self.device)
 
+        # Accumulates dense shaping reward per env across Alice's phase; reset at phase end.
+        self._alice_dense_accum = torch.zeros(env.num_envs, device=self.device)
+
         # Per-iteration aggregate stats (reset each iteration via reset_iter_stats())
         self._iter_stats = self._make_iter_stats()
 
@@ -182,6 +185,13 @@ class AsyncDualPlayEnvWrapper:
             "bob_successes": 0,
             "bob_failures": 0,
             "terminations": {},  # reason -> count
+            # Alice displacement accumulators — summed across all _handle_alice_completion
+            # calls in the iteration; printed as a single [AliceDisp] line in train.py.
+            "alice_total": 0,
+            "alice_disp_3d_sum": 0.0,
+            "alice_disp_xy_sum": 0.0,
+            "alice_disp_xy_max": 0.0,
+            "alice_not_moved": 0,
         }
 
     def reset_iter_stats(self):
@@ -293,6 +303,7 @@ class AsyncDualPlayEnvWrapper:
                         )
                     self._early_alice_failures[env_id] = True
                     self.delayed_alice_reward[env_id] = -3.0
+                    self._alice_dense_accum[env_id] = 0.0
 
                 self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
 
@@ -457,7 +468,8 @@ class AsyncDualPlayEnvWrapper:
         # Alice must move objects MORE than Bob's success threshold (0.04m),
         # otherwise Bob starts already within the goal zone → instant win.
         # 0.05m gives a 1cm safety margin above Bob's 0.04m threshold.
-        alice_pos_req = 0.05
+        _ALICE_POS_REQ = 0.05
+        alice_pos_req = _ALICE_POS_REQ
         alice_rot_req = 0.25
 
         # 2. Validate Goal (Local vs Local)
@@ -498,27 +510,34 @@ class AsyncDualPlayEnvWrapper:
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 3. Per-env Alice reward events + aggregate goal counts
+        # 3. Per-env phase-end log + aggregate stats.
         start_pos = active_initial[:, 0:3]
         final_pos = active_goal[:, 0:3]
+        dist_3d = torch.norm(final_pos - start_pos, dim=-1)
         dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
-        dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
         for i, env_id in enumerate(env_ids):
-            rew = val_reward[i].item()
-            if valid[i].item():
-                self._iter_stats["valid_goals"] += 1
-                print(
-                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} valid goal | "
-                    f"XY={dist_xy[i]:.3f}m Z={dist_z[i]:.3f}m",
-                    flush=True,
-                )
-            else:
-                self._iter_stats["invalid_goals"] += 1
-                print(
-                    f"  [AliceRew] Env {env_id.item()}: {rew:+.1f} invalid goal "
-                    f"({reasons[i]}) | XY={dist_xy[i]:.3f}m",
-                    flush=True,
-                )
+            dense_acc = self._alice_dense_accum[env_id].item()
+            outcome   = "valid" if valid[i].item() else f"invalid ({reasons[i]})"
+            print(
+                f"  [AliceEnd] Env {env_id.item():>2}: "
+                f"dense={dense_acc:.3f} | outcome={outcome} {val_reward[i].item():+.1f} | "
+                f"XY={dist_xy[i]:.3f}m",
+                flush=True,
+            )
+        self._alice_dense_accum[env_ids] = 0.0
+
+        n = len(env_ids)
+        self._iter_stats["valid_goals"] += int(valid.sum().item())
+        self._iter_stats["invalid_goals"] += int((~valid).sum().item())
+        self._iter_stats["alice_total"] += n
+        self._iter_stats["alice_disp_3d_sum"] += dist_3d.sum().item()
+        self._iter_stats["alice_disp_xy_sum"] += dist_xy.sum().item()
+        self._iter_stats["alice_disp_xy_max"] = max(
+            self._iter_stats["alice_disp_xy_max"], dist_xy.max().item()
+        )
+        self._iter_stats["alice_not_moved"] += int(
+            (dist_3d <= _ALICE_POS_REQ).sum().item()
+        )
 
         # 4. Storage for Bob (LOCAL)
         self.episode_manager.store_goal_state(active_goal, env_ids)
@@ -859,6 +878,12 @@ class AsyncDualPlayEnvWrapper:
         # Otherwise she gets 0.0 for OOB/Collisions and never learns to avoid them.
         if is_alice.any():
             rewards[is_alice] = base_rewards[is_alice]
+            # Dense shaping: reward step-over-step XY velocity of the target object.
+            # Scale 0.1 keeps the signal below the sparse outcome (+1/+5) but above noise.
+            target_vel_xy = self.env.scene["target_object"].data.root_lin_vel_w[:, :2]
+            dense = target_vel_xy.norm(dim=-1) * 0.1
+            rewards[is_alice] += dense[is_alice]
+            self._alice_dense_accum[is_alice] += dense[is_alice]
 
         # Track which envs just achieved completion (for early termination)
         bob_achieved_completion = torch.zeros(

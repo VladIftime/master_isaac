@@ -94,6 +94,16 @@ def main():
         help="Override rollout steps per env (to prevent OOM on high num_envs)",
     )
     parser.add_argument("--max_iterations", type=int, default=1000)
+    parser.add_argument(
+        "--alice_decay_alpha",
+        type=float,
+        default=3.33,
+        help=(
+            "Steepness of Alice entropy decay. Uses normalized progress p=iter/max_iterations. "
+            "alpha=3.33 → ~Test-2 shape (drops to ~0.10 by 75%% of run). "
+            "alpha=1.5 → slower, suits long production runs."
+        ),
+    )
     parser.add_argument("--save_interval", type=int, default=50)
     parser.add_argument(
         "--max_alice_bob_ratio",
@@ -798,13 +808,13 @@ def main():
                 flush=True,
             )
 
-        # Alice entropy annealing: 1.0 → 0.05 over first 300 iterations.
-        _ALICE_ENT_START = 1.0
-        _ALICE_ENT_END = 0.05
-        _ALICE_ENT_ANNEAL_ITERS = 450
-        frac = min(1.0, bob_updates / _ALICE_ENT_ANNEAL_ITERS)
-        alice_ppo.entropy_coef = _ALICE_ENT_START + frac * (
-            _ALICE_ENT_END - _ALICE_ENT_START
+        # Alice entropy annealing: normalised-progress exponential decay.
+        # E(t) = 0.05 + 0.95 * exp(-alpha * p),  p = iter / max_iterations.
+        # alpha=3.33 → drops to ~0.10 by 75% of any run length (default / Test 2).
+        # alpha=1.5  → slower decay for long production runs.
+        _ent_p = min(1.0, bob_updates / args.max_iterations)
+        alice_ppo.entropy_coef = 0.05 + 0.95 * math.exp(
+            -args.alice_decay_alpha * _ent_p
         )
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
         print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f}", flush=True)
@@ -1269,6 +1279,19 @@ def main():
             f"ABC warm: {'YES' if _abc_warm else 'NO'}",
             flush=True,
         )
+        _alice_total = _stats.get("alice_total", 0)
+        if _alice_total > 0:
+            _avg_3d  = _stats["alice_disp_3d_sum"] / _alice_total
+            _avg_xy  = _stats["alice_disp_xy_sum"] / _alice_total
+            _max_xy  = _stats["alice_disp_xy_max"]
+            _not_mvd = _stats["alice_not_moved"]
+            _pos_req = getattr(env, "_ALICE_POS_REQ", 0.05)
+            print(
+                f"  [AliceDisp] {_valid_goals}/{_alice_total} valid | "
+                f"avg 3D={_avg_3d:.3f}m  avg XY={_avg_xy:.3f}m  max XY={_max_xy:.3f}m | "
+                f"not-moved(≤{_pos_req:.2f}m): {_not_mvd}/{_alice_total}",
+                flush=True,
+            )
 
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))
