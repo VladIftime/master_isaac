@@ -288,6 +288,10 @@ class PPOABC(PPO):
                     + aux_loss_val
                 )
 
+                if not torch.isfinite(loss):
+                    print(f"[PPO] WARNING: skipping update — non-finite loss ({loss.item():.4f})", flush=True)
+                    continue
+
                 self.optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(

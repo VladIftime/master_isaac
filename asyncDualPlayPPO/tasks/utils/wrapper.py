@@ -167,6 +167,16 @@ class AsyncDualPlayEnvWrapper:
         # Accumulates dense shaping reward per env across Alice's phase; reset at phase end.
         self._alice_dense_accum = torch.zeros(env.num_envs, device=self.device)
 
+        # Potential-based dense reward state for Alice.
+        # alice_start_pos_xy: world-frame XY of target_object at start of Alice's phase.
+        # alice_prev_dist: distance from start at the previous step (Φ(s_{t-1})).
+        # _alice_phase_initialized: True once start pos has been captured for this phase.
+        self.alice_start_pos_xy = torch.zeros(env.num_envs, 2, device=self.device)
+        self.alice_prev_dist = torch.zeros(env.num_envs, device=self.device)
+        self._alice_phase_initialized = torch.zeros(
+            env.num_envs, dtype=torch.bool, device=self.device
+        )
+
         # Per-iteration aggregate stats (reset each iteration via reset_iter_stats())
         self._iter_stats = self._make_iter_stats()
 
@@ -214,6 +224,7 @@ class AsyncDualPlayEnvWrapper:
         env_ids = torch.arange(self.num_envs, device=self.device)
         self.episode_manager.reset_episode(env_ids, reason="Global Manual Reset")
         self.delayed_alice_reward[env_ids] = 0.0
+        self._alice_phase_initialized[env_ids] = False
 
         # Place objects at safe starting positions (Isaac Lab's default reset may use
         # different spawn locations). Set initial_states directly from the known safe
@@ -304,6 +315,7 @@ class AsyncDualPlayEnvWrapper:
                     self._early_alice_failures[env_id] = True
                     self.delayed_alice_reward[env_id] = -3.0
                     self._alice_dense_accum[env_id] = 0.0
+                    self._alice_phase_initialized[env_id] = False
 
                 self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
 
@@ -525,6 +537,7 @@ class AsyncDualPlayEnvWrapper:
                 flush=True,
             )
         self._alice_dense_accum[env_ids] = 0.0
+        self._alice_phase_initialized[env_ids] = False
 
         n = len(env_ids)
         self._iter_stats["valid_goals"] += int(valid.sum().item())
@@ -867,8 +880,7 @@ class AsyncDualPlayEnvWrapper:
         """
         rewards = torch.zeros(self.num_envs, device=self.device)
 
-        # Alice: NO rewards during her phase
-        # She only receives rewards at goal validation in _handle_alice_completion:
+        # Alice: NO rewards during her phase receives rewards at goal validation in _handle_alice_completion:
         # - Valid goal bonus: +1
         # - Out-of-zone penalty: -3
         # - Outcome reward (if Bob fails): +5 (applied in train.py)
@@ -878,12 +890,22 @@ class AsyncDualPlayEnvWrapper:
         # Otherwise she gets 0.0 for OOB/Collisions and never learns to avoid them.
         if is_alice.any():
             rewards[is_alice] = base_rewards[is_alice]
-            # Dense shaping: reward step-over-step XY velocity of the target object.
-            # Scale 0.1 keeps the signal below the sparse outcome (+1/+5) but above noise.
-            target_vel_xy = self.env.scene["target_object"].data.root_lin_vel_w[:, :2]
-            dense = target_vel_xy.norm(dim=-1) * 0.1
+            # Potential-based shaping for Alice: F(s_{t-1}, s_t) = Φ(s_t) - Φ(s_{t-1})
+            # Φ(s) = dist(obj_xy, alice_start_xy) — larger dist = more exploration.
+            # Telescoping: Σ F over phase = Φ(s_T) - Φ(s_0) = final_dist * 2.0 (bounded).
+            # No wiggle exploit: going back reduces Φ and subtracts from reward.
+            current_pos_xy = self.env.scene["target_object"].data.root_pos_w[:, :2]
+            # On the first step of a new Alice phase, capture start position.
+            fresh = is_alice & ~self._alice_phase_initialized
+            if fresh.any():
+                self.alice_start_pos_xy[fresh] = current_pos_xy[fresh].detach().clone()
+                self.alice_prev_dist[fresh] = 0.0
+                self._alice_phase_initialized[fresh] = True
+            current_dist = torch.norm(current_pos_xy - self.alice_start_pos_xy, dim=-1)
+            dense = (current_dist - self.alice_prev_dist) * 2.0
             rewards[is_alice] += dense[is_alice]
             self._alice_dense_accum[is_alice] += dense[is_alice]
+            self.alice_prev_dist[is_alice] = current_dist[is_alice].detach()
 
         # Track which envs just achieved completion (for early termination)
         bob_achieved_completion = torch.zeros(

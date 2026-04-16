@@ -138,10 +138,10 @@ class RolloutStorage:
         if valid.any():
             valid_adv = self.advantages[:filled][valid]
             adv_mean = valid_adv.mean()
-            adv_std = valid_adv.std() + 1e-8
+            adv_std = (valid_adv.std() if valid_adv.numel() > 1 else torch.tensor(1.0, device=valid_adv.device)) + 1e-8
         else:
             adv_mean = filled_adv.mean()
-            adv_std = filled_adv.std() + 1e-8
+            adv_std = (filled_adv.std() if filled_adv.numel() > 1 else torch.tensor(1.0, device=filled_adv.device)) + 1e-8
 
         self.advantages[:filled] = (self.advantages[:filled] - adv_mean) / adv_std
 

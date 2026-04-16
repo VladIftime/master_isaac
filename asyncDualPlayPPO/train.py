@@ -809,10 +809,12 @@ def main():
             )
 
         # Alice entropy annealing: normalised-progress exponential decay.
-        # E(t) = 0.05 + 0.95 * exp(-alpha * p),  p = iter / max_iterations.
-        # alpha=3.33 → drops to ~0.10 by 75% of any run length (default / Test 2).
-        # alpha=1.5  → slower decay for long production runs.
-        _ent_p = min(1.0, bob_updates / args.max_iterations)
+        # E(t) = 0.05 + 0.95 * exp(-alpha * p),  p = iter / min(max_iterations, 250).
+        # Denominator is clamped at 250 so annealing always completes within 250 iters
+        # regardless of --max_iterations (prevents run-1 failure where max_iterations>>250
+        # kept entropy near 1.0 for the entire run).
+        # alpha=3.33 → drops to ~0.10 by 75% of 250 iters.
+        _ent_p = min(1.0, bob_updates / min(args.max_iterations, 250))
         alice_ppo.entropy_coef = 0.05 + 0.95 * math.exp(
             -args.alice_decay_alpha * _ent_p
         )
@@ -1227,9 +1229,22 @@ def main():
         alice_outcome_rewards[bob_failed] += ALICE_BOB_FAIL_REWARD
 
         if alice_ppo.storage.step > 0:
-            last_idx = alice_ppo.storage.step - 1
-            alice_ppo.storage.rewards[last_idx].copy_(alice_outcome_rewards.view(-1, 1))
-            alice_ppo.storage.dones[last_idx].fill_(1.0)  # prevent GAE bleeding
+            # Fix: write terminal reward to each env's LAST VALID row (mask==1), not the
+            # global cursor step-1.  In an async rollout Alice phases end at different
+            # times per env, so step-1 lands on a padding row for most envs.
+            filled = alice_ppo.storage.step
+            masks = alice_ppo.storage.masks[:filled, :, 0]  # (filled, num_envs)
+            row_idx = torch.arange(filled, device=env.device).unsqueeze(1).expand_as(masks)
+            last_valid_rows = torch.where(
+                masks.bool(), row_idx, torch.tensor(-1, device=env.device)
+            ).max(dim=0).values  # (num_envs,) — last valid row per env, -1 if none
+
+            has_valid = last_valid_rows >= 0
+            valid_envs = has_valid.nonzero(as_tuple=False).squeeze(1)
+            if len(valid_envs) > 0:
+                rows = last_valid_rows[valid_envs]
+                alice_ppo.storage.rewards[rows, valid_envs] = alice_outcome_rewards[valid_envs].unsqueeze(1)
+                alice_ppo.storage.dones[rows, valid_envs] = 1.0  # prevent GAE bleeding
 
             alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
