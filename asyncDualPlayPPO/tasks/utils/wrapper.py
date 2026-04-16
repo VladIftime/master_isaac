@@ -651,6 +651,13 @@ class AsyncDualPlayEnvWrapper:
                 .expand(len(continue_ids), -1)
                 .clone()
             )
+            # Reset potential-shaping state so the new Alice phase captures a fresh
+            # start position on its first step. Without this, alice_start_pos_xy
+            # holds the stale world position from the *previous* Alice phase, and
+            # the first-step dist spike produces large spurious dense rewards even
+            # when the object hasn't moved.
+            self._alice_phase_initialized[continue_ids] = False
+            self.alice_prev_dist[continue_ids] = 0.0
 
         # Episode End (Bob failed or max goals)
         reset_ids = env_ids[~can_continue]
@@ -691,6 +698,9 @@ class AsyncDualPlayEnvWrapper:
                 .expand(len(continue_ids), -1)
                 .clone()
             )
+            # Reset potential-shaping state (same fix as _handle_bob_completion).
+            self._alice_phase_initialized[continue_ids] = False
+            self.alice_prev_dist[continue_ids] = 0.0
 
         # Others reset (reached max goals with success)
         reset_ids = env_ids[~can_continue]
@@ -902,7 +912,14 @@ class AsyncDualPlayEnvWrapper:
                 self.alice_prev_dist[fresh] = 0.0
                 self._alice_phase_initialized[fresh] = True
             current_dist = torch.norm(current_pos_xy - self.alice_start_pos_xy, dim=-1)
-            dense = (current_dist - self.alice_prev_dist) * 2.0
+            # Bounded potential: Φ(s) = C * (1 - exp(-k * dist))
+            # Telescopes to Φ(s_T) - Φ(s_0) ≤ C per phase. No-wiggle preserved.
+            # Gradient always non-zero, but marginal reward shrinks with distance.
+            _C = 3.0   # absolute cumulative cap (tune vs sparse rewards: valid=+1, bob-fail=+5)
+            _k = 5.0   # decay rate: at 0.07m (min XY) Alice earns ≈ 0.89 of 3.0
+            current_potential = _C * (1.0 - torch.exp(-_k * current_dist))
+            prev_potential    = _C * (1.0 - torch.exp(-_k * self.alice_prev_dist))
+            dense = current_potential - prev_potential
             rewards[is_alice] += dense[is_alice]
             self._alice_dense_accum[is_alice] += dense[is_alice]
             self.alice_prev_dist[is_alice] = current_dist[is_alice].detach()

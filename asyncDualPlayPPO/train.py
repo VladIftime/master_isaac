@@ -1246,6 +1246,34 @@ def main():
                 alice_ppo.storage.rewards[rows, valid_envs] = alice_outcome_rewards[valid_envs].unsqueeze(1)
                 alice_ppo.storage.dones[rows, valid_envs] = 1.0  # prevent GAE bleeding
 
+                # --- Outcome-reward propagation log ---
+                # Shows: which env got rewarded, at which storage row, with what value,
+                # and how much dense reward accumulated in the rows before it.
+                outcome_vals = alice_outcome_rewards[valid_envs].cpu()
+                rows_cpu     = rows.cpu()
+                n_envs_got   = len(valid_envs)
+                n_pos        = int((outcome_vals > 0).sum().item())
+                n_zero       = int((outcome_vals == 0).sum().item())
+                n_neg        = int((outcome_vals < 0).sum().item())
+                # Dense reward sum per env: sum of all storage rows 0..last_valid_row-1
+                dense_sums = []
+                for i, (env_i, row_i) in enumerate(zip(valid_envs.cpu().tolist(), rows_cpu.tolist())):
+                    if row_i > 0:
+                        ds = alice_ppo.storage.rewards[:row_i, env_i, 0].sum().item()
+                    else:
+                        ds = 0.0
+                    dense_sums.append(ds)
+                mean_dense = sum(dense_sums) / len(dense_sums) if dense_sums else 0.0
+                print(
+                    f"  [AliceOutcome] iter={bob_updates} | "
+                    f"envs_written={n_envs_got}/{env.num_envs} | "
+                    f"pos={n_pos} zero={n_zero} neg={n_neg} | "
+                    f"outcome: min={outcome_vals.min():.2f} mean={outcome_vals.mean():.2f} max={outcome_vals.max():.2f} | "
+                    f"dense_before: mean_sum={mean_dense:.4f} | "
+                    f"storage_rows: min={rows_cpu.min().item()} max={rows_cpu.max().item()} filled={filled}",
+                    flush=True,
+                )
+
             alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])

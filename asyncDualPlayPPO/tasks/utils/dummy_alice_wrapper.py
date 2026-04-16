@@ -437,6 +437,12 @@ class DiagnosticAliceWrapper(AsyncDualPlayEnvWrapper):
                 flush=True,
             )
         self._alice_dense_accum[env_ids] = 0.0
+        # Must match parent: reset the initialized flag so the very next
+        # _get_current_rewards call (same step, is_alice_before=True) treats
+        # this env as fresh and uses current_dist=0, alice_prev_dist=0.
+        # Without this, the stale alice_prev_dist produces -(final_dist)*50
+        # which re-fills the just-cleared accumulator with a spurious negative.
+        self._alice_phase_initialized[env_ids] = False
 
         n = len(env_ids)
         self._iter_stats["valid_goals"]   += int(valid.sum().item())

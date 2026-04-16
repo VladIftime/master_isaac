@@ -111,7 +111,7 @@ run_test 2 "Alice Exploration Sandbox" \
     python -m asyncDualPlayPPO.train \
         --headless \
         --num_envs 32 \
-        --max_iterations 5000 \
+        --max_iterations 400 \
         --exp_name "diag_${TS}/test2_alice_exploration" \
         --save_interval 0 \
         --diag_alice_exploration
@@ -123,13 +123,13 @@ run_test 2 "Alice Exploration Sandbox" \
 #          Metrics/ABC/IsWarm crosses 1.0 once Alice's reward > abc_warmup_threshold.
 #          Metrics/ABC/BufferSize fills as Alice succeeds.
 # # ─────────────────────────────────────────────────────────────────────────────
-# run_test 3 "PPO vs ABC Tug-of-War (Mini-ASP)" \
-#     python -m asyncDualPlayPPO.train \
-#         --headless \
-#         --num_envs 64 \
-#         --max_iterations 300 \
-#         --exp_name "diag_${TS}/test3_ppo_abc_balance" \
-#         --save_interval 0
+run_test 3 "PPO vs ABC Tug-of-War (Mini-ASP)" \
+    python -m asyncDualPlayPPO.train \
+        --headless \
+        --num_envs 64 \
+        --max_iterations 400 \
+        --exp_name "diag_${TS}/test3_ppo_abc_balance" \
+        --save_interval 0
 
 # # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
