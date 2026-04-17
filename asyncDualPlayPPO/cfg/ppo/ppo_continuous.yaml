@@ -1,6 +1,8 @@
 params:
   learn:
     optim_stepsize: 3.0e-4
+    # Alice-specific LR floor for cosine decay (Bob keeps optim_stepsize fixed).
+    alice_lr_min: 5.0e-5
     schedule: fixed
     # desired_kl is only valid for Gaussian policies.
     # With use_multicategorical: true it must be null (set to null here and

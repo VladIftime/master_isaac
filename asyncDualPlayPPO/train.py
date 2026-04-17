@@ -621,6 +621,7 @@ def main():
 
     best_bob_success_rate = -1.0
     last_alice_mean_rew = 0.0  # gating value for Bob's ABC loss warmup
+    ema_alice_rew = 0.0        # 10-iter EMA of last_alice_mean_rew (τ=0.9)
 
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     print(f"\n{'='*80}\nTRAINING RUN: {args.exp_name}\nLOG DIRECTORY: {run_dir}")
@@ -628,7 +629,7 @@ def main():
 
     def perform_alice_update():
         """Run a PPO update for Alice after her rollout is complete."""
-        nonlocal alice_updates, last_alice_mean_rew
+        nonlocal alice_updates, last_alice_mean_rew, ema_alice_rew
 
         # Storage is oversized to alice_storage_size; do NOT gate on num_transitions_per_env.
         if alice_ppo.storage.step == 0:
@@ -642,6 +643,7 @@ def main():
 
         mean_alice_rew = np.mean(alice_rew_buf) if alice_rew_buf else 0.0
         last_alice_mean_rew = mean_alice_rew
+        ema_alice_rew = 0.9 * ema_alice_rew + 0.1 * mean_alice_rew
         writer.add_scalar("Loss/Alice/Value", loss_val, alice_updates)
         writer.add_scalar("Loss/Alice/Surrogate", loss_surr, alice_updates)
         writer.add_scalar("Reward/Alice", mean_alice_rew, alice_updates)
@@ -809,17 +811,31 @@ def main():
             )
 
         # Alice entropy annealing: normalised-progress exponential decay.
-        # E(t) = 0.05 + 0.95 * exp(-alpha * p),  p = iter / min(max_iterations, 250).
+        # E(t) = 0.10 + 0.90 * exp(-alpha * p),  p = iter / min(max_iterations, 250).
         # Denominator is clamped at 250 so annealing always completes within 250 iters
         # regardless of --max_iterations (prevents run-1 failure where max_iterations>>250
         # kept entropy near 1.0 for the entire run).
-        # alpha=3.33 → drops to ~0.10 by 75% of 250 iters.
+        # Floor raised from 0.05 → 0.10 so Alice retains enough exploration at late stage
+        # to recover from policy drift without re-training from scratch.
+        # alpha=3.33 → drops to ~0.19 by 75% of 250 iters (was ~0.14 at old floor).
         _ent_p = min(1.0, bob_updates / min(args.max_iterations, 250))
-        alice_ppo.entropy_coef = 0.05 + 0.95 * math.exp(
+        alice_ppo.entropy_coef = 0.10 + 0.90 * math.exp(
             -args.alice_decay_alpha * _ent_p
         )
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
         print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f}", flush=True)
+
+        # Alice LR cosine decay: lr(t) = lr_min + 0.5*(lr_max−lr_min)*(1+cos(π·t/T)).
+        # Decoupled from Bob's fixed LR so Alice's updates shrink as her policy converges.
+        _alice_lr_max = alice_ppo.learning_rate
+        _alice_lr_min = ppo_cfg["params"]["learn"].get("alice_lr_min", 5e-5)
+        _lr_p = min(1.0, bob_updates / args.max_iterations)
+        _alice_lr = _alice_lr_min + 0.5 * (_alice_lr_max - _alice_lr_min) * (
+            1.0 + math.cos(math.pi * _lr_p)
+        )
+        for pg in alice_ppo.optimizer.param_groups:
+            pg["lr"] = _alice_lr
+        writer.add_scalar("Alice/LearningRate", _alice_lr, bob_updates)
 
         # --- 1. ALICE ROLLOUT PHASE ---
         alice_ppo.storage.clear()
@@ -1308,17 +1324,18 @@ def main():
         # TensorBoard diagnostics for Tests 2 & 3
         _valid_goals = _stats.get("valid_goals", 0)
         writer.add_scalar("Metrics/Alice/ValidGoals", _valid_goals, bob_updates)
-        _abc_buf_size = bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else bob_ppo.abc_buffer.capacity
+        _abc_buf_size = bob_ppo.abc_buffer.size
         writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
-        _abc_warm = 1.0 if last_alice_mean_rew >= bob_ppo.abc_warmup_threshold else 0.0
+        _abc_warm = 1.0 if ema_alice_rew >= bob_ppo.abc_warmup_threshold else 0.0
         writer.add_scalar("Metrics/ABC/IsWarm", _abc_warm, bob_updates)
+        writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
 
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | "
             f"Goals valid={_valid_goals} invalid={_stats.get('invalid_goals', 0)} | "
             f"Bob succ={_stats.get('bob_successes', 0)} fail={_stats.get('bob_failures', 0)} | "
             f"Terminations: {_term_str} | "
-            f"ABC buf: {bob_ppo.abc_buffer.step if not bob_ppo.abc_buffer.full else 'FULL'} | "
+            f"ABC buf: {bob_ppo.abc_buffer.size} | "
             f"ABC warm: {'YES' if _abc_warm else 'NO'}",
             flush=True,
         )
