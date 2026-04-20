@@ -68,7 +68,7 @@ run_test_hpc() {
         --headless \
         --exp_name "$EXP_ROOT/$test_exp" \
         "${args[@]}" \
-        2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
+        2>&1 | grep --line-buffered -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
                        -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
 
     local exit_code=$?

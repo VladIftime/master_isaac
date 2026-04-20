@@ -103,8 +103,8 @@ apptainer exec --nv \
     --num_objects    "$NUM_OBJECTS" \
     --headless \
     $RESUME_ARGS \
-    2>&1 | grep -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
-                   -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
+    2>&1 | grep --line-buffered -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
+                                  -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
 TRAIN_EXIT=$?
 
 # Log final checkpoint iteration so the next job knows where we ended

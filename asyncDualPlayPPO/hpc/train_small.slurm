@@ -1,22 +1,22 @@
 #!/bin/bash
-#SBATCH --job-name=asp_100k
-#SBATCH --time=23:00:00
+#SBATCH --job-name=asp_small
+#SBATCH --time=12:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 192 GB node RAM / 8 GPUs = 24 GB/slot
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=24G
-#SBATCH --output=slurm-%j-100k.out
+#SBATCH --output=slurm-%j-small.out
 #SBATCH --signal=B:USR1@120
 WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=4096
+NUM_ENVS=512
 NSTEPS=256
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10
 NUM_OBJECTS=1
-EXP_NAME="hpc_high_${NUM_ENVS}env_${NUM_OBJECTS}obj"
+EXP_NAME="hpc_small_${NUM_ENVS}env_${NUM_OBJECTS}obj"
 
 SIF_IMAGE="isaac-lab.sif"
 PROJECT_ROOT=$(pwd)
@@ -31,7 +31,7 @@ cleanup() {
     echo "[INFO] Sync complete."
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_high.slurm" 2>&1)
+        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_small.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
         if [ -n "$NEXT_JOB" ]; then
             echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
