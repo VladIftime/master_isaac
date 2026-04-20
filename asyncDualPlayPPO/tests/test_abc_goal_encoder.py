@@ -614,10 +614,10 @@ def main():
         f"aux_coef={aux_coef}"
     )
     print(
-        f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'Match%':>8} | "
-        f"{'TgtD':>6} | {'CubD':>6} | {'WinRate':>8} | {'Status':>8}"
+        f"\n  {'Iter':>6} | {'NLL':>8} | {'Aux':>8} | {'GEGrad':>7} | {'GECorr':>7} | "
+        f"{'Match%':>8} | {'TgtD':>6} | {'CubD':>6} | {'WinRate':>8} | {'Status':>8}"
     )
-    print("  " + "-" * 80)
+    print("  " + "-" * 95)
 
     nll_history = []
     aux_history = []
@@ -738,6 +738,15 @@ def main():
             optimizer.zero_grad()
             total_loss.backward()
             nn.utils.clip_grad_norm_(ac.parameters(), 1.0)
+
+            # Capture encoder grad norm before step clears nothing (zero_grad is next iter)
+            ge_grad_sq = 0.0
+            if ac.goal_encoder is not None:
+                for p in ac.goal_encoder.parameters():
+                    if p.grad is not None:
+                        ge_grad_sq += p.grad.norm().item() ** 2
+            ge_grad_norm = ge_grad_sq ** 0.5
+
             optimizer.step()
 
         # ── Evaluate ──
@@ -771,6 +780,27 @@ def main():
             gr_mode = greedy[:, 5].mode().values.item()
             all_match = (greedy == demo_acts).all(dim=-1).float().mean().item()
 
+            # ── Inline encoder corr: ||g|| vs d1_dist on this episode's obs ──
+            # Uses the same obs slices as _encode_obs so it catches layout bugs.
+            ge_corr = float("nan")
+            if ac.goal_encoder is not None:
+                _r  = ac._ge_robot_dim
+                _ch = ac._ge_raw_per_obj
+                _s  = ac._ge_obj_state_dim
+                _gd = ac._ge_goal_dim
+                d1  = _r + _s + _gd          # pos_dist slot for object 0
+                o_sec  = demo_obs[:, _r:]
+                o_chk  = o_sec.view(T, ac._ge_num_objects, _ch)
+                g_flat = o_chk[:, :, _s : _s + _gd].reshape(T, -1)
+                c_flat = o_chk[:, :, :_gd].reshape(T, -1)
+                g_emb  = ac.goal_encoder(g_flat, c_flat)
+                g_nrm  = g_emb.norm(dim=-1)
+                pos_d  = demo_obs[:, d1]
+                if g_nrm.std() > 1e-6 and pos_d.std() > 1e-6:
+                    ge_corr = torch.corrcoef(
+                        torch.stack([g_nrm, pos_d])
+                    )[0, 1].item()
+
         nll_history.append(raw_nll)
         aux_val = (
             aux_loss_val.item()
@@ -800,8 +830,10 @@ def main():
         status = "CONVERGED" if converged else ("GOAL" if episode_success else "      ")
 
         if it % 5 == 0 or it == 1 or episode_success or converged:
+            ge_corr_s = f"{ge_corr:>+7.3f}" if ge_corr == ge_corr else "    nan"
             print(
                 f"  {it:>6} | {raw_nll:>+8.3f} | {aux_val:>8.4f} | "
+                f"{ge_grad_norm:>7.4f} | {ge_corr_s} | "
                 f"{all_match:>8.1%} | {tgt_dist:>6.3f} | {cube_dist:>6.3f} | "
                 f"{win_rate:>8.1%} | {status}"
             )
