@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=asp_med
-#SBATCH --time=6:00:00
+#SBATCH --time=12:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 192 GB node RAM / 8 GPUs = 24 GB/slot
 #SBATCH --cpus-per-task=16
