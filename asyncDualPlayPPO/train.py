@@ -688,21 +688,28 @@ def main():
         if bob_ppo.actor_critic.use_goal_encoder:
             with torch.no_grad():
                 sample_obs = current_bob_obs[:8]
-                # Bob obs layout (1 obj, 29D): robot(7) | obj1_state(14) | obj1_goal(6) | obj1_dist(2)
-                # Bob obs layout (2 obj, 51D): robot(7) | obj1_state(14) | obj2_state(14) |
-                #                              obj1_goal(6) | obj2_goal(6) | obj1_dist(2) | obj2_dist(2)
+                # Bob obs layout — INTERLEAVED per object (matches _encode_obs reshape):
+                #   1 obj (29D): robot(7) | s1(14) | g1(6) | d1(2)
+                #   2 obj (51D): robot(7) | s1(14) | g1(6) | d1(2) | s2(14) | g2(6) | d2(2)
+                # Per-object chunk size = 14+6+2 = 22D.
                 _robot_dim = 7
                 _obj_state_dim = 14
                 _goal_dim = 6
+                _dist_dim = 2
+                _chunk = _obj_state_dim + _goal_dim + _dist_dim  # 22
                 if args.num_objects == 1:
+                    # s1 starts at 7, g1 starts at 7+14=21
                     s_t_batch = sample_obs[:, _robot_dim : _robot_dim + _goal_dim]
                     _goal_start = _robot_dim + _obj_state_dim
                     s_star_batch = sample_obs[:, _goal_start : _goal_start + _goal_dim]
                 else:
+                    # s1: [7:21], g1: [21:27]; s2: [29:43], g2: [43:49]
                     s_t_batch = torch.cat(
-                        [sample_obs[:, 7:13], sample_obs[:, 21:27]], dim=-1
+                        [sample_obs[:, 7:13], sample_obs[:, 29:35]], dim=-1
                     )
-                    s_star_batch = sample_obs[:, 35:47]
+                    s_star_batch = torch.cat(
+                        [sample_obs[:, 21:27], sample_obs[:, 43:49]], dim=-1
+                    )
                 g_sample = bob_ppo.actor_critic.goal_encoder(s_star_batch, s_t_batch)
                 writer.add_scalar(
                     "GoalEncoder/embedding_norm",
@@ -765,10 +772,6 @@ def main():
 
         bob_updates += 1
 
-        # Force Python GC every 10 iterations to reclaim Python-side memory.
-        # IsaacSim's PhysX heap is not affected, but this helps with Python objects.
-        if bob_updates % 10 == 0:
-            gc.collect()
 
     # --- Graceful shutdown on SIGTERM (sent by SLURM at the hard time limit) ---
     _shutdown_requested = False
@@ -837,116 +840,168 @@ def main():
             pg["lr"] = _alice_lr
         writer.add_scalar("Alice/LearningRate", _alice_lr, bob_updates)
 
-        # --- 1. ALICE ROLLOUT PHASE ---
+        # --- 1. UNIFIED ASYNCHRONOUS ROLLOUT PHASE ---
         alice_ppo.storage.clear()
+        bob_ppo.storage.clear()
 
-        iter_sr_counts = [
-            0,
-            0,
-        ]  # [attempted, succeeded] — moved here so Alice-loop Bob completions are counted
+        iter_sr_counts = [0, 0]  # [attempted, succeeded]
 
         obs_dict = env.env.observation_manager.compute()
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_alice_obs = obs[:, : env.alice_obs_dim]
+        current_bob_obs = obs[:, env.alice_obs_dim :]
 
-        # Pre-allocate iteration buffers for ABC
-        alice_traj_obs = []  # list of (num_envs, obs_dim)
-        alice_traj_act = []  # list of (num_envs, act_dim)
+        # Pre-allocate Alice trajectory buffers for ABC (Max: alice_timesteps)
+        _a_max_steps = env.episode_manager.alice_timesteps
+        _a_pdim = num_cat_dims if use_mc else env.action_space.shape[0]
+        _b_pdim = num_cat_dims if use_mc else env.action_space.shape[0]
 
-        hist_alice = (
-            alice_pool.sample_policy(alice_ppo.actor_critic, env.device)
-            if alice_pool.size > 0
-            else None
-        )
+        alice_traj_obs = torch.zeros((env.num_envs, _a_max_steps, env.alice_obs_dim), device=env.device)
+        alice_traj_act = torch.zeros((env.num_envs, _a_max_steps, _a_pdim), device=env.device)
+        alice_traj_len = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)
 
-        for t in range(env.episode_manager.alice_timesteps):
-            # Capture where we are in alice phase
+        hist_alice = alice_pool.sample_policy(alice_ppo.actor_critic, env.device) if alice_pool.size > 0 else None
+        hist_bob = bob_pool.sample_policy(bob_ppo.actor_critic, env.device) if bob_pool.size > 0 else None
+
+        rollout_length = env.episode_manager.alice_timesteps + env.episode_manager.bob_timesteps
+
+        for t in range(rollout_length):
             is_alice = env.episode_manager.is_alice_phase()
+            is_bob = env.episode_manager.is_bob_phase()
             alice_indices = torch.where(is_alice)[0]
+            bob_indices = torch.where(is_bob)[0]
 
-            if len(alice_indices) == 0:
-                break
-
-            # Split active envs: hist_ids use saved policy, curr_ids use current
-            hist_ids, curr_ids = alice_pool.sample_env_subset(
-                alice_indices, frac=HIST_FRAC
-            )
-
-            with torch.no_grad():
-                # Current Alice (majority)
-                h_in = (
-                    (alice_hidden[0][curr_ids], alice_hidden[1][curr_ids])
-                    if alice_hidden
-                    else None
-                )
-                (
-                    a_acts_curr,
-                    a_logprob_curr,
-                    a_val_curr,
-                    a_mu_curr,
-                    a_sigma_curr,
-                    new_h,
-                ) = alice_ppo.actor_critic.act_with_hidden(
-                    current_alice_obs[curr_ids], None, h_in
-                )
-                if alice_hidden and new_h is not None:
-                    alice_hidden[0][curr_ids] = new_h[0]
-                    alice_hidden[1][curr_ids] = new_h[1]
-
-                # Historical Alice (minority, no grad tracking needed)
-                if len(hist_ids) > 0 and hist_alice is not None:
-                    (
-                        a_acts_hist,
-                        a_logprob_hist,
-                        a_val_hist,
-                        a_mu_hist,
-                        a_sigma_hist,
-                        _,
-                    ) = hist_alice.act_with_hidden(
-                        current_alice_obs[hist_ids], None, None
-                    )
-                else:
-                    # Fallback to current if no history yet
-                    hist_ids = torch.tensor([], dtype=torch.long, device=env.device)
-                    a_acts_hist = a_logprob_hist = a_val_hist = a_mu_hist = (
-                        a_sigma_hist
-                    ) = None
-
-            # Policy action dim: 4 bin indices (MC) or 7 continuous (Gaussian)
-            _a_pdim = num_cat_dims if use_mc else env.action_space.shape[0]
-
-            # Merge curr + hist actions into full alice_indices tensors
-            a_acts_active = torch.zeros(
-                (len(alice_indices), _a_pdim), device=env.device
-            )
+            # -----------------------------------------------------------------
+            # COMPUTE ALICE ACTIONS
+            # -----------------------------------------------------------------
+            a_acts_active = torch.zeros((len(alice_indices), _a_pdim), device=env.device)
             a_logprob_active = torch.zeros(len(alice_indices), device=env.device)
             a_val_active = torch.zeros(len(alice_indices), 1, device=env.device)
             a_mu_active = torch.zeros_like(a_acts_active)
             a_sigma_active = torch.zeros_like(a_acts_active)
 
-            curr_local = torch.searchsorted(alice_indices, curr_ids)
-            a_acts_active[curr_local] = a_acts_curr
-            a_logprob_active[curr_local] = a_logprob_curr
-            a_val_active[curr_local] = a_val_curr
-            a_mu_active[curr_local] = a_mu_curr
-            a_sigma_active[curr_local] = a_sigma_curr
+            if len(alice_indices) > 0:
+                hist_ids, curr_ids = alice_pool.sample_env_subset(alice_indices, frac=HIST_FRAC)
+                with torch.no_grad():
+                    # Current Alice (majority)
+                    h_in = ((alice_hidden[0][curr_ids], alice_hidden[1][curr_ids]) if alice_hidden else None)
+                    (a_acts_curr, a_logprob_curr, a_val_curr, a_mu_curr, a_sigma_curr, new_h) = alice_ppo.actor_critic.act_with_hidden(current_alice_obs[curr_ids], None, h_in)
+                    if alice_hidden and new_h is not None:
+                        alice_hidden[0][curr_ids] = new_h[0]
+                        alice_hidden[1][curr_ids] = new_h[1]
 
-            if len(hist_ids) > 0 and a_acts_hist is not None:
-                hist_local = torch.searchsorted(alice_indices, hist_ids)
-                a_acts_active[hist_local] = a_acts_hist
-                a_logprob_active[hist_local] = a_logprob_hist
-                a_val_active[hist_local] = a_val_hist
-                a_mu_active[hist_local] = a_mu_hist
-                a_sigma_active[hist_local] = a_sigma_hist
+                    # Historical Alice (minority)
+                    if len(hist_ids) > 0 and hist_alice is not None:
+                        (a_acts_hist, a_logprob_hist, a_val_hist, a_mu_hist, a_sigma_hist, _) = hist_alice.act_with_hidden(current_alice_obs[hist_ids], None, None)
+                    else:
+                        hist_ids = torch.tensor([], dtype=torch.long, device=env.device)
+                        a_acts_hist = a_logprob_hist = a_val_hist = a_mu_hist = a_sigma_hist = None
 
-            alice_traj_obs.append(current_alice_obs.clone())
+                curr_local = torch.searchsorted(alice_indices, curr_ids)
+                a_acts_active[curr_local] = a_acts_curr
+                a_logprob_active[curr_local] = a_logprob_curr
+                a_val_active[curr_local] = a_val_curr
+                a_mu_active[curr_local] = a_mu_curr
+                a_sigma_active[curr_local] = a_sigma_curr
 
-            # Policy actions for storage/ABC (bin indices or continuous)
+                if len(hist_ids) > 0 and a_acts_hist is not None:
+                    hist_local = torch.searchsorted(alice_indices, hist_ids)
+                    a_acts_active[hist_local] = a_acts_hist
+                    a_logprob_active[hist_local] = a_logprob_hist
+                    a_val_active[hist_local] = a_val_hist
+                    a_mu_active[hist_local] = a_mu_hist
+                    a_sigma_active[hist_local] = a_sigma_hist
+
+            # -----------------------------------------------------------------
+            # COMPUTE BOB ACTIONS
+            # -----------------------------------------------------------------
+            b_acts_active = torch.zeros((len(bob_indices), _b_pdim), device=env.device)
+            b_logprob_active = torch.zeros(len(bob_indices), device=env.device)
+            b_val_active = torch.zeros(len(bob_indices), 1, device=env.device)
+            b_mu_active = torch.zeros_like(b_acts_active)
+            b_sigma_active = torch.zeros_like(b_acts_active)
+
+            if len(bob_indices) > 0:
+                hist_bids, curr_bids = bob_pool.sample_env_subset(bob_indices, frac=HIST_FRAC)
+                with torch.no_grad():
+                    # Current Bob
+                    h_in = ((bob_hidden[0][curr_bids], bob_hidden[1][curr_bids]) if bob_hidden else None)
+                    (b_acts_curr, b_lp_curr, b_val_curr, b_mu_curr, b_sig_curr, new_bh) = bob_ppo.actor_critic.act_with_hidden(current_bob_obs[curr_bids], None, h_in)
+                    if bob_hidden and new_bh is not None:
+                        bob_hidden[0][curr_bids] = new_bh[0]
+                        bob_hidden[1][curr_bids] = new_bh[1]
+
+                    # Historical Bob
+                    if len(hist_bids) > 0 and hist_bob is not None:
+                        (b_acts_hist, b_lp_hist, b_val_hist, b_mu_hist, b_sig_hist, _) = hist_bob.act_with_hidden(current_bob_obs[hist_bids], None, None)
+                    else:
+                        hist_bids = torch.tensor([], dtype=torch.long, device=env.device)
+                        b_acts_hist = b_lp_hist = b_val_hist = b_mu_hist = b_sig_hist = None
+
+                curr_bloc = torch.searchsorted(bob_indices, curr_bids)
+                b_acts_active[curr_bloc] = b_acts_curr
+                b_logprob_active[curr_bloc] = b_lp_curr
+                b_val_active[curr_bloc] = b_val_curr
+                b_mu_active[curr_bloc] = b_mu_curr
+                b_sigma_active[curr_bloc] = b_sig_curr
+
+                if len(hist_bids) > 0 and b_acts_hist is not None:
+                    hist_bloc = torch.searchsorted(bob_indices, hist_bids)
+                    b_acts_active[hist_bloc] = b_acts_hist
+                    b_logprob_active[hist_bloc] = b_lp_hist
+                    b_val_active[hist_bloc] = b_val_hist
+                    b_mu_active[hist_bloc] = b_mu_hist
+                    b_sigma_active[hist_bloc] = b_sig_hist
+
+            # -----------------------------------------------------------------
+            # COMBINE ACTIONS & STEP ENVIRONMENT
+            # -----------------------------------------------------------------
             a_policy = torch.zeros((env.num_envs, _a_pdim), device=env.device)
             a_policy[alice_indices] = a_acts_active
-            alice_traj_act.append(a_policy.clone())  # ABC buffer gets bin indices
+            
+            b_policy = torch.zeros((env.num_envs, _b_pdim), device=env.device)
+            b_policy[bob_indices] = b_acts_active
 
-            # Full-env tensors for storage (non-active envs get zeros)
+            # Store Alice trajectory for ABC
+            alice_step_raw = env.episode_manager.phase_step[alice_indices] - 1
+            valid_t = alice_step_raw < _a_max_steps
+            active_alice = alice_indices[valid_t]
+            active_steps = alice_step_raw[valid_t]
+
+            phase_start = alice_step_raw == 0
+            if phase_start.any():
+                alice_traj_len[alice_indices[phase_start]] = 0
+
+            if len(active_alice) > 0:
+                alice_traj_obs[active_alice, active_steps] = current_alice_obs[active_alice].clone()
+                alice_traj_act[active_alice, active_steps] = a_acts_active[valid_t].clone()
+                new_len = (active_steps + 1).to(alice_traj_len.dtype)
+                alice_traj_len[active_alice] = torch.max(alice_traj_len[active_alice], new_len)
+
+            if use_mc:
+                env_full = torch.zeros((env.num_envs, env.action_space.shape[0]), device=env.device)
+                a_act_7d, new_ags = bins_to_env_action(a_acts_active, alice_gripper_state[alice_indices])
+                b_act_7d, new_bgs = bins_to_env_action(b_acts_active, bob_gripper_state[bob_indices])
+                env_full[alice_indices] = a_act_7d
+                env_full[bob_indices] = b_act_7d
+                alice_gripper_state[alice_indices] = new_ags
+                bob_gripper_state[bob_indices] = new_bgs
+            else:
+                env_full = a_policy + b_policy  # Masks are disjoint
+
+            obs_full, rewards, dones, truncated, extras = env.step(env_full)
+
+            # Count Bob completions
+            ep_info = extras.get("episode_manager", {})
+            if ep_info:
+                finished_bob = torch.where(ep_info["bob_done_this_step"])[0]
+                if len(finished_bob) > 0:
+                    iter_sr_counts[0] += len(finished_bob)
+                    iter_sr_counts[1] += int(ep_info["bob_success_this_step"][finished_bob].sum().item())
+
+            # -----------------------------------------------------------------
+            # ALICE STORAGE & UPDATES
+            # -----------------------------------------------------------------
             a_lp_full = torch.zeros(env.num_envs, device=env.device)
             a_val_full = torch.zeros(env.num_envs, 1, device=env.device)
             a_mu_full = torch.zeros((env.num_envs, _a_pdim), device=env.device)
@@ -956,52 +1011,22 @@ def main():
             a_mu_full[alice_indices] = a_mu_active
             a_sigma_full[alice_indices] = a_sigma_active
 
-            # 7D env action for RMPFlow: convert bins → deltas, zero-pad rotation
-            if use_mc:
-                a_env_full = torch.zeros(
-                    (env.num_envs, env.action_space.shape[0]), device=env.device
-                )
-                a_act_7d, new_ags = bins_to_env_action(
-                    a_acts_active, alice_gripper_state[alice_indices]
-                )
-                a_env_full[alice_indices] = a_act_7d
-                alice_gripper_state[alice_indices] = new_ags
-            else:
-                a_env_full = a_policy  # already 7D continuous
-
-            obs_full, rewards, dones, truncated, extras = env.step(a_env_full)
-
-            # Count Bob completions from envs still in Bob phase during this step.
-            ep_info_a = extras.get("episode_manager", {})
-            if ep_info_a:
-                finished_bob_a = torch.where(ep_info_a["bob_done_this_step"])[0]
-                if len(finished_bob_a) > 0:
-                    iter_sr_counts[0] += len(finished_bob_a)
-                    iter_sr_counts[1] += int(
-                        ep_info_a["bob_success_this_step"][finished_bob_a].sum().item()
-                    )
-
-            # Reset LSTM hidden state and gripper state for envs that terminated
             if alice_hidden is not None:
                 done_alice = alice_indices[dones[alice_indices]]
                 if len(done_alice) > 0:
                     alice_hidden[0][done_alice] = 0.0
                     alice_hidden[1][done_alice] = 0.0
-            alice_gripper_state[alice_indices[dones[alice_indices]]] = (
-                1.0  # reset to open
-            )
+            alice_gripper_state[alice_indices[dones[alice_indices]]] = 1.0
 
-            # Storage masking
             a_masks = torch.zeros(env.num_envs, 1, device=env.device)
             a_masks[alice_indices[~dones[alice_indices]]] = 1.0
 
-            # Store policy actions (bins) and real log_probs/values for PPO update
             next_alice_obs = obs_full[:, : env.alice_obs_dim]
             alice_ppo.storage.add_transitions(
                 current_alice_obs,
                 next_alice_obs,
                 a_policy,
-                rewards,
+                torch.zeros(env.num_envs, device=env.device), # rewards (computed later)
                 dones,
                 a_val_full,
                 a_lp_full,
@@ -1011,286 +1036,101 @@ def main():
             )
             current_alice_obs = next_alice_obs
 
-        # Goal states already extracted by wrapper during Alice→Bob transition
-        # (in _handle_alice_completion, before objects were reset to S0).
-        # DO NOT re-extract here: the objects have already been reset to S0 by the wrapper,
-        # so any extraction now would overwrite the goal with the reset position.
-        goal_states = env.episode_manager.goal_states
+            # -----------------------------------------------------------------
+            # BOB STORAGE & UPDATES
+            # -----------------------------------------------------------------
+            b_lp_full = torch.zeros(env.num_envs, 1, device=env.device)
+            b_val_full = torch.zeros(env.num_envs, 1, device=env.device)
+            b_mu_full = torch.zeros((env.num_envs, _b_pdim), device=env.device)
+            b_sigma_full = torch.zeros((env.num_envs, _b_pdim), device=env.device)
+            b_lp_full[bob_indices] = b_logprob_active.unsqueeze(1)
+            b_val_full[bob_indices] = b_val_active
+            b_mu_full[bob_indices] = b_mu_active
+            b_sigma_full[bob_indices] = b_sigma_active
 
-        # --- 2. BOB ROLLOUT PHASE ---
-        bob_ppo.storage.clear()
-
-        # Env already reset to S0 by wrapper during transition
-        obs_dict = env.env.observation_manager.compute()
-        obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
-        current_bob_obs = obs[:, env.alice_obs_dim :]
-
-        hist_bob = (
-            bob_pool.sample_policy(bob_ppo.actor_critic, env.device)
-            if bob_pool.size > 0
-            else None
-        )
-
-        for t in range(env.episode_manager.bob_timesteps):
-            is_bob = env.episode_manager.is_bob_phase()
-            bob_indices = torch.where(is_bob)[0]
-            if len(bob_indices) == 0:
-                break
-
-            hist_bids, curr_bids = bob_pool.sample_env_subset(
-                bob_indices, frac=HIST_FRAC
-            )
-
-            bob_obs_active = current_bob_obs[bob_indices]
-
-            with torch.no_grad():
-                # Current Bob (majority)
-                h_in = (
-                    (bob_hidden[0][curr_bids], bob_hidden[1][curr_bids])
-                    if bob_hidden
-                    else None
-                )
-                b_acts_curr, b_lp_curr, b_val_curr, b_mu_curr, b_sig_curr, new_bh = (
-                    bob_ppo.actor_critic.act_with_hidden(
-                        current_bob_obs[curr_bids], None, h_in
-                    )
-                )
-                if bob_hidden and new_bh is not None:
-                    bob_hidden[0][curr_bids] = new_bh[0]
-                    bob_hidden[1][curr_bids] = new_bh[1]
-
-                # Historical Bob (minority)
-                if len(hist_bids) > 0 and hist_bob is not None:
-                    b_acts_hist, b_lp_hist, b_val_hist, b_mu_hist, b_sig_hist, _ = (
-                        hist_bob.act_with_hidden(current_bob_obs[hist_bids], None, None)
-                    )
-                else:
-                    hist_bids = torch.tensor([], dtype=torch.long, device=env.device)
-                    b_acts_hist = b_lp_hist = b_val_hist = b_mu_hist = b_sig_hist = None
-
-            # Policy action dim: 4 bin indices (MC) or 7 continuous (Gaussian)
-            _b_pdim = num_cat_dims if use_mc else env.action_space.shape[0]
-
-            # Merge curr + hist into full bob_indices tensors
-            b_acts_active = torch.zeros((len(bob_indices), _b_pdim), device=env.device)
-            b_logprob_active = torch.zeros(len(bob_indices), device=env.device)
-            b_val_active = torch.zeros(len(bob_indices), 1, device=env.device)
-            b_mu_active = torch.zeros_like(b_acts_active)
-            b_sigma_active = torch.zeros_like(b_acts_active)
-
-            curr_bloc = torch.searchsorted(bob_indices, curr_bids)
-            b_acts_active[curr_bloc] = b_acts_curr
-            b_logprob_active[curr_bloc] = b_lp_curr
-            b_val_active[curr_bloc] = b_val_curr
-            b_mu_active[curr_bloc] = b_mu_curr
-            b_sigma_active[curr_bloc] = b_sig_curr
-
-            if len(hist_bids) > 0 and b_acts_hist is not None:
-                hist_bloc = torch.searchsorted(bob_indices, hist_bids)
-                b_acts_active[hist_bloc] = b_acts_hist
-                b_logprob_active[hist_bloc] = b_lp_hist
-                b_val_active[hist_bloc] = b_val_hist
-                b_mu_active[hist_bloc] = b_mu_hist
-                b_sigma_active[hist_bloc] = b_sig_hist
-
-            # 7D env action for RMPFlow
-            if use_mc:
-                b_env_full = torch.zeros(
-                    (env.num_envs, env.action_space.shape[0]), device=env.device
-                )
-                b_act_7d, new_bgs = bins_to_env_action(
-                    b_acts_active, bob_gripper_state[bob_indices]
-                )
-                b_env_full[bob_indices] = b_act_7d
-                bob_gripper_state[bob_indices] = new_bgs
-            else:
-                b_env_full = torch.zeros(
-                    (env.num_envs, env.action_space.shape[0]), device=env.device
-                )
-                b_env_full[bob_indices] = b_acts_active
-
-            obs_full, rewards, dones, truncated, extras = env.step(b_env_full)
-
-            bob_done_this_step = extras.get(
-                "bob_done_this_step",
-                torch.zeros(env.num_envs, dtype=torch.bool, device=env.device),
-            )
+            bob_done_this_step = ep_info.get("bob_done_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
             ended_for_bob = dones | bob_done_this_step
             b_masks = torch.zeros(env.num_envs, 1, device=env.device)
             b_masks[bob_indices[~ended_for_bob[bob_indices]]] = 1.0
 
-            # Storage-ready tensors — policy actions (bins) stored, not env actions
-            _obs = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device)
-            _obs[bob_indices] = bob_obs_active
-            _next_obs = torch.zeros((env.num_envs, env.bob_obs_dim), device=env.device)
-            _next_obs[bob_indices] = obs_full[bob_indices, env.alice_obs_dim :]
-            _acts = torch.zeros((env.num_envs, _b_pdim), device=env.device)
-            _acts[bob_indices] = b_acts_active
-            _rew = torch.zeros(env.num_envs, device=env.device)
-            _rew[bob_indices] = rewards[bob_indices]
-            _val = torch.zeros(env.num_envs, 1, device=env.device)
-            _val[bob_indices] = b_val_active
-            _lp = torch.zeros(env.num_envs, 1, device=env.device)
-            _lp[bob_indices] = b_logprob_active.unsqueeze(1)
-            _mu = torch.zeros((env.num_envs, _b_pdim), device=env.device)
-            _mu[bob_indices] = b_mu_active
-            _sigma = torch.zeros((env.num_envs, _b_pdim), device=env.device)
-            _sigma[bob_indices] = b_sigma_active
+            if bob_hidden is not None:
+                done_bob = bob_indices[dones[bob_indices]]
+                if len(done_bob) > 0:
+                    bob_hidden[0][done_bob] = 0.0
+                    bob_hidden[1][done_bob] = 0.0
+            bob_gripper_state[bob_indices[dones[bob_indices]]] = 1.0
 
-            # Reset LSTM hidden state and gripper state for terminated envs
-            done_bob = bob_indices[dones[bob_indices]]
-            if bob_hidden is not None and len(done_bob) > 0:
-                bob_hidden[0][done_bob] = 0.0
-                bob_hidden[1][done_bob] = 0.0
-            if len(done_bob) > 0:
-                bob_gripper_state[done_bob] = 1.0  # reset to open
-
+            next_bob_obs = obs_full[:, env.alice_obs_dim :]
             bob_ppo.storage.add_transitions(
-                _obs,
-                _next_obs,
-                _acts,
-                _rew,
-                dones.clone(),
-                _val,
-                _lp,
-                _mu,
-                _sigma,
+                current_bob_obs,
+                next_bob_obs,
+                b_policy,
+                rewards,
+                dones,
+                b_val_full,
+                b_lp_full,
+                b_mu_full,
+                b_sigma_full,
                 b_masks,
             )
-            current_bob_obs = obs_full[:, env.alice_obs_dim :]
-            bob_rew_buf.extend(rewards.cpu().numpy().tolist())
+            current_bob_obs = next_bob_obs
 
-            # Populate error buffers for TensorBoard (only for envs where Bob just finished)
-            ep_info = extras.get("episode_manager", {})
+            # -----------------------------------------------------------------
+            # ALICE OUTCOME & ABC BUFFER
+            # -----------------------------------------------------------------
             if ep_info:
-                pos_err = ep_info["bob_pos_err"]
-                rot_err = ep_info["bob_rot_err"]
-                finished_bob = torch.where(ep_info["bob_done_this_step"])[0]
-                if len(finished_bob) > 0:
-                    bob_pos_err_buf.extend(pos_err[finished_bob].cpu().numpy().tolist())
-                    bob_rot_err_buf.extend(rot_err[finished_bob].cpu().numpy().tolist())
-                    iter_sr_counts[0] = iter_sr_counts[0] + len(finished_bob)
-                    iter_sr_counts[1] = iter_sr_counts[1] + int(
-                        ep_info["bob_success_this_step"][finished_bob].sum().item()
+                bob_dones_now = ep_info.get("bob_done_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+                alice_dones_now = extras.get("alice_failed_this_step", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+                alice_rewards_now = extras.get("alice_total_reward", torch.zeros(env.num_envs, device=env.device))
+                goal_valid = ep_info.get("goal_valid", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+                bob_success = ep_info.get("bob_success", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+                
+                # Apply Alice outcome to storage NOW
+                if bob_dones_now.any() or alice_dones_now.any() or (alice_rewards_now != 0).any():
+                    filled = alice_ppo.storage.step
+                    if filled > 0:
+                        masks = alice_ppo.storage.masks[:filled, :, 0]
+                        row_idx = torch.arange(filled, device=env.device).unsqueeze(1).expand_as(masks)
+                        last_valid_rows = torch.where(masks.bool(), row_idx, torch.tensor(-1, device=env.device)).max(dim=0).values
+                        
+                        has_valid = last_valid_rows >= 0
+                        
+                        rewarded_envs = torch.where(alice_rewards_now != 0)[0]
+                        valid_rewarded = rewarded_envs[has_valid[rewarded_envs]]
+                        if len(valid_rewarded) > 0:
+                            rows = last_valid_rows[valid_rewarded]
+                            alice_ppo.storage.rewards[rows, valid_rewarded, 0] += alice_rewards_now[valid_rewarded]
+                            alice_rew_buf.extend(alice_rewards_now[valid_rewarded].cpu().numpy().tolist())
+
+                # ABC BATCH: Add demos for Bob failures *that just finished this step*
+                just_failed_bob = bob_dones_now & (~bob_success) & goal_valid
+                valid_ids = torch.where(just_failed_bob)[0]
+                
+                min_demo_steps = max(10, env.episode_manager.alice_timesteps // 2)
+                for env_id in valid_ids:
+                    eid = env_id.item()
+                    t_len = alice_traj_len[eid].item()
+                    if t_len < min_demo_steps:
+                        continue
+                        
+                    traj_o = alice_traj_obs[eid, :t_len]
+                    traj_a = alice_traj_act[eid, :t_len]
+                    g = ep_info["goal_states"][eid].unsqueeze(0).expand(t_len, -1)
+                    
+                    bc_obs = env.construct_bob_observation(traj_o, g)
+                    with torch.no_grad():
+                        old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(bc_obs, None, traj_a)
+                    
+                    bob_ppo.abc_buffer.add_trajectory(
+                        bc_obs, bc_obs, traj_a, 
+                        torch.zeros(t_len, device=env.device),
+                        torch.zeros(t_len, device=env.device).byte(),
+                        torch.zeros(t_len, device=env.device),
+                        old_lp.view(-1, 1),
+                        torch.zeros_like(traj_a), torch.zeros_like(traj_a),
+                        torch.zeros(t_len, 1, device=env.device),
+                        torch.zeros(t_len, 1, device=env.device)
                     )
-
-        # --- 3. ALICE BEHAVIORAL CLONING (ABC) BUFFER PUSH ---
-        goal_valid = env.episode_manager.goal_valid
-        bob_success = env.episode_manager.bob_success
-
-        # Add demos only when Bob failed: success means the goal is already reachable.
-        # Skip trajectories shorter than 50% of alice_timesteps — Alice crashed early.
-        min_demo_steps = max(10, target_alice_timesteps // 2)
-        if goal_valid.any():
-            valid_ids = torch.where(goal_valid & ~bob_success)[0]
-            skipped_short = 0
-            for env_id in valid_ids:
-                eid = env_id.item()
-                traj_o = torch.stack(
-                    [alice_traj_obs[step][eid] for step in range(len(alice_traj_obs))]
-                )
-                traj_a = torch.stack(
-                    [alice_traj_act[step][eid] for step in range(len(alice_traj_act))]
-                )
-
-                if len(traj_o) < min_demo_steps:
-                    skipped_short += 1
-                    continue
-
-                g = goal_states[eid].unsqueeze(0).expand(len(traj_o), -1)
-
-                bc_obs = env.construct_bob_observation(traj_o, g)
-
-                # Evaluate current Bob policy on Alice's demo for PPO ratio clipping.
-                with torch.no_grad():
-                    old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(
-                        bc_obs, None, traj_a
-                    )
-
-                if args.test_abc_verbose:
-                    g_slice = goal_states[eid]
-                    obs_dim = bc_obs.shape[-1]
-                    # Bob obs layout (interleaved): Robot(7) + [Obj(14)+Goal(6)+Dist(2)] × 2 = 51D
-                    # Object 1 goal starts at index 7+14=21, Object 2 goal at 7+36=43
-                    goal_start = 7 + 14  # goal for first object
-                    print(
-                        f"[ABC Verbose] env={eid} | traj_len={len(traj_o)} | "
-                        f"obs_shape={bc_obs.shape} | goal_shape={g_slice.shape} | "
-                        f"goal_pos={g_slice[0:3].tolist()} | "
-                        f"obs[0,goal_start:goal_start+3]={bc_obs[0, goal_start:goal_start+3].tolist()} "
-                        f"(should match goal_pos)",
-                        flush=True,
-                    )
-
-                bob_ppo.abc_buffer.add_trajectory(
-                    bc_obs,
-                    bc_obs,
-                    traj_a,
-                    torch.zeros(len(traj_o), device=env.device),
-                    torch.zeros(len(traj_o), device=env.device).byte(),
-                    torch.zeros(len(traj_o), device=env.device),
-                    old_lp.view(-1, 1),
-                    torch.zeros_like(traj_a),
-                    torch.zeros_like(traj_a),
-                    torch.zeros(len(traj_o), 1, device=env.device),
-                    torch.zeros(len(traj_o), 1, device=env.device),
-                )
-
-        # --- 4. ALICE REWARD ASSIGNMENT & UPDATE ---
-        alice_outcome_rewards = torch.zeros(env.num_envs, device=env.device)
-        alice_outcome_rewards[goal_valid] = env.episode_manager.alice_base_reward[
-            goal_valid
-        ]
-        bob_failed = (~bob_success) & goal_valid
-        alice_outcome_rewards[bob_failed] += ALICE_BOB_FAIL_REWARD
-
-        if alice_ppo.storage.step > 0:
-            # Fix: write terminal reward to each env's LAST VALID row (mask==1), not the
-            # global cursor step-1.  In an async rollout Alice phases end at different
-            # times per env, so step-1 lands on a padding row for most envs.
-            filled = alice_ppo.storage.step
-            masks = alice_ppo.storage.masks[:filled, :, 0]  # (filled, num_envs)
-            row_idx = torch.arange(filled, device=env.device).unsqueeze(1).expand_as(masks)
-            last_valid_rows = torch.where(
-                masks.bool(), row_idx, torch.tensor(-1, device=env.device)
-            ).max(dim=0).values  # (num_envs,) — last valid row per env, -1 if none
-
-            has_valid = last_valid_rows >= 0
-            valid_envs = has_valid.nonzero(as_tuple=False).squeeze(1)
-            if len(valid_envs) > 0:
-                rows = last_valid_rows[valid_envs]
-                alice_ppo.storage.rewards[rows, valid_envs] = alice_outcome_rewards[valid_envs].unsqueeze(1)
-                alice_ppo.storage.dones[rows, valid_envs] = 1.0  # prevent GAE bleeding
-
-                # --- Outcome-reward propagation log ---
-                # Shows: which env got rewarded, at which storage row, with what value,
-                # and how much dense reward accumulated in the rows before it.
-                outcome_vals = alice_outcome_rewards[valid_envs].cpu()
-                rows_cpu     = rows.cpu()
-                n_envs_got   = len(valid_envs)
-                n_pos        = int((outcome_vals > 0).sum().item())
-                n_zero       = int((outcome_vals == 0).sum().item())
-                n_neg        = int((outcome_vals < 0).sum().item())
-                # Dense reward sum per env: sum of all storage rows 0..last_valid_row-1
-                dense_sums = []
-                for i, (env_i, row_i) in enumerate(zip(valid_envs.cpu().tolist(), rows_cpu.tolist())):
-                    if row_i > 0:
-                        ds = alice_ppo.storage.rewards[:row_i, env_i, 0].sum().item()
-                    else:
-                        ds = 0.0
-                    dense_sums.append(ds)
-                mean_dense = sum(dense_sums) / len(dense_sums) if dense_sums else 0.0
-                print(
-                    f"  [AliceOutcome] iter={bob_updates} | "
-                    f"envs_written={n_envs_got}/{env.num_envs} | "
-                    f"pos={n_pos} zero={n_zero} neg={n_neg} | "
-                    f"outcome: min={outcome_vals.min():.2f} mean={outcome_vals.mean():.2f} max={outcome_vals.max():.2f} | "
-                    f"dense_before: mean_sum={mean_dense:.4f} | "
-                    f"storage_rows: min={rows_cpu.min().item()} max={rows_cpu.max().item()} filled={filled}",
-                    flush=True,
-                )
-
-            alice_rew_buf.extend(alice_outcome_rewards.cpu().numpy().tolist())
 
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         bob_success_buf.append(current_sr)

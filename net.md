@@ -80,10 +80,11 @@ goal_distance (Bob only)
 
 ```
 Alice obs = [robot_state(7) | obj1_state(14) | obj2_state(14)]          = 35D
-Bob obs   = [robot_state(7) | obj1_state(14) | obj2_state(14)
-                            | obj1_goal(6)   | obj2_goal(6)
-                            | obj1_dist(2)   | obj2_dist(2)]             = 51D
+Bob obs   = [robot_state(7) | obj1_state(14) | obj1_goal(6) | obj1_dist(2)
+                            | obj2_state(14) | obj2_goal(6) | obj2_dist(2)]  = 51D
 ```
+*(Interleaved per-object layout: each 22D chunk = state+goal+dist for one object.
+ This matches the `view(batch, num_objects, 22)` reshape in `_encode_obs`.)*
 
 ### Forward Pass (Alice)
 
@@ -126,7 +127,7 @@ GoalEncoder (φ MLP, shared across objects):                                 │
   input per object: current_pose(6D) + goal_pose(6D)                       │
   φ: Linear(6→64) → Tanh → Linear(64→K=8)   ← no final activation        │
   g_i = φ(goal_i) − φ(current_i)  [difference variant]                    │
-  g_pooled = max-pool(g_0, g_1)              → 8D  (additive injection)    │
+  g_pooled = sum-pool(g_0, g_1)              → 8D  (additive injection)    │
                                                                              │
 PI Embedding (PermInvEncoder):                                              │
   input: ONLY obj_states (14D each) — goal enters via additive injection   │ concat
@@ -168,7 +169,7 @@ PI Embedding (PermInvEncoder):                                              │
 | **Goal encoding** | Raw PI embedding on goal states | **GoalEncoder → K=8 latent** per object |
 | **GoalEncoder φ activation** | — | **Tanh** (paper §2.4) |
 | **GoalEncoder input** | — | **6D Euler pose** (pos3 + euler3) |
-| **GoalEncoder pooling** | — | **Max-pool** (g = max(g_0, g_1); same as PI encoder) |
+| **GoalEncoder pooling** | — | **Sum-pool** (g = Σ g_i; "AND" semantics — all objects contribute) |
 | **Additive goal injection** | ❌ | ✅ `h = ReLU(LN(W·enc + Wg·g))` |
 | **PI encoder per-obj input** | 14D obj state | **14D obj state only** (goal separated out) |
 | **Pooling (PI encoder)** | Sum-pool | **Max-pool** (more robust, standard DeepSets) |

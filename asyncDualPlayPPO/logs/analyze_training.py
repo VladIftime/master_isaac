@@ -17,6 +17,7 @@ Usage (stitch prior run + current):
 import re
 import csv
 import shutil
+import bisect
 from pathlib import Path
 from collections import defaultdict
 
@@ -41,6 +42,13 @@ RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
 # Explicit anchor emitted by train_high.slurm after the checkpoint detection block
 GLOBAL_START_RE = re.compile(r"Global iteration start:\s*(\d+)")
 JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-.*)?\.out")
+# New-format summary lines (replaces per-event [AliceEnd] lines)
+ITER_RE = re.compile(
+    r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)\s*\|\s*Goals valid=(\d+) invalid=(\d+)\s*\|\s*Bob succ=(\d+) fail=(\d+)"
+)
+ALICE_DISP_RE = re.compile(
+    r"\[AliceDisp\]\s+\d+/\d+ valid\s*\|\s*avg 3D=[-\d.]+m\s+avg XY=([-\d.]+)m\s+max XY=([-\d.]+)m"
+)
 
 
 def parse_logs(log_dir: Path) -> dict:
@@ -68,24 +76,88 @@ def parse_logs(log_dir: Path) -> dict:
         if cm:
             chain_next = int(cm.group(1))
 
+        # New-format: parse [Iter N] summary lines (one per iteration boundary)
+        # [Iter N] is printed after Update N-1, so its goals belong to Update N-1.
+        iter_stats: dict[int, dict] = {}
+        for im in ITER_RE.finditer(text):
+            n = int(im.group(1))
+            iter_stats[n] = {
+                "sr": float(im.group(2)),
+                "valid": int(im.group(3)),
+                "invalid": int(im.group(4)),
+                "bob_succ": int(im.group(5)),
+                "bob_fail": int(im.group(6)),
+                "pos": im.start(),
+                "avg_xy": None,
+                "max_xy": None,
+            }
+
+        # Attach [AliceDisp] displacement data to the preceding [Iter N]
+        iter_positions = sorted((d["pos"], n) for n, d in iter_stats.items())
+        for dm in ALICE_DISP_RE.finditer(text):
+            dp = dm.start()
+            n = None
+            for ip, in_ in iter_positions:
+                if ip < dp:
+                    n = in_
+                else:
+                    break
+            if n is not None and iter_stats[n]["avg_xy"] is None:
+                iter_stats[n]["avg_xy"] = float(dm.group(1))
+                iter_stats[n]["max_xy"] = float(dm.group(2))
+
+        # Old-format fallback: per-event [AliceEnd] lines
+        valid_pos = []
+        invalid_pos = []
+        if not iter_stats:
+            valid_pos = [m.start() for m in re.finditer(r"\[AliceEnd\].*?outcome=valid", text)]
+            invalid_pos = [m.start() for m in re.finditer(r"\[AliceEnd\].*?outcome=invalid", text)]
+
+        alice_all_matches = []
+        for am in ALICE_RE.finditer(text):
+            alice_all_matches.append((am.start(), am.end(), am, True))
+        for am in ALICE_NO_ENT_RE.finditer(text):
+            alice_all_matches.append((am.start(), am.end(), am, False))
+        alice_all_matches.sort(key=lambda x: x[0])
+
         alice_updates = []
         matched_iters = set()
-        for am in ALICE_RE.finditer(text):
-            it = int(am.group(2))
+        prev_update_end = 0
+
+        for start, end, am, has_ent in alice_all_matches:
+            it = int(am.group(2)) if has_ent else int(am.group(1))
+            if it in matched_iters:
+                continue
             matched_iters.add(it)
-            alice_updates.append(
-                {
-                    "local_iter": it,
-                    "entropy_coef": float(am.group(1)),
-                    "loss": float(am.group(3)),
-                    "val": float(am.group(4)),
-                    "rew": float(am.group(5)),
-                }
-            )
-        # Fallback for lines without an entropy header
-        for am in ALICE_NO_ENT_RE.finditer(text):
-            it = int(am.group(1))
-            if it not in matched_iters:
+
+            if iter_stats:
+                # [Iter it+1] holds the goals generated in the rollout that fed Update it
+                ist = iter_stats.get(it + 1, {})
+                v_count = ist.get("valid", 0)
+                inv_count = ist.get("invalid", 0)
+                avg_xy = ist.get("avg_xy")
+                max_xy = ist.get("max_xy")
+            else:
+                v_count = bisect.bisect_left(valid_pos, end) - bisect.bisect_left(valid_pos, prev_update_end)
+                inv_count = bisect.bisect_left(invalid_pos, end) - bisect.bisect_left(invalid_pos, prev_update_end)
+                avg_xy = None
+                max_xy = None
+
+            if has_ent:
+                alice_updates.append(
+                    {
+                        "local_iter": it,
+                        "entropy_coef": float(am.group(1)),
+                        "loss": float(am.group(3)),
+                        "val": float(am.group(4)),
+                        "rew": float(am.group(5)),
+                        "valid_goals": v_count,
+                        "invalid_goals": inv_count,
+                        "avg_xy": avg_xy,
+                        "max_xy": max_xy,
+                    }
+                )
+            else:
                 alice_updates.append(
                     {
                         "local_iter": it,
@@ -93,8 +165,14 @@ def parse_logs(log_dir: Path) -> dict:
                         "loss": float(am.group(2)),
                         "val": float(am.group(3)),
                         "rew": float(am.group(4)),
+                        "valid_goals": v_count,
+                        "invalid_goals": inv_count,
+                        "avg_xy": avg_xy,
+                        "max_xy": max_xy,
                     }
                 )
+            prev_update_end = end
+
         alice_updates.sort(key=lambda x: x["local_iter"])
 
         bob_updates = []
@@ -109,6 +187,14 @@ def parse_logs(log_dir: Path) -> dict:
                     "sr": float(bm.group(6)),
                 }
             )
+            
+        # Backward compatibility for old logs (scaling step rewards to episodic returns)
+        if bob_updates:
+            max_rew = max(u["rew"] for u in bob_updates)
+            if max_rew < 0.1:
+                # Old logs: mean step reward. Scale by 200 to approximate episodic return.
+                for u in bob_updates:
+                    u["rew"] *= 200.0
 
         jobs[job_id] = {
             "path": f,
@@ -284,6 +370,10 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "entropy_coef",
         "abc",
         "sr",
+        "valid_goals",
+        "invalid_goals",
+        "avg_xy",
+        "max_xy",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -291,7 +381,7 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         for r in alice_records:
             writer.writerow({"agent": "alice", "abc": "", "sr": "", **r})
         for r in bob_records:
-            writer.writerow({"agent": "bob", "entropy_coef": "", **r})
+            writer.writerow({"agent": "bob", "entropy_coef": "", "valid_goals": "", "invalid_goals": "", "avg_xy": "", "max_xy": "", **r})
     print(f"[INFO] Wrote {out_path}")
     return out_path
 
@@ -324,6 +414,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "entropy_coef",
         "abc",
         "sr",
+        "valid_goals",
+        "invalid_goals",
+        "avg_xy",
+        "max_xy",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=all_fields)
@@ -343,6 +437,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                         "entropy_coef": upd.get("entropy_coef") or "",
                         "abc": "",
                         "sr": "",
+                        "valid_goals": upd.get("valid_goals", ""),
+                        "invalid_goals": upd.get("invalid_goals", ""),
+                        "avg_xy": upd.get("avg_xy") if upd.get("avg_xy") is not None else "",
+                        "max_xy": upd.get("max_xy") if upd.get("max_xy") is not None else "",
                     }
                 )
             for upd in job["bob"]:
@@ -358,6 +456,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                         "entropy_coef": "",
                         "abc": upd["abc"],
                         "sr": upd["sr"],
+                        "valid_goals": "",
+                        "invalid_goals": "",
+                        "avg_xy": "",
+                        "max_xy": "",
                     }
                 )
     print(f"[INFO] Wrote {out_path}")
@@ -480,43 +582,38 @@ def plot_metrics(
         plt.close(fig)
         print(f"[INFO] Saved {p}")
 
-    # --- Overview: all metrics in one figure ---
-    specs = [
-        (a_by_chain, a_labels, alice_colors, "loss", "Loss", "Policy Loss (Alice)"),
-        (b_by_chain, b_labels, bob_colors, "loss", "Loss", "Policy Loss (Bob)"),
-        (a_by_chain, a_labels, alice_colors, "val", "Value Loss", "Value Loss (Alice)"),
-        (b_by_chain, b_labels, bob_colors, "val", "Value Loss", "Value Loss (Bob)"),
-        (a_by_chain, a_labels, alice_colors, "rew", "Reward", "Reward (Alice)"),
-        (b_by_chain, b_labels, bob_colors, "rew", "Reward", "Reward (Bob)"),
-        (b_by_chain, b_labels, bob_colors, "sr", "SR", "Success Rate (Bob)"),
-        (b_by_chain, b_labels, bob_colors, "abc", "ABC", "ABC (Bob)"),
-        (
-            a_ent_by_chain,
-            a_labels,
-            alice_colors,
-            "entropy_coef",
-            "Ent Coef",
-            "Entropy Coef (Alice)",
-        ),
-    ]
-
-    ncols = 3
-    nrows = (len(specs) + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(18, 5 * nrows))
-    axes = axes.flatten()
-    fig.suptitle("Training Overview" + title_suffix, fontsize=15)
-
-    for i, (recs, labels, colors, key, ylabel, title) in enumerate(specs):
-        plot_single(axes[i], recs, labels, colors, key, ylabel, title)
-
-    for j in range(len(specs), len(axes)):
-        axes[j].set_visible(False)
-
+    # --- Figure: Alice Valid Goals ---
+    fig, ax = plt.subplots(figsize=(10, 5))
+    plot_single(ax, a_by_chain, a_labels, alice_colors, "valid_goals", "Goals", "Alice — Valid Goals")
     plt.tight_layout()
-    p = out_dir / "plot_overview.png"
+    p = out_dir / "plot_alice_valid_goals.png"
     fig.savefig(p, dpi=150)
     plt.close(fig)
     print(f"[INFO] Saved {p}")
+
+    # --- Figure: Alice Invalid Goals ---
+    fig, ax = plt.subplots(figsize=(10, 5))
+    plot_single(ax, a_by_chain, a_labels, alice_colors, "invalid_goals", "Goals", "Alice — Invalid Goals")
+    plt.tight_layout()
+    p = out_dir / "plot_alice_invalid_goals.png"
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
+    print(f"[INFO] Saved {p}")
+
+    # --- Figure: Alice Goal Displacement (avg_xy / max_xy) ---
+    a_disp_by_chain = [
+        [r for r in recs if r.get("avg_xy") is not None] for recs in a_by_chain
+    ]
+    if any(a_disp_by_chain):
+        fig, axes_disp = plt.subplots(1, 2, figsize=(14, 5))
+        plot_single(axes_disp[0], a_disp_by_chain, a_labels, alice_colors, "avg_xy", "Avg XY (m)", "Alice — Avg Goal Displacement XY")
+        plot_single(axes_disp[1], a_disp_by_chain, a_labels, alice_colors, "max_xy", "Max XY (m)", "Alice — Max Goal Displacement XY")
+        plt.tight_layout()
+        p = out_dir / "plot_alice_goal_displacement.png"
+        fig.savefig(p, dpi=150)
+        plt.close(fig)
+        print(f"[INFO] Saved {p}")
+
 
 
 def write_summary_txt(chain_idx: int, chain: list[int], a_c: list[dict], b_c: list[dict], out_dir: Path):
@@ -541,7 +638,8 @@ def write_summary_txt(chain_idx: int, chain: list[int], a_c: list[dict], b_c: li
                 bob_str = "[Bob]   —"
             f.write(
                 f"  Iter {g:5d} | "
-                f"[Alice] Loss={ar['loss']:+.4f}  Val={ar['val']:.4f}  Rew={ar['rew']:.4f}{ent_str}  || "
+                f"[Alice] Loss={ar['loss']:+.4f}  Val={ar['val']:.4f}  Rew={ar['rew']:.4f}  "
+                f"Valid={ar.get('valid_goals', 0)}  Invalid={ar.get('invalid_goals', 0)}{ent_str}  || "
                 f"{bob_str}\n"
             )
         # Any Bob-only iters (when Bob counter > Alice)
@@ -656,9 +754,6 @@ def main():
         write_summary_txt(i, ch, a_c, b_c, chain_dir)
         plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})")
 
-    # Overall overview across all chains
-    print(f"[INFO] Generating overall overview in {out_dir} ...")
-    plot_metrics(alice_records, bob_records, out_dir, title_suffix=" (Overview)")
     write_csv(alice_records, bob_records, out_dir)
     print("[INFO] Done.")
 

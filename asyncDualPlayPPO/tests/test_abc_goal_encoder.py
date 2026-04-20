@@ -448,6 +448,124 @@ def main():
         achieved = tgt_dist < thr and cube_dist < thr
         return achieved, tgt_dist, cube_dist
 
+    def _verify_encoder_semantics(n_episodes: int = 3) -> bool:
+        """Check that the GoalEncoder embedding norm tracks physical goal distance.
+
+        The difference encoder produces g = φ(goal) − φ(current), so ||g|| must
+        decrease monotonically as Bob approaches the goal.  Pearson
+        corr(||g||, pos_dist) should therefore be strictly positive after training.
+
+        A scrambled encoder (e.g. wrong obs slices fed to _encode_obs) produces
+        a g that is noise with respect to physical distance → corr ≈ 0.
+
+        Two sub-checks:
+          1. corr > CORR_THRESHOLD  — encoder tracks distance (not noise)
+          2. g_std  > COLLAPSE_THRESHOLD — encoder not collapsed to constant vector
+
+        pos_dist is read directly from the obs tensor (goal_distance term stored at
+        the interleaved d1/d2 slots) so no extra physics calls are needed.
+
+        Interleaved layout (post-fix, 2 objects):
+          [robot(7) | s1(14) | g1(6) | d1(2) | s2(14) | g2(6) | d2(2)]
+          d1 starts at 7+14+6=27, d2 starts at 27+22=49.
+        """
+        import numpy as np
+
+        CORR_THRESHOLD = 0.30
+        COLLAPSE_THRESHOLD = 0.01
+
+        # Pre-compute obs slot indices from stored encoder config.
+        _r  = ac._ge_robot_dim        # 7
+        _s  = ac._ge_obj_state_dim    # 14
+        _g  = ac._ge_goal_dim         # 6
+        _d  = ac._ge_dist_dim         # 2
+        _ch = ac._ge_raw_per_obj      # 22
+        d1_idx = _r + _s + _g        # 27: pos_dist slot for object 0 in obs
+        d2_idx = d1_idx + _ch        # 49: pos_dist slot for object 1 in obs
+
+        print(
+            f"\n  [EncoderCheck] Verifying GoalEncoder semantics "
+            f"over {n_episodes} episodes..."
+        )
+
+        g_norms_all: list = []
+        pos_dists_all: list = []
+
+        for _ in range(n_episodes):
+            obs_dict_c, _ = base_env.reset()
+            bob_obs_c = obs_dict_c["bob_policy"]
+            bob_gripper_c = torch.ones(1, 1, device=device)
+            h_c = torch.zeros(1, ac.lstm_hidden_size, device=device)
+            c_c = torch.zeros(1, ac.lstm_hidden_size, device=device)
+
+            for t in range(N):
+                obs_t = bob_obs_c[1:2]  # Bob's obs, env 1
+
+                with torch.no_grad():
+                    # ── Goal embedding ──────────────────────────────────────
+                    # Use the same slicing that _encode_obs uses so the check
+                    # exercises exactly the path that runs during training.
+                    obj_section = obs_t[:, _r:]
+                    obj_chunks  = obj_section.view(1, ac._ge_num_objects, _ch)
+                    goal_poses_t    = obj_chunks[:, :, _s : _s + _g]  # (1,N,6)
+                    current_poses_t = obj_chunks[:, :, :_g]           # (1,N,6)
+                    g = ac.goal_encoder(
+                        goal_poses_t.reshape(1, -1),
+                        current_poses_t.reshape(1, -1),
+                    )
+                    g_norms_all.append(g.norm(dim=-1).item())
+
+                    # ── Physical pos_dist (from obs, no physics readback) ───
+                    # Take the worst-case distance across both objects.
+                    pos_d1 = obs_t[0, d1_idx].item()
+                    pos_d2 = obs_t[0, d2_idx].item()
+                    pos_dists_all.append(max(pos_d1, pos_d2))
+
+                    # Step with the converged policy
+                    bob_bins_c, _, _, _, _, (h_c, c_c) = ac.act_with_hidden(
+                        obs_t, None, (h_c, c_c)
+                    )
+                    bob_act_c, bob_gripper_c = bins_to_env_action(
+                        bob_bins_c, bob_gripper_c
+                    )
+
+                alice_act_c = alice_env_actions[t].unsqueeze(0)
+                combined_c  = torch.cat([alice_act_c, bob_act_c], dim=0)
+                obs_dict_c, _, term_c, trunc_c, _ = base_env.step(combined_c)
+                bob_obs_c = obs_dict_c["bob_policy"]
+
+                if (term_c | trunc_c).any():
+                    obs_dict_c, _ = base_env.reset()
+                    bob_obs_c = obs_dict_c["bob_policy"]
+                    break
+
+        if len(g_norms_all) < 10:
+            print("  [EncoderCheck] Too few steps collected — SKIP")
+            return False
+
+        g_arr = np.array(g_norms_all)
+        d_arr = np.array(pos_dists_all)
+        corr      = float(np.corrcoef(g_arr, d_arr)[0, 1]) if g_arr.std() > 1e-6 else 0.0
+        g_std     = g_arr.std()
+        g_mean    = g_arr.mean()
+
+        corr_ok       = corr  > CORR_THRESHOLD
+        not_collapsed = g_std > COLLAPSE_THRESHOLD
+
+        print(
+            f"  [EncoderCheck] ||g||: mean={g_mean:.4f}  std={g_std:.4f}  "
+            f"pos_dist: mean={d_arr.mean():.4f}  std={d_arr.std():.4f}"
+        )
+        print(
+            f"  [EncoderCheck] Pearson corr(||g||, pos_dist) = {corr:+.4f}  "
+            f"(need > {CORR_THRESHOLD})  →  {'PASS ✓' if corr_ok else 'FAIL ✗'}"
+        )
+        print(
+            f"  [EncoderCheck] g_norm non-collapsed (std > {COLLAPSE_THRESHOLD})  "
+            f"→  {'PASS ✓' if not_collapsed else 'FAIL ✗'}"
+        )
+        return corr_ok and not_collapsed
+
     # ── Video recorder (always created — used for goal-achievement recording) ──
     video_dir = os.path.join(script_dir, "videos")
     e0 = base_env.scene.env_origins[0].cpu().tolist()
@@ -789,6 +907,20 @@ def main():
     print(f"    Avg tgt dist : {avg_tgt:.4f} m")
     print(f"    Avg cube dist: {avg_cube:.4f} m")
     print(f"{'=' * 70}")
+
+    # ── GoalEncoder semantics check ───────────────────────────────
+    # Runs 3 post-convergence episodes and verifies that the encoder's
+    # embedding norm correlates positively with physical goal distance.
+    # This catches the class of bug where _encode_obs receives the wrong
+    # obs layout (e.g. grouped instead of interleaved), causing g to be
+    # noise even when NLL and success rate look fine.
+    encoder_semantics_ok = _verify_encoder_semantics(n_episodes=3)
+    if not encoder_semantics_ok:
+        print(
+            "\n  [EncoderCheck] WARNING: GoalEncoder semantics FAILED.\n"
+            "  The encoder embedding does not track physical goal distance.\n"
+            "  Likely cause: obs layout mismatch in _encode_obs (grouped vs interleaved)."
+        )
 
     # ── Record the post-eval episode ──────────────────────────────
     print(f"\n  Recording {'converged' if converged else 'final'} episode...")

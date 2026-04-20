@@ -1,0 +1,39 @@
+=== TRAINING UPDATES SUMMARY (Chain 2) ===
+
+Jobs in chain: 28550199 → 28551075 → 28552321
+
+  Iter   220 | [Alice] Loss=+0.7059  Val=1.8000  Rew=5.3804  Valid=2736  Invalid=253  Ent=0.1480  || [Bob]   Loss=+0.0162  Val=0.1484  Rew=0.0000  ABC=-1.0947  SR=0.1175
+  Iter   221 | [Alice] Loss=+0.4411  Val=1.4041  Rew=5.3397  Valid=2709  Invalid=196  Ent=0.1474  || [Bob]   Loss=+0.0053  Val=0.1481  Rew=0.0000  ABC=-1.0993  SR=0.1118
+  Iter   222 | [Alice] Loss=+0.2902  Val=1.0720  Rew=5.2628  Valid=2609  Invalid=488  Ent=0.1468  || [Bob]   Loss=+0.0008  Val=0.1492  Rew=0.0000  ABC=-1.0917  SR=0.1178
+  Iter   223 | [Alice] Loss=+0.1881  Val=0.8824  Rew=5.0345  Valid=2564  Invalid=601  Ent=0.1462  || [Bob]   Loss=+0.0100  Val=0.1645  Rew=0.0000  ABC=-1.0780  SR=0.1389
+  Iter   224 | [Alice] Loss=+0.1548  Val=0.7718  Rew=4.9153  Valid=2544  Invalid=624  Ent=0.1455  || [Bob]   Loss=+0.0096  Val=0.1494  Rew=0.0000  ABC=-1.1112  SR=0.1339
+  Iter   225 | [Alice] Loss=+0.0841  Val=0.6836  Rew=4.7565  Valid=2421  Invalid=856  Ent=0.1449  || [Bob]   Loss=+0.0119  Val=0.1680  Rew=0.0000  ABC=-1.0705  SR=0.1446
+  Iter   226 | [Alice] Loss=+0.0810  Val=0.6149  Rew=4.7166  Valid=2376  Invalid=1019  Ent=0.1443  || [Bob]   Loss=+0.0065  Val=0.1580  Rew=0.0000  ABC=-1.0750  SR=0.1391
+  Iter   227 | [Alice] Loss=+0.0670  Val=0.5791  Rew=4.8545  Valid=2239  Invalid=1213  Ent=0.1438  || [Bob]   Loss=+0.0066  Val=0.1563  Rew=0.0000  ABC=-1.0886  SR=0.1316
+  Iter   228 | [Alice] Loss=+0.0714  Val=0.5142  Rew=4.7292  Valid=2175  Invalid=1462  Ent=0.1432  || [Bob]   Loss=+0.0079  Val=0.1670  Rew=0.0000  ABC=-1.0834  SR=0.1470
+  Iter   229 | [Alice] Loss=+0.0388  Val=0.4259  Rew=4.7135  Valid=1862  Invalid=2192  Ent=0.1426  || [Bob]   Loss=+0.0099  Val=0.1673  Rew=0.0000  ABC=-1.0889  SR=0.1328
+  Iter   230 | [Alice] Loss=+0.0649  Val=0.3659  Rew=4.3857  Valid=1953  Invalid=2284  Ent=0.1420  || [Bob]   Loss=+0.0065  Val=0.1974  Rew=0.0000  ABC=-1.0804  SR=0.1765
+  Iter   231 | [Alice] Loss=+0.0690  Val=0.4271  Rew=4.5913  Valid=2034  Invalid=1960  Ent=0.1415  || [Bob]   Loss=+0.0074  Val=0.1828  Rew=0.0000  ABC=-1.0898  SR=0.1620
+  Iter   232 | [Alice] Loss=+0.0722  Val=0.4166  Rew=4.5104  Valid=2098  Invalid=1875  Ent=0.1409  || [Bob]   Loss=+0.0112  Val=0.2005  Rew=0.0000  ABC=-1.0749  SR=0.1645
+  Iter   233 | [Alice] Loss=+0.0636  Val=0.3930  Rew=4.5119  Valid=2103  Invalid=1854  Ent=0.1404  || [Bob]   Loss=+0.0086  Val=0.1867  Rew=0.0000  ABC=-1.0896  SR=0.1626
+  Iter   234 | [Alice] Loss=+0.0745  Val=0.4272  Rew=4.4669  Valid=2172  Invalid=1617  Ent=0.1399  || [Bob]   Loss=+0.0098  Val=0.1931  Rew=0.0000  ABC=-1.0908  SR=0.1634
+  Iter   235 | [Alice] Loss=+0.0760  Val=0.4387  Rew=4.4569  Valid=2145  Invalid=1607  Ent=0.1393  || [Bob]   Loss=+0.0118  Val=0.1967  Rew=0.0000  ABC=-1.0696  SR=0.1653
+  Iter   236 | [Alice] Loss=+0.0542  Val=0.4529  Rew=4.5522  Valid=2154  Invalid=1580  Ent=0.1388  || [Bob]   Loss=+0.0154  Val=0.1927  Rew=0.0000  ABC=-1.0611  SR=0.1609
+  Iter   237 | [Alice] Loss=+0.0665  Val=0.4767  Rew=4.6247  Valid=0  Invalid=0  Ent=0.1383  || [Bob]   Loss=+0.0112  Val=0.1845  Rew=0.0000  ABC=-1.0643  SR=0.0000
+  Iter   240 | [Alice] Loss=+0.2658  Val=0.8392  Rew=4.8968  Valid=2510  Invalid=1678  Ent=0.1368  || [Bob]   Loss=+0.0142  Val=0.3168  Rew=0.0000  ABC=-1.0081  SR=0.2192
+  Iter   241 | [Alice] Loss=+0.0833  Val=0.4272  Rew=4.7685  Valid=1963  Invalid=2431  Ent=0.1363  || [Bob]   Loss=+0.0167  Val=0.2115  Rew=0.0000  ABC=-1.0345  SR=0.1615
+  Iter   242 | [Alice] Loss=+0.0356  Val=0.3637  Rew=4.7128  Valid=1782  Invalid=2539  Ent=0.1358  || [Bob]   Loss=+0.0113  Val=0.1930  Rew=0.0000  ABC=-1.0463  SR=0.1552
+  Iter   243 | [Alice] Loss=+0.0593  Val=0.4310  Rew=4.8263  Valid=1945  Invalid=2189  Ent=0.1354  || [Bob]   Loss=+0.0048  Val=0.1935  Rew=0.0000  ABC=-1.0661  SR=0.1500
+  Iter   244 | [Alice] Loss=+0.0587  Val=0.4407  Rew=4.6679  Valid=2068  Invalid=1881  Ent=0.1349  || [Bob]   Loss=+0.0043  Val=0.1955  Rew=0.0000  ABC=-1.0656  SR=0.1613
+  Iter   245 | [Alice] Loss=+0.0520  Val=0.4367  Rew=4.7176  Valid=2064  Invalid=1841  Ent=0.1344  || [Bob]   Loss=+0.0041  Val=0.1976  Rew=0.0000  ABC=-1.0765  SR=0.1570
+  Iter   246 | [Alice] Loss=+0.0496  Val=0.4108  Rew=4.5895  Valid=2049  Invalid=1885  Ent=0.1340  || [Bob]   Loss=+0.0051  Val=0.2101  Rew=0.0000  ABC=-1.0708  SR=0.1640
+  Iter   247 | [Alice] Loss=+0.0515  Val=0.4340  Rew=4.7880  Valid=1966  Invalid=1934  Ent=0.1335  || [Bob]   Loss=+0.0053  Val=0.1785  Rew=0.0000  ABC=-1.0597  SR=0.1471
+  Iter   248 | [Alice] Loss=+0.0600  Val=0.4253  Rew=4.7177  Valid=2014  Invalid=1962  Ent=0.1331  || [Bob]   Loss=+0.0040  Val=0.1799  Rew=0.0000  ABC=-1.0877  SR=0.1419
+  Iter   249 | [Alice] Loss=+0.0459  Val=0.4077  Rew=4.8311  Valid=1953  Invalid=2054  Ent=0.1326  || [Bob]   Loss=+0.0043  Val=0.1691  Rew=0.0000  ABC=-1.0653  SR=0.1376
+  Iter   250 | [Alice] Loss=+0.0485  Val=0.3987  Rew=4.7747  Valid=1891  Invalid=2177  Ent=0.1322  || [Bob]   Loss=+0.0045  Val=0.1792  Rew=0.0000  ABC=-1.0726  SR=0.1444
+  Iter   251 | [Alice] Loss=+0.0502  Val=0.3623  Rew=4.7730  Valid=1907  Invalid=2267  Ent=0.1322  || [Bob]   Loss=+0.0065  Val=0.1795  Rew=0.0000  ABC=-1.0700  SR=0.1404
+  Iter   252 | [Alice] Loss=+0.0470  Val=0.3488  Rew=4.5934  Valid=1947  Invalid=2248  Ent=0.1322  || [Bob]   Loss=+0.0145  Val=0.1898  Rew=0.0000  ABC=-1.0555  SR=0.1587
+  Iter   253 | [Alice] Loss=+0.0474  Val=0.3869  Rew=4.7497  Valid=1937  Invalid=2107  Ent=0.1322  || [Bob]   Loss=+0.0072  Val=0.1754  Rew=0.0000  ABC=-1.0764  SR=0.1408
+  Iter   254 | [Alice] Loss=+0.0444  Val=0.3607  Rew=4.4075  Valid=1967  Invalid=2165  Ent=0.1322  || [Bob]   Loss=+0.0072  Val=0.2259  Rew=0.0000  ABC=-1.0781  SR=0.1673
+  Iter   255 | [Alice] Loss=+0.0468  Val=0.3791  Rew=4.5545  Valid=1986  Invalid=2161  Ent=0.1322  || [Bob]   Loss=+0.0076  Val=0.2057  Rew=0.0000  ABC=-1.0709  SR=0.1639
+  Iter   256 | [Alice] Loss=+0.0455  Val=0.4211  Rew=4.7173  Valid=1999  Invalid=1950  Ent=0.1322  || [Bob]   Loss=+0.0090  Val=0.1881  Rew=0.0000  ABC=-1.0689  SR=0.1506

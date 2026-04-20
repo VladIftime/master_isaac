@@ -89,6 +89,10 @@ class AsyncDualPlayObservationsCfg:
                 "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
+        # Interleaved per-object layout: [s1(14)|g1(6)|d1(2)|s2(14)|g2(6)|d2(2)]
+        # This matches the reshape in _encode_obs (module.py) which does
+        # obj_section.view(batch, num_objects, 22) expecting contiguous per-object chunks.
+        # construct_bob_observation (wrapper.py) also produces this layout for the ABC buffer.
         object_state = ObsTerm(
             func=observations.object_states,
             params={
@@ -96,6 +100,14 @@ class AsyncDualPlayObservationsCfg:
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
                 "contact_cfg": SceneEntityCfg("contact_forces"),
             },
+        )
+        goal_state = ObsTerm(
+            func=observations.goal_states,
+            params={"object_cfg": SceneEntityCfg("target_object")},
+        )
+        goal_distance = ObsTerm(
+            func=observations.goal_distance,
+            params={"object_cfg": SceneEntityCfg("target_object")},
         )
         cube_state = ObsTerm(
             func=observations.object_states,
@@ -105,17 +117,9 @@ class AsyncDualPlayObservationsCfg:
                 "contact_cfg": SceneEntityCfg("contact_forces"),
             },
         )
-        goal_state = ObsTerm(
-            func=observations.goal_states,
-            params={"object_cfg": SceneEntityCfg("target_object")},
-        )
         cube_goal_state = ObsTerm(
             func=observations.goal_states,
             params={"object_cfg": SceneEntityCfg("cube")},
-        )
-        goal_distance = ObsTerm(
-            func=observations.goal_distance,
-            params={"object_cfg": SceneEntityCfg("target_object")},
         )
         cube_goal_distance = ObsTerm(
             func=observations.goal_distance,

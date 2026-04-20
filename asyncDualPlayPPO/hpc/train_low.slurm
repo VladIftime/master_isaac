@@ -1,17 +1,17 @@
 #!/bin/bash
-#SBATCH --job-name=asp_test
-#SBATCH --time=00:10:00
+#SBATCH --job-name=asp_low
+#SBATCH --time=05:00:00
 #SBATCH --partition=gpu
-#SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs
+#SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 192 GB node RAM / 8 GPUs = 24 GB/slot
 #SBATCH --cpus-per-task=16
-#SBATCH --mem-per-cpu=16G
-#SBATCH --output=slurm-%j-test.out
+#SBATCH --mem=24G
+#SBATCH --output=slurm-%j-low.out
 #SBATCH --signal=B:USR1@120
 WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=128
+NUM_ENVS=2560
 NSTEPS=256
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10

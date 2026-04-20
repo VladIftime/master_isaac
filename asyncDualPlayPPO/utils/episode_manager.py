@@ -140,15 +140,6 @@ class EpisodeManager:
 
     def transition_to_bob(self, env_ids: torch.Tensor):
         """Transition specified environments from Alice to Bob phase"""
-        # Log Alice's completion stats
-        for env_id in env_ids:
-            steps = self.phase_step[env_id].item()
-            goal_num = self.goal_count[env_id].item() + 1
-            print(
-                f"[Phase] Env {env_id.item()}: Alice→Bob | Goal {goal_num}/5 | Alice completed {steps}/{self.alice_timesteps} steps",
-                flush=True,
-            )
-
         self.current_phase[env_ids] = Phase.BOB.value
         self.phase_step[env_ids] = 0
         self.goal_count[env_ids] += 1
@@ -160,43 +151,11 @@ class EpisodeManager:
 
     def transition_to_alice(self, env_ids: torch.Tensor):
         """Transition specified environments from Bob to Alice phase (for next goal)"""
-        # Log Bob's completion stats — capped at 3 per call
-        for _log_i, env_id in enumerate(env_ids):
-            if _log_i >= 3:
-                break
-            steps = self.phase_step[env_id].item()
-            goal_num = self.goal_count[env_id].item()
-            success = self.bob_success[env_id].item()
-            status = "SUCCESS" if success else "FAILURE"
-            print(
-                f"[Phase] Env {env_id.item()}: Bob→Alice | Goal {goal_num}/5 {status} | Bob used {steps}/{self.bob_timesteps} steps",
-                flush=True,
-            )
-
         self.current_phase[env_ids] = Phase.ALICE.value
         self.phase_step[env_ids] = 0
 
     def reset_episode(self, env_ids: torch.Tensor, reason: str = "Unknown"):
         """Reset specified environments to start of episode"""
-        # Log detailed reset info — capped at 3 per call to avoid log spam at scale
-        for _log_i, env_id in enumerate(env_ids):
-            if _log_i >= 3:
-                break
-            phase_name = (
-                "Alice"
-                if self.current_phase[env_id].item() == Phase.ALICE.value
-                else "Bob"
-            )
-            steps = self.phase_step[env_id].item()
-            goals = self.goal_count[env_id].item()
-            max_steps = (
-                self.alice_timesteps if phase_name == "Alice" else self.bob_timesteps
-            )
-            print(
-                f"[Reset] Env {env_id.item()}: {phase_name} phase @ step {steps}/{max_steps} | Goals: {goals}/5 | Reason: {reason}",
-                flush=True,
-            )
-
         self.current_phase[env_ids] = Phase.ALICE.value
         self.phase_step[env_ids] = 0
         self.goal_count[env_ids] = 0

@@ -383,6 +383,7 @@ class AsyncDualPlayEnvWrapper:
             any_reset = True
 
         if any_reset:
+            self.env.scene.write_data_to_sim()
             obs_dict = self.env.observation_manager.compute()
 
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
@@ -423,6 +424,7 @@ class AsyncDualPlayEnvWrapper:
             any_reset = True
 
         if any_reset:
+            self.env.scene.write_data_to_sim()
             obs_dict = self.env.observation_manager.compute()
             current_obs = self._get_current_observations(obs_dict)
 
@@ -516,26 +518,15 @@ class AsyncDualPlayEnvWrapper:
         val_reward = val_reward.clone()
         val_reward[xy_fail] = 0.0
         valid = valid & sufficient_xy
-        for i in range(len(env_ids)):
-            if xy_fail[i].item():
-                reasons[i] = "XY Disp Too Small (0.0)"
 
         self.delayed_alice_reward[env_ids] = val_reward
 
-        # 3. Per-env phase-end log + aggregate stats.
+        # 3. Aggregate stats (skip per-env debug prints to prevent CPU-GPU stall on HPC)
         start_pos = active_initial[:, 0:3]
         final_pos = active_goal[:, 0:3]
         dist_3d = torch.norm(final_pos - start_pos, dim=-1)
         dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
-        for i, env_id in enumerate(env_ids):
-            dense_acc = self._alice_dense_accum[env_id].item()
-            outcome   = "valid" if valid[i].item() else f"invalid ({reasons[i]})"
-            print(
-                f"  [AliceEnd] Env {env_id.item():>2}: "
-                f"dense={dense_acc:.3f} | outcome={outcome} {val_reward[i].item():+.1f} | "
-                f"XY={dist_xy[i]:.3f}m",
-                flush=True,
-            )
+        
         self._alice_dense_accum[env_ids] = 0.0
         self._alice_phase_initialized[env_ids] = False
 
@@ -589,7 +580,6 @@ class AsyncDualPlayEnvWrapper:
                 )
 
             reset_robot_joints(self.env, valid_env_ids)
-            self.env.scene.write_data_to_sim()
 
         # 6. Handle Invalid
         invalid_env_ids = env_ids[~successful_goal]
@@ -604,7 +594,6 @@ class AsyncDualPlayEnvWrapper:
                 .expand(len(invalid_env_ids), -1)
                 .clone()
             )
-            self.env.scene.write_data_to_sim()
 
         return valid, invalid_env_ids
 
@@ -673,8 +662,6 @@ class AsyncDualPlayEnvWrapper:
             )
 
         # Commit all physics writes so the next observation read reflects the reset.
-        self.env.scene.write_data_to_sim()
-
         return success, pos_err, rot_err
 
     def _handle_bob_success_transition(self, env_ids: torch.Tensor):
@@ -714,8 +701,6 @@ class AsyncDualPlayEnvWrapper:
             )
 
         # Commit all physics writes so the next observation read reflects the reset.
-        self.env.scene.write_data_to_sim()
-
     def _check_bob_success(self, obs_dict: Dict, env_ids: torch.Tensor) -> torch.Tensor:
         """Check if Bob successfully reached the goal.
 
@@ -1105,53 +1090,7 @@ class AsyncDualPlayEnvWrapper:
 
         rewards = step_rewards + completion_bonus + self.shaping_coef * shaping
 
-        # Per-env reward event logging — print every non-zero Bob reward
-        env_origins = self.env.scene.env_origins
-        for env_id in torch.where(rewards != 0)[0]:
-            eid = env_id.item()
-            if not is_bob_phase[eid].item():
-                continue
-            step = bob_phase_steps[eid].item()
-            rew = rewards[eid].item()
-            if abs(rew) < 0.5:
-                continue
-            if should_give_completion[eid]:
-                t_curr_l = (
-                    self.env.scene["target_object"].data.root_pos_w[eid]
-                    - env_origins[eid]
-                ).tolist()
-                t_goal = self.episode_manager.goal_states[eid, 0:3].tolist()
-                msg = (
-                    f"  [BobRew] Env {eid} step={step}: {rew:+.0f} COMPLETION | "
-                    f"target dist={pos_dists[eid,0]:.3f} "
-                    f"(curr={[round(x,3) for x in t_curr_l]} goal={[round(x,3) for x in t_goal]})"
-                )
-                if self.num_objects == 2:
-                    c_curr_l = (
-                        self.env.scene["cube"].data.root_pos_w[eid] - env_origins[eid]
-                    ).tolist()
-                    c_goal = self.episode_manager.goal_states[eid, 6:9].tolist()
-                    msg += (
-                        f" | cube dist={pos_dists[eid,1]:.3f} "
-                        f"(curr={[round(x,3) for x in c_curr_l]} goal={[round(x,3) for x in c_goal]})"
-                    )
-                print(msg, flush=True)
-            else:
-                parts = []
-                for obj_idx, obj_name in enumerate(_OBJ_NAMES):
-                    d = delta[eid, obj_idx].item()
-                    if d > 0:
-                        parts.append(
-                            f"+1 {obj_name} at goal (dist={pos_dists[eid,obj_idx]:.3f}m)"
-                        )
-                    elif d < 0:
-                        parts.append(
-                            f"-1 {obj_name} left goal (dist={pos_dists[eid,obj_idx]:.3f}m)"
-                        )
-                print(
-                    f"  [BobRew] Env {eid} step={step}: {rew:+.0f} | {' | '.join(parts)}",
-                    flush=True,
-                )
+        # Skip per-env reward event logging to prevent CPU-GPU stall on HPC
 
         # Update prev_obj_success only for Bob-phase envs to avoid Alice-phase
         # envs carrying stale success state into their first Bob step.

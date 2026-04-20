@@ -385,8 +385,10 @@ class ActorCritic(nn.Module):
             batch = observations.shape[0]
             robot = observations[:, : self._ge_robot_dim]
 
-            # Extract per-object chunks from flat obs
-            # Bob obs: [robot(8) | obj1(15)+goal1(7)+dist1(2) | obj2(15)+goal2(7)+dist2(2)]
+            # Extract per-object chunks from flat obs.
+            # Bob obs INTERLEAVED layout: [robot(7) | s1(14)+g1(6)+d1(2) | s2(14)+g2(6)+d2(2)]
+            # Both the live obs (async_dual_play.py BobPolicyCfg) and the ABC buffer
+            # (construct_bob_observation) produce this layout, so the reshape is safe.
             obj_section = observations[:, self._ge_robot_dim :]
             obj_chunks = obj_section.view(
                 batch, self._ge_num_objects, self._ge_raw_per_obj

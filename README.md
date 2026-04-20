@@ -65,7 +65,7 @@ Alice (PPO):
     Role: explore and construct interesting goal configurations
 
 Bob (PPO + ABC + Goal Encoder):
-    Obs (interleaved): Robot(7) + [obj_state(14) + goal(6) + dist(2)] × 2 = 51D
+    Obs (interleaved per-object): Robot(7) + [obj_state(14) + goal(6) + dist(2)] × 2 = 51D
     Goal encoder:      E(goal_state, current_state) → g ∈ ℝ^K
     Acts: same action space as Alice
     Role: reproduce the goal Alice left behind
@@ -93,7 +93,7 @@ Episode Manager:
 | ZYX Euler angles | Matches OpenAI paper Appendix A.2; avoids quaternion discontinuities in policy input |
 | 12D goal state (pos+euler × 2 objects) | Compact; no velocities needed for goal definition |
 | 51D Bob obs (interleaved) | Object state + goal + distance interleaved per-object; easier for encoder to associate |
-| Alice entropy 1.0 → 0.01 over 100 iters | Annealed faster than paper (1856 envs → smaller batch) |
+| Alice entropy 1.0 → 0.10 over min(max_iters, 250) iters | Floor raised to 0.10 so Alice retains late-stage exploration; denominator clamped at 250 so annealing always completes |
 | ABC filter: Bob-failure only | Follows paper §3.3; avoids cloning trivial successes |
 | Historical pool 20% | Paper ratio; pool holds last 5 snapshots (max_size=5 in HistoricalPolicyPool) |
 | Success threshold 0.05 m (pos), ~2° (rot) | 0.04 m from paper; relaxed to 0.05 m in wrapper |
