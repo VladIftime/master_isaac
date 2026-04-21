@@ -118,17 +118,21 @@ class TrainingProfiler:
 
     # ------------------------------------------------------------------
     def _print_iter_table(self, iteration: int, wall: float):
+        # (display_label, lookup_key) — indented labels are sub-sections of env_step
         _SECTIONS = [
-            "obs_compute",
-            "alice_act",
-            "bob_act",
-            "env_step",
-            "alice_store",
-            "bob_store",
-            "reward_backfill",
-            "abc_buffer",
-            "alice_update",
-            "bob_update",
+            ("obs_compute",       "obs_compute"),
+            ("alice_act",         "alice_act"),
+            ("bob_act",           "bob_act"),
+            ("env_step",          "env_step"),
+            ("  isaac_step",      "isaac_step"),
+            ("  wrapper_reset",   "wrapper_reset"),
+            ("  wrapper_rewards", "wrapper_rewards"),
+            ("alice_store",       "alice_store"),
+            ("bob_store",         "bob_store"),
+            ("reward_backfill",   "reward_backfill"),
+            ("abc_buffer",        "abc_buffer"),
+            ("alice_update",      "alice_update"),
+            ("bob_update",        "bob_update"),
         ]
         print(f"\n{'='*65}")
         print(f"  PROFILER  iter={iteration}   wall={wall:.1f}s")
@@ -136,13 +140,14 @@ class TrainingProfiler:
         print(f"  {'-'*62}")
 
         accounted = 0.0
-        for name in _SECTIONS:
-            t = self._iter_totals.get(name, 0.0)
-            n = self._iter_calls.get(name, 0)
+        for label, key in _SECTIONS:
+            t = self._iter_totals.get(key, 0.0)
+            n = self._iter_calls.get(key, 0)
             pct = 100.0 * t / wall if wall > 0 else 0.0
             ms_per = 1000.0 * t / n if n > 0 else 0.0
-            accounted += t
-            print(f"  {name:<20} {t:>9.3f}  {pct:>6.1f}%  {n:>6}  {ms_per:>8.2f}")
+            if key not in ("isaac_step", "wrapper_reset", "wrapper_rewards"):
+                accounted += t
+            print(f"  {label:<20} {t:>9.3f}  {pct:>6.1f}%  {n:>6}  {ms_per:>8.2f}")
 
         unaccounted = wall - accounted
         pct_un = 100.0 * unaccounted / wall if wall > 0 else 0.0
@@ -160,16 +165,19 @@ class TrainingProfiler:
         avg_wall = statistics.mean(self._iter_wall)
 
         _SECTIONS = [
-            "obs_compute",
-            "alice_act",
-            "bob_act",
-            "env_step",
-            "alice_store",
-            "bob_store",
-            "reward_backfill",
-            "abc_buffer",
-            "alice_update",
-            "bob_update",
+            ("obs_compute",       "obs_compute"),
+            ("alice_act",         "alice_act"),
+            ("bob_act",           "bob_act"),
+            ("env_step",          "env_step"),
+            ("  isaac_step",      "isaac_step"),
+            ("  wrapper_reset",   "wrapper_reset"),
+            ("  wrapper_rewards", "wrapper_rewards"),
+            ("alice_store",       "alice_store"),
+            ("bob_store",         "bob_store"),
+            ("reward_backfill",   "reward_backfill"),
+            ("abc_buffer",        "abc_buffer"),
+            ("alice_update",      "alice_update"),
+            ("bob_update",        "bob_update"),
         ]
 
         print(f"\n{'='*70}")
@@ -177,14 +185,14 @@ class TrainingProfiler:
         print(f"  {'Section':<22} {'avg(s)':>8}  {'%wall':>7}  {'stddev(s)':>10}")
         print(f"  {'-'*65}")
 
-        for name in _SECTIONS:
-            hist = self._history.get(name, [])
+        for label, key in _SECTIONS:
+            hist = self._history.get(key, [])
             if not hist:
                 continue
             avg_t = statistics.mean(hist)
             std_t = statistics.stdev(hist) if len(hist) > 1 else 0.0
             pct = 100.0 * avg_t / avg_wall if avg_wall > 0 else 0.0
-            print(f"  {name:<22} {avg_t:>8.3f}  {pct:>6.1f}%  {std_t:>10.3f}")
+            print(f"  {label:<22} {avg_t:>8.3f}  {pct:>6.1f}%  {std_t:>10.3f}")
 
         print(f"{'='*70}\n")
         print("[PROFILER] Top recommendation: the largest % section is your bottleneck.")

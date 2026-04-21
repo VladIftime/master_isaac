@@ -360,7 +360,7 @@ class ActionsCfg:
             urdf_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/urdf/ur_robotics/ur5e/ur5e_robotiq_140.urdf",
             collision_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/lula_left.yaml",
             frame_name="wrist_3_link",
-            evaluations_per_frame=12.0,
+            evaluations_per_frame=1.0,
         ),
         articulation_prim_expr="/World/envs/env_.*/RobotUnified",
         scale=[0.8, 0.8, 0.8, 0.8, 0.8, 0.8],

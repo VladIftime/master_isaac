@@ -440,6 +440,10 @@ def main():
             num_objects=args.num_objects,
             shaping_gamma=ppo_cfg["params"]["learn"].get("gamma", 0.99),
             shaping_coef=ppo_cfg["params"]["learn"].get("shaping_coef", 1.0),
+            profiler=TrainingProfiler(
+                enabled=getattr(args, "profile", False),
+                device=str(base_env.device),
+            ),
         )
 
     # --- Agents ---
@@ -620,7 +624,8 @@ def main():
 
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
-    profiler = TrainingProfiler(enabled=getattr(args, "profile", False), device=env.device)
+    profiler = env._profiler if hasattr(env, "_profiler") and env._profiler is not None \
+        else TrainingProfiler(enabled=getattr(args, "profile", False), device=env.device)
 
     rollout_length = ppo_cfg["params"]["learn"]["nsteps"] * args.num_envs
     alice_rew_buf = deque(maxlen=rollout_length)

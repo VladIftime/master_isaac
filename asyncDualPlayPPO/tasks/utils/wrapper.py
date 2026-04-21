@@ -51,6 +51,7 @@ class AsyncDualPlayEnvWrapper:
         arm_config: str = "default",
         shaping_gamma: float = 0.99,
         shaping_coef: float = 1.0,
+        profiler=None,
     ):
         self.env = env
         self.device = device
@@ -60,6 +61,7 @@ class AsyncDualPlayEnvWrapper:
         # shaping_gamma must match PPO gamma for the theorem to hold exactly.
         self.shaping_gamma = shaping_gamma
         self.shaping_coef = shaping_coef
+        self._profiler = profiler
         # Stores pos_dists from the *previous* Bob step per env; None until Bob phase starts.
         self.prev_pos_dists: Optional[torch.Tensor] = None
 
@@ -257,67 +259,75 @@ class AsyncDualPlayEnvWrapper:
         # Now handled in reach_dual_arm_env_cfg.py via scale=(0.015, 0.05)
         scaled_action = action.clone()
 
+        _prof = self._profiler
+        _null = _prof is None
+
         # Step base environment
+        if not _null:
+            _prof.mark_start("isaac_step")
         obs_dict, rewards, terminated, truncated, extras = self.env.step(scaled_action)
+        if not _null:
+            _prof.mark_stop("isaac_step")
 
         # Capture phase state BEFORE any resets so reward/success logic sees the
         # correct phase even for envs that terminate this step.
         is_alice_before = self.episode_manager.is_alice_phase().clone()
         is_bob_before = self.episode_manager.is_bob_phase().clone()
 
-        # Sync EpisodeManager with Env Resets
+        # Sync EpisodeManager with Env Resets — fully vectorised, no per-env .item() calls.
+        if not _null:
+            _prof.mark_start("wrapper_reset")
         dones = terminated | truncated
         if dones.any():
             reset_ids = torch.where(dones)[0]
             is_alice = self.episode_manager.is_alice_phase()
 
-            # Build a reason string per env from the termination manager.
-            # IsaacLab stores _term_dones as (num_envs, num_conditions) bool tensor
-            # and condition names in _term_names list.
             tm = self.env.termination_manager
             term_dones = tm._term_dones  # (num_envs, num_conditions)
-            term_names = tm._term_names  # list[str]
+            term_names = tm._term_names
 
-            for env_id in reset_ids:
-                is_term = terminated[env_id].item()
+            is_term_vec = terminated[reset_ids]   # (num_reset,) bool
+            is_trunc_vec = ~is_term_vec
 
-                # Collect names of conditions that fired for this env.
-                fired = [
-                    term_names[i]
-                    for i in range(len(term_names))
-                    if term_dones[env_id, i].item()
-                ]
+            # Termination stats: count per condition with a single .item() each
+            if is_term_vec.any():
+                term_env_ids = reset_ids[is_term_vec]
+                fired_mat = term_dones[term_env_ids]  # (num_term, num_conditions)
+                for i, name in enumerate(term_names):
+                    cnt = int(fired_mat[:, i].sum().item())
+                    if cnt:
+                        self._iter_stats["terminations"][name] = (
+                            self._iter_stats["terminations"].get(name, 0) + cnt
+                        )
+                no_fired_cnt = int((~fired_mat.any(dim=1)).sum().item())
+                if no_fired_cnt:
+                    self._iter_stats["terminations"]["physics_termination"] = (
+                        self._iter_stats["terminations"].get("physics_termination", 0)
+                        + no_fired_cnt
+                    )
 
-                if fired:
-                    reason = " | ".join(fired)
-                elif is_term:
-                    reason = "physics_termination"
-                else:
-                    reason = "timeout"
-
-                # Accumulate termination counts for the iteration summary
-                self._iter_stats["terminations"][reason] = (
-                    self._iter_stats["terminations"].get(reason, 0) + 1
+            if is_trunc_vec.any():
+                self._iter_stats["terminations"]["timeout"] = (
+                    self._iter_stats["terminations"].get("timeout", 0)
+                    + int(is_trunc_vec.sum().item())
                 )
 
-                # Only penalize hard physics terminations (not timeouts)
-                if not is_term:
-                    self.episode_manager.reset_episode(
-                        env_id.unsqueeze(0), reason=reason
+            # Handle Alice early failures (vectorised)
+            alice_term_ids = reset_ids[is_term_vec & is_alice[reset_ids]]
+            if len(alice_term_ids) > 0:
+                if not hasattr(self, "_early_alice_failures"):
+                    self._early_alice_failures = torch.zeros(
+                        self.num_envs, dtype=torch.bool, device=self.device
                     )
-                    continue
+                self._early_alice_failures[alice_term_ids] = True
+                self.delayed_alice_reward[alice_term_ids] = -3.0
+                self._alice_dense_accum[alice_term_ids] = 0.0
+                self._alice_phase_initialized[alice_term_ids] = False
 
-                if is_alice[env_id]:
-                    if not hasattr(self, "_early_alice_failures"):
-                        self._early_alice_failures = torch.zeros(
-                            self.num_envs, dtype=torch.bool, device=self.device
-                        )
-                    self._early_alice_failures[env_id] = True
-                    self.delayed_alice_reward[env_id] = -3.0
-                    self._alice_dense_accum[env_id] = 0.0
-                    self._alice_phase_initialized[env_id] = False
-
-                self.episode_manager.reset_episode(env_id.unsqueeze(0), reason=reason)
+            # Batch reset — one call for all done envs
+            self.episode_manager.reset_episode(reset_ids)
+        if not _null:
+            _prof.mark_stop("wrapper_reset")
 
         # Advance episode manager
         phase_info = self.episode_manager.step()
@@ -387,9 +397,13 @@ class AsyncDualPlayEnvWrapper:
             obs_dict = self.env.observation_manager.compute()
 
         obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
+        if not _null:
+            _prof.mark_start("wrapper_rewards")
         current_rewards, bob_achieved_completion = self._get_current_rewards(
             obs_dict, rewards, is_alice_before, is_bob_before, action
         )
+        if not _null:
+            _prof.mark_stop("wrapper_rewards")
 
         # Handle Bob's EARLY SUCCESS
         if bob_achieved_completion.any():
