@@ -190,6 +190,13 @@ def main():
         "Expected: measured_dist ≈ 0.362 and validate_goal says 'Valid Goal'. "
         "measured_dist ≈ 0.000 means stale initial_states.",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable per-iteration timing profiler. Prints a breakdown table each "
+        "iteration showing which section (env_step, alice_act, abc_buffer, …) "
+        "dominates wall-clock time. Use with --max_iterations 3 for a quick audit.",
+    )
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -215,6 +222,7 @@ def main():
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
     from asyncDualPlayPPO.utils.historical_pool import HistoricalPolicyPool
+    from asyncDualPlayPPO.utils.profiler import TrainingProfiler
 
     # Import reward constants so train.py stays in sync with rewards.py.
     # Do not hardcode reward values here — change them in rewards.py instead.
@@ -612,6 +620,8 @@ def main():
 
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
 
+    profiler = TrainingProfiler(enabled=getattr(args, "profile", False), device=env.device)
+
     rollout_length = ppo_cfg["params"]["learn"]["nsteps"] * args.num_envs
     alice_rew_buf = deque(maxlen=rollout_length)
     bob_rew_buf = deque(maxlen=rollout_length)
@@ -793,6 +803,8 @@ def main():
 
     while bob_updates < args.max_iterations:
 
+        profiler.start_iteration()
+
         # --- 0. SETUP: reset per-iteration stats, LSTM hidden states, snapshot policies ---
         if hasattr(env, "reset_iter_stats"):
             env.reset_iter_stats()
@@ -846,8 +858,9 @@ def main():
 
         iter_sr_counts = [0, 0]  # [attempted, succeeded]
 
-        obs_dict = env.env.observation_manager.compute()
-        obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
+        with profiler.section("obs_compute"):
+            obs_dict = env.env.observation_manager.compute()
+            obs = torch.cat([obs_dict["alice_policy"], obs_dict["bob_policy"]], dim=-1)
         current_alice_obs = obs[:, : env.alice_obs_dim]
         current_bob_obs = obs[:, env.alice_obs_dim :]
 
@@ -874,6 +887,7 @@ def main():
             # -----------------------------------------------------------------
             # COMPUTE ALICE ACTIONS
             # -----------------------------------------------------------------
+            profiler.mark_start("alice_act")
             a_acts_active = torch.zeros((len(alice_indices), _a_pdim), device=env.device)
             a_logprob_active = torch.zeros(len(alice_indices), device=env.device)
             a_val_active = torch.zeros(len(alice_indices), 1, device=env.device)
@@ -912,9 +926,11 @@ def main():
                     a_mu_active[hist_local] = a_mu_hist
                     a_sigma_active[hist_local] = a_sigma_hist
 
+            profiler.mark_stop("alice_act")
             # -----------------------------------------------------------------
             # COMPUTE BOB ACTIONS
             # -----------------------------------------------------------------
+            profiler.mark_start("bob_act")
             b_acts_active = torch.zeros((len(bob_indices), _b_pdim), device=env.device)
             b_logprob_active = torch.zeros(len(bob_indices), device=env.device)
             b_val_active = torch.zeros(len(bob_indices), 1, device=env.device)
@@ -953,6 +969,7 @@ def main():
                     b_mu_active[hist_bloc] = b_mu_hist
                     b_sigma_active[hist_bloc] = b_sig_hist
 
+            profiler.mark_stop("bob_act")
             # -----------------------------------------------------------------
             # COMBINE ACTIONS & STEP ENVIRONMENT
             # -----------------------------------------------------------------
@@ -989,7 +1006,8 @@ def main():
             else:
                 env_full = a_policy + b_policy  # Masks are disjoint
 
-            obs_full, rewards, dones, truncated, extras = env.step(env_full)
+            with profiler.section("env_step"):
+                obs_full, rewards, dones, truncated, extras = env.step(env_full)
 
             # Log Bob's per-step rewards (sparse + shaping) for the Rew column in CSV
             if len(bob_indices) > 0:
@@ -1026,18 +1044,19 @@ def main():
             a_masks[alice_indices[~dones[alice_indices]]] = 1.0
 
             next_alice_obs = obs_full[:, : env.alice_obs_dim]
-            alice_ppo.storage.add_transitions(
-                current_alice_obs,
-                next_alice_obs,
-                a_policy,
-                rewards,  # per-step: base penalties + dense shaping; terminal outcome backfilled later
-                dones,
-                a_val_full,
-                a_lp_full,
-                a_mu_full,
-                a_sigma_full,
-                a_masks,
-            )
+            with profiler.section("alice_store"):
+                alice_ppo.storage.add_transitions(
+                    current_alice_obs,
+                    next_alice_obs,
+                    a_policy,
+                    rewards,  # per-step: base penalties + dense shaping; terminal outcome backfilled later
+                    dones,
+                    a_val_full,
+                    a_lp_full,
+                    a_mu_full,
+                    a_sigma_full,
+                    a_masks,
+                )
             current_alice_obs = next_alice_obs
 
             # -----------------------------------------------------------------
@@ -1065,18 +1084,19 @@ def main():
             bob_gripper_state[bob_indices[dones[bob_indices]]] = 1.0
 
             next_bob_obs = obs_full[:, env.alice_obs_dim :]
-            bob_ppo.storage.add_transitions(
-                current_bob_obs,
-                next_bob_obs,
-                b_policy,
-                rewards,
-                dones,
-                b_val_full,
-                b_lp_full,
-                b_mu_full,
-                b_sigma_full,
-                b_masks,
-            )
+            with profiler.section("bob_store"):
+                bob_ppo.storage.add_transitions(
+                    current_bob_obs,
+                    next_bob_obs,
+                    b_policy,
+                    rewards,
+                    dones,
+                    b_val_full,
+                    b_lp_full,
+                    b_mu_full,
+                    b_sigma_full,
+                    b_masks,
+                )
             current_bob_obs = next_bob_obs
 
             # -----------------------------------------------------------------
@@ -1089,6 +1109,7 @@ def main():
                 goal_valid = ep_info.get("goal_valid", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
                 bob_success = ep_info.get("bob_success", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
                 
+                profiler.mark_start("reward_backfill")
                 # Apply Alice outcome to storage NOW
                 if bob_dones_now.any() or alice_dones_now.any() or (alice_rewards_now != 0).any():
                     filled = alice_ppo.storage.step
@@ -1096,37 +1117,39 @@ def main():
                         masks = alice_ppo.storage.masks[:filled, :, 0]
                         row_idx = torch.arange(filled, device=env.device).unsqueeze(1).expand_as(masks)
                         last_valid_rows = torch.where(masks.bool(), row_idx, torch.tensor(-1, device=env.device)).max(dim=0).values
-                        
+
                         has_valid = last_valid_rows >= 0
-                        
+
                         rewarded_envs = torch.where(alice_rewards_now != 0)[0]
                         valid_rewarded = rewarded_envs[has_valid[rewarded_envs]]
                         if len(valid_rewarded) > 0:
                             rows = last_valid_rows[valid_rewarded]
                             alice_ppo.storage.rewards[rows, valid_rewarded, 0] += alice_rewards_now[valid_rewarded]
                             alice_rew_buf.extend(alice_rewards_now[valid_rewarded].cpu().numpy().tolist())
+                profiler.mark_stop("reward_backfill")
 
                 # ABC BATCH: Add demos for Bob failures *that just finished this step*
+                profiler.mark_start("abc_buffer")
                 just_failed_bob = bob_dones_now & (~bob_success) & goal_valid
                 valid_ids = torch.where(just_failed_bob)[0]
-                
+
                 min_demo_steps = max(10, env.episode_manager.alice_timesteps // 2)
                 for env_id in valid_ids:
                     eid = env_id.item()
                     t_len = alice_traj_len[eid].item()
                     if t_len < min_demo_steps:
                         continue
-                        
+
                     traj_o = alice_traj_obs[eid, :t_len]
                     traj_a = alice_traj_act[eid, :t_len]
                     g = ep_info["goal_states"][eid].unsqueeze(0).expand(t_len, -1)
-                    
+
                     bc_obs = env.construct_bob_observation(traj_o, g)
                     with torch.no_grad():
                         old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(bc_obs, None, traj_a)
-                    
+
                     bob_ppo.abc_buffer.add_trajectory(
-                        bc_obs, bc_obs, traj_a, 
+                        bc_obs, bc_obs, traj_a,
                         torch.zeros(t_len, device=env.device),
                         torch.zeros(t_len, device=env.device).byte(),
                         torch.zeros(t_len, device=env.device),
@@ -1135,12 +1158,15 @@ def main():
                         torch.zeros(t_len, 1, device=env.device),
                         torch.zeros(t_len, 1, device=env.device)
                     )
+                profiler.mark_stop("abc_buffer")
 
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         bob_success_buf.append(current_sr)
 
-        perform_alice_update()
-        perform_bob_update(current_bob_obs)
+        with profiler.section("alice_update"):
+            perform_alice_update()
+        with profiler.section("bob_update"):
+            perform_bob_update(current_bob_obs)
 
         # --- Emergency checkpoint on SIGTERM (SLURM hard kill) ---
         if _shutdown_requested:
@@ -1196,7 +1222,9 @@ def main():
                 f"not-moved(≤{_pos_req:.2f}m): {_not_mvd}/{_alice_total}",
                 flush=True,
             )
+        profiler.end_iteration(bob_updates)
 
+    profiler.print_summary()
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))
     torch.save(
