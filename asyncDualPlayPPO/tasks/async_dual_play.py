@@ -57,7 +57,7 @@ class AsyncDualPlayObservationsCfg:
             params={
                 "object_cfg": SceneEntityCfg("target_object"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-                "contact_cfg": SceneEntityCfg("contact_forces"),
+                "contact_cfg": None,
             },
         )
         cube_state = ObsTerm(
@@ -65,7 +65,7 @@ class AsyncDualPlayObservationsCfg:
             params={
                 "object_cfg": SceneEntityCfg("cube"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-                "contact_cfg": SceneEntityCfg("contact_forces"),
+                "contact_cfg": None,
             },
         )
 
@@ -98,7 +98,7 @@ class AsyncDualPlayObservationsCfg:
             params={
                 "object_cfg": SceneEntityCfg("target_object"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-                "contact_cfg": SceneEntityCfg("contact_forces"),
+                "contact_cfg": None,
             },
         )
         goal_state = ObsTerm(
@@ -114,7 +114,7 @@ class AsyncDualPlayObservationsCfg:
             params={
                 "object_cfg": SceneEntityCfg("cube"),
                 "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-                "contact_cfg": SceneEntityCfg("contact_forces"),
+                "contact_cfg": None,
             },
         )
         cube_goal_state = ObsTerm(
@@ -162,18 +162,13 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
 
     @configclass
     class AsyncDualPlaySceneCfg(ReachDualArmSceneCfg):
-        """Scene restricted to two objects and augmented with gripper contact sensors."""
+        """Scene restricted to two objects."""
 
         cylinder = None
         rect = None
         triangle = None
         camera = None
-
-        contact_forces = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/RobotUnified/.*finger.*",
-            history_length=3,
-            track_air_time=False,
-        )
+        contact_forces = None
 
     scene: AsyncDualPlaySceneCfg = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
     observations: AsyncDualPlayObservationsCfg = AsyncDualPlayObservationsCfg()
@@ -183,11 +178,11 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
     events: EventCfg = EventCfg()
 
     def __post_init__(self):
-        self.decimation = 2
+        self.decimation = 1
         self.episode_length_s = (
             10000.0  # Extremely high value to prevent internal IsaacLab forced timeouts
         )
-        self.sim.dt = 0.01
+        self.sim.dt = 0.02
         self.sim.render_interval = self.decimation
         # PhysX GPU buffer capacities — required at large num_envs (≥1024).
         # Without these, PhysX silently drops contacts and the robot falls through the table.

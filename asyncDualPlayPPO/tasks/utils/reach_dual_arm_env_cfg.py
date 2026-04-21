@@ -61,10 +61,10 @@ UR5e_CFG = ArticulationCfg(
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=8,
+            solver_position_iteration_count=4,
             solver_velocity_iteration_count=0,
         ),
-        activate_contact_sensors=True,
+        activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
@@ -107,11 +107,11 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=8,
+            solver_position_iteration_count=4,
             solver_velocity_iteration_count=0,
             fix_root_link=True,
         ),
-        activate_contact_sensors=True,
+        activate_contact_sensors=False,
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
@@ -462,9 +462,9 @@ class ReachDualArmEnvCfg(ManagerBasedRLEnvCfg):
     events: EventCfg = EventCfg()
 
     def __post_init__(self):
-        self.decimation = 2
+        self.decimation = 1
         self.episode_length_s = 20.0
-        self.sim.dt = 0.01
+        self.sim.dt = 0.02
         self.sim.use_fabric = True
         self.sim.render_interval = self.decimation
         self.reset_settle_steps = (
