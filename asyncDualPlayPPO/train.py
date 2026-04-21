@@ -991,6 +991,10 @@ def main():
 
             obs_full, rewards, dones, truncated, extras = env.step(env_full)
 
+            # Log Bob's per-step rewards (sparse + shaping) for the Rew column in CSV
+            if len(bob_indices) > 0:
+                bob_rew_buf.extend(rewards[bob_indices].cpu().numpy().tolist())
+
             # Count Bob completions
             ep_info = extras.get("episode_manager", {})
             if ep_info:
@@ -1026,7 +1030,7 @@ def main():
                 current_alice_obs,
                 next_alice_obs,
                 a_policy,
-                torch.zeros(env.num_envs, device=env.device), # rewards (computed later)
+                rewards,  # per-step: base penalties + dense shaping; terminal outcome backfilled later
                 dones,
                 a_val_full,
                 a_lp_full,

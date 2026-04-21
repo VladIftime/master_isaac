@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=asp_low
-#SBATCH --time=12:00:00
+#SBATCH --time=23:00:00
 #SBATCH --partition=gpu
-#SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 192 GB node RAM / 8 GPUs = 24 GB/slot
+#SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs = 192 GB/slot
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=24G
 #SBATCH --output=slurm-%j-low.out
