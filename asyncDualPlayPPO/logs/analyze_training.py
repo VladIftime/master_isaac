@@ -36,12 +36,13 @@ ALICE_NO_ENT_RE = re.compile(
 )
 BOB_RE = re.compile(
     r"\[Bob Update\s+(\d+)\]\s+Loss:\s*([-\d.]+)\s*\|\s*Val:\s*([-\d.]+)\s*\|\s*Rew:\s*([-\d.]+)\s*\|\s*ABC:\s*([-\d.]+)\s*\|\s*SR:\s*([-\d.]+)"
+    r"(?:\s*\|\s*ABCCoef:\s*([-\d.]+))?"
 )
 CHAIN_RE = re.compile(r"chained next job:\s*(\d+)")
 RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
 # Explicit anchor emitted by train_high.slurm after the checkpoint detection block
 GLOBAL_START_RE = re.compile(r"Global iteration start:\s*(\d+)")
-JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-.*)?\.out")
+JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-(.*?))?\.out")
 # New-format summary lines (replaces per-event [AliceEnd] lines)
 ITER_RE = re.compile(
     r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)\s*\|\s*Goals valid=(\d+) invalid=(\d+)\s*\|\s*Bob succ=(\d+) fail=(\d+)"
@@ -55,10 +56,13 @@ def parse_logs(log_dir: Path) -> dict:
     """Parse all slurm log files in log_dir (recursively) and return per-job data dict."""
     jobs = {}
     for f in log_dir.rglob("slurm-*-*.out"):
+        if "chain_" in str(f.parent):
+            continue
         m = JOB_ID_RE.match(f.name)
         if not m:
             continue
         job_id = int(m.group(1))
+        suffix = m.group(2) if m.group(2) else "default"
         text = f.read_text(errors="replace")
 
         resume_iter = None
@@ -185,6 +189,7 @@ def parse_logs(log_dir: Path) -> dict:
                     "rew": float(bm.group(4)),
                     "abc": float(bm.group(5)),
                     "sr": float(bm.group(6)),
+                    "abc_coef": float(bm.group(7)) if bm.group(7) is not None else None,
                 }
             )
             
@@ -200,6 +205,7 @@ def parse_logs(log_dir: Path) -> dict:
             "path": f,
             "resume_iter": resume_iter,
             "chain_next": chain_next,
+            "suffix": suffix,
             "alice": alice_updates,
             "bob": bob_updates,
         }
@@ -223,13 +229,15 @@ def parse_all_dirs(log_dirs: list[Path]) -> dict:
 def trace_chains(jobs: dict) -> list[list[int]]:
     """
     Find root jobs (not pointed to by any other job) and trace forward chains.
+    Then, attempt to logically link broken chains that share the same suffix
+    and resume from >0 iterations.
     Returns list of chains, each chain is an ordered list of job_ids.
     """
     all_ids = set(jobs.keys())
     pointed_to = {v["chain_next"] for v in jobs.values() if v["chain_next"] is not None}
     roots = sorted(all_ids - pointed_to)
 
-    chains = []
+    explicit_chains = []
     for root in roots:
         chain = []
         jid = root
@@ -242,8 +250,53 @@ def trace_chains(jobs: dict) -> list[list[int]]:
             else:
                 break
         if chain:
-            chains.append(chain)
-    return chains
+            explicit_chains.append(chain)
+
+    # Sort chains by the ID of their first job
+    explicit_chains.sort(key=lambda c: c[0])
+
+    final_chains = []
+    chains_by_suffix = {}
+
+    for chain in explicit_chains:
+        first_job = jobs[chain[0]]
+        suffix = first_job["suffix"]
+        ri = first_job["resume_iter"] or 0
+
+        if suffix not in chains_by_suffix:
+            chains_by_suffix[suffix] = []
+
+        if ri > 0 and chains_by_suffix[suffix]:
+            # This chain resumes an existing experiment, find the best previous chain to attach to.
+            # We look for the previous chain whose max global iter is closest to (but ideally <=) ri.
+            best_prev_chain = None
+            best_prev_chain_idx = -1
+            best_max_iter = -1
+            
+            for idx, prev_c in enumerate(chains_by_suffix[suffix]):
+                # Find max iter in prev_c
+                c_max = -1
+                for jid in prev_c:
+                    if jobs[jid]["alice"]:
+                        c_max = max(c_max, jobs[jid]["alice"][-1]["local_iter"])
+                    if jobs[jid]["bob"]:
+                        c_max = max(c_max, jobs[jid]["bob"][-1]["local_iter"])
+                
+                # We simply pick the one with the highest max_iter so far.
+                if c_max > best_max_iter:
+                    best_max_iter = c_max
+                    best_prev_chain = prev_c
+            
+            if best_prev_chain is not None:
+                best_prev_chain.extend(chain)
+            else:
+                # Fallback, just append to the last one
+                chains_by_suffix[suffix][-1].extend(chain)
+        else:
+            chains_by_suffix[suffix].append(chain)
+            final_chains.append(chain)
+
+    return final_chains
 
 
 def merge_all_chains(chains: list[list[int]]) -> list[list[int]]:
@@ -369,6 +422,7 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "rew",
         "entropy_coef",
         "abc",
+        "abc_coef",
         "sr",
         "valid_goals",
         "invalid_goals",
@@ -379,7 +433,7 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in alice_records:
-            writer.writerow({"agent": "alice", "abc": "", "sr": "", **r})
+            writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "", **r})
         for r in bob_records:
             writer.writerow({"agent": "bob", "entropy_coef": "", "valid_goals": "", "invalid_goals": "", "avg_xy": "", "max_xy": "", **r})
     print(f"[INFO] Wrote {out_path}")
@@ -413,6 +467,7 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "rew",
         "entropy_coef",
         "abc",
+        "abc_coef",
         "sr",
         "valid_goals",
         "invalid_goals",
@@ -455,6 +510,7 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                         "rew": upd["rew"],
                         "entropy_coef": "",
                         "abc": upd["abc"],
+                        "abc_coef": upd["abc_coef"] if upd.get("abc_coef") is not None else "",
                         "sr": upd["sr"],
                         "valid_goals": "",
                         "invalid_goals": "",

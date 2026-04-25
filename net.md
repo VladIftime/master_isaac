@@ -191,3 +191,15 @@ policy ever sees them.
 The GoalEncoder's φ MLP therefore receives 6D inputs (pos3 + euler3) and computes
 difference embeddings `φ(goal) − φ(current)` that are meaningful under linear arithmetic
 — an advantage of Euler over quaternion for this structured subtraction.
+
+
+storage.py — three fixes:
+
+traj_maxlen is now a constructor parameter (default 200, YAML sets 500). With 512 envs and ~66% fail rate, the old 200 cycled faster than one iteration — no cross-iteration memory. 500 gives ~1.5 iterations of trajectory history, enough diversity without staleness.
+save serialises _traj_store to CPU before pickling — _traj_store was silently lost on every checkpoint resume, meaning BC always restarted cold.
+load restores _traj_store onto the correct device, respecting the current _traj_maxlen (so changing maxlen between runs still works).
+train.py — ABC two-phase controller:
+
+Phase 1 (iter < abc_anneal_iters): unchanged linear decay 0.5 → 0.0, bootstraps Bob when RL has no useful signal.
+Phase 2: target = abc_coef_start * (1 - bob_sr) — 0.5 when Bob fails completely, 0.0 when Bob always succeeds. EMA with α=0.95 smooths transitions so a single bad SR window doesn't shock the optimizer. When Alice's entropy spikes and Bob's SR drops, abc_coef rises automatically within ~20 iterations.
+ppo_continuous.yaml: abc_coef_ema: 0.95, abc_traj_maxlen: 500 added alongside the existing ABC params.

@@ -4,7 +4,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs = 192 GB/slot
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=24G
+#SBATCH --mem=64G
 #SBATCH --output=slurm-%j-100k.out
 #SBATCH --signal=B:USR1@120
 WILL_RESUBMIT=false

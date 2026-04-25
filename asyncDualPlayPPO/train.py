@@ -478,7 +478,8 @@ def main():
     ).to(env.device)
 
     max_alice_steps = env.episode_manager.alice_timesteps + 10
-    alice_storage_size = alice_ppo.num_transitions_per_env + max_alice_steps
+    _rollout_len = env.episode_manager.alice_timesteps + env.episode_manager.bob_timesteps
+    alice_storage_size = max(alice_ppo.num_transitions_per_env + max_alice_steps, _rollout_len + 10)
     alice_ppo.storage = alice_ppo.storage.__class__(
         alice_ppo.vec_env.num_envs,
         alice_storage_size,
@@ -540,7 +541,7 @@ def main():
     # Re-initialize Bob's standard PPO storage for 56 dims.
     # Must hold the full bob_timesteps rollout (same pattern as Alice's oversized storage).
     max_bob_steps = env.episode_manager.bob_timesteps + 10
-    bob_storage_size = bob_ppo.num_transitions_per_env + max_bob_steps
+    bob_storage_size = max(bob_ppo.num_transitions_per_env + max_bob_steps, _rollout_len + 10)
     bob_ppo.storage = bob_ppo.storage.__class__(
         bob_ppo.vec_env.num_envs,
         bob_storage_size,
@@ -560,6 +561,7 @@ def main():
         states_shape=env.bob_observation_space.shape,
         actions_shape=_abc_act_shape,
         device=env.device,
+        traj_maxlen=ppo_cfg["params"]["learn"].get("abc_traj_maxlen", 500),
     )
 
     # LSTM hidden states (None for non-LSTM models — act_with_hidden handles both).
@@ -587,6 +589,17 @@ def main():
     bob_pool = HistoricalPolicyPool(max_size=5)
     HIST_SAVE_INTERVAL = 50  # save snapshot every N bob_updates
     HIST_FRAC = 0.2  # fraction of envs using historical policy
+
+    # Alice adaptive entropy params (read once; used in the per-iter entropy block).
+    _learn = ppo_cfg["params"]["learn"]
+    _alice_target_sr   = _learn.get("alice_entropy_target_sr", 0.5)
+    _alice_entropy_lr  = _learn.get("alice_entropy_lr", 1e-3)
+    _alice_entropy_min = _learn.get("alice_entropy_min", 0.05)
+    _alice_entropy_max = _learn.get("alice_entropy_max", 1.0)
+    print(
+        f"[Config] Alice adaptive entropy: target_sr={_alice_target_sr}, "
+        f"lr={_alice_entropy_lr}, min={_alice_entropy_min}, max={_alice_entropy_max}"
+    )
 
     # --- Resume from checkpoint ---
     if args.chkpt_alice and os.path.isfile(args.chkpt_alice):
@@ -758,9 +771,10 @@ def main():
         writer.add_scalar("Metrics/Bob/RotError", mean_rot_err, bob_updates)
 
         print(
-            f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | ABC: {loss_abc:.4f} | SR: {bob_success_rate:.4f}",
+            f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | ABC: {loss_abc:.4f} | SR: {bob_success_rate:.4f} | ABCCoef: {bob_ppo.abc_coef:.4f}",
             flush=True,
         )
+        # _abc_phase is set later in the iter (entropy/ABC block); log it there.
 
         if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
             bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates+1}.pt"))
@@ -830,20 +844,30 @@ def main():
                 flush=True,
             )
 
-        # Alice entropy annealing: normalised-progress exponential decay.
-        # E(t) = 0.10 + 0.90 * exp(-alpha * p),  p = iter / min(max_iterations, 250).
-        # Denominator is clamped at 250 so annealing always completes within 250 iters
-        # regardless of --max_iterations (prevents run-1 failure where max_iterations>>250
-        # kept entropy near 1.0 for the entire run).
-        # Floor raised from 0.05 → 0.10 so Alice retains enough exploration at late stage
-        # to recover from policy drift without re-training from scratch.
-        # alpha=3.33 → drops to ~0.19 by 75% of 250 iters (was ~0.14 at old floor).
+        # Alice entropy: two-phase schedule.
+        # Phase 1 (iter < 250): exponential decay 1.0 → 0.10, identical to before.
+        # Phase 2 (iter ≥ 250): proportional controller on Bob's SR.
+        #   entropy += lr * (bob_sr - target_sr) each iteration, clamped to [min, max].
+        #   Entropy rises when Bob exceeds the target, falls when Bob struggles —
+        #   keeping Alice at the edge of Bob's competence without hand-tuned thresholds.
         _ent_p = min(1.0, bob_updates / min(args.max_iterations, 250))
-        alice_ppo.entropy_coef = 0.10 + 0.90 * math.exp(
-            -args.alice_decay_alpha * _ent_p
-        )
+        if _ent_p < 1.0:
+            alice_ppo.entropy_coef = 0.10 + 0.90 * math.exp(
+                -args.alice_decay_alpha * _ent_p
+            )
+            _ent_phase = "decay"
+        else:
+            _bob_sr_now = np.mean(bob_success_buf) if bob_success_buf else 0.0
+            _sr_error = _bob_sr_now - _alice_target_sr
+            alice_ppo.entropy_coef = float(np.clip(
+                alice_ppo.entropy_coef + _alice_entropy_lr * _sr_error,
+                _alice_entropy_min,
+                _alice_entropy_max,
+            ))
+            _ent_phase = f"adaptive sr_err={_sr_error:+.3f}"
+            writer.add_scalar("Alice/EntropySRError", _sr_error, bob_updates)
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
-        print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f}", flush=True)
+        print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f} ({_ent_phase})", flush=True)
 
         # Alice LR cosine decay: lr(t) = lr_min + 0.5*(lr_max−lr_min)*(1+cos(π·t/T)).
         # Decoupled from Bob's fixed LR so Alice's updates shrink as her policy converges.
@@ -856,6 +880,36 @@ def main():
         for pg in alice_ppo.optimizer.param_groups:
             pg["lr"] = _alice_lr
         writer.add_scalar("Alice/LearningRate", _alice_lr, bob_updates)
+
+        # ABC coefficient: two-phase schedule.
+        # Phase 1 (iter < abc_anneal_iters): linear decay abc_coef → abc_coef_end (0.0).
+        #   Bootstrap phase — strong imitation signal while RL has no useful gradients.
+        # Phase 2 (iter ≥ abc_anneal_iters): inverse proportional controller.
+        #   target = abc_coef * (1 - bob_sr): high when Bob fails, decays as Bob succeeds.
+        #   EMA smoothing prevents gradient shocks when Alice generates new hard tasks.
+        #   When Alice's entropy spikes and Bob's SR drops, abc_coef automatically rises,
+        #   re-arming the imitation lifeline — but only once the buffer has refreshed with
+        #   failures on the new task distribution.
+        _abc_coef_start   = ppo_cfg["params"]["learn"].get("abc_coef", 0.5)
+        _abc_coef_end     = ppo_cfg["params"]["learn"].get("abc_coef_end", 0.0)
+        _abc_anneal_iters = ppo_cfg["params"]["learn"].get("abc_anneal_iters", 0)
+        _abc_coef_ema     = ppo_cfg["params"]["learn"].get("abc_coef_ema", 0.95)
+
+        if _abc_anneal_iters > 0 and bob_updates < _abc_anneal_iters:
+            _abc_p = bob_updates / _abc_anneal_iters
+            bob_ppo.abc_coef = _abc_coef_start + (_abc_coef_end - _abc_coef_start) * _abc_p
+            _abc_phase = "anneal"
+        else:
+            _bob_sr_for_abc = np.mean(bob_success_buf) if bob_success_buf else 0.0
+            _target_abc = float(np.clip(
+                _abc_coef_start * (1.0 - _bob_sr_for_abc),
+                _abc_coef_end,
+                _abc_coef_start,
+            ))
+            bob_ppo.abc_coef = _abc_coef_ema * bob_ppo.abc_coef + (1.0 - _abc_coef_ema) * _target_abc
+            _abc_phase = f"inverse sr={_bob_sr_for_abc:.3f} tgt={_target_abc:.3f}"
+        writer.add_scalar("Bob/ABCCoef", bob_ppo.abc_coef, bob_updates)
+        print(f"  [Bob] ABCCoef: {bob_ppo.abc_coef:.4f} ({_abc_phase})", flush=True)
 
         # --- 1. UNIFIED ASYNCHRONOUS ROLLOUT PHASE ---
         alice_ppo.storage.clear()
@@ -1219,11 +1273,12 @@ def main():
             _avg_3d  = _stats["alice_disp_3d_sum"] / _alice_total
             _avg_xy  = _stats["alice_disp_xy_sum"] / _alice_total
             _max_xy  = _stats["alice_disp_xy_max"]
+            _avg_y   = _stats.get("alice_disp_y_sum", 0.0) / _alice_total
             _not_mvd = _stats["alice_not_moved"]
             _pos_req = getattr(env, "_ALICE_POS_REQ", 0.05)
             print(
                 f"  [AliceDisp] {_valid_goals}/{_alice_total} valid | "
-                f"avg 3D={_avg_3d:.3f}m  avg XY={_avg_xy:.3f}m  max XY={_max_xy:.3f}m | "
+                f"avg 3D={_avg_3d:.3f}m  avg XY={_avg_xy:.3f}m  max XY={_max_xy:.3f}m  avg Y={_avg_y:.3f}m | "
                 f"not-moved(≤{_pos_req:.2f}m): {_not_mvd}/{_alice_total}",
                 flush=True,
             )

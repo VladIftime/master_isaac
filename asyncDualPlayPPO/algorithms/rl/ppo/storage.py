@@ -183,7 +183,8 @@ class RolloutStorage:
 
 
 class GPUDemonstrationBuffer:
-    def __init__(self, capacity, obs_shape, states_shape, actions_shape, device="cpu"):
+    def __init__(self, capacity, obs_shape, states_shape, actions_shape, device="cpu",
+                 traj_maxlen=200):
         self.capacity = capacity
         self.device = device
 
@@ -202,10 +203,12 @@ class GPUDemonstrationBuffer:
         self.step = 0
         self.full = False
 
-        # Trajectory-level store for sequential LSTM evaluation in ABC.
+        # Trajectory-level sliding window for sequential LSTM evaluation in ABC.
         # Stores dicts {obs:(T,*obs_shape), acts:(T,*act_shape), old_lp:(T,)}.
-        # maxlen=200 keeps the 200 most recent Alice demo trajectories.
-        self._traj_store: deque = deque(maxlen=200)
+        # Configurable maxlen ensures old demonstrations from previous Alice task
+        # distributions are evicted as new failures populate the buffer.
+        self._traj_maxlen = traj_maxlen
+        self._traj_store: deque = deque(maxlen=traj_maxlen)
 
     @property
     def size(self) -> int:
@@ -323,6 +326,10 @@ class GPUDemonstrationBuffer:
 
     def save(self, path: str):
         """Persist buffer contents and cursor state to disk."""
+        # Move trajectory tensors to CPU for portable serialisation.
+        traj_cpu = [
+            {k: v.cpu() for k, v in t.items()} for t in self._traj_store
+        ]
         torch.save(
             {
                 "observations": self.observations,
@@ -338,6 +345,8 @@ class GPUDemonstrationBuffer:
                 "advantages": self.advantages,
                 "step": self.step,
                 "full": self.full,
+                "traj_store": traj_cpu,
+                "traj_maxlen": self._traj_maxlen,
             },
             path,
         )
@@ -358,3 +367,9 @@ class GPUDemonstrationBuffer:
         self.advantages.copy_(data["advantages"])
         self.step = int(data["step"])
         self.full = bool(data["full"])
+        # Restore trajectory sliding window, respecting current maxlen.
+        if "traj_store" in data:
+            self._traj_store = deque(
+                ({k: v.to(self.device) for k, v in t.items()} for t in data["traj_store"]),
+                maxlen=self._traj_maxlen,
+            )

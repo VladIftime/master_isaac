@@ -4,15 +4,15 @@
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs = 192 GB/slot
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=24G
+#SBATCH --mem=64G
 #SBATCH --output=slurm-%j-low.out
 #SBATCH --signal=B:USR1@120
 WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=2560
-NSTEPS=256
+NUM_ENVS=1024
+NSTEPS=128
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10
 NUM_OBJECTS=1

@@ -203,6 +203,7 @@ class AsyncDualPlayEnvWrapper:
             "alice_disp_3d_sum": 0.0,
             "alice_disp_xy_sum": 0.0,
             "alice_disp_xy_max": 0.0,
+            "alice_disp_y_sum": 0.0,
             "alice_not_moved": 0,
         }
 
@@ -540,7 +541,8 @@ class AsyncDualPlayEnvWrapper:
         final_pos = active_goal[:, 0:3]
         dist_3d = torch.norm(final_pos - start_pos, dim=-1)
         dist_xy = torch.norm(final_pos[:, :2] - start_pos[:, :2], dim=-1)
-        
+        dist_y = (final_pos[:, 1] - start_pos[:, 1]).abs()
+
         self._alice_dense_accum[env_ids] = 0.0
         self._alice_phase_initialized[env_ids] = False
 
@@ -553,6 +555,7 @@ class AsyncDualPlayEnvWrapper:
         self._iter_stats["alice_disp_xy_max"] = max(
             self._iter_stats["alice_disp_xy_max"], dist_xy.max().item()
         )
+        self._iter_stats["alice_disp_y_sum"] += dist_y.sum().item()
         self._iter_stats["alice_not_moved"] += int(
             (dist_3d <= _ALICE_POS_REQ).sum().item()
         )
