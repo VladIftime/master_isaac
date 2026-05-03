@@ -625,6 +625,23 @@ def main():
                 f"[Resume] WARNING: EpisodeManager checkpoint not found at {_ep_mgr_path}. Envs will start fresh."
             )
 
+        _train_state_path = args.chkpt_bob.replace("model_", "train_state_")
+        if os.path.isfile(_train_state_path):
+            _ts = torch.load(_train_state_path, map_location="cpu")
+            alice_ppo.entropy_coef = float(_ts["entropy_coef"])
+            bob_ppo.abc_coef = float(_ts["abc_coef"])
+            bob_success_buf.extend(_ts.get("bob_success_buf", []))
+            print(
+                f"[Resume] Restored train state: entropy_coef={alice_ppo.entropy_coef:.4f}, "
+                f"abc_coef={bob_ppo.abc_coef:.4f}, "
+                f"bob_success_buf len={len(bob_success_buf)}"
+            )
+        else:
+            print(
+                f"[Resume] WARNING: train_state checkpoint not found at {_train_state_path}. "
+                f"entropy_coef/abc_coef reset to YAML defaults."
+            )
+
     # --- Agents ---
     alice_updates = args.resume_iteration  # keep in sync with bob_updates so logs show global iters
     bob_updates = args.resume_iteration
@@ -783,6 +800,14 @@ def main():
                 env.episode_manager.state_dict(),
                 os.path.join(bob_ppo.log_dir, f"episode_manager_{bob_updates+1}.pt"),
             )
+            torch.save(
+                {
+                    "entropy_coef": alice_ppo.entropy_coef,
+                    "abc_coef": bob_ppo.abc_coef,
+                    "bob_success_buf": list(bob_success_buf),
+                },
+                os.path.join(bob_ppo.log_dir, f"train_state_{bob_updates+1}.pt"),
+            )
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
@@ -791,6 +816,14 @@ def main():
             torch.save(
                 env.episode_manager.state_dict(),
                 os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"),
+            )
+            torch.save(
+                {
+                    "entropy_coef": alice_ppo.entropy_coef,
+                    "abc_coef": bob_ppo.abc_coef,
+                    "bob_success_buf": list(bob_success_buf),
+                },
+                os.path.join(bob_ppo.log_dir, "train_state_best.pt"),
             )
 
         bob_rew_buf.clear()
@@ -815,6 +848,21 @@ def main():
     with SuppressAllOutput():
         obs = env.reset()[0]
     print("Environment initialized. Starting training loop...")
+
+    # Stagger Alice phase starts across envs so they don't all complete simultaneously.
+    # Without this, a cold restart floods the goal-setter with 768 simultaneous requests
+    # before Alice's policy has warmed up → cascading valid_goals collapse (chain_1 bug).
+    if not (args.chkpt_alice and os.path.isfile(args.chkpt_alice)):
+        # Fresh start only — resumed runs already have phase_step from EpisodeManager checkpoint.
+        _stagger = torch.randint(
+            0,
+            max(1, env.episode_manager.alice_timesteps),
+            (env.num_envs,),
+            device=env.device,
+            dtype=torch.int32,
+        )
+        env.episode_manager.phase_step.copy_(_stagger)
+        print(f"[Init] Phase stagger applied: alice_timesteps={env.episode_manager.alice_timesteps}")
 
     target_alice_timesteps = env.episode_manager.alice_timesteps
 
@@ -1179,6 +1227,9 @@ def main():
                     _alice_entropy_min,
                     _alice_entropy_max,
                 ))
+            # Enforce floor unconditionally — catches cold-restarts where entropy_coef
+            # was re-initialized from YAML (0.05) below the intended minimum (0.10).
+            alice_ppo.entropy_coef = max(alice_ppo.entropy_coef, _alice_entropy_min)
             _ent_phase = f"adaptive sr_err={_sr_error:+.3f}"
             writer.add_scalar("Alice/EntropySRError", _sr_error, bob_updates)
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
@@ -1235,6 +1286,14 @@ def main():
             torch.save(
                 env.episode_manager.state_dict(),
                 os.path.join(bob_ppo.log_dir, f"episode_manager_{_ckpt_iter}.pt"),
+            )
+            torch.save(
+                {
+                    "entropy_coef": alice_ppo.entropy_coef,
+                    "abc_coef": bob_ppo.abc_coef,
+                    "bob_success_buf": list(bob_success_buf),
+                },
+                os.path.join(bob_ppo.log_dir, f"train_state_{_ckpt_iter}.pt"),
             )
             print(f"[INFO] Emergency checkpoint saved — exiting cleanly.", flush=True)
             break
