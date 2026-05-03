@@ -775,22 +775,24 @@ def main():
         )
         # _abc_phase is set later in the iter (entropy/ABC block); log it there.
 
-        if args.save_interval > 0 and (bob_updates + 1) % args.save_interval == 0:
+        if bob_success_rate > best_bob_success_rate:
+            best_bob_success_rate = bob_success_rate
+            
+            # Save 'best' alias
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_best.pt"))
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
+            torch.save(
+                env.episode_manager.state_dict(),
+                os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"),
+            )
+
+            # Save explicit iteration files
             bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates+1}.pt"))
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(
                 env.episode_manager.state_dict(),
                 os.path.join(bob_ppo.log_dir, f"episode_manager_{bob_updates+1}.pt"),
-            )
-
-        if bob_success_rate > best_bob_success_rate:
-            best_bob_success_rate = bob_success_rate
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_best.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
-            torch.save(
-                env.episode_manager.state_dict(),
-                os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"),
             )
 
         bob_rew_buf.clear()
