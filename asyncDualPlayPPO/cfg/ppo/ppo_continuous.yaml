@@ -57,8 +57,8 @@ params:
     # Phase 2 (iter ≥ 250): entropy adjusts each iteration by lr * (bob_sr - target_sr).
     #   Rises when Bob is too successful, falls when Bob is struggling.
     alice_entropy_target_sr: 0.5   # desired Bob SR; 0.5 sits at the competence edge
-    alice_entropy_lr: 1.0e-3        # proportional gain (step per iteration)
-    alice_entropy_min: 0.05         # hard floor
+    alice_entropy_lr: 5.0e-3        # proportional gain (step per iteration)
+    alice_entropy_min: 0.10         # hard floor — matches proven decay floor; controller can only raise entropy, never lower it below this
     alice_entropy_max: 1.0          # hard ceiling
 
   policy:

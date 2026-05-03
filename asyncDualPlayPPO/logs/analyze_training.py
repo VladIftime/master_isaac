@@ -49,6 +49,8 @@ ITER_RE = re.compile(
 )
 ALICE_DISP_RE = re.compile(
     r"\[AliceDisp\]\s+\d+/\d+ valid\s*\|\s*avg 3D=[-\d.]+m\s+avg XY=([-\d.]+)m\s+max XY=([-\d.]+)m"
+    r"(?:\s+avg Y=[-\d.]+m)?"
+    r"(?:\s+avg Z=([-\d.]+)m)?"
 )
 
 
@@ -94,6 +96,7 @@ def parse_logs(log_dir: Path) -> dict:
                 "pos": im.start(),
                 "avg_xy": None,
                 "max_xy": None,
+                "avg_z": None,
             }
 
         # Attach [AliceDisp] displacement data to the preceding [Iter N]
@@ -109,6 +112,7 @@ def parse_logs(log_dir: Path) -> dict:
             if n is not None and iter_stats[n]["avg_xy"] is None:
                 iter_stats[n]["avg_xy"] = float(dm.group(1))
                 iter_stats[n]["max_xy"] = float(dm.group(2))
+                iter_stats[n]["avg_z"] = float(dm.group(3)) if dm.group(3) is not None else None
 
         # Old-format fallback: per-event [AliceEnd] lines
         valid_pos = []
@@ -141,11 +145,13 @@ def parse_logs(log_dir: Path) -> dict:
                 inv_count = ist.get("invalid", 0)
                 avg_xy = ist.get("avg_xy")
                 max_xy = ist.get("max_xy")
+                avg_z = ist.get("avg_z")
             else:
                 v_count = bisect.bisect_left(valid_pos, end) - bisect.bisect_left(valid_pos, prev_update_end)
                 inv_count = bisect.bisect_left(invalid_pos, end) - bisect.bisect_left(invalid_pos, prev_update_end)
                 avg_xy = None
                 max_xy = None
+                avg_z = None
 
             if has_ent:
                 alice_updates.append(
@@ -159,6 +165,7 @@ def parse_logs(log_dir: Path) -> dict:
                         "invalid_goals": inv_count,
                         "avg_xy": avg_xy,
                         "max_xy": max_xy,
+                        "avg_z": avg_z,
                     }
                 )
             else:
@@ -173,6 +180,7 @@ def parse_logs(log_dir: Path) -> dict:
                         "invalid_goals": inv_count,
                         "avg_xy": avg_xy,
                         "max_xy": max_xy,
+                        "avg_z": avg_z,
                     }
                 )
             prev_update_end = end
@@ -428,6 +436,7 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "invalid_goals",
         "avg_xy",
         "max_xy",
+        "avg_z",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -435,7 +444,7 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         for r in alice_records:
             writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "", **r})
         for r in bob_records:
-            writer.writerow({"agent": "bob", "entropy_coef": "", "valid_goals": "", "invalid_goals": "", "avg_xy": "", "max_xy": "", **r})
+            writer.writerow({"agent": "bob", "entropy_coef": "", "valid_goals": "", "invalid_goals": "", "avg_xy": "", "max_xy": "", "avg_z": "", **r})
     print(f"[INFO] Wrote {out_path}")
     return out_path
 
@@ -473,6 +482,7 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "invalid_goals",
         "avg_xy",
         "max_xy",
+        "avg_z",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=all_fields)
@@ -496,6 +506,7 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                         "invalid_goals": upd.get("invalid_goals", ""),
                         "avg_xy": upd.get("avg_xy") if upd.get("avg_xy") is not None else "",
                         "max_xy": upd.get("max_xy") if upd.get("max_xy") is not None else "",
+                        "avg_z": upd.get("avg_z") if upd.get("avg_z") is not None else "",
                     }
                 )
             for upd in job["bob"]:
@@ -516,6 +527,7 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                         "invalid_goals": "",
                         "avg_xy": "",
                         "max_xy": "",
+                        "avg_z": "",
                     }
                 )
     print(f"[INFO] Wrote {out_path}")
@@ -537,138 +549,218 @@ def plot_metrics(
     bob_records: list[dict],
     out_dir: Path,
     title_suffix: str = "",
+    separate: bool = False,
 ):
+    """Render training plots.
+
+    separate=False (default): one combined PNG (plot_overview.png) with all panels
+                              plus the curriculum-tension panel.
+    separate=True:            one PNG per metric, matching the old behaviour.
+    """
     if not alice_records and not bob_records:
         print("[WARN] No records to plot.")
         return
 
-    # Alice = blues, Bob = reds/oranges per chain
     alice_colors = ["tab:blue", "cornflowerblue", "navy", "steelblue"]
-    bob_colors = ["tab:red", "tomato", "darkred", "salmon"]
+    bob_colors   = ["tab:red",  "tomato",          "darkred", "salmon"]
+    abc_colors   = ["tab:green","mediumseagreen",  "darkgreen","lightgreen"]
 
-    def plot_single(ax, records_list, labels, colors, key, ylabel, title):
+    all_chain_indices = sorted(
+        set([r["chain"] for r in alice_records] + [r["chain"] for r in bob_records])
+    )
+    a_by_chain = [[r for r in alice_records if r["chain"] == c] for c in all_chain_indices]
+    b_by_chain = [[r for r in bob_records   if r["chain"] == c] for c in all_chain_indices]
+    a_labels = [f"Alice C{c}" for c in all_chain_indices]
+    b_labels = [f"Bob C{c}"   for c in all_chain_indices]
+
+    a_ent_by_chain  = [[r for r in recs if r.get("entropy_coef") is not None] for recs in a_by_chain]
+    a_disp_by_chain = [[r for r in recs if r.get("avg_xy")       is not None] for recs in a_by_chain]
+    a_z_by_chain    = [[r for r in recs if r.get("avg_z")        is not None] for recs in a_by_chain]
+
+    # ------------------------------------------------------------------ helpers
+    def _draw(ax, records_list, labels, colors, key):
+        """Add lines for one metric onto ax — no axis formatting."""
         for records, label, color in zip(records_list, labels, colors):
-            if not records:
+            pts = [(r["global_iter"], r[key]) for r in records if r.get(key) is not None]
+            if not pts:
                 continue
-            xs = [r["global_iter"] for r in records]
-            ys = smooth([r[key] for r in records])
-            ax.plot(xs, ys, color=color, label=label, linewidth=1.5)
+            xs, ys = zip(*pts)
+            ax.plot(xs, smooth(list(ys)), color=color, label=label, linewidth=1.5)
+
+    def _fmt(ax, ylabel, title):
         ax.set_title(title + title_suffix)
         ax.set_xlabel("Global Iteration")
         ax.set_ylabel(ylabel)
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
-    all_chain_indices = sorted(
-        set(
-            [r["chain"] for r in alice_records] + [r["chain"] for r in bob_records]
-        )
-    )
-    a_by_chain = [[r for r in alice_records if r["chain"] == c] for c in all_chain_indices]
-    b_by_chain = [[r for r in bob_records if r["chain"] == c] for c in all_chain_indices]
-    a_labels = [f"Alice C{c}" for c in all_chain_indices]
-    b_labels = [f"Bob C{c}" for c in all_chain_indices]
+    def _fill(ax, records_list_a, records_list_b, labels_a, labels_b, key, ylabel, title):
+        """Draw both Alice and Bob series onto ax, then format."""
+        _draw(ax, records_list_a, labels_a, alice_colors, key)
+        _draw(ax, records_list_b, labels_b, bob_colors,   key)
+        _fmt(ax, ylabel, title)
 
-    # --- Figure: Loss ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "loss", "Loss", "Policy Loss — Alice & Bob")
-    plot_single(ax, b_by_chain, b_labels, bob_colors, "loss", "Loss", "Policy Loss — Alice & Bob")
-    plt.tight_layout()
-    p = out_dir / "plot_loss.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
+    def _tension(ax):
+        """Overlay Alice entropy, Bob SR and Bob ABC_coef to show curriculum tension."""
+        for i, (a_c, b_c) in enumerate(zip(a_ent_by_chain, b_by_chain)):
+            ac = alice_colors[i % len(alice_colors)]
+            bc = bob_colors[i % len(bob_colors)]
+            gc = abc_colors[i % len(abc_colors)]
+            suffix = f" C{all_chain_indices[i]}"
+            # Alice entropy — solid
+            if a_c:
+                xs, ys = zip(*[(r["global_iter"], r["entropy_coef"]) for r in a_c])
+                ax.plot(xs, smooth(list(ys)), color=ac, linewidth=1.8,
+                        label=f"Alice Entropy{suffix}")
+            # Bob SR — dashed
+            sr_pts = [(r["global_iter"], r["sr"]) for r in b_c if r.get("sr") is not None]
+            if sr_pts:
+                xs, ys = zip(*sr_pts)
+                ax.plot(xs, smooth(list(ys)), color=bc, linewidth=1.8,
+                        linestyle="--", label=f"Bob SR{suffix}")
+            # Bob ABC_coef — dotted
+            abc_pts = [(r["global_iter"], r["abc_coef"]) for r in b_c
+                       if r.get("abc_coef") is not None]
+            if abc_pts:
+                xs, ys = zip(*abc_pts)
+                ax.plot(xs, smooth(list(ys)), color=gc, linewidth=1.8,
+                        linestyle=":", label=f"ABC Coef{suffix}")
+        # Reference line at target SR = 0.5
+        ax.axhline(0.5, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
+                   label="Target SR = 0.5")
+        _fmt(ax, "Value [0–1]",
+             "Curriculum Tension: Alice Entropy / Bob SR / ABC Coef")
 
-    # --- Figure: Value Loss ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "val", "Value Loss", "Value Loss — Alice & Bob")
-    plot_single(ax, b_by_chain, b_labels, bob_colors, "val", "Value Loss", "Value Loss — Alice & Bob")
-    plt.tight_layout()
-    p = out_dir / "plot_value_loss.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
+    # ---------------------------------------------------------------- save helper
+    def _save(fig, name):
+        p = out_dir / name
+        fig.savefig(p, dpi=150)
+        plt.close(fig)
+        print(f"[INFO] Saved {p}")
 
-    # --- Figure: Reward ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "rew", "Reward", "Mean Episode Reward — Alice & Bob")
-    plot_single(ax, b_by_chain, b_labels, bob_colors, "rew", "Reward", "Mean Episode Reward — Alice & Bob")
-    plt.tight_layout()
-    p = out_dir / "plot_reward.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
+    # ============================================================ separate mode
+    if separate:
+        def _solo(draw_fn, ylabel, title, fname, figsize=(10, 5)):
+            fig, ax = plt.subplots(figsize=figsize)
+            draw_fn(ax)
+            _fmt(ax, ylabel, title)
+            plt.tight_layout()
+            _save(fig, fname)
 
-    # --- Figure: Bob SR ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, b_by_chain, b_labels, bob_colors, "sr", "Success Rate", "Bob — Success Rate")
-    plt.tight_layout()
-    p = out_dir / "plot_bob_sr.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
-
-    # --- Figure: Bob ABC ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, b_by_chain, b_labels, bob_colors, "abc", "ABC", "Bob — ABC Metric")
-    plt.tight_layout()
-    p = out_dir / "plot_bob_abc.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
-
-    # --- Figure: Alice Entropy Coef ---
-    a_ent_by_chain = [
-        [r for r in recs if r.get("entropy_coef") is not None] for recs in a_by_chain
-    ]
-    if any(a_ent_by_chain):
         fig, ax = plt.subplots(figsize=(10, 5))
-        plot_single(
-            ax,
-            a_ent_by_chain,
-            a_labels,
-            alice_colors,
-            "entropy_coef",
-            "Entropy Coef",
-            "Alice — Entropy Coefficient",
-        )
-        plt.tight_layout()
-        p = out_dir / "plot_alice_entropy.png"
-        fig.savefig(p, dpi=150)
-        plt.close(fig)
-        print(f"[INFO] Saved {p}")
+        _fill(ax, a_by_chain, b_by_chain, a_labels, b_labels, "loss", "Loss",
+              "Policy Loss — Alice & Bob")
+        plt.tight_layout(); _save(fig, "plot_loss.png")
 
-    # --- Figure: Alice Valid Goals ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "valid_goals", "Goals", "Alice — Valid Goals")
-    plt.tight_layout()
-    p = out_dir / "plot_alice_valid_goals.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _fill(ax, a_by_chain, b_by_chain, a_labels, b_labels, "val", "Value Loss",
+              "Value Loss — Alice & Bob")
+        plt.tight_layout(); _save(fig, "plot_value_loss.png")
 
-    # --- Figure: Alice Invalid Goals ---
-    fig, ax = plt.subplots(figsize=(10, 5))
-    plot_single(ax, a_by_chain, a_labels, alice_colors, "invalid_goals", "Goals", "Alice — Invalid Goals")
-    plt.tight_layout()
-    p = out_dir / "plot_alice_invalid_goals.png"
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    print(f"[INFO] Saved {p}")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _fill(ax, a_by_chain, b_by_chain, a_labels, b_labels, "rew", "Reward",
+              "Mean Episode Reward — Alice & Bob")
+        plt.tight_layout(); _save(fig, "plot_reward.png")
 
-    # --- Figure: Alice Goal Displacement (avg_xy / max_xy) ---
-    a_disp_by_chain = [
-        [r for r in recs if r.get("avg_xy") is not None] for recs in a_by_chain
-    ]
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _draw(ax, b_by_chain, b_labels, bob_colors, "sr")
+        _fmt(ax, "Success Rate", "Bob — Success Rate")
+        plt.tight_layout(); _save(fig, "plot_bob_sr.png")
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _draw(ax, b_by_chain, b_labels, bob_colors, "abc")
+        _fmt(ax, "ABC Loss", "Bob — ABC Loss")
+        plt.tight_layout(); _save(fig, "plot_bob_abc.png")
+
+        if any(a_ent_by_chain):
+            fig, ax = plt.subplots(figsize=(10, 5))
+            _draw(ax, a_ent_by_chain, a_labels, alice_colors, "entropy_coef")
+            _fmt(ax, "Entropy Coef", "Alice — Entropy Coefficient")
+            plt.tight_layout(); _save(fig, "plot_alice_entropy.png")
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _draw(ax, a_by_chain, a_labels, alice_colors, "valid_goals")
+        _fmt(ax, "Goals", "Alice — Valid Goals")
+        plt.tight_layout(); _save(fig, "plot_alice_valid_goals.png")
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _draw(ax, a_by_chain, a_labels, alice_colors, "invalid_goals")
+        _fmt(ax, "Goals", "Alice — Invalid Goals")
+        plt.tight_layout(); _save(fig, "plot_alice_invalid_goals.png")
+
+        if any(a_disp_by_chain):
+            ncols = 3 if any(a_z_by_chain) else 2
+            fig, axes_d = plt.subplots(1, ncols, figsize=(7 * ncols, 5))
+            _draw(axes_d[0], a_disp_by_chain, a_labels, alice_colors, "avg_xy")
+            _fmt(axes_d[0], "Avg XY (m)", "Alice — Avg Goal Displacement XY")
+            _draw(axes_d[1], a_disp_by_chain, a_labels, alice_colors, "max_xy")
+            _fmt(axes_d[1], "Max XY (m)", "Alice — Max Goal Displacement XY")
+            if any(a_z_by_chain):
+                _draw(axes_d[2], a_z_by_chain, a_labels, alice_colors, "avg_z")
+                _fmt(axes_d[2], "Avg Z (m)", "Alice — Avg Goal Displacement Z")
+            plt.tight_layout(); _save(fig, "plot_alice_goal_displacement.png")
+
+        fig, ax = plt.subplots(figsize=(14, 5))
+        _tension(ax)
+        plt.tight_layout(); _save(fig, "plot_tension.png")
+
+        return
+
+    # ============================================================ combined mode
+    from matplotlib.gridspec import GridSpec
+
+    fig = plt.figure(figsize=(18, 24))
+    gs  = GridSpec(4, 3, figure=fig, hspace=0.45, wspace=0.32)
+
+    ax_loss    = fig.add_subplot(gs[0, 0])
+    ax_val     = fig.add_subplot(gs[0, 1])
+    ax_rew     = fig.add_subplot(gs[0, 2])
+    ax_sr      = fig.add_subplot(gs[1, 0])
+    ax_ent     = fig.add_subplot(gs[1, 1])
+    ax_abc_l   = fig.add_subplot(gs[1, 2])
+    ax_valid   = fig.add_subplot(gs[2, 0])
+    ax_invalid = fig.add_subplot(gs[2, 1])
+    ax_disp    = fig.add_subplot(gs[2, 2])
+    ax_tension = fig.add_subplot(gs[3, :])   # full-width bottom row
+
+    _fill(ax_loss,  a_by_chain, b_by_chain, a_labels, b_labels, "loss", "Loss",
+          "Policy Loss — Alice & Bob")
+    _fill(ax_val,   a_by_chain, b_by_chain, a_labels, b_labels, "val",  "Value Loss",
+          "Value Loss — Alice & Bob")
+    _fill(ax_rew,   a_by_chain, b_by_chain, a_labels, b_labels, "rew",  "Reward",
+          "Episode Reward — Alice & Bob")
+
+    _draw(ax_sr, b_by_chain, b_labels, bob_colors, "sr")
+    _fmt(ax_sr, "Success Rate", "Bob — Success Rate")
+
+    _draw(ax_ent, a_ent_by_chain, a_labels, alice_colors, "entropy_coef")
+    _fmt(ax_ent, "Entropy Coef", "Alice — Entropy Coefficient")
+
+    _draw(ax_abc_l, b_by_chain, b_labels, bob_colors, "abc")
+    _fmt(ax_abc_l, "ABC Loss", "Bob — ABC Loss")
+
+    _draw(ax_valid,   a_by_chain, a_labels, alice_colors, "valid_goals")
+    _fmt(ax_valid, "Goals", "Alice — Valid Goals")
+
+    _draw(ax_invalid, a_by_chain, a_labels, alice_colors, "invalid_goals")
+    _fmt(ax_invalid, "Goals", "Alice — Invalid Goals")
+
+    _draw(ax_disp, a_disp_by_chain, a_labels, alice_colors, "avg_xy")
     if any(a_disp_by_chain):
-        fig, axes_disp = plt.subplots(1, 2, figsize=(14, 5))
-        plot_single(axes_disp[0], a_disp_by_chain, a_labels, alice_colors, "avg_xy", "Avg XY (m)", "Alice — Avg Goal Displacement XY")
-        plot_single(axes_disp[1], a_disp_by_chain, a_labels, alice_colors, "max_xy", "Max XY (m)", "Alice — Max Goal Displacement XY")
-        plt.tight_layout()
-        p = out_dir / "plot_alice_goal_displacement.png"
-        fig.savefig(p, dpi=150)
-        plt.close(fig)
-        print(f"[INFO] Saved {p}")
+        _draw(ax_disp, a_disp_by_chain,
+              [f"max {l}" for l in a_labels],
+              ["tab:purple", "mediumpurple", "indigo", "plum"], "max_xy")
+    if any(a_z_by_chain):
+        _draw(ax_disp, a_z_by_chain,
+              [f"Z {l}" for l in a_labels],
+              ["tab:orange", "darkorange", "saddlebrown", "peru"], "avg_z")
+    _fmt(ax_disp, "Displacement (m)", "Alice — Goal Displacement XY / Z")
+
+    _tension(ax_tension)
+
+    fig.suptitle(f"Training Overview{title_suffix}", fontsize=15, fontweight="bold", y=1.005)
+    plt.tight_layout()
+    _save(fig, "plot_overview.png")
 
 
 
@@ -746,6 +838,12 @@ def main():
              "'chained next job' link was printed) and the successor job "
              "appears as an unlinked root.",
     )
+    parser.add_argument(
+        "--separate-plots",
+        action="store_true",
+        default=False,
+        help="Save one PNG per metric instead of a single combined overview PNG.",
+    )
     args = parser.parse_args()
 
     log_dir = Path(args.log_dir)
@@ -808,7 +906,7 @@ def main():
         write_raw_csv(i, ch, jobs, chain_dir)
         write_csv(a_c, b_c, chain_dir)
         write_summary_txt(i, ch, a_c, b_c, chain_dir)
-        plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})")
+        plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})", separate=args.separate_plots)
 
     write_csv(alice_records, bob_records, out_dir)
     print("[INFO] Done.")

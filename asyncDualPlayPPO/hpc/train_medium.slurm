@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=asp_med
-#SBATCH --time=23:00:00
+#SBATCH --time=12:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM, 1536 GB node RAM / 8 GPUs = 192 GB/slot
 #SBATCH --cpus-per-task=16
@@ -11,7 +11,7 @@ WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=1024
+NUM_ENVS=128
 NSTEPS=256
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10
