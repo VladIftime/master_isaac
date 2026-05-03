@@ -166,9 +166,6 @@ class AsyncDualPlayEnvWrapper:
         # Buffer to hold Alice's rewards until her cycle ends (either Alice failed or Bob finished)
         self.delayed_alice_reward = torch.zeros(env.num_envs, device=self.device)
 
-        # Accumulates dense shaping reward per env across Alice's phase; reset at phase end.
-        self._alice_dense_accum = torch.zeros(env.num_envs, device=self.device)
-
         # Potential-based dense reward state for Alice.
         # alice_start_pos_xy: world-frame XY of target_object at start of Alice's phase.
         # alice_prev_dist: distance from start at the previous step (Φ(s_{t-1})).
@@ -323,7 +320,6 @@ class AsyncDualPlayEnvWrapper:
                     )
                 self._early_alice_failures[alice_term_ids] = True
                 self.delayed_alice_reward[alice_term_ids] = -3.0
-                self._alice_dense_accum[alice_term_ids] = 0.0
                 self._alice_phase_initialized[alice_term_ids] = False
 
             # Batch reset — one call for all done envs
@@ -461,26 +457,23 @@ class AsyncDualPlayEnvWrapper:
                     )
 
         extras["episode_manager"] = {
-            "phase": self.episode_manager.current_phase.clone(),
-            "goal_count": self.episode_manager.goal_count.clone(),
-            "bob_success": self.episode_manager.bob_success.clone(),
+            "phase": self.episode_manager.current_phase,
+            "goal_count": self.episode_manager.goal_count,
+            "bob_success": self.episode_manager.bob_success,
             "bob_success_this_step": step_bob_success,
             "bob_done_this_step": step_bob_done,
             "bob_pos_err": step_pos_err,
             "bob_rot_err": step_rot_err,
-            "goal_valid": self.episode_manager.goal_valid.clone(),
+            "goal_valid": self.episode_manager.goal_valid,
             "goal_states": (
-                self.episode_manager.goal_states.clone()
+                self.episode_manager.goal_states
                 if self.episode_manager.goal_states is not None
                 else torch.zeros(
                     (self.num_envs, self.num_objects * 6), device=self.device
                 )
             ),
-            "max_contact_force": self.episode_manager.max_contact_force.clone(),
+            "max_contact_force": self.episode_manager.max_contact_force,
         }
-
-        extras["goal_valid"] = self.episode_manager.goal_valid.clone()
-        extras["bob_success"] = self.episode_manager.bob_success.clone()
         self.previous_actions = action.clone()
 
         return obs, current_rewards, terminated, truncated, extras
@@ -545,7 +538,6 @@ class AsyncDualPlayEnvWrapper:
         dist_y = (final_pos[:, 1] - start_pos[:, 1]).abs()
         dist_z = (final_pos[:, 2] - start_pos[:, 2]).abs()
 
-        self._alice_dense_accum[env_ids] = 0.0
         self._alice_phase_initialized[env_ids] = False
 
         n = len(env_ids)
@@ -926,7 +918,6 @@ class AsyncDualPlayEnvWrapper:
             prev_potential    = _C * (1.0 - torch.exp(-_k * self.alice_prev_dist))
             dense = current_potential - prev_potential
             rewards[is_alice] += dense[is_alice]
-            self._alice_dense_accum[is_alice] += dense[is_alice]
             self.alice_prev_dist[is_alice] = current_dist[is_alice].detach()
 
         # Track which envs just achieved completion (for early termination)

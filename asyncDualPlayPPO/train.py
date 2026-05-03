@@ -933,6 +933,14 @@ def main():
             alice_indices = torch.where(is_alice)[0]
             bob_indices = torch.where(is_bob)[0]
 
+            # Pre-compute reverse-index lookup tables (replaces 4x searchsorted per step)
+            alice_local_idx = torch.empty(env.num_envs, dtype=torch.long, device=env.device)
+            if len(alice_indices) > 0:
+                alice_local_idx[alice_indices] = torch.arange(len(alice_indices), device=env.device)
+            bob_local_idx = torch.empty(env.num_envs, dtype=torch.long, device=env.device)
+            if len(bob_indices) > 0:
+                bob_local_idx[bob_indices] = torch.arange(len(bob_indices), device=env.device)
+
             # -----------------------------------------------------------------
             # COMPUTE ALICE ACTIONS
             # -----------------------------------------------------------------
@@ -960,7 +968,7 @@ def main():
                         hist_ids = torch.tensor([], dtype=torch.long, device=env.device)
                         a_acts_hist = a_logprob_hist = a_val_hist = a_mu_hist = a_sigma_hist = None
 
-                curr_local = torch.searchsorted(alice_indices, curr_ids)
+                curr_local = alice_local_idx[curr_ids]
                 a_acts_active[curr_local] = a_acts_curr
                 a_logprob_active[curr_local] = a_logprob_curr
                 a_val_active[curr_local] = a_val_curr
@@ -968,7 +976,7 @@ def main():
                 a_sigma_active[curr_local] = a_sigma_curr
 
                 if len(hist_ids) > 0 and a_acts_hist is not None:
-                    hist_local = torch.searchsorted(alice_indices, hist_ids)
+                    hist_local = alice_local_idx[hist_ids]
                     a_acts_active[hist_local] = a_acts_hist
                     a_logprob_active[hist_local] = a_logprob_hist
                     a_val_active[hist_local] = a_val_hist
@@ -1003,7 +1011,7 @@ def main():
                         hist_bids = torch.tensor([], dtype=torch.long, device=env.device)
                         b_acts_hist = b_lp_hist = b_val_hist = b_mu_hist = b_sig_hist = None
 
-                curr_bloc = torch.searchsorted(bob_indices, curr_bids)
+                curr_bloc = bob_local_idx[curr_bids]
                 b_acts_active[curr_bloc] = b_acts_curr
                 b_logprob_active[curr_bloc] = b_lp_curr
                 b_val_active[curr_bloc] = b_val_curr
@@ -1011,7 +1019,7 @@ def main():
                 b_sigma_active[curr_bloc] = b_sig_curr
 
                 if len(hist_bids) > 0 and b_acts_hist is not None:
-                    hist_bloc = torch.searchsorted(bob_indices, hist_bids)
+                    hist_bloc = bob_local_idx[hist_bids]
                     b_acts_active[hist_bloc] = b_acts_hist
                     b_logprob_active[hist_bloc] = b_lp_hist
                     b_val_active[hist_bloc] = b_val_hist
@@ -1183,30 +1191,30 @@ def main():
                 valid_ids = torch.where(just_failed_bob)[0]
 
                 min_demo_steps = max(10, env.episode_manager.alice_timesteps // 2)
+                valid_trajs = []
                 for env_id in valid_ids:
                     eid = env_id.item()
                     t_len = alice_traj_len[eid].item()
                     if t_len < min_demo_steps:
                         continue
-
                     traj_o = alice_traj_obs[eid, :t_len]
                     traj_a = alice_traj_act[eid, :t_len]
                     g = ep_info["goal_states"][eid].unsqueeze(0).expand(t_len, -1)
-
                     bc_obs = env.construct_bob_observation(traj_o, g)
-                    with torch.no_grad():
-                        old_lp, _, _, _, _ = bob_ppo.actor_critic.evaluate(bc_obs, None, traj_a)
+                    valid_trajs.append((bc_obs, traj_a))
 
-                    bob_ppo.abc_buffer.add_trajectory(
-                        bc_obs, bc_obs, traj_a,
-                        torch.zeros(t_len, device=env.device),
-                        torch.zeros(t_len, device=env.device).byte(),
-                        torch.zeros(t_len, device=env.device),
-                        old_lp.view(-1, 1),
-                        torch.zeros_like(traj_a), torch.zeros_like(traj_a),
-                        torch.zeros(t_len, 1, device=env.device),
-                        torch.zeros(t_len, 1, device=env.device)
-                    )
+                if valid_trajs:
+                    all_obs = torch.cat([t[0] for t in valid_trajs], dim=0)
+                    all_acts = torch.cat([t[1] for t in valid_trajs], dim=0)
+                    with torch.no_grad():
+                        old_lp_all, _, _, _, _ = bob_ppo.actor_critic.evaluate(all_obs, None, all_acts)
+                    offset = 0
+                    for bc_obs_i, traj_a_i in valid_trajs:
+                        t_len_i = bc_obs_i.shape[0]
+                        bob_ppo.abc_buffer.add_trajectory(
+                            bc_obs_i, traj_a_i, old_lp_all[offset:offset + t_len_i]
+                        )
+                        offset += t_len_i
                 profiler.mark_stop("abc_buffer")
 
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])

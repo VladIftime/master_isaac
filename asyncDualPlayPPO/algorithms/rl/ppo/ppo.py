@@ -89,6 +89,7 @@ class PPO:
             self.action_space.shape,
             self.device,
             sampler,
+            asymmetric=asymmetric,
         )
         self.demo_buffer = None
 

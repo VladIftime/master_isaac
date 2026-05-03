@@ -31,6 +31,7 @@ class HistoricalPolicyPool:
     def __init__(self, max_size: int = 5):
         self.max_size: int = max_size
         self._pool: List[dict] = []  # list of state_dicts (on CPU)
+        self._hist_clone: Optional[nn.Module] = None  # persistent device clone
 
     def add(self, policy: nn.Module):
         """Save a snapshot of the current policy weights."""
@@ -49,10 +50,11 @@ class HistoricalPolicyPool:
         if not self._pool:
             return None
         snapshot = random.choice(self._pool)
-        hist_copy = copy.deepcopy(reference_policy)
-        hist_copy.load_state_dict({k: v.to(device) for k, v in snapshot.items()})
-        hist_copy.eval()
-        return hist_copy
+        if self._hist_clone is None:
+            self._hist_clone = copy.deepcopy(reference_policy)
+        self._hist_clone.load_state_dict({k: v.to(device) for k, v in snapshot.items()})
+        self._hist_clone.eval()
+        return self._hist_clone
 
     def sample_env_subset(
         self,

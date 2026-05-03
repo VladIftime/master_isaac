@@ -2,6 +2,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.distributions import MultivariateNormal, Categorical
 
 # ---------------------------------------------------------------------------
@@ -29,12 +30,14 @@ class MultiCategorical:
         Args:
             logits: (batch, num_dims, num_bins)
         """
+        self.logits = logits  # (batch, num_dims, num_bins)
         self.num_dims = logits.shape[1]
-        self.dists = [Categorical(logits=logits[:, i, :]) for i in range(self.num_dims)]
 
     def sample(self) -> torch.Tensor:
         """Returns (batch, num_dims) integer bin indices."""
-        return torch.stack([d.sample() for d in self.dists], dim=-1)
+        batch, ndim, nbins = self.logits.shape
+        probs = torch.softmax(self.logits, dim=-1).reshape(batch * ndim, nbins)
+        return torch.multinomial(probs, 1).reshape(batch, ndim)
 
     def log_prob(self, bin_indices: torch.Tensor) -> torch.Tensor:
         """
@@ -43,13 +46,17 @@ class MultiCategorical:
         Returns:
             (batch,) summed log-probabilities
         """
-        return sum(
-            self.dists[i].log_prob(bin_indices[:, i]) for i in range(self.num_dims)
-        )
+        batch, ndim, nbins = self.logits.shape
+        return -F.cross_entropy(
+            self.logits.reshape(batch * ndim, nbins),
+            bin_indices.reshape(batch * ndim).long(),
+            reduction="none",
+        ).reshape(batch, ndim).sum(dim=-1)
 
     def entropy(self) -> torch.Tensor:
         """Returns (batch,) summed entropy."""
-        return sum(d.entropy() for d in self.dists)
+        log_p = torch.log_softmax(self.logits, dim=-1)
+        return -(torch.exp(log_p) * log_p).sum(dim=-1).sum(dim=-1)
 
 
 # ---------------------------------------------------------------------------

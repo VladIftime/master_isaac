@@ -28,6 +28,7 @@ class RolloutStorage:
         actions_shape,
         device="cpu",
         sampler="sequential",
+        asymmetric=False,
     ):
         self.device = device
         self.sampler = sampler
@@ -35,8 +36,10 @@ class RolloutStorage:
         self.observations = torch.zeros(
             num_transitions_per_env, num_envs, *obs_shape, device=device
         )
-        self.states = torch.zeros(
-            num_transitions_per_env, num_envs, *states_shape, device=device
+        self.states = (
+            torch.zeros(num_transitions_per_env, num_envs, *states_shape, device=device)
+            if asymmetric
+            else None
         )
         self.rewards = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
         self.actions = torch.zeros(
@@ -86,7 +89,8 @@ class RolloutStorage:
             raise AssertionError("Rollout buffer overflow")
 
         self.observations[self.step].copy_(observations)
-        self.states[self.step].copy_(states)
+        if self.states is not None:
+            self.states[self.step].copy_(states)
         self.actions[self.step].copy_(actions)
         self.rewards[self.step].copy_(rewards.view(-1, 1))
         self.dones[self.step].copy_(dones.view(-1, 1))
@@ -185,129 +189,24 @@ class RolloutStorage:
 class GPUDemonstrationBuffer:
     def __init__(self, capacity, obs_shape, states_shape, actions_shape, device="cpu",
                  traj_maxlen=200):
-        self.capacity = capacity
+        # capacity / obs_shape / states_shape / actions_shape kept for API compat
         self.device = device
-
-        self.observations = torch.zeros(capacity, *obs_shape, device=device)
-        self.states = torch.zeros(capacity, *states_shape, device=device)
-        self.actions = torch.zeros(capacity, *actions_shape, device=device)
-        self.rewards = torch.zeros(capacity, 1, device=device)
-        self.dones = torch.zeros(capacity, 1, device=device).byte()
-        self.values = torch.zeros(capacity, 1, device=device)
-        self.actions_log_prob = torch.zeros(capacity, 1, device=device)
-        self.mu = torch.zeros(capacity, *actions_shape, device=device)
-        self.sigma = torch.zeros(capacity, *actions_shape, device=device)
-        self.returns = torch.zeros(capacity, 1, device=device)
-        self.advantages = torch.zeros(capacity, 1, device=device)
-
-        self.step = 0
-        self.full = False
-
-        # Trajectory-level sliding window for sequential LSTM evaluation in ABC.
-        # Stores dicts {obs:(T,*obs_shape), acts:(T,*act_shape), old_lp:(T,)}.
-        # Configurable maxlen ensures old demonstrations from previous Alice task
-        # distributions are evicted as new failures populate the buffer.
         self._traj_maxlen = traj_maxlen
         self._traj_store: deque = deque(maxlen=traj_maxlen)
 
     @property
     def size(self) -> int:
-        """Number of valid entries currently in the buffer."""
-        return self.capacity if self.full else self.step
+        return len(self._traj_store)
 
-    def add_trajectory(
-        self, obs, states, acts, rews, dones, vals, log_probs, mus, sigmas, ret, adv
-    ):
-        """Add a full trajectory or sequence of steps"""
-        n = obs.size(0)
-        if n == 0:
+    def add_trajectory(self, obs, acts, log_probs):
+        """Append a single trajectory to the sliding-window store."""
+        if obs.size(0) == 0:
             return
-
-        # Record this trajectory for sequential LSTM evaluation.
-        # log_probs shape may be (T, 1) or (T,); normalise to (T,).
-        self._traj_store.append(
-            {
-                "obs": obs.clone(),
-                "acts": acts.clone(),
-                "old_lp": log_probs.clone().view(-1),
-            }
-        )
-
-        if self.step + n > self.capacity:
-            end = self.capacity
-            size = self.capacity - self.step
-
-            self.observations[self.step : end].copy_(obs[:size])
-            if states is not None:
-                self.states[self.step : end].copy_(states[:size])
-            self.actions[self.step : end].copy_(acts[:size])
-            self.rewards[self.step : end].copy_(rews[:size].view(-1, 1))
-            self.dones[self.step : end].copy_(dones[:size].view(-1, 1))
-            self.values[self.step : end].copy_(vals[:size].view(-1, 1))
-            self.actions_log_prob[self.step : end].copy_(log_probs[:size].view(-1, 1))
-            self.mu[self.step : end].copy_(mus[:size])
-            self.sigma[self.step : end].copy_(sigmas[:size])
-            self.returns[self.step : end].copy_(ret[:size].view(-1, 1))
-            self.advantages[self.step : end].copy_(adv[:size].view(-1, 1))
-
-            self.step = 0
-            self.full = True
-
-            # Wrap around
-            rem = n - size
-            if rem > 0:
-                self.observations[:rem].copy_(obs[size:])
-                if states is not None:
-                    self.states[:rem].copy_(states[size:])
-                self.actions[:rem].copy_(acts[size:])
-                self.rewards[:rem].copy_(rews[size:].view(-1, 1))
-                self.dones[:rem].copy_(dones[size:].view(-1, 1))
-                self.values[:rem].copy_(vals[size:].view(-1, 1))
-                self.actions_log_prob[:rem].copy_(log_probs[size:].view(-1, 1))
-                self.mu[:rem].copy_(mus[size:])
-                self.sigma[:rem].copy_(sigmas[size:])
-                self.returns[:rem].copy_(ret[size:].view(-1, 1))
-                self.advantages[:rem].copy_(adv[size:].view(-1, 1))
-                self.step = rem
-        else:
-            self.observations[self.step : self.step + n].copy_(obs)
-            if states is not None:
-                self.states[self.step : self.step + n].copy_(states)
-            self.actions[self.step : self.step + n].copy_(acts)
-            self.rewards[self.step : self.step + n].copy_(rews.view(-1, 1))
-            self.dones[self.step : self.step + n].copy_(dones.view(-1, 1))
-            self.values[self.step : self.step + n].copy_(vals.view(-1, 1))
-            self.actions_log_prob[self.step : self.step + n].copy_(
-                log_probs.view(-1, 1)
-            )
-            self.mu[self.step : self.step + n].copy_(mus)
-            self.sigma[self.step : self.step + n].copy_(sigmas)
-            self.returns[self.step : self.step + n].copy_(ret.view(-1, 1))
-            self.advantages[self.step : self.step + n].copy_(adv.view(-1, 1))
-            self.step += n
-            if self.step == self.capacity:
-                self.step = 0
-                self.full = True
-
-    def sample(self, batch_size):
-        if self.step == 0 and not self.full:
-            return None
-        max_idx = self.capacity if self.full else self.step
-        indices = torch.randint(0, max_idx, (batch_size,), device=self.device)
-
-        states = self.states[indices] if self.states is not None else None
-
-        return (
-            self.observations[indices],
-            states,
-            self.actions[indices],
-            self.values[indices],
-            self.returns[indices],
-            self.actions_log_prob[indices],
-            self.advantages[indices],
-            self.mu[indices],
-            self.sigma[indices],
-        )
+        self._traj_store.append({
+            "obs": obs.clone(),
+            "acts": acts.clone(),
+            "old_lp": log_probs.clone().view(-1),
+        })
 
     def sample_trajectories(self, n_trajs: int):
         """
@@ -325,49 +224,13 @@ class GPUDemonstrationBuffer:
         )
 
     def save(self, path: str):
-        """Persist buffer contents and cursor state to disk."""
-        # Move trajectory tensors to CPU for portable serialisation.
-        traj_cpu = [
-            {k: v.cpu() for k, v in t.items()} for t in self._traj_store
-        ]
-        torch.save(
-            {
-                "observations": self.observations,
-                "states": self.states,
-                "actions": self.actions,
-                "rewards": self.rewards,
-                "dones": self.dones,
-                "values": self.values,
-                "actions_log_prob": self.actions_log_prob,
-                "mu": self.mu,
-                "sigma": self.sigma,
-                "returns": self.returns,
-                "advantages": self.advantages,
-                "step": self.step,
-                "full": self.full,
-                "traj_store": traj_cpu,
-                "traj_maxlen": self._traj_maxlen,
-            },
-            path,
-        )
+        """Persist trajectory store to disk."""
+        traj_cpu = [{k: v.cpu() for k, v in t.items()} for t in self._traj_store]
+        torch.save({"traj_store": traj_cpu, "traj_maxlen": self._traj_maxlen}, path)
 
     def load(self, path: str):
-        """Restore buffer contents in-place (keeps same device/capacity)."""
+        """Restore trajectory store from disk (backward-compatible with old flat-buffer format)."""
         data = torch.load(path, map_location=self.device, weights_only=False)
-        self.observations.copy_(data["observations"])
-        self.states.copy_(data["states"])
-        self.actions.copy_(data["actions"])
-        self.rewards.copy_(data["rewards"])
-        self.dones.copy_(data["dones"])
-        self.values.copy_(data["values"])
-        self.actions_log_prob.copy_(data["actions_log_prob"])
-        self.mu.copy_(data["mu"])
-        self.sigma.copy_(data["sigma"])
-        self.returns.copy_(data["returns"])
-        self.advantages.copy_(data["advantages"])
-        self.step = int(data["step"])
-        self.full = bool(data["full"])
-        # Restore trajectory sliding window, respecting current maxlen.
         if "traj_store" in data:
             self._traj_store = deque(
                 ({k: v.to(self.device) for k, v in t.items()} for t in data["traj_store"]),
