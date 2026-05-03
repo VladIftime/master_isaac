@@ -1,0 +1,29 @@
+JobId=28665378 JobName=asp_med
+   UserId=s3426394(33426394) GroupId=s3426394(33426394) MCS_label=N/A
+   Priority=1127375 Nice=0 Account=users QOS=normal
+   JobState=PENDING Reason=ReqNodeNotAvail,_May_be_reserved_for_other_job Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:00:00 TimeLimit=23:00:00 TimeMin=N/A
+   SubmitTime=2026-04-27T23:15:33 EligibleTime=2026-04-27T23:15:33
+   AccrueTime=2026-04-27T23:15:33
+   StartTime=Unknown EndTime=Unknown Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-04-28T11:34:35 Scheduler=Main
+   Partition=gpumedium AllocNode:Sid=l40sgpu1:12130
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=
+   NumNodes=1 NumCPUs=16 NumTasks=1 CPUs/Task=16 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=16,mem=64G,node=1,billing=16,gres/gpu=1,gres/gpu:rtx_pro_6000=1
+   AllocTRES=(null)
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:1 CoreSpec=*
+   MinCPUsNode=16 MinMemoryNode=64G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null)
+   Command=/home3/s3426394/master_isaac/asyncDualPlayPPO/hpc/train_medium.slurm
+   WorkDir=/home3/s3426394/master_isaac/asyncDualPlayPPO
+   StdErr=/home3/s3426394/master_isaac/asyncDualPlayPPO/slurm-28665378-medium.out
+   StdIn=/dev/null
+   StdOut=/home3/s3426394/master_isaac/asyncDualPlayPPO/slurm-28665378-medium.out
+   TresPerNode=gres/gpu:rtx_pro_6000:1
+   TresPerTask=cpu=16
+   
+
