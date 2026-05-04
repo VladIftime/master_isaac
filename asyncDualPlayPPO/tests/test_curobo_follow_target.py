@@ -99,7 +99,23 @@ def main():
 
     # ── Gamepad ────────────────────────────────────────────────────────────────
     carb.log_info("Initializing Se3Gamepad...")
-    gamepad = Se3Gamepad(Se3GamepadCfg(pos_sensitivity=0.02, rot_sensitivity=0.0, gripper_term=False))
+    # ── Button map (Xbox/standard layout) ─────────────────────────────────────
+    # Left  stick  ↑↓     →  +X / -X   (forward/back)
+    # Left  stick  ←→     →  +Y / -Y   (left/right)
+    # Right stick  ↑↓     →  +Z / -Z   (up/down)
+    # Right stick  ←→     →  (unused, rot_sensitivity=0)
+    # D-pad        ↑↓←→   →  (unused, rot_sensitivity=0)
+    # Left  trigger       →  -Z  (down, via add_callback)
+    # Right trigger       →  +Z  (up,   via add_callback)
+    # X button            →  toggle gripper open/close
+    # A / B / Y           →  available for custom callbacks
+    # Left  shoulder (LB) →  available
+    # Right shoulder (RB) →  available
+    # Left  stick click   →  available
+    # Right stick click   →  available
+    # MENU1 / MENU2       →  available
+    # ──────────────────────────────────────────────────────────────────────────
+    gamepad = Se3Gamepad(Se3GamepadCfg(pos_sensitivity=0.02, rot_sensitivity=0.0, gripper_term=True))
     gamepad.reset()
 
     # ── CuRobo IK solver ──────────────────────────────────────────────────────
@@ -245,6 +261,8 @@ def main():
             # Apply gamepad XYZ delta to ball's USD position.
             gamepad_cmd = gamepad.advance()
             delta_pos = gamepad_cmd[:3].cpu().numpy()
+            # gamepad_cmd[6]: +1.0 = open, -1.0 = close (X button toggles)
+            action[0, 6] = gamepad_cmd[6]
             if delta_pos.any():
                 mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
                 t = mat.ExtractTranslation()
