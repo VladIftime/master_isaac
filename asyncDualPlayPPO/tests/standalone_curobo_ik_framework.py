@@ -15,6 +15,7 @@ Key fixes vs naive integration:
     as the wrist rotates.
 """
 
+import os
 import sys
 import torch
 import numpy as np
@@ -39,9 +40,10 @@ app_launcher = AppLauncher(args)
 simulation_app = app_launcher.app
 
 import carb
+import omni.usd
 import isaacsim.core.api.tasks as tasks
 from isaacsim.core.api import World
-from isaacsim.core.api.objects import VisualSphere
+from isaacsim.core.api.objects import VisualCuboid, VisualSphere
 from isaacsim.core.prims import SingleXFormPrim
 from isaacsim.core.utils.prims import is_prim_path_valid
 from isaacsim.core.utils.types import ArticulationAction
@@ -49,6 +51,10 @@ from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.robot.manipulators.grippers import ParallelGripper
 from isaacsim.robot.manipulators.manipulators import SingleManipulator
 from isaacsim.storage.native import get_assets_root_path
+
+# Assets shared with AsyncDualPlayEnvCfg
+_PROJ_ROOT   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # master_isaac/
+_BLOCKS_DIR  = os.path.join(_PROJ_ROOT, "asyncDualPlayPPO", "assets", "blocks")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -73,6 +79,63 @@ class FollowTarget(tasks.FollowTarget):
 
     def __init__(self, name: str = "ur10e_follow_target", target_position=None, **kwargs):
         super().__init__(name=name, target_position=target_position, **kwargs)
+
+    def set_up_scene(self, scene) -> None:
+        super().set_up_scene(scene)   # adds ground plane, robot, target sphere
+        self._add_env_scene()
+
+    def _add_env_scene(self) -> None:
+        """Populate the stage to match AsyncDualPlayEnvCfg: table, zone borders, blocks.
+        All lighting is removed for render performance."""
+        stage = omni.usd.get_context().get_stage()
+
+        # Remove all auto-created lights (dome light hurts perf significantly).
+        for light_path in [
+            "/World/defaultGroundPlane/SphereLight",
+            "/World/defaultGroundPlane/DistantLight",
+            "/World/defaultGroundPlane/SphereLight1",
+        ]:
+            p = stage.GetPrimAtPath(light_path)
+            if p.IsValid():
+                stage.RemovePrim(light_path)
+
+        # Table: 2.0 × 2.0 × 0.1 m, dark gray, centred at [0.0, 0.5, -0.05].
+        self.scene.add(VisualCuboid(
+            prim_path="/World/Table", name="table",
+            position=np.array([0.0, 0.5, -0.05]),
+            size=1.0, scale=np.array([2.0, 2.0, 0.1]),
+            color=np.array([0.2, 0.2, 0.2]),
+        ))
+
+        # Zone borders (thin black lines on the table surface).
+        for prim_name, pos, scale in [
+            ("ZoneBorderTop",    [0.0,   1.0, 0.001], [1.52, 0.02, 0.001]),
+            ("ZoneBorderBottom", [0.0,   0.2, 0.001], [1.52, 0.02, 0.001]),
+            ("ZoneBorderLeft",   [-0.75, 0.6, 0.001], [0.02, 0.82, 0.001]),
+            ("ZoneBorderRight",  [0.75,  0.6, 0.001], [0.02, 0.82, 0.001]),
+        ]:
+            self.scene.add(VisualCuboid(
+                prim_path=f"/World/{prim_name}", name=prim_name.lower(),
+                position=np.array(pos),
+                size=1.0, scale=np.array(scale),
+                color=np.array([0.05, 0.05, 0.05]),
+            ))
+
+        # Manipulation blocks (pure-visual USD meshes, no rigid-body physics).
+        for prim_name, usd_name, pos in [
+            ("TargetObject", "concave.usd",  [0.0,   0.7, 0.05]),
+            ("Cube",         "cube.usd",     [-0.15, 0.7, 0.05]),
+            ("Cylinder",     "cylinder.usd", [-0.05, 0.5, 0.05]),
+            ("Rect",         "rect.usd",     [0.05,  0.5, 0.05]),
+            ("Triangle",     "triangle.usd", [0.2,   0.6, 0.05]),
+        ]:
+            usd_path = os.path.join(_BLOCKS_DIR, usd_name)
+            if os.path.exists(usd_path):
+                add_reference_to_stage(usd_path=usd_path, prim_path=f"/World/{prim_name}")
+                SingleXFormPrim(
+                    prim_path=f"/World/{prim_name}",
+                    position=np.array(pos),
+                )
 
     def set_robot(self) -> SingleManipulator:
         assets_root_path = get_assets_root_path()
