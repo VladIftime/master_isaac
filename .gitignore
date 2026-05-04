@@ -10,3 +10,4 @@ __pycache__/
 asyncDualPlayPPO/__pycache__
 asyncDualPlayPPO/paper-async.master_venv/
 curobo/
+.master_venv/
