@@ -206,6 +206,78 @@ def main():
         _border_cfg.func(f"/World/{_name}", _border_cfg,
                          translation=np.array(_pos), scale=np.array(_scale))
 
+    # ── Cameras & viewport panels ──────────────────────────────────────────────
+    import omni.kit.viewport.utility as vp_util
+
+    def _make_lookat_matrix(eye, target):
+        """USD row-vector look-at matrix for a camera at eye pointing toward target.
+        USD cameras look along local -Z with local +Y up."""
+        e   = Gf.Vec3d(*eye)
+        t   = Gf.Vec3d(*target)
+        fwd = (t - e).GetNormalized()
+        # Use Y-up when fwd is near-vertical, otherwise Z-up.
+        world_up = Gf.Vec3d(0, 1, 0) if abs(fwd[2]) > 0.9 else Gf.Vec3d(0, 0, 1)
+        right    = Gf.Cross(fwd, world_up).GetNormalized()
+        up       = Gf.Cross(right, fwd)
+        nfwd     = -fwd
+        # Rows = local axes expressed in world space; row3 = translation.
+        return Gf.Matrix4d(
+            right[0], right[1], right[2], 0.0,
+            up[0],    up[1],    up[2],    0.0,
+            nfwd[0],  nfwd[1],  nfwd[2],  0.0,
+            e[0],     e[1],     e[2],     1.0,
+        )
+
+    def _add_camera(prim_path, eye, target, focal_mm=24.0):
+        cam = UsdGeom.Camera.Define(stage, prim_path)
+        cam.GetFocalLengthAttr().Set(focal_mm)
+        UsdGeom.Xformable(cam).MakeMatrixXform().Set(_make_lookat_matrix(eye, target))
+        return prim_path
+
+    # Side camera: right of the table, looking at the arm + working area at ~45°
+    _cam_side = _add_camera(
+        "/World/CamSide",
+        eye    = (1.5,  0.5, 2.5),
+        target = (0.10,  0.5, 0.0),
+    )
+    # Top camera: 0.4 m above the robot's reach, looking straight down
+    _cam_top = _add_camera(
+        "/World/CamTop",
+        eye    = (0.0,  0.5, 1.5),
+        target = (0.0,  0.55, 0.0),
+        focal_mm=18.0,
+    )
+
+    # Viewport windows stacked on the left side of the screen.
+    _vp_side = vp_util.create_viewport_window("Side View", width=420, height=280)
+    _vp_side.viewport_api.set_active_camera(_cam_side)
+    _vp_side.position_x = 0
+    _vp_side.position_y = 0
+
+    _vp_top = vp_util.create_viewport_window("Top View", width=420, height=280)
+    _vp_top.viewport_api.set_active_camera(_cam_top)
+    _vp_top.position_x = 0
+    _vp_top.position_y = 290
+
+    # Zoom the main viewport in by 50% — move its camera halfway toward the
+    # robot working-area centre so the scene fills the screen more tightly.
+    _active_vp = vp_util.get_active_viewport()
+    _main_cam_prim = stage.GetPrimAtPath(_active_vp.camera_path)
+    if _main_cam_prim.IsValid():
+        _cam_xform = UsdGeom.Xformable(_main_cam_prim)
+        _eye = _cam_xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
+        _focus = Gf.Vec3d(0.0, 0.5, 0.4)
+        _new_eye = _focus + (_eye - _focus) * 0.5
+        _main_translate_op = next(
+            (op for op in _cam_xform.GetOrderedXformOps()
+             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
+            None,
+        )
+        if _main_translate_op is not None:
+            _main_translate_op.Set(_new_eye)
+        else:
+            UsdGeom.XformCommonAPI(_main_cam_prim).SetTranslate(_new_eye)
+
     def _read_ball_pos() -> torch.Tensor:
         mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
         t = mat.ExtractTranslation()
