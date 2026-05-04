@@ -40,10 +40,11 @@ app_launcher = AppLauncher(args)
 simulation_app = app_launcher.app
 
 import carb
+import omni.kit.commands
 import omni.usd
 import isaacsim.core.api.tasks as tasks
 from isaacsim.core.api import World
-from isaacsim.core.api.objects import VisualCuboid, VisualSphere
+from isaacsim.core.api.objects import DynamicCuboid, VisualCuboid, VisualSphere
 from isaacsim.core.prims import SingleXFormPrim
 from isaacsim.core.utils.prims import is_prim_path_valid
 from isaacsim.core.utils.types import ArticulationAction
@@ -63,7 +64,7 @@ def _quat_rotate(v: torch.Tensor, q_wxyz: torch.Tensor) -> torch.Tensor:
     """Rotate vector v by quaternion q (local-to-world: v_world = q * v * q⁻¹)."""
     w, x, y, z = q_wxyz[0], q_wxyz[1], q_wxyz[2], q_wxyz[3]
     u = torch.stack([x, y, z])
-    return v + 2.0 * w * torch.cross(u, v) + 2.0 * torch.cross(u, torch.cross(u, v))
+    return v + 2.0 * w * torch.linalg.cross(u, v) + 2.0 * torch.linalg.cross(u, torch.linalg.cross(u, v))
 
 
 def _quat_inv_rotate(v: torch.Tensor, q_wxyz: torch.Tensor) -> torch.Tensor:
@@ -107,12 +108,19 @@ class FollowTarget(tasks.FollowTarget):
             color=np.array([0.2, 0.2, 0.2]),
         ))
 
-        # Zone borders (thin black lines on the table surface).
+        # Zone borders — ground level (table surface) and upper workspace ceiling (Z=0.70).
+        _WS_Z_TOP = 0.70
         for prim_name, pos, scale in [
-            ("ZoneBorderTop",    [0.0,   1.0, 0.001], [1.52, 0.02, 0.001]),
-            ("ZoneBorderBottom", [0.0,   0.2, 0.001], [1.52, 0.02, 0.001]),
-            ("ZoneBorderLeft",   [-0.75, 0.6, 0.001], [0.02, 0.82, 0.001]),
-            ("ZoneBorderRight",  [0.75,  0.6, 0.001], [0.02, 0.82, 0.001]),
+            # Ground-level borders
+            ("ZoneBorderTop",    [0.0,   1.0, 0.001],      [1.52, 0.02, 0.001]),
+            ("ZoneBorderBottom", [0.0,   0.2, 0.001],      [1.52, 0.02, 0.001]),
+            ("ZoneBorderLeft",   [-0.75, 0.6, 0.001],      [0.02, 0.82, 0.001]),
+            ("ZoneBorderRight",  [0.75,  0.6, 0.001],      [0.02, 0.82, 0.001]),
+            # Upper ceiling borders at Z = _WS_Z_TOP
+            ("ZoneCeilTop",    [0.0,    1.0, _WS_Z_TOP],  [1.52, 0.02, 0.01]),
+            ("ZoneCeilBottom", [0.0,    0.2, _WS_Z_TOP],  [1.52, 0.02, 0.01]),
+            ("ZoneCeilLeft",   [-0.75,  0.6, _WS_Z_TOP],  [0.02, 0.82, 0.01]),
+            ("ZoneCeilRight",  [0.75,   0.6, _WS_Z_TOP],  [0.02, 0.82, 0.01]),
         ]:
             self.scene.add(VisualCuboid(
                 prim_path=f"/World/{prim_name}", name=prim_name.lower(),
@@ -121,21 +129,27 @@ class FollowTarget(tasks.FollowTarget):
                 color=np.array([0.05, 0.05, 0.05]),
             ))
 
-        # Manipulation blocks (pure-visual USD meshes, no rigid-body physics).
+        # Target object: physics-enabled DynamicCuboid matching AsyncDualPlayEnvCfg
+        # (concave.usd has no built-in physics API so we use a cuboid approximation).
+        self.scene.add(DynamicCuboid(
+            prim_path="/World/TargetObject",
+            name="target_object",
+            position=np.array([0.0, 0.7, 0.05]),
+            size=0.04,
+            color=np.array([1.0, 0.2, 0.2]),  # red, same as env cfg diffuse_color
+        ))
+
+        # Remaining blocks — pure-visual USD meshes, no rigid-body physics.
         for prim_name, usd_name, pos in [
-            ("TargetObject", "concave.usd",  [0.0,   0.7, 0.05]),
-            ("Cube",         "cube.usd",     [-0.15, 0.7, 0.05]),
-            ("Cylinder",     "cylinder.usd", [-0.05, 0.5, 0.05]),
-            ("Rect",         "rect.usd",     [0.05,  0.5, 0.05]),
-            ("Triangle",     "triangle.usd", [0.2,   0.6, 0.05]),
+            ("Cube",     "cube.usd",     [-0.15, 0.7, 0.05]),
+            ("Cylinder", "cylinder.usd", [-0.05, 0.5, 0.05]),
+            ("Rect",     "rect.usd",     [0.05,  0.5, 0.05]),
+            ("Triangle", "triangle.usd", [0.2,   0.6, 0.05]),
         ]:
             usd_path = os.path.join(_BLOCKS_DIR, usd_name)
             if os.path.exists(usd_path):
                 add_reference_to_stage(usd_path=usd_path, prim_path=f"/World/{prim_name}")
-                SingleXFormPrim(
-                    prim_path=f"/World/{prim_name}",
-                    position=np.array(pos),
-                )
+                SingleXFormPrim(prim_path=f"/World/{prim_name}", position=np.array(pos))
 
     def set_robot(self) -> SingleManipulator:
         assets_root_path = get_assets_root_path()
@@ -337,6 +351,26 @@ class CuRoboKinematicsSolver:
         return ArticulationAction(joint_positions=joints_np, joint_indices=np.arange(6)), True
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _lock_non_target_prims(target_prim_path: str) -> None:
+    """Lock every prim in the stage except the draggable target sphere.
+
+    Locked prims cannot be selected or moved via the viewport gizmo.
+    The target sphere is identified by its prim path and left untouched.
+    """
+    stage = omni.usd.get_context().get_stage()
+    to_lock = []
+    for prim in stage.Traverse():
+        path = str(prim.GetPath())
+        # Skip pseudo-root, the world scope, and the target sphere (and its children).
+        if path in ("/", "/World") or path.startswith(target_prim_path):
+            continue
+        to_lock.append(path)
+    if to_lock:
+        omni.kit.commands.execute("LockPrims", paths=to_lock)
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -353,6 +387,20 @@ def main():
 
     my_ur10 = my_world.scene.get_object(ur10_name)
     articulation_controller = my_ur10.get_articulation_controller()
+
+    # ── Lock all prims except the draggable target sphere ─────────────────────
+    target_prim_path = task_params["target_prim_path"]["value"]
+    _lock_non_target_prims(target_prim_path)
+
+    # ── Cache USD translate op for the target sphere (ceiling clamp) ──────────
+    from pxr import UsdGeom, Gf
+    _stage = omni.usd.get_context().get_stage()
+    _target_prim = _stage.GetPrimAtPath(target_prim_path)
+    _xlate_ops = [
+        op for op in UsdGeom.Xformable(_target_prim).GetOrderedXformOps()
+        if op.GetOpType() == UsdGeom.XformOp.TypeTranslate
+    ]
+    _Z_CEIL = 0.70
 
     print("\n[INFO] Initializing CuRoboKinematicsSolver...")
     my_controller = CuRoboKinematicsSolver(my_ur10, robot_yaml_name="ur10e.yml")
@@ -382,6 +430,14 @@ def main():
                 ee_pos_world, _ = my_ur10.end_effector.get_world_pose()
                 my_controller.setup_tcp_offset(ee_pos_world)
                 reset_needed = False
+
+            # Ceiling clamp: prevent sphere from being dragged above Z = _Z_CEIL.
+            # Write directly to the USD translate op so the viewport gizmo sees
+            # the corrected position immediately (set_local_pose lags one frame).
+            if _xlate_ops:
+                t = _xlate_ops[0].Get()
+                if t[2] > _Z_CEIL:
+                    _xlate_ops[0].Set(Gf.Vec3d(t[0], t[1], _Z_CEIL))
 
             observations = my_world.get_observations()
             actions, succ = my_controller.compute_inverse_kinematics(

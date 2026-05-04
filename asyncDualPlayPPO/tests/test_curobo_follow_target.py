@@ -129,7 +129,7 @@ def main():
     from asyncDualPlayPPO.tasks.async_dual_play import AsyncDualPlayEnvCfg
     import isaaclab.sim as sim_utils
     import omni.usd
-    from pxr import UsdGeom, Usd
+    from pxr import UsdGeom, Usd, Gf
 
     ARM_JOINT_NAMES = [
         "shoulder_pan_joint",
@@ -221,22 +221,42 @@ def main():
     )
     sphere_cfg.func(target_path, sphere_cfg, translation=tcp_pos_w)
 
+    import omni.kit.app
+
     stage = omni.usd.get_context().get_stage()
     target_prim = stage.GetPrimAtPath(target_path)
-    _xlate_ops = [
-        op for op in UsdGeom.Xformable(target_prim).GetOrderedXformOps()
-        if op.GetOpType() == UsdGeom.XformOp.TypeTranslate
-    ]
+
+    # Workspace bounds for the draggable ball (world frame, matches scene border cuboids).
+    _WS_X_MIN, _WS_X_MAX = -0.75, 0.75
+    _WS_Y_MIN, _WS_Y_MAX =  0.20, 1.00
+    _WS_Z_MIN, _WS_Z_MAX =  0.02, 0.70
+
+    _session_layer = stage.GetSessionLayer()
+    _xform_api = UsdGeom.XformCommonAPI(target_prim)
+
+    # Shared mutable slot so the update-subscription and main loop share one value.
+    _ball_pos = list(tcp_pos_w)   # [x, y, z], updated every frame by subscription
+
+    def _enforce_bounds(_event):
+        """Kit pre-render callback: fires every frame inside simulation_app.update(),
+        after the gizmo writes its drag position but before the scene is rendered.
+        We write the clamped value back to the session layer so the render and the
+        IK loop both see a position that is always inside the workspace."""
+        t, *_ = _xform_api.GetXformVectors(Usd.TimeCode.Default())
+        x = float(max(_WS_X_MIN, min(_WS_X_MAX, t[0])))
+        y = float(max(_WS_Y_MIN, min(_WS_Y_MAX, t[1])))
+        z = float(max(_WS_Z_MIN, min(_WS_Z_MAX, t[2])))
+        _ball_pos[0], _ball_pos[1], _ball_pos[2] = x, y, z
+        if x != t[0] or y != t[1] or z != t[2]:
+            with Usd.EditContext(stage, _session_layer):
+                _xform_api.SetTranslate(Gf.Vec3d(x, y, z))
+
+    _bounds_sub = omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(  # noqa: F841
+        _enforce_bounds, name="ball_workspace_clamp", order=-100
+    )
 
     def _read_ball_pos() -> torch.Tensor:
-        """Read the sphere's world-space position directly from its USD translate attribute.
-        ComputeLocalToWorldTransform() returns a stale cached value when Fabric is active."""
-        if _xlate_ops:
-            t = _xlate_ops[0].Get()
-            return torch.tensor([t[0], t[1], t[2]], device=device, dtype=torch.float32)
-        m = UsdGeom.Xformable(target_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-        t = m.ExtractTranslation()
-        return torch.tensor([t[0], t[1], t[2]], device=device, dtype=torch.float32)
+        return torch.tensor(_ball_pos, device=device, dtype=torch.float32)
 
     # ── Control loop state ─────────────────────────────────────────────────────
     robot_base_pos_w = robot.data.root_pos_w[0].clone()
@@ -266,7 +286,7 @@ def main():
 
     try:
         while simulation_app.is_running():
-            # Flush USD gizmo writes so _read_ball_pos() sees the latest position.
+            # Flush USD gizmo writes so _clamp_and_read_ball() sees the latest position.
             simulation_app.update()
 
             ball_w = _read_ball_pos()
