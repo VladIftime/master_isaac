@@ -8,4 +8,5 @@ __pycache__/
 *.lock
 *.mp4
 asyncDualPlayPPO/__pycache__
-asyncDualPlayPPO/paper-async
+asyncDualPlayPPO/paper-async.master_venv/
+curobo/
