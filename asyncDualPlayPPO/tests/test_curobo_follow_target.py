@@ -206,6 +206,22 @@ def main():
     MAX_REACH = 0.78
     MIN_Z = 0.02
 
+    def _clamp_ball(pos: torch.Tensor) -> torch.Tensor:
+        """Clamp pos to the UR5e reachable workspace and write back to USD if moved."""
+        local = pos - env_origin
+        # Radial reach limit.
+        reach = local.norm()
+        if reach > MAX_REACH:
+            local = local * (MAX_REACH / reach)
+        # Z floor.
+        if local[2] < MIN_Z:
+            local[2] = MIN_Z
+        clamped = local + env_origin
+        if _translate_op is not None and not torch.allclose(pos, clamped, atol=1e-4):
+            with Usd.EditContext(stage, _session_layer):
+                _translate_op.Set(Gf.Vec3d(clamped[0].item(), clamped[1].item(), clamped[2].item()))
+        return clamped
+
     action = torch.zeros((1, env.action_space.shape[-1]), device=device)
     action[0, :6] = reset_joints[0]
 
@@ -238,7 +254,7 @@ def main():
                                                    t[1] + float(delta_pos[1]),
                                                    t[2] + float(delta_pos[2])))
 
-            ball_w = _read_ball_pos()
+            ball_w = _clamp_ball(_read_ball_pos())
 
             # Velocity-clamp: advance IK target toward ball.
             delta = ball_w - current_ik_target_w
