@@ -13,6 +13,8 @@ Controls:
     1. Click the Red Ball in the viewport.
     2. Press 'W' to activate the translation gizmo.
     3. Drag the ball — the arm follows in real-time.
+    4. Press 'C' to spawn random blocks.
+    5. Press 'R' to reset the environment.
 """
 
 import argparse
@@ -41,9 +43,9 @@ def main():
     from asyncDualPlayPPO.tasks.async_dual_play_diffik import AsyncDualPlayDiffIKEnvCfg as AsyncDualPlayEnvCfg
     import isaaclab.sim as sim_utils
     import omni.usd
-    from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf, UsdPhysics
-    import carb
+    from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf
     from isaaclab.devices import Se3Gamepad, Se3GamepadCfg
+    import carb
 
     ARM_JOINT_NAMES = [
         "shoulder_pan_joint",
@@ -104,6 +106,10 @@ def main():
     left_finger_id  = left_finger_ids[0]
     right_finger_id = right_finger_ids[0]
 
+    # Joint indices and reset state for reference
+    joint_indices, _ = robot.find_joints(ARM_JOINT_NAMES)
+    reset_joints = robot.data.default_joint_pos[:, joint_indices]
+
     # ── Spawn red target sphere at gripper midpoint ───────────────────────────
     left_pos  = robot.data.body_pos_w[0, left_finger_id]
     right_pos = robot.data.body_pos_w[0, right_finger_id]
@@ -112,6 +118,13 @@ def main():
 
     target_path = "/World/interactive_target"
     stage = omni.usd.get_context().get_stage()
+
+    # Disable all default stage lights so the scene starts unlit.
+    from pxr import UsdLux
+    for _prim in stage.Traverse():
+        if _prim.IsA(UsdLux.BoundableLightBase) or _prim.IsA(UsdLux.NonboundableLightBase):
+            _prim.SetActive(False)
+
     _cone = UsdGeom.Cone.Define(stage, target_path)
     _cone.GetRadiusAttr().Set(0.02)
     _cone.GetHeightAttr().Set(0.08)
@@ -139,15 +152,11 @@ def main():
     # Visual workspace border boxes
     _WS_X_MIN, _WS_X_MAX = -0.65,  0.65
     _WS_Y_MIN, _WS_Y_MAX =  0.20,  0.75
-    _WS_Z_MIN, _WS_Z_MAX =  0.02,  0.80
+    _WS_Z_MIN, _WS_Z_MAX = -0.02,  0.80
     _vb = 0.03
     _border_cfg = sim_utils.CuboidCfg(
         size=[1.0, 1.0, 1.0],
         visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.85, 0.0), opacity=0.25),
-    )
-    _floor_cfg = sim_utils.CuboidCfg(
-        size=[1.0, 1.0, 1.0],
-        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.08, 0.08, 0.08), opacity=0.55),
     )
     _y_mid   = (_WS_Y_MIN + _WS_Y_MAX) / 2.0
     _z_mid   = (_WS_Z_MIN + _WS_Z_MAX) / 2.0
@@ -163,10 +172,6 @@ def main():
     ]:
         _border_cfg.func(f"/World/{_name}", _border_cfg,
                          translation=np.array(_pos), scale=np.array(_scale))
-    # Dark floor slab — flat on the table showing the exact workspace footprint.
-    _floor_cfg.func("/World/WsFloor", _floor_cfg,
-                    translation=np.array([0.0, _y_mid, 0.002]),
-                    scale=np.array([_WS_X_MAX - _WS_X_MIN, _WS_Y_MAX - _WS_Y_MIN, 0.001]))
 
     # ── Block spawner ─────────────────────────────────────────────────────────
     import random
@@ -192,14 +197,9 @@ def main():
         xform.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.05))
         xform.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
         xform.GetPrim().GetReferences().AddReference(usd_file)
-        # Apply physics so the block can be grabbed/pushed.
-        UsdPhysics.RigidBodyAPI.Apply(xform.GetPrim())
-        UsdPhysics.CollisionAPI.Apply(xform.GetPrim())
-        mass_api = UsdPhysics.MassAPI.Apply(xform.GetPrim())
-        mass_api.CreateMassAttr().Set(0.3)
         r, g, b = random.random(), random.random(), random.random()
         _bmat    = UsdShade.Material.Define(stage, prim_path + "/BlockMat")
-        _bshader = UsdShade.Shader.Define(stage,   prim_path + "/BlockMat/Shader")
+        _bshader = UsdShade.Shader.Define(stage,   _bmat.GetPath().AppendChild("Shader"))
         _bshader.CreateIdAttr("UsdPreviewSurface")
         _bshader.CreateInput("diffuseColor",  Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(r, g, b))
         _bshader.CreateInput("roughness",     Sdf.ValueTypeNames.Float).Set(0.5)
@@ -207,10 +207,14 @@ def main():
         UsdShade.MaterialBindingAPI(xform.GetPrim()).Bind(_bmat)
         _spawned_blocks.append(prim_path)
 
+    _reset_requested = [False]
+
     def _on_keyboard(event, *_args, **_kwargs):
-        if (event.type == carb.input.KeyboardEventType.KEY_PRESS
-                and event.input == carb.input.KeyboardInput.C):
-            _spawn_requested[0] = True
+        if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+            if event.input == carb.input.KeyboardInput.C:
+                _spawn_requested[0] = True
+            elif event.input == carb.input.KeyboardInput.R:
+                _reset_requested[0] = True
         return True
 
     _appwindow  = omni.appwindow.get_default_app_window()
@@ -240,14 +244,46 @@ def main():
         UsdGeom.Xformable(cam).MakeMatrixXform().Set(_make_lookat_matrix(eye, target))
         return prim_path
 
-    _cam_side = _add_camera("/World/CamSide", eye=(1.5, 0.5, 0.1), target=(0.10, 0.5, 0.0))
-    _cam_top = _add_camera("/World/CamTop", eye=(0.0, 0.5, 1.5), target=(0.0, 0.55, 0.0), focal_mm=18.0)
-    _vp_side = vp_util.create_viewport_window("Side View", width=420, height=280)
-    _vp_side.viewport_api.set_active_camera(_cam_side)
-    _vp_side.position_x, _vp_side.position_y = 0, 0
-    _vp_top = vp_util.create_viewport_window("Top View", width=420, height=280)
-    _vp_top.viewport_api.set_active_camera(_cam_top)
-    _vp_top.position_x, _vp_top.position_y = 0, 290
+    _ws_y_mid = (_WS_Y_MIN + _WS_Y_MAX) / 2.0
+
+    _cam_side = _add_camera(
+        "/World/CamSide",
+        eye    = (1.5,  _ws_y_mid, 0.15),
+        target = (0.0,  _ws_y_mid, 0.0),
+    )
+    _cam_top = _add_camera(
+        "/World/CamTop",
+        eye    = (0.0,  _ws_y_mid, 1.3),
+        target = (0.0,  _ws_y_mid, 0.0),
+        focal_mm=18.0,
+    )
+
+    _vp_side = vp_util.create_viewport_window(
+        "Side View", width=420, height=280, position_x=0, position_y=0
+    )
+    _vp_side.viewport_api.camera_path = _cam_side
+
+    _vp_top = vp_util.create_viewport_window(
+        "Top View", width=420, height=280, position_x=0, position_y=290
+    )
+    _vp_top.viewport_api.camera_path = _cam_top
+
+    _active_vp = vp_util.get_active_viewport()
+    _main_cam_prim = stage.GetPrimAtPath(_active_vp.camera_path)
+    if _main_cam_prim.IsValid():
+        _cam_xform = UsdGeom.Xformable(_main_cam_prim)
+        _eye = _cam_xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
+        _focus = Gf.Vec3d(0.0, 0.5, 0.4)
+        _new_eye = _focus + (_eye - _focus) * 0.5
+        _main_translate_op = next(
+            (op for op in _cam_xform.GetOrderedXformOps()
+             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
+            None,
+        )
+        if _main_translate_op is not None:
+            _main_translate_op.Set(_new_eye)
+        else:
+            UsdGeom.XformCommonAPI(_main_cam_prim).SetTranslate(_new_eye)
 
     def _read_ball_pos() -> torch.Tensor:
         mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
@@ -256,15 +292,27 @@ def main():
 
     # ── Control loop state ─────────────────────────────────────────────────────
     env_origin = env.scene.env_origins[0]
+
+    _ox, _oy, _oz = env_origin[0].item(), env_origin[1].item(), env_origin[2].item()
+    _ws_slab = UsdGeom.Cube.Define(stage, "/World/WsFloor")
+    _ws_slab.GetSizeAttr().Set(1.0)
+    UsdGeom.Xformable(_ws_slab).AddTranslateOp().Set(Gf.Vec3d(_ox, _oy + float(_y_mid), _oz + 0.003))
+    UsdGeom.Xformable(_ws_slab).AddScaleOp().Set(Gf.Vec3f(_WS_X_MAX - _WS_X_MIN, _WS_Y_MAX - _WS_Y_MIN, 0.001))
+    _ws_mat    = UsdShade.Material.Define(stage, "/World/WsFloor/Mat")
+    _ws_shader = UsdShade.Shader.Define(stage,   _ws_mat.GetPath().AppendChild("Shader"))
+    _ws_shader.CreateIdAttr("UsdPreviewSurface")
+    _ws_shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.15, 0.45, 0.15))
+    _ws_shader.CreateInput("roughness",    Sdf.ValueTypeNames.Float).Set(0.9)
+    _ws_mat.CreateSurfaceOutput().ConnectToSource(_ws_shader.ConnectableAPI(), "surface")
+    UsdShade.MaterialBindingAPI(_ws_slab.GetPrim()).Bind(_ws_mat)
+
     target_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device, dtype=torch.float32) # [w, x, y, z]
 
     current_ik_target_w = torch.tensor(ball_spawn, device=device, dtype=torch.float32)
+    last_good_joints = reset_joints[0].clone()
     max_step_delta = args.max_vel * env.step_dt
-    MAX_REACH = 0.78
-    MIN_Z = 0.02
 
     def _clamp_ball(pos: torch.Tensor) -> torch.Tensor:
-        """Clamp pos to the workspace rectangle and write back to USD if moved."""
         local = pos - env_origin
         local[0] = local[0].clamp(_WS_X_MIN, _WS_X_MAX)
         local[1] = local[1].clamp(_WS_Y_MIN, _WS_Y_MAX)
@@ -291,30 +339,36 @@ def main():
         while simulation_app.is_running():
             simulation_app.update()
 
+            if _reset_requested[0]:
+                _reset_requested[0] = False
+                env.reset()
+                robot.update(env.step_dt)
+                last_good_joints = reset_joints[0].clone()
+                current_ik_target_w = torch.tensor(ball_spawn, device=device, dtype=torch.float32)
+                if _translate_op is not None:
+                    with Usd.EditContext(stage, _session_layer):
+                        _translate_op.Set(Gf.Vec3d(float(ball_spawn[0]), float(ball_spawn[1]), float(ball_spawn[2])))
+                gamepad.reset()
+                print("  [R] Reset — robot and target returned to start pose.")
+
             if _spawn_requested[0]:
                 _spawn_requested[0] = False
                 _spawn_block()
 
-            # Apply gamepad XYZ delta to ball's USD position.
             gamepad_cmd = gamepad.advance()
             delta_pos = gamepad_cmd[:3].cpu().numpy()
-            # Remap left-stick so UP=forward(+Y), DOWN=back(-Y), RIGHT=right(-X), LEFT=left(+X)
             dx, dy = delta_pos[0], delta_pos[1]
             delta_pos[0] = dy
             delta_pos[1] = dx
-            action[0, -1] = gamepad_cmd[6] # gripper
+            action[0, 7] = gamepad_cmd[6] # Gripper at index 7 for 8D action space
             if delta_pos.any():
                 mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
                 t = mat.ExtractTranslation()
                 if _translate_op is not None:
                     with Usd.EditContext(stage, _session_layer):
-                        _translate_op.Set(Gf.Vec3d(t[0] + float(delta_pos[0]),
-                                                   t[1] + float(delta_pos[1]),
-                                                   t[2] + float(delta_pos[2])))
+                        _translate_op.Set(Gf.Vec3d(t[0] + float(delta_pos[0]), t[1] + float(delta_pos[1]), t[2] + float(delta_pos[2])))
 
             ball_w = _clamp_ball(_read_ball_pos())
-
-            # Velocity-clamp: advance IK target toward ball.
             delta = ball_w - current_ik_target_w
             dist = delta.norm()
             if dist > max_step_delta:
@@ -322,23 +376,20 @@ def main():
             else:
                 current_ik_target_w = ball_w.clone()
 
-            # Workspace clamp in local (env-origin-relative) frame.
             local_target = current_ik_target_w - env_origin
             local_target[0] = local_target[0].clamp(_WS_X_MIN, _WS_X_MAX)
             local_target[1] = local_target[1].clamp(_WS_Y_MIN, _WS_Y_MAX)
             local_target[2] = local_target[2].clamp(_WS_Z_MIN, _WS_Z_MAX)
             current_ik_target_w = local_target + env_origin
 
-            # TCP offset
             left_pos_w   = robot.data.body_pos_w[0, left_finger_id]
             right_pos_w  = robot.data.body_pos_w[0, right_finger_id]
             tcp_pos_w_cur = (left_pos_w + right_pos_w) / 2.0
             wrist3_pos_w  = robot.data.body_pos_w[0, wrist3_id]
             tcp_offset    = tcp_pos_w_cur - wrist3_pos_w
-
             ik_local_target = local_target - tcp_offset
 
-            # DiffIK action vector: [x, y, z, qw, qx, qy, qz, gripper]
+            # DiffIK action vector.
             action[0, 0:3] = ik_local_target
             action[0, 3:7] = target_quat
 
@@ -349,18 +400,11 @@ def main():
             if step_count % 10 == 0:
                 tcp_local = tcp_pos_w_cur - env_origin
                 err = (tcp_local - local_target).norm().item()
-                print(
-                    f"[{step_count:5d}] "
-                    f"target=({local_target[0]:.3f},{local_target[1]:.3f},{local_target[2]:.3f}) "
-                    f"tcp=({tcp_local[0]:.3f},{tcp_local[1]:.3f},{tcp_local[2]:.3f}) "
-                    f"err={err:.4f}m"
-                )
+                print(f"[{step_count:5d}] target=({local_target[0]:.3f},{local_target[1]:.3f},{local_target[2]:.3f}) tcp=({tcp_local[0]:.3f},{tcp_local[1]:.3f},{tcp_local[2]:.3f}) err={err:.4f}m")
 
     except KeyboardInterrupt:
         print("\nExiting.")
-
     simulation_app.close()
-
 
 if __name__ == "__main__":
     main()

@@ -52,7 +52,7 @@ def main():
     import isaaclab.sim as sim_utils
     import omni.usd
     import numpy as np
-    from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf
+    from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf, UsdPhysics
     from isaaclab.devices import Se3Gamepad, Se3GamepadCfg
     import carb
 
@@ -259,8 +259,17 @@ def main():
         xform.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.05))
         xform.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
         xform.GetPrim().GetReferences().AddReference(usd_file)
-        # The USD files already carry RigidBodyAPI on their inner baseLink —
-        # adding physics on the outer xform too creates an invalid hierarchy.
+        # Disable the inner baseLink's rigid body so there is only one in the
+        # hierarchy.  A scaled parent breaks PhysX unless the rigid body sits
+        # on the same prim as the scale ops.
+        _bl = stage.GetPrimAtPath(prim_path + "/baseLink")
+        if _bl.IsValid() and _bl.HasAPI(UsdPhysics.RigidBodyAPI):
+            UsdPhysics.RigidBodyAPI(_bl).CreateRigidBodyEnabledAttr(False)
+        # physx_utils.setRigidBody adds RigidBodyAPI + PhysxRigidBodyAPI to the
+        # outer xform and walks the subtree to apply convex-hull collision.
+        import omni.physx.scripts.utils as physx_utils
+        physx_utils.setRigidBody(xform.GetPrim(), "convexDecomposition", False)
+        UsdPhysics.MassAPI.Apply(xform.GetPrim()).CreateMassAttr().Set(0.3)
         # Unique random colour applied as a material override on the outer xform.
         r, g, b = random.random(), random.random(), random.random()
         _bmat    = UsdShade.Material.Define(stage, prim_path + "/BlockMat")
