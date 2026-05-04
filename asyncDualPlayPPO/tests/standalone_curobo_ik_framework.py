@@ -109,7 +109,7 @@ class FollowTarget(tasks.FollowTarget):
         ))
 
         # Zone borders — ground level (table surface) and upper workspace ceiling (Z=0.70).
-        _WS_Z_TOP = 0.70
+        _WS_Z_TOP = 1.05
         for prim_name, pos, scale in [
             # Ground-level borders
             ("ZoneBorderTop",    [0.0,   1.0, 0.001],      [1.52, 0.02, 0.001]),
@@ -400,7 +400,7 @@ def main():
         op for op in UsdGeom.Xformable(_target_prim).GetOrderedXformOps()
         if op.GetOpType() == UsdGeom.XformOp.TypeTranslate
     ]
-    _Z_CEIL = 0.70
+    _Z_CEIL = 1.05
 
     print("\n[INFO] Initializing CuRoboKinematicsSolver...")
     my_controller = CuRoboKinematicsSolver(my_ur10, robot_yaml_name="ur10e.yml")
@@ -432,8 +432,6 @@ def main():
                 reset_needed = False
 
             # Ceiling clamp: prevent sphere from being dragged above Z = _Z_CEIL.
-            # Write directly to the USD translate op so the viewport gizmo sees
-            # the corrected position immediately (set_local_pose lags one frame).
             if _xlate_ops:
                 t = _xlate_ops[0].Get()
                 if t[2] > _Z_CEIL:
