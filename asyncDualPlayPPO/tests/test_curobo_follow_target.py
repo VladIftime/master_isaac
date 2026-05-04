@@ -38,7 +38,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 def main():
     parser = argparse.ArgumentParser(description="CuRobo Interactive Follow Target")
-    parser.add_argument("--max_vel", type=float, default=0.5, help="Max EE velocity in m/s")
+    parser.add_argument("--max_vel", type=float, default=2.0, help="Max EE velocity in m/s")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -135,6 +135,7 @@ def main():
     left_pos  = robot.data.body_pos_w[0, left_finger_id]
     right_pos = robot.data.body_pos_w[0, right_finger_id]
     ball_spawn = ((left_pos + right_pos) / 2.0).cpu().numpy()
+    ball_spawn[2] += 0.05  # 5 cm above gripper midpoint
 
     target_path = "/World/interactive_target"
     sphere_cfg = sim_utils.SphereCfg(
