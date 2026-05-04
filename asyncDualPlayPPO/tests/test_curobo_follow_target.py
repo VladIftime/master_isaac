@@ -52,7 +52,9 @@ def main():
     import isaaclab.sim as sim_utils
     import omni.usd
     import numpy as np
-    from pxr import UsdGeom, Usd
+    from pxr import UsdGeom, Usd, Gf
+    from isaaclab.devices import Se3Gamepad, Se3GamepadCfg
+    import carb
 
     ARM_JOINT_NAMES = [
         "shoulder_pan_joint",
@@ -94,6 +96,11 @@ def main():
 
     env = ManagerBasedRLEnv(cfg=env_cfg)
     device = env.device
+
+    # ── Gamepad ────────────────────────────────────────────────────────────────
+    carb.log_info("Initializing Se3Gamepad...")
+    gamepad = Se3Gamepad(Se3GamepadCfg(pos_sensitivity=0.02, rot_sensitivity=0.0, gripper_term=False))
+    gamepad.reset()
 
     # ── CuRobo IK solver ──────────────────────────────────────────────────────
     print("\nInitializing CuRobo IKSolver...")
@@ -148,6 +155,15 @@ def main():
     stage = omni.usd.get_context().get_stage()
     target_prim = stage.GetPrimAtPath(target_path)
     _xformable = UsdGeom.Xformable(target_prim)
+    _session_layer = stage.GetSessionLayer()
+    # Find the existing translate op so we can write to it directly.
+    # XformCommonAPI.SetTranslate fails on IsaacLab-spawned prims whose xform
+    # op layout doesn't match the CommonAPI schema.
+    _translate_op = next(
+        (op for op in _xformable.GetOrderedXformOps()
+         if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
+        None,
+    )
 
     # Visual workspace border boxes
     _WS_X_MIN, _WS_X_MAX = -0.75,  0.75
@@ -209,6 +225,18 @@ def main():
     try:
         while simulation_app.is_running():
             simulation_app.update()
+
+            # Apply gamepad XYZ delta to ball's USD position.
+            gamepad_cmd = gamepad.advance()
+            delta_pos = gamepad_cmd[:3].cpu().numpy()
+            if delta_pos.any():
+                mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                t = mat.ExtractTranslation()
+                if _translate_op is not None:
+                    with Usd.EditContext(stage, _session_layer):
+                        _translate_op.Set(Gf.Vec3d(t[0] + float(delta_pos[0]),
+                                                   t[1] + float(delta_pos[1]),
+                                                   t[2] + float(delta_pos[2])))
 
             ball_w = _read_ball_pos()
 
