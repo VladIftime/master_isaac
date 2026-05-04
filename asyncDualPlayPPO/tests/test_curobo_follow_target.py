@@ -52,7 +52,7 @@ def main():
     import isaaclab.sim as sim_utils
     import omni.usd
     import numpy as np
-    from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf, UsdPhysics
+    from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf
     from isaaclab.devices import Se3Gamepad, Se3GamepadCfg
     import carb
 
@@ -259,11 +259,8 @@ def main():
         xform.AddTranslateOp().Set(Gf.Vec3d(x, y, 0.05))
         xform.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
         xform.GetPrim().GetReferences().AddReference(usd_file)
-        # Apply physics so the block can be grabbed/pushed.
-        UsdPhysics.RigidBodyAPI.Apply(xform.GetPrim())
-        UsdPhysics.CollisionAPI.Apply(xform.GetPrim())
-        mass_api = UsdPhysics.MassAPI.Apply(xform.GetPrim())
-        mass_api.CreateMassAttr().Set(0.3)
+        # The USD files already carry RigidBodyAPI on their inner baseLink —
+        # adding physics on the outer xform too creates an invalid hierarchy.
         # Unique random colour applied as a material override on the outer xform.
         r, g, b = random.random(), random.random(), random.random()
         _bmat    = UsdShade.Material.Define(stage, prim_path + "/BlockMat")
