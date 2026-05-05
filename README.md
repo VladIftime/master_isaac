@@ -451,3 +451,19 @@ The expected benefit over RMPFlow is smoother joint trajectories (better physica
 plausibility of Alice's goals) and explicit workspace constraint enforcement. The
 expected benefit over DiffIK is better IK quality near singularities, which matters
 when Alice explores configurations at the edges of the workspace.
+
+---
+
+## Latest Updates (May 2026)
+
+### 1. Environment & Object Spawning
+*   **Startup Randomization**: The `TargetObject` and `Cube` are now randomly selected from a pool (`concave`, `cube`, `cylinder`, `rect`, `triangle`) at simulation startup. This provides visual and geometric variety for each training run while maintaining simulation stability.
+*   **Visual Enhancements**:
+    *   **Scale**: All blocks have been scaled up to **(1.5, 1.5, 1.5)** for significantly better visibility and easier interaction for the robot arms.
+    *   **Color**: All target-related objects are now consistently colored **Green** `(0.1, 0.8, 0.1)`.
+    *   **Table Feedback**: In non-headless mode, the table color now dynamically switches based on the active agent: **Red** for Alice and **Blue** for Bob.
+
+### 2. cuRobo Training Refinements (`train_curobo.py`)
+*   **Continuous Episodes (No IK Resets)**: Removed the immediate episode reset on IK failure. If the cuRobo solver cannot find a solution (e.g., the agent commands a pose inside the table), the robot now **holds its last valid pose** and the episode continues. This allows Alice to learn how to touch and push blocks without being interrupted by a reset.
+*   **Target Persistence**: Removed target synchronization on IK failure. The target no longer "snaps" back to the hand if a command fails, forcing the agent to learn to move away from unreachable or colliding configurations.
+*   **Stability**: Switched to **Startup Randomization** for USD references to prevent invalidating the PhysX tensor backend views during training rollouts. Resolved import errors (`NameError`, `AttributeError`) associated with custom spawner implementation.

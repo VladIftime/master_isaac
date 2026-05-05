@@ -12,6 +12,72 @@
 from dataclasses import MISSING
 import math
 import os
+import re
+import torch
+import numpy as np
+from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
+from isaaclab.sim.spawners.from_files import spawn_from_usd
+
+# Define block variety
+BLOCK_FILES = ["concave.usd", "cube.usd", "cylinder.usd", "rect.usd", "triangle.usd"]
+
+def spawn_random_block(prim_path: str, cfg: UsdFileCfg, translation=None, orientation=None):
+    """
+    Custom spawner that picks a USD file based on the environment index.
+    
+    Ensures that different environments have different shapes, providing variety 
+    across the parallel training batch without breaking the physics tensor backend.
+    """
+    import isaaclab.sim as sim_utils
+    from isaaclab.sim.utils.stage import get_current_stage
+    
+    # Base directory for blocks (infer from existing path)
+    base_dir = os.path.dirname(cfg.usd_path)
+    
+    # If the prim_path is a regex (e.g. contains .*), we need to spawn for all environments
+    if ".*" in prim_path:
+        stage = get_current_stage()
+        # Find all environments already created by the cloner
+        env_folder = stage.GetPrimAtPath("/World/envs")
+        if not env_folder.IsValid():
+            # Fallback if envs are not under /World/envs
+            return spawn_from_usd(prim_path, cfg, translation, orientation)
+            
+        env_names = [child.GetName() for child in env_folder.GetChildren() if child.GetName().startswith("env_")]
+        if not env_names:
+            return spawn_from_usd(prim_path, cfg, translation, orientation)
+            
+        # Spawn one for each environment
+        for env_name in env_names:
+            # Extract index
+            try:
+                env_idx = int(env_name.split("_")[-1])
+            except:
+                env_idx = 0
+            
+            # Construct actual path for this env
+            actual_path = prim_path.replace(".*", str(env_idx))
+            
+            # Choose block (different pattern for Cube vs TargetObject)
+            offset = 2 if "Cube" in actual_path else 0
+            usd_file = BLOCK_FILES[(env_idx + offset) % len(BLOCK_FILES)]
+            cfg.usd_path = os.path.join(base_dir, usd_file)
+            
+            # Spawn
+            spawn_from_usd(actual_path, cfg, translation, orientation)
+        
+        # Return the first one as representative
+        return stage.GetPrimAtPath(prim_path.replace(".*", "0"))
+
+    # Single path case (fallback or template)
+    match = re.search(r"env_(\d+)", prim_path)
+    env_idx = int(match.group(1)) if match else 0
+    
+    offset = 2 if "Cube" in prim_path else 0
+    usd_file = BLOCK_FILES[(env_idx + offset) % len(BLOCK_FILES)]
+    cfg.usd_path = os.path.join(base_dir, usd_file)
+    
+    return spawn_from_usd(prim_path, cfg, translation, orientation)
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
@@ -31,7 +97,6 @@ from isaaclab.sim import SimulationCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import (
     GroundPlaneCfg,
     UrdfFileCfg,
-    UsdFileCfg,
 )
 from isaaclab.utils import configclass
 
@@ -180,6 +245,8 @@ UR5e_Dual_CFG = UR5e_CFG.replace(
 class ReachDualArmSceneCfg(InteractiveSceneCfg):
     """Configuration for the dual-arm reach scene."""
 
+    replicate_physics: bool = False
+
     robot: ArticulationCfg = UR5e_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotUnified",
         init_state=ArticulationCfg.InitialStateCfg(
@@ -264,13 +331,14 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/TargetObject",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.0, 0.7, 0.05],
-            rot=[0.0, 0.0, 0.0, 1.0],  # 0.05: gravity settles to ~0.023
+            rot=[0.0, 0.0, 0.0, 1.0],
         ),
         spawn=UsdFileCfg(
-            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/concave.usd",
-            scale=(1.0, 1.0, 1.0),
+            func=spawn_random_block, # Use custom randomizer
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
+            scale=(1.5, 1.5, 1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.2, 0.2)),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
         ),
     )
 
@@ -278,13 +346,14 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Cube",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[-0.15, 0.7, 0.05],
-            rot=[0.0, 0.0, 0.0, 1.0],  # 0.05: gravity settles to ~0.023
+            rot=[0.0, 0.0, 0.0, 1.0],
         ),
         spawn=UsdFileCfg(
+            func=spawn_random_block, # Use custom randomizer
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
-            scale=(1.0, 1.0, 1.0),
+            scale=(1.5, 1.5, 1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.6, 1.0)),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
         ),
     )
 
@@ -295,7 +364,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-            scale=(1.0, 1.0, 1.0),
+            scale=(1.5, 1.5, 1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 1.0, 0.4)),
         ),
@@ -308,7 +377,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
-            scale=(1.0, 1.0, 1.0),
+            scale=(1.5, 1.5, 1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
         ),
@@ -321,7 +390,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
-            scale=(1.0, 1.0, 1.0),
+            scale=(1.5, 1.5, 1.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.8)),
         ),

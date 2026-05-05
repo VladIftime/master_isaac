@@ -125,20 +125,8 @@ def reset_objects_to_random_safe_pose(
     """
     Reset objects to random positions within the table workspace.
 
-    Randomises the XY spawn location each call so Alice cannot trivially push
-    the block to a fixed goal with her home-position arm sweep. Objects missing
-    from the scene are silently skipped.
-
-    Returns a dict with keys "target_local" and optionally "cube_local", each
-    a (num_resets, 3) tensor in LOCAL frame with Z=0.023 (gravity-settled height).
-    The caller should use these to set episode_manager.initial_states directly,
-    avoiding PhysX readback timing issues.
-
-    Args:
-        env: The RL environment.
-        env_ids: Indices of environments to reset.
-        x_range: Local x randomisation bounds (metres, env-origin-relative).
-        y_range: Local y randomisation bounds (metres, env-origin-relative).
+    Randomises the XY spawn location each call. Objects missing from the scene
+    are silently skipped.
     """
     num_resets = len(env_ids)
     if num_resets == 0:
@@ -151,8 +139,6 @@ def reset_objects_to_random_safe_pose(
     # Random XY for target_object
     x_local = torch.rand(num_resets, device=env.device) * (x_range[1] - x_range[0]) + x_range[0]
     y_local = torch.rand(num_resets, device=env.device) * (y_range[1] - y_range[0]) + y_range[0]
-    # Physics spawn at Z=0.05 (above table); gravity settles to Z≈0.023.
-    # initial_states records 0.023 so the movement metric isn't inflated by the drop.
     spawn_z = torch.full((num_resets,), 0.05, device=env.device)
     settled_z = torch.full((num_resets,), 0.023, device=env.device)
 

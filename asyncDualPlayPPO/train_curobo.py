@@ -967,38 +967,11 @@ def main():
             if len(bob_indices) > 0:
                 env_full[bob_indices,   6] = bob_gripper_state[bob_indices].squeeze(-1)
 
-            # 6. Episode reset for active envs where IK failed.
-            # Do NOT call env.env.reset() here — that triggers Isaac Lab's env_cfg reset
-            # events which randomly move objects to positions that differ from what
-            # initial_states records (causes phantom goal displacement and constant
-            # visible respawning). Instead, reset everything manually so we control
-            # exactly what gets placed and can sync initial_states accordingly.
-            if len(_active) > 0:
-                if len(_fail_active) > 0:
-                    env.episode_manager.reset_episode(_fail_active, reason="ik_failure")
-                    # Reset robot joints to default pose and set table to Red
-                    env.set_table_color(_fail_active, (0.8, 0.1, 0.1))
-                    _robot_scene.write_joint_state_to_sim(
-                        position=_robot_scene.data.default_joint_pos[_fail_active],
-                        velocity=_robot_scene.data.default_joint_vel[_fail_active],
-                        env_ids=_fail_active,
-                    )
-                    # Place objects at known random positions and record in initial_states
-                    _sp = _rand_reset_objs(env.env, _fail_active)
-                    env.episode_manager.initial_states[_fail_active] = (
-                        env._initial_states_from_spawn(_sp, len(_fail_active))
-                    )
-                    env.env.scene.write_data_to_sim()
-
-                    if alice_hidden is not None:
-                        alice_hidden[0][_fail_active] = 0.0
-                        alice_hidden[1][_fail_active] = 0.0
-                    if bob_hidden is not None:
-                        bob_hidden[0][_fail_active] = 0.0
-                        bob_hidden[1][_fail_active] = 0.0
 
             # Capture phase BEFORE env.step so we can detect transitions afterwards
+            # and log the correct step count before the wrapper resets it to 0.
             _prev_phase = env.episode_manager.current_phase.clone()
+            _prev_steps = env.episode_manager.phase_step.clone()
 
             # ── STEP ──────────────────────────────────────────────────────────────
             with profiler.section("env_step"):
@@ -1010,10 +983,8 @@ def main():
             _alice_just_ended = _phase_changed & is_alice   
             _bob_just_ended   = _phase_changed & is_bob     
             
-            # Identify ALL envs that need a target sync (Phase changes, Terminations, and IK Fails)
+            # Identify ALL envs that need a target sync (Phase changes and Terminations)
             needs_sync = _phase_changed | dones.bool()
-            if len(_fail_active) > 0:
-                needs_sync[_fail_active] = True
 
             if needs_sync.any():
                 _sync_ids = torch.where(needs_sync)[0]
@@ -1058,11 +1029,16 @@ def main():
             a_sigma_full[alice_indices] = a_sigma_active
 
             if alice_hidden is not None:
-                done_alice = alice_indices[dones[alice_indices]]
+                # Reset Alice's memory if the episode ended OR if her phase just transitioned to Bob
+                reset_alice = (dones[alice_indices]) | (_alice_just_ended[alice_indices])
+                done_alice = alice_indices[reset_alice]
                 if len(done_alice) > 0:
                     alice_hidden[0][done_alice] = 0.0
                     alice_hidden[1][done_alice] = 0.0
-            alice_gripper_state[alice_indices[dones[alice_indices]]] = 1.0
+            
+            # Reset gripper state to OPEN (1.0) on phase boundary/reset
+            reset_alice_ids = alice_indices[(dones[alice_indices]) | (_alice_just_ended[alice_indices])]
+            alice_gripper_state[reset_alice_ids] = 1.0
 
             a_masks = torch.zeros(env.num_envs, 1, device=env.device)
             a_masks[alice_indices[~dones[alice_indices]]] = 1.0
@@ -1093,11 +1069,16 @@ def main():
             b_masks[bob_indices[~ended_for_bob[bob_indices]]] = 1.0
 
             if bob_hidden is not None:
-                done_bob = bob_indices[dones[bob_indices]]
+                # Reset Bob's memory if the episode ended OR if his phase just transitioned to Alice
+                reset_bob = (dones[bob_indices]) | (_bob_just_ended[bob_indices])
+                done_bob = bob_indices[reset_bob]
                 if len(done_bob) > 0:
                     bob_hidden[0][done_bob] = 0.0
                     bob_hidden[1][done_bob] = 0.0
-            bob_gripper_state[bob_indices[dones[bob_indices]]] = 1.0
+            
+            # Reset gripper state to OPEN (1.0) on phase boundary/reset
+            reset_bob_ids = bob_indices[(dones[bob_indices]) | (_bob_just_ended[bob_indices])]
+            bob_gripper_state[reset_bob_ids] = 1.0
 
             next_bob_obs = obs_full[:, env.alice_obs_dim :]
             with profiler.section("bob_store"):
@@ -1124,7 +1105,7 @@ def main():
                         _rew   = alice_rewards_now[_gi].item()
                         _dense = _dbg_rew_acc[_gi].item()
                         _ik_f  = _dbg_ik_fails[_gi].item()
-                        _step  = env.episode_manager.phase_step[_gi].item() if hasattr(env.episode_manager, "phase_step") else -1
+                        _step  = _prev_steps[_gi].item()
                         print(
                             f"  [ALICE END | iter={bob_updates} env={_gi}]"
                             f"  goal={_valid}"
@@ -1142,7 +1123,7 @@ def main():
                         _gv   = "valid_goal" if goal_valid[_gi].item() else "no_goal"
                         _pos  = ep_info.get("bob_pos_err", torch.zeros(env.num_envs, device=env.device))[_gi].item()
                         _rot  = ep_info.get("bob_rot_err", torch.zeros(env.num_envs, device=env.device))[_gi].item()
-                        _step = env.episode_manager.phase_step[_gi].item() if hasattr(env.episode_manager, "phase_step") else -1
+                        _step = _prev_steps[_gi].item()
                         _alice_rew_at_bob_end = alice_rewards_now[_gi].item()
                         print(
                             f"  [BOB END   | iter={bob_updates} env={_gi}]"
@@ -1343,3 +1324,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- LATEST UPDATES (May 2026) ---
+# 1. Removed immediate episode reset on IK failure to allow Alice to learn from collisions.
+# 2. Disabled target 'snapping' (sync) on IK failure; the agent must now learn to recover.
+# 3. Switched to startup-time random block selection for simulation stability.
+# 4. Standardized all blocks to a Green (0.1, 0.8, 0.1) visual theme with 1.5x scale.
