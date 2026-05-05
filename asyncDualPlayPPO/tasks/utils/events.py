@@ -96,8 +96,6 @@ def reset_objects_to_fixed_safe_pose(
     if num_resets == 0:
         return
 
-    # print(f"[Reset] Resetting objects to safe pose for {num_resets} envs")
-
     env_origins = env.scene.env_origins[env_ids]
     identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=env.device)
     zero_vel = torch.zeros(num_resets, 6, device=env.device)
@@ -116,6 +114,76 @@ def reset_objects_to_fixed_safe_pose(
             obj.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
         except KeyError:
             pass
+
+
+def reset_objects_to_random_safe_pose(
+    env: ManagerBasedRLEnv,
+    env_ids: torch.Tensor,
+    x_range: tuple[float, float] = (-0.35, 0.35),
+    y_range: tuple[float, float] = (0.45, 0.80),
+) -> dict:
+    """
+    Reset objects to random positions within the table workspace.
+
+    Randomises the XY spawn location each call so Alice cannot trivially push
+    the block to a fixed goal with her home-position arm sweep. Objects missing
+    from the scene are silently skipped.
+
+    Returns a dict with keys "target_local" and optionally "cube_local", each
+    a (num_resets, 3) tensor in LOCAL frame with Z=0.023 (gravity-settled height).
+    The caller should use these to set episode_manager.initial_states directly,
+    avoiding PhysX readback timing issues.
+
+    Args:
+        env: The RL environment.
+        env_ids: Indices of environments to reset.
+        x_range: Local x randomisation bounds (metres, env-origin-relative).
+        y_range: Local y randomisation bounds (metres, env-origin-relative).
+    """
+    num_resets = len(env_ids)
+    if num_resets == 0:
+        return {}
+
+    env_origins = env.scene.env_origins[env_ids]
+    identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=env.device)
+    zero_vel = torch.zeros(num_resets, 6, device=env.device)
+
+    # Random XY for target_object
+    x_local = torch.rand(num_resets, device=env.device) * (x_range[1] - x_range[0]) + x_range[0]
+    y_local = torch.rand(num_resets, device=env.device) * (y_range[1] - y_range[0]) + y_range[0]
+    # Physics spawn at Z=0.05 (above table); gravity settles to Z≈0.023.
+    # initial_states records 0.023 so the movement metric isn't inflated by the drop.
+    spawn_z = torch.full((num_resets,), 0.05, device=env.device)
+    settled_z = torch.full((num_resets,), 0.023, device=env.device)
+
+    result = {}
+
+    try:
+        obj = env.scene["target_object"]
+        t_spawn = torch.stack([x_local, y_local, spawn_z], dim=1)
+        t_world = t_spawn + env_origins
+        quat = identity_quat.unsqueeze(0).expand(num_resets, -1)
+        obj.write_root_pose_to_sim(torch.cat([t_world, quat], dim=1), env_ids=env_ids)
+        obj.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
+        result["target_local"] = torch.stack([x_local, y_local, settled_z], dim=1)
+    except KeyError:
+        pass
+
+    try:
+        # Place cube 10 cm to the left of the target so they don't overlap
+        cx_local = (x_local - 0.10).clamp(x_range[0], x_range[1])
+        cy_local = y_local
+        c_spawn = torch.stack([cx_local, cy_local, spawn_z], dim=1)
+        c_world = c_spawn + env_origins
+        quat = identity_quat.unsqueeze(0).expand(num_resets, -1)
+        obj = env.scene["cube"]
+        obj.write_root_pose_to_sim(torch.cat([c_world, quat], dim=1), env_ids=env_ids)
+        obj.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
+        result["cube_local"] = torch.stack([cx_local, cy_local, settled_z], dim=1)
+    except KeyError:
+        pass
+
+    return result
 
 
 def reset_robot_joints(

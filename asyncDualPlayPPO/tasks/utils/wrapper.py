@@ -29,7 +29,7 @@ from ...utils.episode_manager import EpisodeManager, Phase
 from ...utils.goal_validator import validate_goal
 from . import observations
 from . import rewards as reward_utils
-from .events import reset_objects_to_fixed_safe_pose, reset_robot_joints
+from .events import reset_objects_to_random_safe_pose, reset_robot_joints
 
 
 class AsyncDualPlayEnvWrapper:
@@ -183,6 +183,58 @@ class AsyncDualPlayEnvWrapper:
         print(f"  Alice obs: {self.alice_obs_dim}, Bob obs: {self.bob_obs_dim}")
         print(f"  Robot state: {self.robot_state_dim} (EE pose 6 euler + gripper 1)")
 
+    def set_table_color(self, env_ids: torch.Tensor, color: Tuple[float, float, float]):
+        """Update table color for specific environments (non-headless only)."""
+        if not self.env.sim.has_gui():
+            return
+        
+        import omni.usd
+        from pxr import Gf
+        
+        stage = omni.usd.get_context().get_stage()
+        for i in env_ids.tolist():
+            # Path for Isaac Lab CuboidSpawner + PreviewSurface material
+            # Standard structure: {prim_path}/VisualMaterial/Shader
+            shader_path = f"/World/envs/env_{i}/Table/VisualMaterial/Shader"
+            prim = stage.GetPrimAtPath(shader_path)
+            if prim.IsValid():
+                # Set the diffuseColor input on the shader (UsdPreviewSurface)
+                color_vec = Gf.Vec3f(color[0], color[1], color[2])
+                attr = prim.GetAttribute("inputs:diffuseColor")
+                if attr.IsValid():
+                    attr.Set(color_vec)
+                else:
+                    print(f"[Visuals] Warning: Found prim at {shader_path} but no 'inputs:diffuseColor' attribute.")
+            else:
+                # Try fallback path for newer Isaac Lab versions
+                fallback_path = f"/World/envs/env_{i}/Table/Visuals/mesh/material/Shader"
+                prim = stage.GetPrimAtPath(fallback_path)
+                if prim.IsValid():
+                    color_vec = Gf.Vec3f(color[0], color[1], color[2])
+                    attr = prim.GetAttribute("inputs:diffuseColor")
+                    if attr.IsValid():
+                        attr.Set(color_vec)
+                    else:
+                        print(f"[Visuals] Warning: Found prim at {fallback_path} but no 'inputs:diffuseColor' attribute.")
+                else:
+                    # Final attempt: search for any Shader under the Table prim
+                    from pxr import Usd, UsdShade
+                    table_prim = stage.GetPrimAtPath(f"/World/envs/env_{i}/Table")
+                    if table_prim.IsValid():
+                        found = False
+                        # Use Usd.PrimRange to traverse the subtree
+                        for p in Usd.PrimRange(table_prim):
+                            if p.IsA(UsdShade.Shader):
+                                attr = p.GetAttribute("inputs:diffuseColor")
+                                if attr.IsValid():
+                                    attr.Set(Gf.Vec3f(color[0], color[1], color[2]))
+                                    found = True
+                                    break
+                        if not found:
+                             print(f"[Visuals] Error: Could not find any Shader with diffuseColor under /World/envs/env_{i}/Table")
+                    else:
+                        print(f"[Visuals] Error: Table prim not found at /World/envs/env_{i}/Table")
+
     # ------------------------------------------------------------------
     # Per-iteration stats helpers
     # ------------------------------------------------------------------
@@ -211,6 +263,18 @@ class AsyncDualPlayEnvWrapper:
     def get_iter_stats(self) -> dict:
         return dict(self._iter_stats)
 
+    def _initial_states_from_spawn(self, spawn_info: dict, n: int) -> torch.Tensor:
+        """Build initial_states tensor (n, 6) or (n, 12) from reset_objects_to_random_safe_pose output."""
+        _id_euler = torch.zeros(n, 3, device=self.device)
+        t_local = spawn_info.get("target_local", torch.zeros(n, 3, device=self.device))
+        if self.num_objects == 1:
+            return torch.cat([t_local, _id_euler], dim=-1)
+        c_local = spawn_info.get("cube_local")
+        if c_local is None:
+            c_local = t_local.clone()
+            c_local[:, 0] -= 0.10
+        return torch.cat([t_local, _id_euler, c_local, _id_euler], dim=-1)
+
     @property
     def num_envs(self):
         return self.env.num_envs
@@ -226,15 +290,19 @@ class AsyncDualPlayEnvWrapper:
         self.episode_manager.reset_episode(env_ids, reason="Global Manual Reset")
         self.delayed_alice_reward[env_ids] = 0.0
         self._alice_phase_initialized[env_ids] = False
+        
+        # Set table to Red for Alice phase
+        self.set_table_color(env_ids, (0.8, 0.1, 0.1))
 
-        # Place objects at safe starting positions (Isaac Lab's default reset may use
-        # different spawn locations). Set initial_states directly from the known safe
-        # pose rather than reading physics cache (avoids PhysX readback timing issues).
-        reset_objects_to_fixed_safe_pose(self.env, env_ids)
+        # Place objects at random positions so Alice cannot trivially push the block
+        # to a fixed goal with her home-position arm sweep.  The returned spawn_info
+        # carries the per-env local positions used (Z=0.023 settled height) so we can
+        # set initial_states without a PhysX readback (avoids timing issues).
+        spawn_info = reset_objects_to_random_safe_pose(self.env, env_ids)
         reset_robot_joints(self.env, env_ids)
         self.env.scene.write_data_to_sim()
-        self.episode_manager.initial_states = (
-            self._safe_reset_state.unsqueeze(0).expand(self.num_envs, -1).clone()
+        self.episode_manager.initial_states = self._initial_states_from_spawn(
+            spawn_info, self.num_envs
         )
 
         # Return concatenated observations so train.py can slice them
@@ -592,6 +660,9 @@ class AsyncDualPlayEnvWrapper:
                 )
 
             reset_robot_joints(self.env, valid_env_ids)
+            
+            # Transition table to Blue for Bob phase
+            self.set_table_color(valid_env_ids, (0.1, 0.1, 0.8))
 
         # 6. Handle Invalid
         invalid_env_ids = env_ids[~successful_goal]
@@ -599,13 +670,13 @@ class AsyncDualPlayEnvWrapper:
             self.episode_manager.reset_episode(
                 invalid_env_ids, reason="Alice Invalid Goal"
             )
-            reset_objects_to_fixed_safe_pose(self.env, invalid_env_ids)
+            _sp = reset_objects_to_random_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.episode_manager.initial_states[invalid_env_ids] = (
-                self._safe_reset_state.unsqueeze(0)
-                .expand(len(invalid_env_ids), -1)
-                .clone()
+                self._initial_states_from_spawn(_sp, len(invalid_env_ids))
             )
+            # Ensure table is Red (reset reason was already Alice Invalid Goal)
+            self.set_table_color(invalid_env_ids, (0.8, 0.1, 0.1))
 
         return valid, invalid_env_ids
 
@@ -643,14 +714,10 @@ class AsyncDualPlayEnvWrapper:
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
             self.episode_manager.transition_to_alice(continue_ids)
-            reset_objects_to_fixed_safe_pose(self.env, continue_ids)
+            _sp = reset_objects_to_random_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
-            # Set initial_states directly from known safe reset positions to avoid
-            # PhysX readback timing issues (data.root_pos_w is stale until next env.step()).
             self.episode_manager.initial_states[continue_ids] = (
-                self._safe_reset_state.unsqueeze(0)
-                .expand(len(continue_ids), -1)
-                .clone()
+                self._initial_states_from_spawn(_sp, len(continue_ids))
             )
             # Reset potential-shaping state so the new Alice phase captures a fresh
             # start position on its first step. Without this, alice_start_pos_xy
@@ -659,6 +726,9 @@ class AsyncDualPlayEnvWrapper:
             # when the object hasn't moved.
             self._alice_phase_initialized[continue_ids] = False
             self.alice_prev_dist[continue_ids] = 0.0
+            
+            # Transition table back to Red for new Alice phase
+            self.set_table_color(continue_ids, (0.8, 0.1, 0.1))
 
         # Episode End (Bob failed or max goals)
         reset_ids = env_ids[~can_continue]
@@ -667,11 +737,13 @@ class AsyncDualPlayEnvWrapper:
             reason = "Bob Succeeded" if succeeded.any() else "Bob Failed"
             self.episode_manager.reset_episode(reset_ids, reason=reason)
 
-            reset_objects_to_fixed_safe_pose(self.env, reset_ids)
+            _sp = reset_objects_to_random_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
             self.episode_manager.initial_states[reset_ids] = (
-                self._safe_reset_state.unsqueeze(0).expand(len(reset_ids), -1).clone()
+                self._initial_states_from_spawn(_sp, len(reset_ids))
             )
+            # Transition table back to Red for Alice phase
+            self.set_table_color(reset_ids, (0.8, 0.1, 0.1))
 
         # Commit all physics writes so the next observation read reflects the reset.
         return success, pos_err, rot_err
@@ -690,27 +762,30 @@ class AsyncDualPlayEnvWrapper:
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
             self.episode_manager.transition_to_alice(continue_ids)
-            reset_objects_to_fixed_safe_pose(self.env, continue_ids)
+            _sp = reset_objects_to_random_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
             self.episode_manager.initial_states[continue_ids] = (
-                self._safe_reset_state.unsqueeze(0)
-                .expand(len(continue_ids), -1)
-                .clone()
+                self._initial_states_from_spawn(_sp, len(continue_ids))
             )
             # Reset potential-shaping state (same fix as _handle_bob_completion).
             self._alice_phase_initialized[continue_ids] = False
             self.alice_prev_dist[continue_ids] = 0.0
+            
+            # Transition table back to Red for new Alice phase
+            self.set_table_color(continue_ids, (0.8, 0.1, 0.1))
 
         # Others reset (reached max goals with success)
         reset_ids = env_ids[~can_continue]
         if len(reset_ids) > 0:
             self.episode_manager.reset_episode(reset_ids, reason="Episode Complete")
 
-            reset_objects_to_fixed_safe_pose(self.env, reset_ids)
+            _sp = reset_objects_to_random_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
             self.episode_manager.initial_states[reset_ids] = (
-                self._safe_reset_state.unsqueeze(0).expand(len(reset_ids), -1).clone()
+                self._initial_states_from_spawn(_sp, len(reset_ids))
             )
+            # Transition table back to Red for Alice phase
+            self.set_table_color(reset_ids, (0.8, 0.1, 0.1))
 
         # Commit all physics writes so the next observation read reflects the reset.
     def _check_bob_success(self, obs_dict: Dict, env_ids: torch.Tensor) -> torch.Tensor:

@@ -2,9 +2,9 @@
 #
 # Differences from train.py / train_diffik.py:
 #   1. cuRobo imports are at the top of the file (required before AppLauncher).
-#   2. num_cat_dims is forced to 4 (XYZ + gripper; orientation fixed to "tool down").
+#   2. num_cat_dims is forced to 6 (XYZ + Rx + Ry + gripper).
 #   3. cuRobo IKSolver replaces the implicit DiffIK controller:
-#        bins → XYZ delta → accumulate ee_target_local → solve_batch → joint positions
+#        bins → XYZ & rot delta → accumulate ee_target_local & ee_target_quat_w → solve_batch → joint positions
 #   4. IK failure causes an immediate episode reset (user requirement).
 #   5. Profiler section "curobo_ik" measures IK latency per rollout step.
 #   6. ik_fail_rate is logged to TensorBoard each iteration.
@@ -187,6 +187,7 @@ def main():
 
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
+    from asyncDualPlayPPO.tasks.utils.events import reset_objects_to_random_safe_pose as _rand_reset_objs
     from asyncDualPlayPPO.tasks.async_dual_play_curobo import AsyncDualPlayCuRoboEnvCfg as AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
     from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import (
@@ -214,8 +215,8 @@ def main():
     ppo_cfg  = load_cfg(ppo_cfg_path)
     task_cfg = load_cfg(task_cfg_path)
 
-    alice_timesteps      = task_cfg.get("alice_timesteps", 100)
-    bob_timesteps        = task_cfg.get("bob_timesteps", 200)
+    alice_timesteps       = task_cfg.get("alice_timesteps", 100)
+    bob_timesteps         = task_cfg.get("bob_timesteps", 200)
     max_goals_per_episode = task_cfg.get("max_goals_per_episode", 5)
     print(
         f"[Config] Episode structure: alice_timesteps={alice_timesteps}, "
@@ -245,35 +246,43 @@ def main():
     if args.nsteps is not None:
         ppo_cfg["params"]["learn"]["nsteps"] = args.nsteps
 
-    # ── cuRobo uses Option B: XYZ (3D) + gripper (1D) = 4 action dims.
-    # Orientation is fixed to "tool pointing down"; rotation bins are not needed.
+    # ── 6D action space: XYZ (3) + Rx/Ry tilt (2) + gripper (1) ─────────────────────
     _pol_cfg = ppo_cfg["params"]["policy"]
     _pol_cfg["use_multicategorical"] = True
-    _pol_cfg["num_cat_dims"] = 4  # override: 4D instead of 6D
-    use_mc       = True
-    num_cat_dims = 4
-    num_bins     = _pol_cfg.get("num_bins", 11)
-    _max_delta_m = _pol_cfg.get("max_delta_m", 0.04) 
-    print(f"[Config] cuRobo action space: {num_cat_dims}D × {num_bins} bins (XYZ + gripper)  max_delta={_max_delta_m*100:.1f} cm")
+    _pol_cfg["num_cat_dims"] = 6
+    use_mc         = True
+    num_cat_dims   = 6
+    num_bins       = _pol_cfg.get("num_bins", 11)
+    _max_delta_m   = _pol_cfg.get("max_delta_m", 0.04)
+    _max_delta_rot = _pol_cfg.get("max_delta_rot", 0.05)   # rad/step EE tilt
+    print(
+        f"[Config] cuRobo action space: {num_cat_dims}D × {num_bins} bins "
+        f"(XYZ + Rx/Ry + gripper)  max_delta={_max_delta_m*100:.1f} cm  "
+        f"max_rot={math.degrees(_max_delta_rot):.1f} deg/step"
+    )
 
-    # ── Helper: decode bins → XYZ delta + updated sticky gripper ─────────────────
-    def _bins_to_xyz_gripper(bin_indices, gripper_state):
+    # ── Helper: decode bins → XYZ delta + Rx/Ry delta + updated sticky gripper ────
+    def _bins_to_xyz_rxy_gripper(bin_indices, gripper_state):
         """
-        (N, 4) int bins → (N, 3) EE XYZ delta metres,  (N, 1) updated gripper state.
+        (N, 6) int bins → (N,3) XYZ delta, (N,2) Rx/Ry delta rad, (N,1) gripper.
 
         Dim layout:
-            0-2: XYZ  →  (bin − center) / center × max_delta_m
-            3:   Gripper → sticky: outer bins trigger open/close, center holds
+            0-2: XYZ    → (bin − center) / center × max_delta_m
+            3-4: Rx, Ry   → (bin − center) / center × max_delta_rot
+            5:   Gripper  → sticky: outer bins open/close, center holds
         """
         center    = (num_bins - 1) / 2.0
         threshold = 2.0
-        normalized = (bin_indices.float() - center) / center   # [-1, 1]
-        xyz = normalized[:, :3] * _max_delta_m                 # (N, 3)
-        g_bin  = bin_indices[:, 3].float()
-        new_gs = gripper_state.clone()
-        new_gs[g_bin < center - threshold + 1] = -1.0          # bins 0-2  → close
-        new_gs[g_bin > center + threshold - 1] =  1.0          # bins 8-10 → open
-        return xyz, new_gs
+        normalized = (bin_indices.float() - center) / center          # [-1, 1], (N,6)
+        xyz  = normalized[:, :3] * _max_delta_m                       # (N, 3)
+        rxry = normalized[:, 3:5] * _max_delta_rot                    # (N, 2)
+        # Clamp per-step delta so a single bin can't cause a violent orientation jump
+        rxry = rxry.clamp(-0.1, 0.1)
+        g_bin   = bin_indices[:, 5].float()
+        new_gs  = gripper_state.clone()
+        new_gs[g_bin < center - threshold + 1] = -1.0                 # bins 0-2  → close
+        new_gs[g_bin > center + threshold - 1] =  1.0                 # bins 8-10 → open
+        return xyz, rxry, new_gs
 
     # ── Environment config ────────────────────────────────────────────────────────
     env_cfg = AsyncDualPlayEnvCfg()
@@ -368,9 +377,17 @@ def main():
     )
     print("[cuRobo] CUDA graph warm-up done.")
 
-    # Fixed "tool pointing down" orientation quaternion (wxyz format)
-    _IK_QUAT = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device,
-                             dtype=torch.float32).expand(env.num_envs, 4).contiguous()
+    # Tool-pointing-down base quaternion (wxyz). Used to initialise and reset
+    # ee_target_quat_w so the arm defaults to a vertical gripper orientation.
+    _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
+
+    def _quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+        """Batch quaternion multiply, wxyz convention. Both (N,4) → (N,4)."""
+        w = a[:,0]*b[:,0] - a[:,1]*b[:,1] - a[:,2]*b[:,2] - a[:,3]*b[:,3]
+        x = a[:,0]*b[:,1] + a[:,1]*b[:,0] + a[:,2]*b[:,3] - a[:,3]*b[:,2]
+        y = a[:,0]*b[:,2] - a[:,1]*b[:,3] + a[:,2]*b[:,0] + a[:,3]*b[:,1]
+        z = a[:,0]*b[:,3] + a[:,1]*b[:,2] - a[:,2]*b[:,1] + a[:,3]*b[:,0]
+        return torch.stack([w, x, y, z], dim=1)
 
     # Robot body/joint indices needed each rollout step (found once, reused)
     _robot_scene  = env.env.scene["robot"]
@@ -379,13 +396,17 @@ def main():
     _lf_ids, _    = _robot_scene.find_bodies("left_inner_finger")
     _rf_ids, _    = _robot_scene.find_bodies("right_inner_finger")
 
-    # Per-env accumulated EE target (local / env-origin-relative frame).
+    # Per-env accumulated EE position target (local / env-origin-relative frame).
     # Initialised to current wrist_3_link position; reset at every phase boundary
     # and after IK failures to prevent target drift.
     ee_target_local = (
         _robot_scene.data.body_pos_w[:, _wrist3_ids[0]]
         - env.env.scene.env_origins
     ).clone()  # (N, 3)
+
+    # Per-env accumulated EE orientation target (wxyz quaternion, world frame).
+    # Initialised to tool-down; updated by composing per-step Rx/Ry delta quats.
+    ee_target_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()  # (N, 4)
 
     # ── PPO agent setup (identical to train.py from here) ─────────────────────────
     import copy
@@ -639,7 +660,7 @@ def main():
         writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
         writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err, bob_updates)
         writer.add_scalar("Metrics/Bob/RotError",    mean_rot_err, bob_updates)
-        print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | ABC: {loss_abc:.4f} | SR: {bob_success_rate:.4f}", flush=True)
+        print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | ABC: {loss_abc:.4f} | SR: {bob_success_rate:.4f} | ABCCoef: {bob_ppo.abc_coef:.4f}", flush=True)
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
@@ -679,11 +700,13 @@ def main():
         env.episode_manager.phase_step.copy_(_stagger)
         print(f"[Init] Phase stagger applied.")
 
-    # Sync initial ee_target with actual robot EE positions after env reset
-    ee_target_local = (
-        _robot_scene.data.body_pos_w[:, _wrist3_ids[0]]
-        - env.env.scene.env_origins
-    ).clone()
+    # Sync initial ee_target with actual robot TCP positions after env reset
+    _lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
+    _rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
+    _tcp_w = (_lf_w + _rf_w) / 2.0
+    ee_target_local = (_tcp_w - env.env.scene.env_origins).clone()
+    # Orientation tracker: start at tool-down for all envs
+    ee_target_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
 
     # Joint-command smoothing: EMA between consecutive IK solutions.
     # alpha=1 → no smoothing (raw IK); alpha<1 → inertia like RMPFlow.
@@ -858,13 +881,13 @@ def main():
                 alice_traj_len[active_alice] = torch.max(alice_traj_len[active_alice], new_len)
 
             # ── cuRobo IK: convert bins → joint positions ─────────────────────────
-            # 1. Decode XYZ delta and gripper from 4D bins
-            a_xyz, new_ags = _bins_to_xyz_gripper(a_acts_active, alice_gripper_state[alice_indices])
-            b_xyz, new_bgs = _bins_to_xyz_gripper(b_acts_active, bob_gripper_state[bob_indices])
+            # 1. Decode XYZ + Rx/Ry delta + gripper from 6D bins
+            a_xyz, a_rxry, new_ags = _bins_to_xyz_rxy_gripper(a_acts_active, alice_gripper_state[alice_indices])
+            b_xyz, b_rxry, new_bgs = _bins_to_xyz_rxy_gripper(b_acts_active, bob_gripper_state[bob_indices])
             alice_gripper_state[alice_indices] = new_ags
             bob_gripper_state[bob_indices]     = new_bgs
 
-            # 2. Accumulate per-env EE targets, clamp to workspace
+            # 2. Accumulate per-env EE position targets, clamp to workspace
             if len(alice_indices) > 0:
                 ee_target_local[alice_indices] += a_xyz
             if len(bob_indices) > 0:
@@ -873,8 +896,27 @@ def main():
             ee_target_local[:, 1].clamp_(_WS_Y[0], _WS_Y[1])
             ee_target_local[:, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
+            # 2b. Accumulate per-env EE orientation via quaternion composition.
+            # Convert (Rx, Ry) deltas → delta quaternion, compose into running target.
+            # Using quat representation avoids gimbal lock and makes phase-sync trivial.
+            delta_rxry = torch.zeros(env.num_envs, 2, device=env.device)
+            if len(alice_indices) > 0:
+                delta_rxry[alice_indices] = a_rxry
+            if len(bob_indices) > 0:
+                delta_rxry[bob_indices]   = b_rxry
+            _rx, _ry = delta_rxry[:, 0], delta_rxry[:, 1]
+            _qx = torch.stack([torch.cos(_rx/2), torch.sin(_rx/2),
+                                torch.zeros_like(_rx), torch.zeros_like(_rx)], dim=1)
+            _qy = torch.stack([torch.cos(_ry/2), torch.zeros_like(_ry),
+                                torch.sin(_ry/2), torch.zeros_like(_ry)], dim=1)
+            _q_delta = _quat_mul(_qy, _qx)                               # Ry then Rx
+            ee_target_quat_w = _quat_mul(ee_target_quat_w, _q_delta)
+            # Normalise every step to prevent floating-point drift
+            ee_target_quat_w = ee_target_quat_w / ee_target_quat_w.norm(dim=-1, keepdim=True)
+
             # 3. TCP offset: cuRobo targets wrist_3_link; finger-midpoint is ~5 cm ahead.
             #    Subtract the live offset so the gripper tip arrives at the intended target.
+            #    As orientation changes, the live finger positions track the arc automatically.
             lf_w  = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
             rf_w  = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
             w3_w  = _robot_scene.data.body_pos_w[:, _wrist3_ids[0]]
@@ -887,21 +929,29 @@ def main():
             cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]     # (N,6)
             with profiler.section("curobo_ik"):
                 _ik_result = ik_solver.solve_batch(
-                    CuroboPose(position=ik_target, quaternion=_IK_QUAT),
+                    CuroboPose(position=ik_target,
+                               quaternion=ee_target_quat_w.contiguous()),
                     seed_config=_prev_joint_cmd.unsqueeze(1),   # (N,1,6)
                     retract_config=_prev_joint_cmd,              # (N,6)
                 )
 
             _ik_success = _ik_result.success.squeeze(-1)               # (N,) bool
             _ik_fail    = ~_ik_success
+            
+            # 1. Initialize an empty tensor here
+            _fail_active = torch.tensor([], dtype=torch.long, device=env.device)
 
             # Track failure rate for active envs only
             _active = torch.cat([alice_indices, bob_indices]) if (
                 len(alice_indices) + len(bob_indices) > 0
             ) else torch.tensor([], dtype=torch.long, device=env.device)
+            
             if len(_active) > 0:
                 _ik_fail_steps  += int(_ik_fail[_active].sum().item())
                 _ik_total_steps += len(_active)
+                
+                # 2. Populate it safely
+                _fail_active = _active[_ik_fail[_active]]
 
             # 5. Build 7D joint-position command with EMA smoothing.
             # Blend new IK solution toward previous command so motion feels like
@@ -917,18 +967,29 @@ def main():
             if len(bob_indices) > 0:
                 env_full[bob_indices,   6] = bob_gripper_state[bob_indices].squeeze(-1)
 
-            # 6. Episode reset for active envs where IK failed
+            # 6. Episode reset for active envs where IK failed.
+            # Do NOT call env.env.reset() here — that triggers Isaac Lab's env_cfg reset
+            # events which randomly move objects to positions that differ from what
+            # initial_states records (causes phantom goal displacement and constant
+            # visible respawning). Instead, reset everything manually so we control
+            # exactly what gets placed and can sync initial_states accordingly.
             if len(_active) > 0:
-                _fail_active = _active[_ik_fail[_active]]
                 if len(_fail_active) > 0:
                     env.episode_manager.reset_episode(_fail_active, reason="ik_failure")
-                    env.env.reset(env_ids=_fail_active)
-                    # Sync ee_target and joint-cmd EMA to actual state so new episode starts cleanly
-                    ee_target_local[_fail_active] = (
-                        _robot_scene.data.body_pos_w[_fail_active, _wrist3_ids[0]]
-                        - env.env.scene.env_origins[_fail_active]
+                    # Reset robot joints to default pose and set table to Red
+                    env.set_table_color(_fail_active, (0.8, 0.1, 0.1))
+                    _robot_scene.write_joint_state_to_sim(
+                        position=_robot_scene.data.default_joint_pos[_fail_active],
+                        velocity=_robot_scene.data.default_joint_vel[_fail_active],
+                        env_ids=_fail_active,
                     )
-                    _prev_joint_cmd[_fail_active] = _robot_scene.data.joint_pos[_fail_active][:, _arm_jids]
+                    # Place objects at known random positions and record in initial_states
+                    _sp = _rand_reset_objs(env.env, _fail_active)
+                    env.episode_manager.initial_states[_fail_active] = (
+                        env._initial_states_from_spawn(_sp, len(_fail_active))
+                    )
+                    env.env.scene.write_data_to_sim()
+
                     if alice_hidden is not None:
                         alice_hidden[0][_fail_active] = 0.0
                         alice_hidden[1][_fail_active] = 0.0
@@ -943,52 +1004,41 @@ def main():
             with profiler.section("env_step"):
                 obs_full, rewards, dones, truncated, extras = env.step(env_full)
 
-            # Reset ee_target and joint-cmd EMA for any env that just transitioned phase
-            _phase_changed = (_prev_phase != env.episode_manager.current_phase)
-            if _phase_changed.any():
-                _ch_ids = torch.where(_phase_changed)[0]
-                ee_target_local[_ch_ids] = (
-                    _robot_scene.data.body_pos_w[_ch_ids, _wrist3_ids[0]]
-                    - env.env.scene.env_origins[_ch_ids]
+            # Centralized sync for IK targets and commands to prevent death loops.
+            # We MUST sync after env.step() so PhysX readbacks are fresh.
+            _phase_changed    = (_prev_phase != env.episode_manager.current_phase)
+            _alice_just_ended = _phase_changed & is_alice   
+            _bob_just_ended   = _phase_changed & is_bob     
+            
+            # Identify ALL envs that need a target sync (Phase changes, Terminations, and IK Fails)
+            needs_sync = _phase_changed | dones.bool()
+            if len(_fail_active) > 0:
+                needs_sync[_fail_active] = True
+
+            if needs_sync.any():
+                _sync_ids = torch.where(needs_sync)[0]
+                
+                # Refresh targets to the current (now clean) physics state using TCP
+                _lf_w_sync = _robot_scene.data.body_pos_w[_sync_ids, _lf_ids[0]]
+                _rf_w_sync = _robot_scene.data.body_pos_w[_sync_ids, _rf_ids[0]]
+                _tcp_w_sync = (_lf_w_sync + _rf_w_sync) / 2.0
+                
+                ee_target_local[_sync_ids] = (
+                    _tcp_w_sync - env.env.scene.env_origins[_sync_ids]
                 )
-                _prev_joint_cmd[_ch_ids] = _robot_scene.data.joint_pos[_ch_ids][:, _arm_jids]
+                _prev_joint_cmd[_sync_ids] = _robot_scene.data.joint_pos[_sync_ids][:, _arm_jids]
+                
+                # Snap orientation back to base tool-down for the new episode/phase
+                ee_target_quat_w[_sync_ids] = _QUAT_TOOL_DOWN.to(env.device).expand(len(_sync_ids), -1).clone()
 
             if len(bob_indices) > 0:
                 bob_rew_buf.extend(rewards[bob_indices].cpu().numpy().tolist())
 
-            # ── DEBUG REWARD LOG (auto-enabled when num_envs < 20) ────────────────
+            # Accumulate per-env dense rewards and IK fails for phase-end summary
             if args.debug_rewards:
                 if len(alice_indices) > 0:
-                    _dbg_rew_acc[alice_indices] += rewards[alice_indices]
+                    _dbg_rew_acc[alice_indices]  += rewards[alice_indices]
                     _dbg_ik_fails[alice_indices] += _ik_fail[alice_indices].long()
-
-                # Print summary when Alice's phase ends for each env
-                _alice_tot = extras.get(
-                    "alice_total_reward",
-                    torch.zeros(env.num_envs, device=env.device),
-                )
-                _phase_ended = (_alice_tot.abs() > 1e-6) & (~_dbg_printed)
-                for _gi in torch.where(_phase_ended)[0].tolist():
-                    _dist_final = getattr(env, "alice_prev_dist", None)
-                    _dist_str = f"{_dist_final[_gi].item():.4f}m" if _dist_final is not None else "n/a"
-                    print(
-                        f"  [DEBUG alice end | iter={bob_updates} env={_gi} step={t:03d}]"
-                        f"  dense_sum={_dbg_rew_acc[_gi].item():+.4f}"
-                        f"  phase_end_reward={_alice_tot[_gi].item():+.4f}"
-                        f"  total={_dbg_rew_acc[_gi].item() + _alice_tot[_gi].item():+.4f}"
-                        f"  ik_fails={_dbg_ik_fails[_gi].item()}"
-                        f"  final_dist={_dist_str}",
-                        flush=True,
-                    )
-                    _dbg_rew_acc[_gi]  = 0.0
-                    _dbg_ik_fails[_gi] = 0
-                    _dbg_printed[_gi]  = True
-
-                # Reset printed flag when env re-enters Alice phase
-                _re_entered = _dbg_printed & is_alice & (_alice_tot.abs() < 1e-6)
-                _dbg_printed[_re_entered] = False
-                _dbg_rew_acc[_re_entered] = 0.0
-                _dbg_ik_fails[_re_entered] = 0
 
             ep_info = extras.get("episode_manager", {})
             if ep_info:
@@ -1065,6 +1115,44 @@ def main():
                 goal_valid       = ep_info.get("goal_valid", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
                 bob_success      = ep_info.get("bob_success", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
 
+                # ── PHASE-END SUMMARY (debug_rewards mode) ────────────────────────
+                if args.debug_rewards:
+                    # Alice phase end — fire on phase transition OR failure
+                    _alice_log_trigger = _alice_just_ended | extras.get("alice_failed_this_step", torch.zeros_like(_alice_just_ended))
+                    for _gi in torch.where(_alice_log_trigger)[0].tolist():
+                        _valid = "VALID" if goal_valid[_gi].item() else "invalid"
+                        _rew   = alice_rewards_now[_gi].item()
+                        _dense = _dbg_rew_acc[_gi].item()
+                        _ik_f  = _dbg_ik_fails[_gi].item()
+                        _step  = env.episode_manager.phase_step[_gi].item() if hasattr(env.episode_manager, "phase_step") else -1
+                        print(
+                            f"  [ALICE END | iter={bob_updates} env={_gi}]"
+                            f"  goal={_valid}"
+                            f"  phase_rew={_rew:+.3f}  dense_acc={_dense:+.3f}  total={_rew+_dense:+.3f}"
+                            f"  ik_fails={_ik_f}  steps={_step}",
+                            flush=True,
+                        )
+                        _dbg_rew_acc[_gi]  = 0.0
+                        _dbg_ik_fails[_gi] = 0
+                        _dbg_printed[_gi]  = True
+
+                    # Bob phase end — fire on phase transition
+                    for _gi in torch.where(_bob_just_ended)[0].tolist():
+                        _succ = "SUCCESS" if bob_success[_gi].item() else "fail"
+                        _gv   = "valid_goal" if goal_valid[_gi].item() else "no_goal"
+                        _pos  = ep_info.get("bob_pos_err", torch.zeros(env.num_envs, device=env.device))[_gi].item()
+                        _rot  = ep_info.get("bob_rot_err", torch.zeros(env.num_envs, device=env.device))[_gi].item()
+                        _step = env.episode_manager.phase_step[_gi].item() if hasattr(env.episode_manager, "phase_step") else -1
+                        _alice_rew_at_bob_end = alice_rewards_now[_gi].item()
+                        print(
+                            f"  [BOB END   | iter={bob_updates} env={_gi}]"
+                            f"  {_succ}  ({_gv})"
+                            f"  pos_err={_pos:.4f}m  rot_err={_rot:.4f}rad"
+                            f"  steps={_step}"
+                            f"  alice_payout={_alice_rew_at_bob_end:+.3f}",
+                            flush=True,
+                        )
+
                 profiler.mark_start("reward_backfill")
                 if bob_dones_now.any() or alice_dones_now.any() or (alice_rewards_now != 0).any():
                     filled = alice_ppo.storage.step
@@ -1113,9 +1201,8 @@ def main():
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         bob_success_buf.append(current_sr)
 
-        # ── IK diagnostics ────────────────────────────────────────────────────────
+        # ── IK diagnostics (logged with rest of iter stats below) ─────────────────
         _ik_fr = _ik_fail_steps / max(1, _ik_total_steps)
-        writer.add_scalar("Metrics/IKFailRate", _ik_fr, bob_updates)
         print(f"  [cuRobo] IK fail rate: {_ik_fr:.4f} ({_ik_fail_steps}/{_ik_total_steps} active steps)", flush=True)
 
         # ── Entropy / LR / ABC controllers (identical to train.py) ────────────────
@@ -1200,20 +1287,42 @@ def main():
             "  ".join(f"{k}={v}" for k, v in sorted(_stats.get("terminations", {}).items()))
             or "none"
         )
-        _valid_goals = _stats.get("valid_goals", 0)
+        _valid_goals   = _stats.get("valid_goals", 0)
+        _invalid_goals = _stats.get("invalid_goals", 0)
+        _bob_succ      = _stats.get("bob_successes", 0)
+        _bob_fail      = _stats.get("bob_failures", 0)
         writer.add_scalar("Metrics/Alice/ValidGoals", _valid_goals, bob_updates)
         _abc_buf_size = bob_ppo.abc_buffer.size
         writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
         _abc_warm = 1.0 if ema_alice_rew >= bob_ppo.abc_warmup_threshold else 0.0
         writer.add_scalar("Metrics/ABC/IsWarm", _abc_warm, bob_updates)
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
+        writer.add_scalar("Metrics/IKFailRate", _ik_fr, bob_updates)
 
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | IK_fail={_ik_fr:.3f} | "
-            f"Goals valid={_valid_goals} | ABC buf: {_abc_buf_size} | "
-            f"Terminations: {_term_str}",
+            f"Goals valid={_valid_goals} invalid={_invalid_goals} | "
+            f"Bob succ={_bob_succ} fail={_bob_fail} | "
+            f"Terminations: {_term_str} | "
+            f"ABC buf: {_abc_buf_size} | "
+            f"ABC warm: {'YES' if _abc_warm else 'NO'}",
             flush=True,
         )
+        _alice_total = _stats.get("alice_total", 0)
+        if _alice_total > 0:
+            _avg_3d = _stats["alice_disp_3d_sum"] / _alice_total
+            _avg_xy = _stats["alice_disp_xy_sum"] / _alice_total
+            _max_xy = _stats["alice_disp_xy_max"]
+            _avg_y  = _stats.get("alice_disp_y_sum", 0.0) / _alice_total
+            _avg_z  = _stats.get("alice_disp_z_sum", 0.0) / _alice_total
+            _not_mv = _stats["alice_not_moved"]
+            _pos_req = getattr(env, "_ALICE_POS_REQ", 0.05)
+            print(
+                f"  [AliceDisp] {_valid_goals}/{_alice_total} valid | "
+                f"avg 3D={_avg_3d:.3f}m  avg XY={_avg_xy:.3f}m  max XY={_max_xy:.3f}m  avg Y={_avg_y:.3f}m  avg Z={_avg_z:.3f}m | "
+                f"not-moved(≤{_pos_req:.2f}m): {_not_mv}/{_alice_total}",
+                flush=True,
+            )
         profiler.end_iteration(bob_updates)
 
     # ── End of training ────────────────────────────────────────────────────────────
