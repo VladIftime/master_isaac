@@ -44,6 +44,7 @@ def main():
     import omni.usd
     from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf
     from isaaclab.devices import Se3Gamepad, Se3GamepadCfg
+    from isaaclab.controllers.rmp_flow import RmpFlowController, RmpFlowControllerCfg
     import carb
 
     ARM_JOINT_NAMES = [
@@ -60,9 +61,16 @@ def main():
     env_cfg = AsyncDualPlayEnvCfg()
     env_cfg.scene.num_envs = 1
 
-    # Configure arm action for absolute pose control via RMPflow
-    env_cfg.actions.arm_action.use_relative_mode = False
-    env_cfg.actions.arm_action.scale = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    # IMPORTANT: Use Joint Position Actions so we can send IK solutions directly.
+    env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=ARM_JOINT_NAMES,
+        scale=1.0,
+        use_default_offset=False,
+    )
+
+    # Disable Fabric — it can cause hangs in interactive/single-env mode.
+    env_cfg.sim.use_fabric = False
 
     env_cfg.terminations.robot_through_table = None
     env_cfg.terminations.objects_off_table = None
@@ -85,8 +93,29 @@ def main():
     env_cfg.scene.robot.actuators["gripper"].stiffness       = 2000.0
     env_cfg.scene.robot.actuators["manual_mimics"].stiffness = 2000.0
 
+    # Remove env-level zone border strips — we draw our own workspace floor slab.
+    for _zb in ("zone_border_top", "zone_border_bottom",
+                 "zone_border_left", "zone_border_right"):
+        try:
+            setattr(env_cfg.scene, _zb, None)
+        except AttributeError:
+            pass
+
     env = ManagerBasedRLEnv(cfg=env_cfg)
     device = env.device
+
+    # ── RMPflow Controller ─────────────────────────────────────────────────────
+    print("\nInitializing RMPflow Controller...")
+    from asyncDualPlayPPO.tasks.utils.reach_dual_arm_env_cfg import ISAACLAB_DUAL_ARM_EXT_DIR
+    rmp_cfg = RmpFlowControllerCfg(
+        config_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/rmpflow_config_left.yaml",
+        urdf_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/urdf/ur_robotics/ur5e/ur5e_robotiq_140.urdf",
+        collision_file=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/cuMotion/lula_left.yaml",
+        frame_name="wrist_3_link",
+        evaluations_per_frame=1.0,
+    )
+    controller = RmpFlowController(rmp_cfg, device=device)
+    controller.initialize("/World/envs/env_0/RobotUnified")
 
     # ── Gamepad ────────────────────────────────────────────────────────────────
     gamepad = Se3Gamepad(Se3GamepadCfg(pos_sensitivity=0.02, rot_sensitivity=0.0, gripper_term=True))
@@ -105,7 +134,6 @@ def main():
     left_finger_id  = left_finger_ids[0]
     right_finger_id = right_finger_ids[0]
 
-    # Joint indices and reset state for reference
     joint_indices, _ = robot.find_joints(ARM_JOINT_NAMES)
     reset_joints = robot.data.default_joint_pos[:, joint_indices]
 
@@ -129,7 +157,7 @@ def main():
     _cone.GetHeightAttr().Set(0.08)
     _cone.GetAxisAttr().Set("Z")
     _mat    = UsdShade.Material.Define(stage, target_path + "/Mat")
-    _shader = UsdShade.Shader.Define(stage, target_path + "/Mat/Shader")
+    _shader = UsdShade.Shader.Define(stage,   _mat.GetPath().AppendChild("Shader"))
     _shader.CreateIdAttr("UsdPreviewSurface")
     _shader.CreateInput("diffuseColor",  Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(1.0, 0.1, 0.1))
     _shader.CreateInput("emissiveColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.6, 0.0, 0.0))
@@ -257,32 +285,37 @@ def main():
         focal_mm=18.0,
     )
 
-    _vp_side = vp_util.create_viewport_window(
-        "Side View", width=420, height=280, position_x=0, position_y=0
-    )
-    _vp_side.viewport_api.camera_path = _cam_side
-
-    _vp_top = vp_util.create_viewport_window(
-        "Top View", width=420, height=280, position_x=0, position_y=290
-    )
-    _vp_top.viewport_api.camera_path = _cam_top
-
-    _active_vp = vp_util.get_active_viewport()
-    _main_cam_prim = stage.GetPrimAtPath(_active_vp.camera_path)
-    if _main_cam_prim.IsValid():
-        _cam_xform = UsdGeom.Xformable(_main_cam_prim)
-        _eye = _cam_xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
-        _focus = Gf.Vec3d(0.0, 0.5, 0.4)
-        _new_eye = _focus + (_eye - _focus) * 0.5
-        _main_translate_op = next(
-            (op for op in _cam_xform.GetOrderedXformOps()
-             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
-            None,
+    if args.headless:
+        _vp_side = None
+        _vp_top = None
+    else:
+        _vp_side = vp_util.create_viewport_window(
+            "Side View", width=420, height=280, position_x=0, position_y=0
         )
-        if _main_translate_op is not None:
-            _main_translate_op.Set(_new_eye)
-        else:
-            UsdGeom.XformCommonAPI(_main_cam_prim).SetTranslate(_new_eye)
+        _vp_side.viewport_api.camera_path = _cam_side
+
+        _vp_top = vp_util.create_viewport_window(
+            "Top View", width=420, height=280, position_x=0, position_y=290
+        )
+        _vp_top.viewport_api.camera_path = _cam_top
+
+    if not args.headless:
+        _active_vp = vp_util.get_active_viewport()
+        _main_cam_prim = stage.GetPrimAtPath(_active_vp.camera_path)
+        if _main_cam_prim.IsValid():
+            _cam_xform = UsdGeom.Xformable(_main_cam_prim)
+            _eye = _cam_xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
+            _focus = Gf.Vec3d(0.0, 0.5, 0.4)
+            _new_eye = _focus + (_eye - _focus) * 0.5
+            _main_translate_op = next(
+                (op for op in _cam_xform.GetOrderedXformOps()
+                 if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
+                None,
+            )
+            if _main_translate_op is not None:
+                _main_translate_op.Set(_new_eye)
+            else:
+                UsdGeom.XformCommonAPI(_main_cam_prim).SetTranslate(_new_eye)
 
     def _read_ball_pos() -> torch.Tensor:
         mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
@@ -305,7 +338,8 @@ def main():
     _ws_mat.CreateSurfaceOutput().ConnectToSource(_ws_shader.ConnectableAPI(), "surface")
     UsdShade.MaterialBindingAPI(_ws_slab.GetPrim()).Bind(_ws_mat)
 
-    target_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device, dtype=torch.float32) # [w, x, y, z]
+    # Orientation [w, x, y, z] — points gripper down
+    target_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device, dtype=torch.float32)
 
     current_ik_target_w = torch.tensor(ball_spawn, device=device, dtype=torch.float32)
     last_good_joints = reset_joints[0].clone()
@@ -323,6 +357,8 @@ def main():
         return clamped
 
     action = torch.zeros((1, env.action_space.shape[-1]), device=device)
+    # Start at reset joints
+    action[0, :6] = last_good_joints
 
     print("\n" + "=" * 70)
     print("  [RMPflow Interactive Mode Ready]")
@@ -343,6 +379,7 @@ def main():
                 env.reset()
                 robot.update(env.step_dt)
                 last_good_joints = reset_joints[0].clone()
+                action[0, :6] = last_good_joints
                 current_ik_target_w = torch.tensor(ball_spawn, device=device, dtype=torch.float32)
                 if _translate_op is not None:
                     with Usd.EditContext(stage, _session_layer):
@@ -359,7 +396,7 @@ def main():
             dx, dy = delta_pos[0], delta_pos[1]
             delta_pos[0] = dy
             delta_pos[1] = dx
-            action[0, 7] = gamepad_cmd[6] # Gripper at index 7 for 8D action space
+            action[0, 6] = gamepad_cmd[6] # Gripper at index 6 for JointAction (6 arm + 1 gripper)
             if delta_pos.any():
                 mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
                 t = mat.ExtractTranslation()
@@ -381,26 +418,34 @@ def main():
             local_target[2] = local_target[2].clamp(_WS_Z_MIN, _WS_Z_MAX)
             current_ik_target_w = local_target + env_origin
 
-            left_pos_w   = robot.data.body_pos_w[0, left_finger_id]
-            right_pos_w  = robot.data.body_pos_w[0, right_finger_id]
-            tcp_pos_w_cur = (left_pos_w + right_pos_w) / 2.0
-            wrist3_pos_w  = robot.data.body_pos_w[0, wrist3_id]
-            tcp_offset    = tcp_pos_w_cur - wrist3_pos_w
-            ik_local_target = local_target - tcp_offset
+            # IMPORTANT: Sync Isaac Lab robot state into RMPflow's Lula robot
+            # Get current full robot state for Lula synchronization
+            full_q = robot.data.joint_pos
+            full_dq = robot.data.joint_vel
+            
+            # Sync state with Lula (Lula needs the full articulation state)
+            for policy in controller.articulation_policies:
+                policy.get_robot_articulation().set_joint_positions(full_q[0])
+                policy.get_robot_articulation().set_joint_velocities(full_dq[0])
 
-            arm_action_dim = env.action_space.shape[-1] - 1
-            if arm_action_dim == 7:
-                action[0, 0:3] = ik_local_target
-                action[0, 3:7] = target_quat
-            else:
-                action[0, 0:3] = ik_local_target
-                action[0, 3:6] = 0.0
+            # Set RMPflow command
+            controller.set_command(
+                torch.cat([local_target.unsqueeze(0), target_quat], dim=-1) # [1, 7]
+            )
+            # RMPflow compute returns (q_target, qdot_target)
+            joint_cmd, _ = controller.compute()
+            
+            # controller.compute returns target joint positions (q_target)
+            action[0, :6] = joint_cmd
 
             env.step(action)
             robot.update(env.step_dt)
             step_count += 1
 
             if step_count % 10 == 0:
+                left_pos_w   = robot.data.body_pos_w[0, left_finger_id]
+                right_pos_w  = robot.data.body_pos_w[0, right_finger_id]
+                tcp_pos_w_cur = (left_pos_w + right_pos_w) / 2.0
                 tcp_local = tcp_pos_w_cur - env_origin
                 err = (tcp_local - local_target).norm().item()
                 print(f"[{step_count:5d}] target=({local_target[0]:.3f},{local_target[1]:.3f},{local_target[2]:.3f}) tcp=({tcp_local[0]:.3f},{tcp_local[1]:.3f},{tcp_local[2]:.3f}) err={err:.4f}m")
