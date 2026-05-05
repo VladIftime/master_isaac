@@ -659,6 +659,15 @@ class AsyncDualPlayEnvWrapper:
                     env_ids=valid_env_ids,
                 )
 
+            # Move Ghost to Alice's final pose (Marker for Bob)
+            goal_pos_local = goal_state[valid_env_ids, 0:3]
+            goal_quat = _euler_xyz_to_quat(goal_state[valid_env_ids, 3:6])
+            ghost_pos_global = goal_pos_local + origins
+            self.env.scene["goal_ghost"].write_root_pose_to_sim(
+                torch.cat([ghost_pos_global, goal_quat], dim=-1),
+                env_ids=valid_env_ids,
+            )
+
             reset_robot_joints(self.env, valid_env_ids)
             
             # Transition table to Blue for Bob phase
@@ -670,6 +679,9 @@ class AsyncDualPlayEnvWrapper:
             self.episode_manager.reset_episode(
                 invalid_env_ids, reason="Alice Invalid Goal"
             )
+            # Hide ghost on invalid goal
+            self.hide_goal_ghost(invalid_env_ids)
+            
             _sp = reset_objects_to_random_safe_pose(self.env, invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.episode_manager.initial_states[invalid_env_ids] = (
@@ -702,6 +714,8 @@ class AsyncDualPlayEnvWrapper:
         self._iter_stats["bob_successes"] += n_success
         self._iter_stats["bob_failures"] += n_failure
 
+
+# --- Robot Control Utilities ---
         # --- 4. Transition Logic ---
         # Paper: Alice continues for all max_goals_per_episode goals even if Bob fails some.
         # `bob_ever_failed` was preventing Alice from proposing further goals after the first failure,
@@ -714,6 +728,9 @@ class AsyncDualPlayEnvWrapper:
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
             self.episode_manager.transition_to_alice(continue_ids)
+            # Hide ghost when Alice starts her new phase
+            self.hide_goal_ghost(continue_ids)
+            
             _sp = reset_objects_to_random_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
             self.episode_manager.initial_states[continue_ids] = (
@@ -736,6 +753,8 @@ class AsyncDualPlayEnvWrapper:
             succeeded = self.episode_manager.bob_success[reset_ids]
             reason = "Bob Succeeded" if succeeded.any() else "Bob Failed"
             self.episode_manager.reset_episode(reset_ids, reason=reason)
+            # Hide ghost on reset
+            self.hide_goal_ghost(reset_ids)
 
             _sp = reset_objects_to_random_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
@@ -1190,6 +1209,14 @@ class AsyncDualPlayEnvWrapper:
 
         # Return rewards and which envs just achieved completion
         return rewards, should_give_completion
+
+    def hide_goal_ghost(self, env_ids: torch.Tensor):
+        """Move the visual goal marker under the table to hide it."""
+        if "goal_ghost" in self.env.scene.rigid_objects:
+            hide_pos = torch.zeros((len(env_ids), 7), device=self.device)
+            hide_pos[:, 2] = -1.0  # Under table
+            hide_pos[:, 3] = 1.0  # Identity orientation (w=1)
+            self.env.scene["goal_ghost"].write_root_pose_to_sim(hide_pos, env_ids=env_ids)
 
     def close(self):
         """Close wrapped environment"""

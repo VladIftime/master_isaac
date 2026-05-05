@@ -342,6 +342,29 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
     )
 
+    goal_ghost = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/GoalGhost",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=[0.0, 0.0, -1.0], # Start hidden under table
+            rot=[0.0, 0.0, 0.0, 1.0],
+        ),
+        spawn=UsdFileCfg(
+            func=spawn_random_block, # Use same custom randomizer to match shape
+            usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
+            scale=(1.52, 1.52, 1.52), # Slightly larger to avoid Z-fighting/clipping if they overlap perfectly
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,
+                disable_gravity=True,
+            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=False # No collisions for the ghost
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(1.0, 0.4, 0.7), # Pink
+            ),
+        ),
+    )
+
     cube = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         init_state=RigidObjectCfg.InitialStateCfg(

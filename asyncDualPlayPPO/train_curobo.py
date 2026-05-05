@@ -904,15 +904,15 @@ def main():
                 delta_rxry[alice_indices] = a_rxry
             if len(bob_indices) > 0:
                 delta_rxry[bob_indices]   = b_rxry
-            _rx, _ry = delta_rxry[:, 0], delta_rxry[:, 1]
-            _qx = torch.stack([torch.cos(_rx/2), torch.sin(_rx/2),
-                                torch.zeros_like(_rx), torch.zeros_like(_rx)], dim=1)
-            _qy = torch.stack([torch.cos(_ry/2), torch.zeros_like(_ry),
-                                torch.sin(_ry/2), torch.zeros_like(_ry)], dim=1)
-            _q_delta = _quat_mul(_qy, _qx)                               # Ry then Rx
-            ee_target_quat_w = _quat_mul(ee_target_quat_w, _q_delta)
-            # Normalise every step to prevent floating-point drift
-            ee_target_quat_w = ee_target_quat_w / ee_target_quat_w.norm(dim=-1, keepdim=True)
+            with profiler.section("orient_accum"):
+                _rx, _ry = delta_rxry[:, 0], delta_rxry[:, 1]
+                _qx = torch.stack([torch.cos(_rx/2), torch.sin(_rx/2),
+                                    torch.zeros_like(_rx), torch.zeros_like(_rx)], dim=1)
+                _qy = torch.stack([torch.cos(_ry/2), torch.zeros_like(_ry),
+                                    torch.sin(_ry/2), torch.zeros_like(_ry)], dim=1)
+                _q_delta = _quat_mul(_qy, _qx)                               # Ry then Rx
+                ee_target_quat_w = _quat_mul(ee_target_quat_w, _q_delta)
+                ee_target_quat_w = ee_target_quat_w / ee_target_quat_w.norm(dim=-1, keepdim=True)
 
             # 3. TCP offset: cuRobo targets wrist_3_link; finger-midpoint is ~5 cm ahead.
             #    Subtract the live offset so the gripper tip arrives at the intended target.
@@ -1324,9 +1324,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# --- LATEST UPDATES (May 2026) ---
-# 1. Removed immediate episode reset on IK failure to allow Alice to learn from collisions.
-# 2. Disabled target 'snapping' (sync) on IK failure; the agent must now learn to recover.
-# 3. Switched to startup-time random block selection for simulation stability.
-# 4. Standardized all blocks to a Green (0.1, 0.8, 0.1) visual theme with 1.5x scale.
