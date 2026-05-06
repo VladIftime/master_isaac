@@ -619,14 +619,8 @@ def main():
             bob_updates += 1
             return
 
-        last_val_b = torch.zeros(env.num_envs, 1, device=env.device)
         with torch.no_grad():
-            for b_id in range(env.num_envs):
-                if env.episode_manager.is_bob_phase()[b_id]:
-                    _, _, lv, _, _ = bob_ppo.actor_critic.act(
-                        current_bob_obs[b_id:b_id+1], None
-                    )
-                    last_val_b[b_id] = lv
+            _, _, last_val_b, _, _ = bob_ppo.actor_critic.act(current_bob_obs, None)
 
         if bob_ppo.actor_critic.use_goal_encoder:
             with torch.no_grad():
@@ -887,7 +881,10 @@ def main():
             alice_gripper_state[alice_indices] = new_ags
             bob_gripper_state[bob_indices]     = new_bgs
 
-            # 2. Accumulate per-env EE position targets, clamp to workspace
+            # 2. Accumulate per-env EE position targets, clamp to workspace.
+            # Snapshot before the delta so IK-failure envs can be reverted below.
+            _ee_target_local_pre  = ee_target_local.clone()
+            _ee_target_quat_w_pre = ee_target_quat_w.clone()
             if len(alice_indices) > 0:
                 ee_target_local[alice_indices] += a_xyz
             if len(bob_indices) > 0:
@@ -952,6 +949,12 @@ def main():
                 
                 # 2. Populate it safely
                 _fail_active = _active[_ik_fail[_active]]
+
+            # Revert EE target accumulator for envs where IK failed so drift
+            # doesn't compound across successive failures.
+            if len(_fail_active) > 0:
+                ee_target_local[_fail_active]  = _ee_target_local_pre[_fail_active]
+                ee_target_quat_w[_fail_active] = _ee_target_quat_w_pre[_fail_active]
 
             # 5. Build 7D joint-position command with EMA smoothing.
             # Blend new IK solution toward previous command so motion feels like
