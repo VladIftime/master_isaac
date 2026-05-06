@@ -68,9 +68,9 @@ _ARM_JOINT_NAMES = [
 ]
 
 # Workspace clamp limits (local / env-origin-relative frame, metres)
-_WS_X = (-0.65, 0.65)
-_WS_Y = (0.20,  0.75)
-_WS_Z = (-0.02, 0.80)
+_WS_X = (-0.50, 0.50)
+_WS_Y = (0.25,  0.70)
+_WS_Z = ( 0.00, 0.55)
 
 
 class SuppressAllOutput:
@@ -1157,17 +1157,35 @@ def main():
                 just_failed_bob = bob_dones_now & (~bob_success) & goal_valid
                 valid_ids = torch.where(just_failed_bob)[0]
                 min_demo_steps = max(10, env.episode_manager.alice_timesteps // 2)
+                _abc_dbg_bob_done   = int(bob_dones_now.sum())
+                _abc_dbg_failed     = int((bob_dones_now & ~bob_success).sum())
+                _abc_dbg_goal_valid = int((bob_dones_now & goal_valid).sum())
+                _abc_dbg_gate       = int(just_failed_bob.sum())
+                _abc_dbg_too_short  = 0
+                print(
+                    f"  [ABC dbg] bob_done={_abc_dbg_bob_done} "
+                    f"failed={_abc_dbg_failed} goal_valid={_abc_dbg_goal_valid} "
+                    f"gate={_abc_dbg_gate} min_steps={min_demo_steps}",
+                    flush=True,
+                )
                 valid_trajs = []
                 for env_id in valid_ids:
                     eid   = env_id.item()
                     t_len = alice_traj_len[eid].item()
                     if t_len < min_demo_steps:
+                        _abc_dbg_too_short += 1
                         continue
                     traj_o = alice_traj_obs[eid, :t_len]
                     traj_a = alice_traj_act[eid, :t_len]
                     g = ep_info["goal_states"][eid].unsqueeze(0).expand(t_len, -1)
                     bc_obs = env.construct_bob_observation(traj_o, g)
                     valid_trajs.append((bc_obs, traj_a))
+                if _abc_dbg_too_short > 0 or _abc_dbg_gate > 0:
+                    print(
+                        f"  [ABC dbg] too_short={_abc_dbg_too_short} "
+                        f"accepted={len(valid_trajs)} buf_size={bob_ppo.abc_buffer.size}",
+                        flush=True,
+                    )
                 if valid_trajs:
                     all_obs  = torch.cat([t[0] for t in valid_trajs], dim=0)
                     all_acts = torch.cat([t[1] for t in valid_trajs], dim=0)
@@ -1192,7 +1210,7 @@ def main():
         # ── Entropy / LR / ABC controllers (identical to train.py) ────────────────
         _ent_p = min(1.0, bob_updates / min(args.max_iterations, 250))
         if _ent_p < 1.0:
-            alice_ppo.entropy_coef = 0.10 + 0.90 * math.exp(-args.alice_decay_alpha * _ent_p)
+            alice_ppo.entropy_coef = 0.05 + 0.95 * math.exp(-args.alice_decay_alpha * _ent_p)
             _ent_phase = "decay"
         else:
             _bob_sr_now  = np.mean(bob_success_buf) if bob_success_buf else 0.0

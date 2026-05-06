@@ -2,17 +2,22 @@
 CuRobo Interactive Follow-Target Test (IsaacLab)
 =================================================
 
-Spawns a red visual sphere at the gripper midpoint that you can move with
-the viewport gizmo. CuRobo computes IK in real-time; a velocity clamp makes
-the robot chase the ball smoothly.
+Spawns a red visual cone at the gripper midpoint that you can move with the
+viewport gizmo or an Xbox Bluetooth controller. CuRobo computes IK in
+real-time; a velocity clamp makes the robot chase the target smoothly.
 
 Usage:
     python tests/test_curobo_follow_target.py --max_vel 0.5
 
-Controls:
-    1. Click the Red Ball in the viewport.
-    2. Press 'W' to activate the translation gizmo.
-    3. Drag the ball — the arm follows in real-time.
+Xbox controller layout:
+    Left  stick  ↑↓ / ←→  →  +X/-X  and  +Y/-Y   (forward/back, left/right)
+    Right stick  ↑↓        →  +Rx/-Rx  (gripper tilt forward/back)
+    Right stick  ←→        →  +Ry/-Ry  (gripper tilt left/right)
+    Right trigger           →  +Z  (raise target)
+    Left  trigger           →  -Z  (lower target)
+    X button                →  toggle gripper open/close
+    R key                   →  reset robot and target to start pose
+    C key                   →  spawn a random block on the table
 """
 
 import argparse
@@ -38,7 +43,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 def main():
     parser = argparse.ArgumentParser(description="CuRobo Interactive Follow Target")
-    parser.add_argument("--max_vel", type=float, default=2.0, help="Max EE velocity in m/s")
+    parser.add_argument("--max_vel",     type=float, default=2.0, help="Max EE velocity in m/s")
+    parser.add_argument("--gamepad_idx", type=int,   default=1,   help="Carb gamepad index (0=first, 1=second, …)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -53,8 +59,125 @@ def main():
     import omni.usd
     import numpy as np
     from pxr import UsdGeom, Usd, Gf, UsdShade, Sdf, UsdPhysics
-    from isaaclab.devices import Se3Gamepad, Se3GamepadCfg
+    from scipy.spatial.transform import Rotation as ScipyRot
     import carb
+    import struct, threading
+
+    # ── Direct /dev/input joystick reader (bypasses carb gamepad API) ─────────
+    class XboxJoystick:
+        """Reads Xbox Bluetooth controller directly from /dev/input/jsN.
+
+        Linux joystick protocol: 8-byte packets  (IhBB = ts, value, type, number)
+        Xbox Wireless (xpad/bt) axis map:
+            0  Left stick X   (-1=left,  +1=right)
+            1  Left stick Y   (-1=up,    +1=down)   ← inverted vs. intuition
+            2  Left  trigger  (0=rest,   +1=full)
+            3  Right stick X  (-1=left,  +1=right)
+            4  Right stick Y  (-1=up,    +1=down)   ← inverted
+            5  Right trigger  (0=rest,   +1=full)
+        Xbox button map:
+            0=A  1=B  2=X  3=Y  4=LB  5=RB  6=Back  7=Start  8=Xbox  9=LS  10=RS
+        """
+
+        _JS_BTN  = 0x01
+        _JS_AXIS = 0x02
+
+        def __init__(self, device="/dev/input/js1", dead_zone=0.10,
+                     pos_sensitivity=0.02, rot_sensitivity=0.02):
+            self.pos_sensitivity = pos_sensitivity
+            self.rot_sensitivity = rot_sensitivity
+            self._dz = dead_zone
+            self._axes    = [0.0] * 16
+            self._buttons = [0]   * 16
+            self._gripper_closed = False
+            self._spawn_requested = False
+            self._reset_requested = False
+            self._lb_held = False
+            self._rb_held = False
+            self._lock = threading.Lock()
+            self._fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+            threading.Thread(target=self._loop, daemon=True).start()
+            print(f"  [XboxJoystick] opened {device}")
+
+        def _loop(self):
+            while True:
+                try:
+                    data = os.read(self._fd, 8)
+                    _ts, value, etype, number = struct.unpack("IhBB", data)
+                    etype &= ~0x80  # strip init flag
+                    with self._lock:
+                        if etype == self._JS_AXIS and number < len(self._axes):
+                            self._axes[number] = value / 32767.0
+                        elif etype == self._JS_BTN and number < len(self._buttons):
+                            prev = self._buttons[number]
+                            self._buttons[number] = value
+                            if number == 1 and value == 1 and prev == 0:  # B btn
+                                self._reset_requested = True
+                            if number == 3 and value == 1 and prev == 0:  # X btn
+                                self._gripper_closed = not self._gripper_closed
+                            if number == 4 and value == 1 and prev == 0:  # Y btn
+                                self._spawn_requested = True
+                            if number == 6:  # LB — rotate CCW
+                                self._lb_held = bool(value)
+                            if number == 7:  # RB — rotate CW
+                                self._rb_held = bool(value)
+                except BlockingIOError:
+                    import time; time.sleep(0.001)
+                except Exception:
+                    break
+
+        def _ax(self, n):
+            v = self._axes[n]
+            return 0.0 if abs(v) < self._dz else v
+
+        def advance(self) -> torch.Tensor:
+            """Return 7-element tensor [dx, dy, dz, drx, dry, drz, gripper]
+            in the same convention as Se3Gamepad.advance()."""
+            with self._lock:
+                # Left stick: axis 0 = X (L/R), axis 1 = Y (up=neg, invert)
+                # Se3Gamepad convention: cmd[0] = left-stick-up (+), cmd[1] = left-stick-right (+)
+                cmd0 =   self._ax(0) * self.pos_sensitivity   # left stick X, right=+
+                cmd1 =  -self._ax(1) * self.pos_sensitivity   # left stick Y, up=+
+                # Triggers rest at -32767, full press = +32767.
+                # Normalise to 0..1: (raw_norm + 1) / 2
+                rt = (self._axes[5] + 1.0) / 2.0   # RT axis 5: up
+                lt = (self._axes[2] + 1.0) / 2.0   # LT axis 2: down
+                cmd2 = (rt - lt) * self.pos_sensitivity
+                # Right stick: axis 3 = X (L/R), axis 4 = Y (up=neg, invert)
+                cmd3 = -self._ax(4) * self.rot_sensitivity    # Rx: right-stick Y, up=+
+                cmd4 =  self._ax(3) * self.rot_sensitivity    # Ry: right-stick X, right=+
+                cmd5 = (self._lb_held - self._rb_held) * self.rot_sensitivity  # Rz: LB=CCW, RB=CW
+                gripper = -1.0 if self._gripper_closed else 1.0
+            return torch.tensor([cmd0, cmd1, cmd2, cmd3, cmd4, cmd5, gripper],
+                                 dtype=torch.float32)
+
+        def pop_reset(self) -> bool:
+            """Returns True (and clears the flag) if B was pressed since last call."""
+            with self._lock:
+                if self._reset_requested:
+                    self._reset_requested = False
+                    return True
+            return False
+
+        def pop_spawn(self) -> bool:
+            """Returns True (and clears the flag) if Y was pressed since last call."""
+            with self._lock:
+                if self._spawn_requested:
+                    self._spawn_requested = False
+                    return True
+            return False
+
+        def reset(self):
+            with self._lock:
+                self._gripper_closed = False
+                self._spawn_requested = False
+                self._reset_requested = False
+                self._lb_held = False
+                self._rb_held = False
+
+        def close(self):
+            try: os.close(self._fd)
+            except OSError: pass
 
     ARM_JOINT_NAMES = [
         "shoulder_pan_joint",
@@ -109,25 +232,9 @@ def main():
     device = env.device
 
     # ── Gamepad ────────────────────────────────────────────────────────────────
-    carb.log_info("Initializing Se3Gamepad...")
-    # ── Button map (Xbox/standard layout) ─────────────────────────────────────
-    # Left  stick  ↑↓     →  +X / -X   (forward/back)
-    # Left  stick  ←→     →  +Y / -Y   (left/right)
-    # Right stick  ↑↓     →  +Z / -Z   (up/down)
-    # Right stick  ←→     →  (unused, rot_sensitivity=0)
-    # D-pad        ↑↓←→   →  (unused, rot_sensitivity=0)
-    # Left  trigger       →  -Z  (down, via add_callback)
-    # Right trigger       →  +Z  (up,   via add_callback)
-    # X button            →  toggle gripper open/close
-    # A / B / Y           →  available for custom callbacks
-    # Left  shoulder (LB) →  available
-    # Right shoulder (RB) →  available
-    # Left  stick click   →  available
-    # Right stick click   →  available
-    # MENU1 / MENU2       →  available
-    # ──────────────────────────────────────────────────────────────────────────
-    gamepad = Se3Gamepad(Se3GamepadCfg(pos_sensitivity=0.02, rot_sensitivity=0.0, gripper_term=True))
-    gamepad.reset()
+    # Use XboxJoystick (direct /dev/input reader) instead of Se3Gamepad so the
+    # Bluetooth Xbox controller works regardless of carb gamepad enumeration.
+    gamepad = XboxJoystick(device=f"/dev/input/js{args.gamepad_idx}")
 
     # ── CuRobo IK solver ──────────────────────────────────────────────────────
     print("\nInitializing CuRobo IKSolver...")
@@ -342,6 +449,14 @@ def main():
         focal_mm=18.0,
     )
 
+    # EE (wrist) camera — pose updated every sim step from wrist_3_link transform.
+    _cam_ee_path = "/World/CamEE"
+    _cam_ee = UsdGeom.Camera.Define(stage, _cam_ee_path)
+    _cam_ee.GetFocalLengthAttr().Set(18.0)
+    _cam_ee_xform = UsdGeom.Xformable(_cam_ee)
+    _cam_ee_mat_op = _cam_ee_xform.MakeMatrixXform()
+    _cam_ee_mat_op.Set(Gf.Matrix4d(1))  # identity until first step
+
     # Viewport windows stacked on the left — pass positions to the constructor
     # so the underlying setPosition() call fires correctly.
     _vp_side = vp_util.create_viewport_window(
@@ -353,6 +468,11 @@ def main():
         "Top View", width=420, height=280, position_x=0, position_y=290
     )
     _vp_top.viewport_api.camera_path = _cam_top
+
+    _vp_ee = vp_util.create_viewport_window(
+        "EE View", width=420, height=280, position_x=0, position_y=580
+    )
+    _vp_ee.viewport_api.camera_path = _cam_ee_path
 
     # Zoom the main viewport in by 50% — move its camera halfway toward the
     # robot working-area centre so the scene fills the screen more tightly.
@@ -399,8 +519,15 @@ def main():
     _ws_mat.CreateSurfaceOutput().ConnectToSource(_ws_shader.ConnectableAPI(), "surface")
     UsdShade.MaterialBindingAPI(_ws_slab.GetPrim()).Bind(_ws_mat)
 
-    # Fixed "tool pointing down" orientation — matches the working IK config.
-    target_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device, dtype=torch.float32)
+    # Base "tool pointing down" orientation [w=0, x=1, y=0, z=0] — 180° about X.
+    # The right stick accumulates Rx/Ry deltas on top of this base each step.
+    _BASE_ROT   = ScipyRot.from_quat([1.0, 0.0, 0.0, 0.0])  # scipy: [x,y,z,w]
+    _acc_rot    = ScipyRot.identity()
+
+    def _compute_target_quat() -> torch.Tensor:
+        """Return CuRobo [w,x,y,z] quaternion from accumulated gripper orientation."""
+        q = (_BASE_ROT * _acc_rot).as_quat()  # scipy gives [x,y,z,w]
+        return torch.tensor([[q[3], q[0], q[1], q[2]]], device=device, dtype=torch.float32)
 
     current_ik_target_w = torch.tensor(ball_spawn, device=device, dtype=torch.float32)
     last_good_joints     = reset_joints[0].clone()
@@ -423,12 +550,12 @@ def main():
 
     print("\n" + "=" * 70)
     print("  [Interactive Mode Ready]")
-    print("  1. Click the Red Ball in the viewport.")
+    print("  1. Click the Red target in the viewport.")
     print("  2. Press 'W' to activate the translation gizmo.")
     print("  3. Drag the ball — the arm follows in real-time.")
     print(f"  Max velocity : {args.max_vel} m/s")
     print(f"  Env origin   : {env_origin.cpu().numpy().round(3)}")
-    print(f"  Ball spawn   : {ball_spawn.round(3)}")
+    print(f"  Target spawn   : {ball_spawn.round(3)}")
     print("=" * 70 + "\n")
 
     step_count = 0
@@ -438,7 +565,7 @@ def main():
         while simulation_app.is_running():
             simulation_app.update()
 
-            if _reset_requested[0]:
+            if _reset_requested[0] or gamepad.pop_reset():
                 _reset_requested[0] = False
                 env.reset()
                 # Hold reset joints for 20 steps so PhysX settles to default pose.
@@ -456,19 +583,20 @@ def main():
                             float(ball_spawn[0]), float(ball_spawn[1]), float(ball_spawn[2])
                         ))
                 gamepad.reset()
+                _acc_rot = ScipyRot.identity()
                 print("  [R] Reset — robot and target returned to start pose.")
 
-            if _spawn_requested[0]:
+            if _spawn_requested[0] or gamepad.pop_spawn():
                 _spawn_requested[0] = False
                 _spawn_block()
 
             # Apply gamepad XYZ delta to ball's USD position.
             gamepad_cmd = gamepad.advance()
             delta_pos = gamepad_cmd[:3].cpu().numpy()
-            # Remap left-stick so UP=forward(+Y), DOWN=back(-Y), RIGHT=right(-X), LEFT=left(+X)
-            dx, dy = delta_pos[0], delta_pos[1]
-            delta_pos[0] = dy
-            delta_pos[1] = dx
+            # Accumulate right-stick Rx/Ry into gripper orientation.
+            delta_rot_vec = gamepad_cmd[3:6].cpu().numpy()
+            if np.any(np.abs(delta_rot_vec) > 1e-6):
+                _acc_rot = _acc_rot * ScipyRot.from_rotvec(delta_rot_vec)
             # gamepad_cmd[6]: +1.0 = open, -1.0 = close (X button toggles)
             action[0, 6] = gamepad_cmd[6]
             if delta_pos.any():
@@ -511,7 +639,7 @@ def main():
             cur_joints = robot.data.joint_pos[:, joint_indices]  # (1, 6)
             goal_pose = Pose(
                 position=ik_local_target.unsqueeze(0),
-                quaternion=target_quat,
+                quaternion=_compute_target_quat(),
             )
             ik_result = ik_solver.solve_single(
                 goal_pose,
@@ -529,6 +657,20 @@ def main():
 
             env.step(action)
             robot.update(env.step_dt)
+
+            # ── Update EE camera pose ──────────────────────────────────────────
+            # Use the IK target rotation (BASE_ROT * _acc_rot) — same frame used
+            # to solve IK — so the camera always aligns with the actual tool direction.
+            _tcp      = tcp_pos_w_cur.cpu().numpy()
+            _tool_rot = _BASE_ROT * _acc_rot
+            _approach = _tool_rot.apply(np.array([0.0, 0.0,  1.0]))  # world direction the tool points
+            _cam_pos  = _tcp - _approach * 0.10   # 10 cm behind TCP (opposite approach)
+            _look_at  = _tcp + _approach * 0.30   # 30 cm ahead along approach
+            _cam_ee_mat_op.Set(_make_lookat_matrix(
+                [float(v) for v in _cam_pos],
+                [float(v) for v in _look_at],
+            ))
+
             step_count += 1
 
             if step_count % 10 == 0:
