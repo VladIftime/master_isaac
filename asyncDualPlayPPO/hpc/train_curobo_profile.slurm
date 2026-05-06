@@ -26,7 +26,12 @@ echo "[INFO] Note: cuRobo CUDA graph warm-up (~30 s) precedes training; not coun
 
 if [ ! -f "$SIF_IMAGE" ]; then
     echo "[ERROR] Container image $SIF_IMAGE not found in $(pwd)"
-    echo "[INFO]  Verify cuRobo is installed: apptainer exec --nv $SIF_IMAGE python -c \"import curobo; print(curobo.__version__)\""
+    exit 1
+fi
+
+if [ ! -f "$PROJECT_ROOT/curobo_overlay.img" ]; then
+    echo "[ERROR] curobo_overlay.img not found in $PROJECT_ROOT"
+    echo "[INFO]  Run: apptainer overlay create --size 8192 curobo_overlay.img"
     exit 1
 fi
 
@@ -34,7 +39,7 @@ fi
 find "$PROJECT_ROOT" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 echo "[INFO] Cleared __pycache__ directories"
 
-apptainer exec --nv \
+apptainer exec --nv --overlay "$PROJECT_ROOT/curobo_overlay.img":ro \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \

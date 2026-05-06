@@ -29,7 +29,7 @@ def spawn_random_block(prim_path: str, cfg: UsdFileCfg, translation=None, orient
     across the parallel training batch without breaking the physics tensor backend.
     """
     import isaaclab.sim as sim_utils
-    from isaaclab.sim.utils.stage import get_current_stage
+    from isaacsim.core.utils.stage import get_current_stage
     
     # Base directory for blocks (infer from existing path)
     base_dir = os.path.dirname(cfg.usd_path)
