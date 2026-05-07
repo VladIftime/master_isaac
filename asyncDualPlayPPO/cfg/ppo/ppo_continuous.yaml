@@ -31,11 +31,10 @@ params:
     # Alice Behavioral Cloning (ABC) params
     # Paper uses β=0.5; was 0.1 which underweights BC signal
     abc_coef: 0.5
-    # Linear annealing: abc_coef decays from abc_coef → abc_coef_end over abc_anneal_iters.
-    # Keeps imitation signal strong during bootstrap, then hands off to RL for fine-tuning.
-    # Set abc_anneal_iters: 0 to disable annealing (fixed coefficient).
+    # abc_anneal_iters: 0 → skip time-based decay; use inverse-SR controller from iter 0.
+    # Controller target = abc_coef * (1 - bob_sr): max signal when Bob fails, fades as Bob learns.
     abc_coef_end: 0.0
-    abc_anneal_iters: 3000
+    abc_anneal_iters: 0
     # EMA smoothing for the inverse proportional controller (Phase 2).
     # 0.95 ramps abc_coef over ~20 iterations — fast enough to respond to
     # Alice's entropy spikes, slow enough to avoid gradient shocks.
