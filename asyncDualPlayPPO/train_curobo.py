@@ -1289,7 +1289,8 @@ def main():
         _invalid_goals = _stats.get("invalid_goals", 0)
         _bob_succ      = _stats.get("bob_successes", 0)
         _bob_fail      = _stats.get("bob_failures", 0)
-        writer.add_scalar("Metrics/Alice/ValidGoals", _valid_goals, bob_updates)
+        writer.add_scalar("Metrics/Alice/ValidGoals",   _valid_goals,   bob_updates)
+        writer.add_scalar("Metrics/Alice/InvalidGoals", _invalid_goals, bob_updates)
         _goal_validity_rate = _valid_goals / max(1, _valid_goals + _invalid_goals)
         writer.add_scalar("Metrics/Alice/GoalValidityRate", _goal_validity_rate, bob_updates)
         _alice_disp_3d_sum = _stats.get("alice_disp_3d_sum", 0.0)
@@ -1301,6 +1302,14 @@ def main():
         writer.add_scalar("Metrics/ABC/IsWarm", _abc_warm, bob_updates)
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
         writer.add_scalar("Metrics/IKFailRate", _ik_fr, bob_updates)
+        _ik_overhead = profiler.get_section_frac("curobo_ik", relative_to="env_step")
+        writer.add_scalar("Metrics/IKOverheadFrac", _ik_overhead, bob_updates)
+        if _ik_overhead > 0.10:
+            print(
+                f"  [cuRobo] WARNING: IK overhead {_ik_overhead:.1%} > 10% of env_step "
+                f"— consider reducing num_envs or upgrading GPU.",
+                flush=True,
+            )
 
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | IK_fail={_ik_fr:.3f} | "

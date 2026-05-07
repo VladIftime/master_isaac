@@ -16,7 +16,7 @@ Usage:
 What is checked:
     - Metrics/Alice/ValidGoals trends upward (last-20 avg > first-20 avg)
     - Metrics/Alice/GoalValidityRate never NaN
-    - Alice/EntropyCoef is constant 0.01 (Fix 2)
+    - Alice/EntropyCoef is constant 0.05 (ent_coef in ppo_continuous.yaml, Fix 2)
     - No NaN in any logged scalar
 """
 
@@ -70,16 +70,34 @@ def check_sandbox_run(log_dir: str):
     else:
         print(f"  GoalValidityRate: min={gvr.min():.3f}  mean={gvr.mean():.3f}")
 
-    # 3. EntropyCoef must be constant 0.01 (Fix 2)
+    # 3. EntropyCoef must be constant 0.05 (ent_coef in ppo_continuous.yaml, Fix 2)
+    EXPECTED_ENT_COEF = 0.05
     ec = df[df["tag"] == "Alice/EntropyCoef"]["value"]
     if len(ec) > 0:
         if ec.std() > 1e-4:
             failures.append(f"FAIL: Alice/EntropyCoef is not constant (std={ec.std():.6f}) — SR-coupled entropy controller still present")
-        if abs(ec.mean() - 0.01) > 0.005:
-            failures.append(f"FAIL: Alice/EntropyCoef != 0.01 (mean={ec.mean():.4f})")
-        print(f"  EntropyCoef: mean={ec.mean():.4f}  std={ec.std():.6f}")
+        if abs(ec.mean() - EXPECTED_ENT_COEF) > 0.005:
+            failures.append(f"FAIL: Alice/EntropyCoef != {EXPECTED_ENT_COEF} (mean={ec.mean():.4f}) — check ent_coef in ppo_continuous.yaml")
+        print(f"  EntropyCoef: mean={ec.mean():.4f}  std={ec.std():.6f}  (expected {EXPECTED_ENT_COEF})")
 
-    # 4. No NaN in any scalar
+    # 4. InvalidGoals must appear at least once (confirms OOZ penalty logic fires)
+    inv_goals = df[df["tag"] == "Metrics/Alice/InvalidGoals"]["value"]
+    if len(inv_goals) == 0:
+        failures.append(
+            "FAIL: Metrics/Alice/InvalidGoals not logged — "
+            "train_curobo.py may be missing the InvalidGoals writer call"
+        )
+    elif inv_goals.sum() == 0:
+        failures.append(
+            "FAIL: Metrics/Alice/InvalidGoals is always 0 — "
+            "out-of-zone penalty logic may never have fired. "
+            "Check _handle_alice_completion() in wrapper.py and "
+            "Alice's workspace boundary enforcement."
+        )
+    else:
+        print(f"  InvalidGoals total: {int(inv_goals.sum())}  (OOZ penalty confirmed firing)")
+
+    # 5. No NaN in any scalar
     for tag in df["tag"].unique():
         vals = df[df["tag"] == tag]["value"]
         if vals.isna().any():

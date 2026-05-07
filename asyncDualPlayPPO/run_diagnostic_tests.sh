@@ -89,7 +89,7 @@ echo "TensorBoard: tensorboard --logdir $LOG_DIR"
 # 50 iterations is enough to confirm; stop early if SR reaches 1.0.
 # # ─────────────────────────────────────────────────────────────────────────────
 # run_test 1 "PPO Reward Pipeline (--test_bob_reward)" \
-#     python -m asyncDualPlayPPO.train \
+#     python -m asyncDualPlayPPO.train_curobo \
 #         --headless \
 #         --num_envs 16 \
 #         --max_iterations 50 \
@@ -108,7 +108,7 @@ echo "TensorBoard: tensorboard --logdir $LOG_DIR"
 #            avg XY > 0.02   but valid = 0    → filter or frame-mismatch bug
 # ─────────────────────────────────────────────────────────────────────────────
 run_test 2 "Alice Exploration Sandbox" \
-    python -m asyncDualPlayPPO.train \
+    python -m asyncDualPlayPPO.train_curobo \
         --headless \
         --num_envs 32 \
         --max_iterations 400 \
@@ -124,7 +124,7 @@ run_test 2 "Alice Exploration Sandbox" \
 #          Metrics/ABC/BufferSize fills as Alice succeeds.
 # # ─────────────────────────────────────────────────────────────────────────────
 run_test 3 "PPO vs ABC Tug-of-War (Mini-ASP)" \
-    python -m asyncDualPlayPPO.train \
+    python -m asyncDualPlayPPO.train_curobo \
         --headless \
         --num_envs 64 \
         --max_iterations 400 \

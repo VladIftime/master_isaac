@@ -155,6 +155,20 @@ class TrainingProfiler:
         print(f"{'='*65}\n")
 
     # ------------------------------------------------------------------
+    def get_section_frac(self, section: str, relative_to: str = "env_step") -> float:
+        """Return this iteration's time fraction: section / relative_to.
+
+        Returns 0.0 when the profiler is disabled or either section is missing.
+        Useful for asserting that curobo_ik < 10% of env_step each iteration.
+        """
+        if not self.enabled:
+            return 0.0
+        denom = self._iter_totals.get(relative_to, 0.0)
+        if denom <= 0.0:
+            return 0.0
+        return self._iter_totals.get(section, 0.0) / denom
+
+    # ------------------------------------------------------------------
     def print_summary(self):
         if not self.enabled or not self._iter_wall:
             return

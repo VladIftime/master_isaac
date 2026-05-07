@@ -7,11 +7,13 @@ Hierarchical Reinforcement Learning", adapted for multi-object manipulation
 with permutation invariance.
 
 Architecture (per-object):
-    1. Convert quaternions to axis-angle (4D → 3D) so linear operations are
-       meaningful for rotations.
-    2. phi MLP maps 6D pose (pos3 + axisangle3) → R^{K_per_obj}
-    3. Difference variant: g_i = phi(goal_i) - phi(current_i)
+    1. phi MLP maps 6D pose (pos3 + euler3) → R^{K_per_obj}  [matches observation space]
+    2. Difference variant: g_i = phi(goal_i) - phi(current_i)
        Absolute variant:   g_i = phi(goal_i)
+
+ZYX Euler angles are used throughout to match the observation pipeline.  Linear
+subtraction phi(goal) - phi(current) is well-defined on Euler angles, which is
+why they are preferred over quaternions for the difference variant.
 
 Permutation invariance:
     Per-object embeddings g_i are max-pooled across objects to produce the
@@ -29,43 +31,6 @@ import torch.nn as nn
 from typing import Literal
 
 
-def quat_to_axis_angle(q: torch.Tensor) -> torch.Tensor:
-    """
-    Convert quaternion (w, x, y, z) to axis-angle (3D).
-
-    Handles the double-cover ambiguity by ensuring w >= 0.
-    Near-identity rotations (small angle) use a first-order Taylor
-    expansion for numerical stability.
-
-    Args:
-        q: (..., 4) quaternions in (w, x, y, z) convention.
-
-    Returns:
-        (..., 3) axis-angle vectors.
-    """
-    # Ensure w >= 0 to resolve double-cover
-    q = torch.where(q[..., :1] < 0, -q, q)
-
-    w = q[..., 0:1]  # (..., 1)
-    xyz = q[..., 1:4]  # (..., 3)
-
-    # sin(half_angle) = ||xyz||
-    sin_half = torch.norm(xyz, dim=-1, keepdim=True).clamp(min=1e-8)
-
-    # half_angle = atan2(sin_half, w)
-    half_angle = torch.atan2(sin_half, w)  # (..., 1)
-
-    # For small angles: angle ≈ 2 * sin_half (Taylor expansion)
-    # For larger angles: angle = 2 * half_angle
-    angle = 2.0 * half_angle  # (..., 1)
-
-    # axis = xyz / sin_half, scaled by angle
-    # axis_angle = axis * angle = xyz * (angle / sin_half)
-    scale = angle / sin_half  # (..., 1)
-
-    return xyz * scale  # (..., 3)
-
-
 class GoalEncoder(nn.Module):
     """
     Per-object goal encoder with permutation-invariant pooling.
@@ -78,7 +43,7 @@ class GoalEncoder(nn.Module):
         K_per_obj:    Output embedding dimension per object (pooled to this).
         hidden_dim:   Hidden layer width for the phi MLP.
         variant:      "difference" (phi(g) - phi(s)) or "absolute" (phi(g)).
-        pose_dim:     Dimension of each pose AFTER preprocessing (6: pos3 + axisangle3).
+        pose_dim:     Dimension of each pose (6: pos(3) + euler(3), matching observation space).
     """
 
     def __init__(
@@ -87,7 +52,7 @@ class GoalEncoder(nn.Module):
         K_per_obj: int = 6,
         hidden_dim: int = 64,
         variant: Literal["difference", "absolute"] = "difference",
-        pose_dim: int = 6,  # pos(3) + axis_angle(3) after quat conversion
+        pose_dim: int = 6,  # pos(3) + euler(3) — matches ZYX Euler observation space
         use_aux_loss: bool = True,
     ):
         super().__init__()
@@ -126,19 +91,7 @@ class GoalEncoder(nn.Module):
             self.aux_head = nn.Linear(K_per_obj, 2 * num_objects)
 
     def _preprocess_pose(self, pose_6d: torch.Tensor) -> torch.Tensor:
-        """
-        Accept 6D pose (pos3 + euler3) and return as-is.
-
-        Previously converted 7D pos+quat -> 6D pos+axis_angle.
-        Now the observation pipeline delivers Euler angles directly,
-        so no conversion is needed.
-
-        Args:
-            pose_6d: (..., 6) tensor with [pos(3), roll, pitch, yaw] per object.
-
-        Returns:
-            (..., 6) tensor unchanged.
-        """
+        """Pass-through: observations already deliver ZYX Euler poses (pos3 + euler3)."""
         return pose_6d
 
     def forward(
@@ -162,7 +115,6 @@ class GoalEncoder(nn.Module):
         goals = goal_poses.view(batch, self.num_objects, 6)
         currents = current_poses.view(batch, self.num_objects, 6)
 
-        # Convert quat → axis-angle: (batch, num_objects, 6)
         goals_6d = self._preprocess_pose(goals)
         currents_6d = self._preprocess_pose(currents)
 

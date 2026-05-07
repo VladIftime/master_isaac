@@ -75,7 +75,7 @@ cd "$ROOT"
 # ─────────────────────────────────────────────────────────────────────────────
 if [[ -z "$ONLY_TEST" || "$ONLY_TEST" == "1" ]]; then
     run_step "Test 1: Reward Pipeline (teleport)" \
-        python -m asyncDualPlayPPO.train \
+        python -m asyncDualPlayPPO.train_curobo \
             --test_reward_pipeline \
             --num_envs 16 \
             --headless \
@@ -88,7 +88,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 if [[ -z "$ONLY_TEST" || "$ONLY_TEST" == "2" ]]; then
     run_step "Test 2: Alice Sandbox (200 iters)" \
-        python -m asyncDualPlayPPO.train \
+        python -m asyncDualPlayPPO.train_curobo \
             --alice_sandbox \
             --num_envs 32 \
             --max_iterations 200 \
@@ -108,7 +108,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 if [[ -z "$ONLY_TEST" || "$ONLY_TEST" == "3" ]]; then
     run_step "Test 3: PPO/ABC Balance run (50 iters)" \
-        python -m asyncDualPlayPPO.train \
+        python -m asyncDualPlayPPO.train_curobo \
             --num_envs 32 \
             --max_iterations 50 \
             --headless \
@@ -129,8 +129,14 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TEST 4 — Goal Encoder integration + latent space
-# Reuses the checkpoint from Test 3 (50 iters — lightweight sanity check only)
-# For full silhouette test, run ≥500 iters first.
+#
+# Test 4a uses the 50-iter checkpoint from Test 3 (forward pass + grad flow).
+# Test 4b (t-SNE silhouette) requires ≥500 iterations to form meaningful
+# clusters and is SKIPPED during CI unless LONG_RUN_CKPT is set, e.g.:
+#
+#   LONG_RUN_CKPT=runs/production/bob/model_500.pt \
+#   LONG_RUN_LOG=runs/production/summary \
+#       bash diagnostics/run_diagnostics.sh --test 4
 # ─────────────────────────────────────────────────────────────────────────────
 if [[ -z "$ONLY_TEST" || "$ONLY_TEST" == "4" ]]; then
     CKPT="asyncDualPlayPPO/runs/diag_${TS}/t3_ppo_abc/bob/model_50.pt"
@@ -141,10 +147,14 @@ if [[ -z "$ONLY_TEST" || "$ONLY_TEST" == "4" ]]; then
             --ckpt "$CKPT" --cfg "$CFG" \
             2>&1 | tee "$LOG_BASE/test4a.log"
 
+    # Test 4b: t-SNE latent space — only runs when a long-run checkpoint is provided.
+    # In CI this always skips (sys.exit(0)) because the 50-iter model has no latent structure.
+    _4B_CKPT="${LONG_RUN_CKPT:-$CKPT}"
+    _4B_LOG="${LONG_RUN_LOG:-asyncDualPlayPPO/runs/diag_${TS}/t3_ppo_abc/summary}"
     run_step "Test 4b: GoalEncoder latent space (t-SNE + noise)" \
         python -m asyncDualPlayPPO.diagnostics.test_goal_encoder_latent \
-            --ckpt "$CKPT" --cfg "$CFG" \
-            --log_dir "asyncDualPlayPPO/runs/diag_${TS}/t3_ppo_abc/summary" \
+            --ckpt "$_4B_CKPT" --cfg "$CFG" \
+            --log_dir "$_4B_LOG" \
             --save_plot "$LOG_BASE/goal_encoder_tsne.png" \
             2>&1 | tee "$LOG_BASE/test4b.log"
 fi
