@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=asp_curobo
+#SBATCH --job-name=asp_curobo_lg
 #SBATCH --time=23:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM; cuRobo adds ~600 MB at 4096 envs
@@ -11,7 +11,7 @@ WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=512
+NUM_ENVS=2048
 NSTEPS=256
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10
@@ -31,7 +31,7 @@ cleanup() {
     echo "[INFO] Sync complete."
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_curobo.slurm" 2>&1)
+        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_curobo_large.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
         if [ -n "$NEXT_JOB" ]; then
             echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"

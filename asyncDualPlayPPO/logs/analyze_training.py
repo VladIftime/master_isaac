@@ -43,14 +43,20 @@ RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
 # Explicit anchor emitted by train_high.slurm after the checkpoint detection block
 GLOBAL_START_RE = re.compile(r"Global iteration start:\s*(\d+)")
 JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-(.*?))?\.out")
-# New-format summary lines (replaces per-event [AliceEnd] lines)
+# Summary lines — IK_fail and ABC buf/warm are curobo-only optional fields
 ITER_RE = re.compile(
-    r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)\s*\|\s*Goals valid=(\d+) invalid=(\d+)\s*\|\s*Bob succ=(\d+) fail=(\d+)"
+    r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)"
+    r"(?:\s*\|\s*IK_fail=([-\d.]+))?"
+    r"\s*\|\s*Goals valid=(\d+) invalid=(\d+)"
+    r"\s*\|\s*Bob succ=(\d+) fail=(\d+)"
+    r"(?:.*?\|\s*ABC buf:\s*(\d+))?"
+    r"(?:.*?ABC warm:\s*(YES|NO))?"
 )
 ALICE_DISP_RE = re.compile(
-    r"\[AliceDisp\]\s+\d+/\d+ valid\s*\|\s*avg 3D=[-\d.]+m\s+avg XY=([-\d.]+)m\s+max XY=([-\d.]+)m"
+    r"\[AliceDisp\]\s+(\d+)/(\d+) valid\s*\|\s*avg 3D=[-\d.]+m\s+avg XY=([-\d.]+)m\s+max XY=([-\d.]+)m"
     r"(?:\s+avg Y=[-\d.]+m)?"
     r"(?:\s+avg Z=([-\d.]+)m)?"
+    r"(?:.*?not-moved[^:]+:\s*(\d+)/\d+)?"
 )
 
 
@@ -84,22 +90,28 @@ def parse_logs(log_dir: Path) -> dict:
 
         # New-format: parse [Iter N] summary lines (one per iteration boundary)
         # [Iter N] is printed after Update N-1, so its goals belong to Update N-1.
+        # Groups: (iter, sr, ik_fail?, valid, invalid, bob_succ, bob_fail, abc_buf?, abc_warm?)
         iter_stats: dict[int, dict] = {}
         for im in ITER_RE.finditer(text):
             n = int(im.group(1))
             iter_stats[n] = {
                 "sr": float(im.group(2)),
-                "valid": int(im.group(3)),
-                "invalid": int(im.group(4)),
-                "bob_succ": int(im.group(5)),
-                "bob_fail": int(im.group(6)),
+                "ik_fail_rate": float(im.group(3)) if im.group(3) is not None else None,
+                "valid": int(im.group(4)),
+                "invalid": int(im.group(5)),
+                "bob_succ": int(im.group(6)),
+                "bob_fail": int(im.group(7)),
+                "abc_buf": int(im.group(8)) if im.group(8) is not None else None,
+                "abc_warm": (im.group(9) == "YES") if im.group(9) is not None else None,
                 "pos": im.start(),
                 "avg_xy": None,
                 "max_xy": None,
                 "avg_z": None,
+                "not_moved_frac": None,
             }
 
         # Attach [AliceDisp] displacement data to the preceding [Iter N]
+        # Groups: (valid_n, total_n, avg_xy, max_xy, avg_z?, not_moved_n?)
         iter_positions = sorted((d["pos"], n) for n, d in iter_stats.items())
         for dm in ALICE_DISP_RE.finditer(text):
             dp = dm.start()
@@ -110,9 +122,13 @@ def parse_logs(log_dir: Path) -> dict:
                 else:
                     break
             if n is not None and iter_stats[n]["avg_xy"] is None:
-                iter_stats[n]["avg_xy"] = float(dm.group(1))
-                iter_stats[n]["max_xy"] = float(dm.group(2))
-                iter_stats[n]["avg_z"] = float(dm.group(3)) if dm.group(3) is not None else None
+                iter_stats[n]["avg_xy"] = float(dm.group(3))
+                iter_stats[n]["max_xy"] = float(dm.group(4))
+                iter_stats[n]["avg_z"] = float(dm.group(5)) if dm.group(5) is not None else None
+                if dm.group(6) is not None:
+                    total = int(dm.group(2))
+                    not_moved = int(dm.group(6))
+                    iter_stats[n]["not_moved_frac"] = not_moved / total if total > 0 else None
 
         # Old-format fallback: per-event [AliceEnd] lines
         valid_pos = []
@@ -146,12 +162,16 @@ def parse_logs(log_dir: Path) -> dict:
                 avg_xy = ist.get("avg_xy")
                 max_xy = ist.get("max_xy")
                 avg_z = ist.get("avg_z")
+                ik_fail_rate = ist.get("ik_fail_rate")
+                not_moved_frac = ist.get("not_moved_frac")
             else:
                 v_count = bisect.bisect_left(valid_pos, end) - bisect.bisect_left(valid_pos, prev_update_end)
                 inv_count = bisect.bisect_left(invalid_pos, end) - bisect.bisect_left(invalid_pos, prev_update_end)
                 avg_xy = None
                 max_xy = None
                 avg_z = None
+                ik_fail_rate = None
+                not_moved_frac = None
 
             if has_ent:
                 alice_updates.append(
@@ -166,6 +186,8 @@ def parse_logs(log_dir: Path) -> dict:
                         "avg_xy": avg_xy,
                         "max_xy": max_xy,
                         "avg_z": avg_z,
+                        "ik_fail_rate": ik_fail_rate,
+                        "not_moved_frac": not_moved_frac,
                     }
                 )
             else:
@@ -181,6 +203,8 @@ def parse_logs(log_dir: Path) -> dict:
                         "avg_xy": avg_xy,
                         "max_xy": max_xy,
                         "avg_z": avg_z,
+                        "ik_fail_rate": ik_fail_rate,
+                        "not_moved_frac": not_moved_frac,
                     }
                 )
             prev_update_end = end
@@ -437,6 +461,8 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "avg_xy",
         "max_xy",
         "avg_z",
+        "ik_fail_rate",
+        "not_moved_frac",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -444,7 +470,13 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         for r in alice_records:
             writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "", **r})
         for r in bob_records:
-            writer.writerow({"agent": "bob", "entropy_coef": "", "valid_goals": "", "invalid_goals": "", "avg_xy": "", "max_xy": "", "avg_z": "", **r})
+            writer.writerow({
+                "agent": "bob",
+                "entropy_coef": "", "valid_goals": "", "invalid_goals": "",
+                "avg_xy": "", "max_xy": "", "avg_z": "",
+                "ik_fail_rate": "", "not_moved_frac": "",
+                **r,
+            })
     print(f"[INFO] Wrote {out_path}")
     return out_path
 
@@ -483,53 +515,61 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "avg_xy",
         "max_xy",
         "avg_z",
+        "ik_fail_rate",
+        "not_moved_frac",
     ]
+
+    def _v(d, k):
+        v = d.get(k)
+        return "" if v is None else v
+
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=all_fields)
         writer.writeheader()
         for job_id in chain:
             job = jobs[job_id]
             for upd in job["alice"]:
-                writer.writerow(
-                    {
-                        "agent": "alice",
-                        "chain": chain_idx,
-                        "job_id": job_id,
-                        "local_iter": upd["local_iter"],
-                        "loss": upd["loss"],
-                        "val": upd["val"],
-                        "rew": upd["rew"],
-                        "entropy_coef": upd.get("entropy_coef") or "",
-                        "abc": "",
-                        "sr": "",
-                        "valid_goals": upd.get("valid_goals", ""),
-                        "invalid_goals": upd.get("invalid_goals", ""),
-                        "avg_xy": upd.get("avg_xy") if upd.get("avg_xy") is not None else "",
-                        "max_xy": upd.get("max_xy") if upd.get("max_xy") is not None else "",
-                        "avg_z": upd.get("avg_z") if upd.get("avg_z") is not None else "",
-                    }
-                )
+                writer.writerow({
+                    "agent": "alice",
+                    "chain": chain_idx,
+                    "job_id": job_id,
+                    "local_iter": upd["local_iter"],
+                    "loss": upd["loss"],
+                    "val": upd["val"],
+                    "rew": upd["rew"],
+                    "entropy_coef": upd.get("entropy_coef") or "",
+                    "abc": "",
+                    "abc_coef": "",
+                    "sr": "",
+                    "valid_goals": _v(upd, "valid_goals"),
+                    "invalid_goals": _v(upd, "invalid_goals"),
+                    "avg_xy": _v(upd, "avg_xy"),
+                    "max_xy": _v(upd, "max_xy"),
+                    "avg_z": _v(upd, "avg_z"),
+                    "ik_fail_rate": _v(upd, "ik_fail_rate"),
+                    "not_moved_frac": _v(upd, "not_moved_frac"),
+                })
             for upd in job["bob"]:
-                writer.writerow(
-                    {
-                        "agent": "bob",
-                        "chain": chain_idx,
-                        "job_id": job_id,
-                        "local_iter": upd["local_iter"],
-                        "loss": upd["loss"],
-                        "val": upd["val"],
-                        "rew": upd["rew"],
-                        "entropy_coef": "",
-                        "abc": upd["abc"],
-                        "abc_coef": upd["abc_coef"] if upd.get("abc_coef") is not None else "",
-                        "sr": upd["sr"],
-                        "valid_goals": "",
-                        "invalid_goals": "",
-                        "avg_xy": "",
-                        "max_xy": "",
-                        "avg_z": "",
-                    }
-                )
+                writer.writerow({
+                    "agent": "bob",
+                    "chain": chain_idx,
+                    "job_id": job_id,
+                    "local_iter": upd["local_iter"],
+                    "loss": upd["loss"],
+                    "val": upd["val"],
+                    "rew": upd["rew"],
+                    "entropy_coef": "",
+                    "abc": upd["abc"],
+                    "abc_coef": _v(upd, "abc_coef"),
+                    "sr": upd["sr"],
+                    "valid_goals": "",
+                    "invalid_goals": "",
+                    "avg_xy": "",
+                    "max_xy": "",
+                    "avg_z": "",
+                    "ik_fail_rate": "",
+                    "not_moved_frac": "",
+                })
     print(f"[INFO] Wrote {out_path}")
 
 
@@ -573,9 +613,12 @@ def plot_metrics(
     a_labels = [f"Alice C{c}" for c in all_chain_indices]
     b_labels = [f"Bob C{c}"   for c in all_chain_indices]
 
-    a_ent_by_chain  = [[r for r in recs if r.get("entropy_coef") is not None] for recs in a_by_chain]
-    a_disp_by_chain = [[r for r in recs if r.get("avg_xy")       is not None] for recs in a_by_chain]
-    a_z_by_chain    = [[r for r in recs if r.get("avg_z")        is not None] for recs in a_by_chain]
+    a_ent_by_chain      = [[r for r in recs if r.get("entropy_coef")   is not None] for recs in a_by_chain]
+    a_disp_by_chain     = [[r for r in recs if r.get("avg_xy")         is not None] for recs in a_by_chain]
+    a_z_by_chain        = [[r for r in recs if r.get("avg_z")          is not None] for recs in a_by_chain]
+    a_ik_by_chain       = [[r for r in recs if r.get("ik_fail_rate")   is not None] for recs in a_by_chain]
+    a_notmov_by_chain   = [[r for r in recs if r.get("not_moved_frac") is not None] for recs in a_by_chain]
+    has_ik_data         = any(a_ik_by_chain)
 
     # ------------------------------------------------------------------ helpers
     def _draw(ax, records_list, labels, colors, key):
@@ -700,6 +743,17 @@ def plot_metrics(
                 _fmt(axes_d[2], "Avg Z (m)", "Alice — Avg Goal Displacement Z")
             plt.tight_layout(); _save(fig, "plot_alice_goal_displacement.png")
 
+        if has_ik_data:
+            fig, axes_ik = plt.subplots(1, 2, figsize=(14, 5))
+            _draw(axes_ik[0], a_ik_by_chain, a_labels, alice_colors, "ik_fail_rate")
+            _fmt(axes_ik[0], "IK Fail Rate", "cuRobo — IK Fail Rate per Iteration")
+            axes_ik[0].axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
+                               label="5% threshold")
+            axes_ik[0].legend(fontsize=8)
+            _draw(axes_ik[1], a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
+            _fmt(axes_ik[1], "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction (≤0.05 m)")
+            plt.tight_layout(); _save(fig, "plot_curobo.png")
+
         fig, ax = plt.subplots(figsize=(14, 5))
         _tension(ax)
         plt.tight_layout(); _save(fig, "plot_tension.png")
@@ -709,8 +763,10 @@ def plot_metrics(
     # ============================================================ combined mode
     from matplotlib.gridspec import GridSpec
 
-    fig = plt.figure(figsize=(18, 24))
-    gs  = GridSpec(4, 3, figure=fig, hspace=0.45, wspace=0.32)
+    n_rows = 5 if has_ik_data else 4
+    fig_h  = 30 if has_ik_data else 24
+    fig = plt.figure(figsize=(18, fig_h))
+    gs  = GridSpec(n_rows, 3, figure=fig, hspace=0.45, wspace=0.32)
 
     ax_loss    = fig.add_subplot(gs[0, 0])
     ax_val     = fig.add_subplot(gs[0, 1])
@@ -721,7 +777,8 @@ def plot_metrics(
     ax_valid   = fig.add_subplot(gs[2, 0])
     ax_invalid = fig.add_subplot(gs[2, 1])
     ax_disp    = fig.add_subplot(gs[2, 2])
-    ax_tension = fig.add_subplot(gs[3, :])   # full-width bottom row
+    tension_row = n_rows - 1
+    ax_tension = fig.add_subplot(gs[tension_row, :])
 
     _fill(ax_loss,  a_by_chain, b_by_chain, a_labels, b_labels, "loss", "Loss",
           "Policy Loss — Alice & Bob")
@@ -755,6 +812,18 @@ def plot_metrics(
               [f"Z {l}" for l in a_labels],
               ["tab:orange", "darkorange", "saddlebrown", "peru"], "avg_z")
     _fmt(ax_disp, "Displacement (m)", "Alice — Goal Displacement XY / Z")
+
+    if has_ik_data:
+        ax_ik       = fig.add_subplot(gs[3, 0])
+        ax_notmov   = fig.add_subplot(gs[3, 1])
+        ax_ik_spare = fig.add_subplot(gs[3, 2])
+        _draw(ax_ik, a_ik_by_chain, a_labels, alice_colors, "ik_fail_rate")
+        ax_ik.axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
+                      label="5% threshold")
+        _fmt(ax_ik, "IK Fail Rate", "cuRobo — IK Fail Rate")
+        _draw(ax_notmov, a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
+        _fmt(ax_notmov, "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
+        ax_ik_spare.axis("off")
 
     _tension(ax_tension)
 
