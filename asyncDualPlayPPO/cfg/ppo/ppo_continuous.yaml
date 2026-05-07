@@ -46,9 +46,10 @@ params:
     # Sliding window size for the trajectory store. Old demos are evicted as new
     # failures arrive, keeping BC relevant to Alice's current task distribution.
     abc_traj_maxlen: 500
-    # Delayed activation (Fix 3): ABC is disabled (coef=0) until Alice's mean
-    # reward exceeds this threshold, ensuring demos are worth imitating.
-    abc_warmup_threshold: 1.0
+    # Gate disabled: the buffer fill condition (bob_done & ~bob_success & goal_valid)
+    # is the real gate — if Alice produces no valid goals the buffer stays empty and
+    # ABC skips regardless of this value.
+    abc_warmup_threshold: -9999.0
     abc_batch_size: 2048
     aux_coef: 0.1
 

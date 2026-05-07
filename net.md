@@ -899,3 +899,6 @@ assert pool._hist_clone is not None
 print('Fix #2: OK, persistent clone verified')
 "
 
+@asyncDualPlayPPO/logs/26.05.07/chain_0/raw_parsed.csv @asyncDualPlayPPO/logs/26.05.07/chain_0/training_updates.csv 
+
+these are the latest updates from @asyncDualPlayPPO/train_curobo.py . @asyncDualPlayPPO/tasks/async_dual_play_curobo.py @asyncDualPlayPPO/tasks/utils/wrapper.py @asyncDualPlayPPO/tasks/utils/reach_dual_arm_diffik_env_cfg.py @asyncDualPlayPPO/tasks/utils/events.py @asyncDualPlayPPO/algorithms/rl/ppo/ppo_abc.py @asyncDualPlayPPO/algorithms/rl/ppo/module.py  
