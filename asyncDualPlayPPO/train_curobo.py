@@ -160,6 +160,10 @@ def main():
     parser.add_argument("--test_bob_reward", action="store_true")
     parser.add_argument("--test_abc_verbose", action="store_true")
     parser.add_argument("--test_hparams", action="store_true")
+    parser.add_argument("--test_reward_pipeline", action="store_true",
+                        help="Run Test 1: teleport objects to goals and verify sparse reward fires. Exits after test.")
+    parser.add_argument("--alice_sandbox", action="store_true",
+                        help="Test 2: disable Bob PPO updates (Bob acts randomly) to isolate Alice curriculum.")
     parser.add_argument("--dummy_goal_distance", action="store_true")
     parser.add_argument("--test_movement", action="store_true")
     parser.add_argument(
@@ -613,6 +617,10 @@ def main():
 
     def perform_bob_update(current_bob_obs):
         nonlocal bob_updates, best_bob_success_rate
+        if args.alice_sandbox:
+            # Test 2: Bob update suppressed — Alice curriculum runs with random Bob
+            bob_updates += 1
+            return
         total_bob_transitions = bob_ppo.storage.step * env.num_envs
         if total_bob_transitions < bob_ppo.num_mini_batches:
             print(f"  [Bob Update {bob_updates}] SKIPPED (only {total_bob_transitions} transitions)", flush=True)
@@ -704,8 +712,13 @@ def main():
 
     # Joint-command smoothing: EMA between consecutive IK solutions.
     # alpha=1 → no smoothing (raw IK); alpha<1 → inertia like RMPFlow.
-    _JC_ALPHA = 0.2   # fraction of new IK solution blended each step (lower = smoother)
+    _JC_ALPHA = 1.0   # no EMA smoothing — paper uses direct TCP servoing
     _prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()  # (N,6)
+
+    if args.test_reward_pipeline:
+        from asyncDualPlayPPO.diagnostics.test_reward_pipeline import run_test1
+        run_test1(env, env.episode_manager, device=env.device)
+        sys.exit(0)
 
     # ── TRAINING LOOP ─────────────────────────────────────────────────────────────
     while bob_updates < args.max_iterations:
@@ -825,8 +838,18 @@ def main():
                 hist_bids, curr_bids = bob_pool.sample_env_subset(bob_indices, frac=HIST_FRAC)
                 with torch.no_grad():
                     h_in = ((bob_hidden[0][curr_bids], bob_hidden[1][curr_bids]) if bob_hidden else None)
-                    (b_acts_curr, b_lp_curr, b_val_curr, b_mu_curr, b_sig_curr, new_bh) = \
-                        bob_ppo.actor_critic.act_with_hidden(current_bob_obs[curr_bids], None, h_in)
+                    if args.alice_sandbox:
+                        # Random Bob actions for Test 2 sandbox
+                        n_c = len(curr_bids)
+                        b_acts_curr = torch.randint(0, num_bins, (n_c, num_cat_dims), device=env.device).float()
+                        b_lp_curr = torch.zeros(n_c, device=env.device)
+                        b_val_curr = torch.zeros(n_c, 1, device=env.device)
+                        b_mu_curr = torch.zeros(n_c, num_cat_dims, device=env.device)
+                        b_sig_curr = torch.zeros(n_c, num_cat_dims, device=env.device)
+                        new_bh = None
+                    else:
+                        (b_acts_curr, b_lp_curr, b_val_curr, b_mu_curr, b_sig_curr, new_bh) = \
+                            bob_ppo.actor_critic.act_with_hidden(current_bob_obs[curr_bids], None, h_in)
                     if bob_hidden and new_bh is not None:
                         bob_hidden[0][curr_bids] = new_bh[0]
                         bob_hidden[1][curr_bids] = new_bh[1]
@@ -1207,24 +1230,10 @@ def main():
         _ik_fr = _ik_fail_steps / max(1, _ik_total_steps)
         print(f"  [cuRobo] IK fail rate: {_ik_fr:.4f} ({_ik_fail_steps}/{_ik_total_steps} active steps)", flush=True)
 
-        # ── Entropy / LR / ABC controllers (identical to train.py) ────────────────
-        _ent_p = min(1.0, bob_updates / min(args.max_iterations, 250))
-        if _ent_p < 1.0:
-            alice_ppo.entropy_coef = 0.05 + 0.95 * math.exp(-args.alice_decay_alpha * _ent_p)
-            _ent_phase = "decay"
-        else:
-            _bob_sr_now  = np.mean(bob_success_buf) if bob_success_buf else 0.0
-            _sr_error    = _bob_sr_now - _alice_target_sr
-            if _sr_error > 0:
-                alice_ppo.entropy_coef = float(np.clip(
-                    alice_ppo.entropy_coef + _alice_entropy_lr * _sr_error,
-                    _alice_entropy_min, _alice_entropy_max,
-                ))
-            alice_ppo.entropy_coef = max(alice_ppo.entropy_coef, _alice_entropy_min)
-            _ent_phase = f"adaptive sr_err={_sr_error:+.3f}"
-            writer.add_scalar("Alice/EntropySRError", _sr_error, bob_updates)
+        # ── Entropy / LR / ABC controllers ────────────────────────────────────────
+        # Fix 2: entropy_coef fixed at paper value (Table 2: 0.01); removed SR-coupled PI controller
         writer.add_scalar("Alice/EntropyCoef", alice_ppo.entropy_coef, bob_updates)
-        print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f} ({_ent_phase})", flush=True)
+        print(f"  [Alice] Entropy Coef: {alice_ppo.entropy_coef:.4f} (fixed)", flush=True)
 
         _alice_lr_max = alice_ppo.learning_rate
         _alice_lr_min = ppo_cfg["params"]["learn"].get("alice_lr_min", 5e-5)
@@ -1234,23 +1243,10 @@ def main():
             pg["lr"] = _alice_lr
         writer.add_scalar("Alice/LearningRate", _alice_lr, bob_updates)
 
-        _abc_coef_start   = ppo_cfg["params"]["learn"].get("abc_coef", 0.5)
-        _abc_coef_end     = ppo_cfg["params"]["learn"].get("abc_coef_end", 0.0)
-        _abc_anneal_iters = ppo_cfg["params"]["learn"].get("abc_anneal_iters", 0)
-        _abc_coef_ema     = ppo_cfg["params"]["learn"].get("abc_coef_ema", 0.95)
-        if _abc_anneal_iters > 0 and bob_updates < _abc_anneal_iters:
-            _abc_p = bob_updates / _abc_anneal_iters
-            bob_ppo.abc_coef = _abc_coef_start + (_abc_coef_end - _abc_coef_start) * _abc_p
-            _abc_phase = "anneal"
-        else:
-            _bob_sr_for_abc = np.mean(bob_success_buf) if bob_success_buf else 0.0
-            _target_abc = float(np.clip(
-                _abc_coef_start * (1.0 - _bob_sr_for_abc), _abc_coef_end, _abc_coef_start
-            ))
-            bob_ppo.abc_coef = _abc_coef_ema * bob_ppo.abc_coef + (1.0 - _abc_coef_ema) * _target_abc
-            _abc_phase = f"inverse sr={_bob_sr_for_abc:.3f} tgt={_target_abc:.3f}"
+        # Fix 1: abc_coef fixed at paper value (Table 2: β=0.5); removed SR-coupling and anneal schedule
+        bob_ppo.abc_coef = ppo_cfg["params"]["learn"].get("abc_coef", 0.5)
         writer.add_scalar("Bob/ABCCoef", bob_ppo.abc_coef, bob_updates)
-        print(f"  [Bob] ABCCoef: {bob_ppo.abc_coef:.4f} ({_abc_phase})", flush=True)
+        print(f"  [Bob] ABCCoef: {bob_ppo.abc_coef:.4f} (fixed)", flush=True)
 
         with profiler.section("alice_update"):
             perform_alice_update()
@@ -1294,6 +1290,11 @@ def main():
         _bob_succ      = _stats.get("bob_successes", 0)
         _bob_fail      = _stats.get("bob_failures", 0)
         writer.add_scalar("Metrics/Alice/ValidGoals", _valid_goals, bob_updates)
+        _goal_validity_rate = _valid_goals / max(1, _valid_goals + _invalid_goals)
+        writer.add_scalar("Metrics/Alice/GoalValidityRate", _goal_validity_rate, bob_updates)
+        _alice_disp_3d_sum = _stats.get("alice_disp_3d_sum", 0.0)
+        _mean_disp_3d = _alice_disp_3d_sum / max(1, _valid_goals)
+        writer.add_scalar("Metrics/Alice/MeanDisp3D", _mean_disp_3d, bob_updates)
         _abc_buf_size = bob_ppo.abc_buffer.size
         writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
         _abc_warm = 1.0 if ema_alice_rew >= bob_ppo.abc_warmup_threshold else 0.0

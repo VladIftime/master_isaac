@@ -58,8 +58,8 @@ class PPOABC(PPO):
         self.abc_batch_size = cfg_train["learn"].get("abc_batch_size", 2048)
         # Fix 1: number of full trajectories for sequential LSTM evaluation
         self.abc_n_trajs = cfg_train["learn"].get("abc_n_trajs", 16)
-        # Fix 3: hold ABC at 0 until Alice's reward crosses this threshold
-        self.abc_warmup_threshold = cfg_train["learn"].get("abc_warmup_threshold", 1.0)
+        # Fix 9: removed abc_warmup_threshold gate — paper uses β=0.5 from iteration 1
+        self.abc_warmup_threshold = 0.0  # always active
         self.abc_buffer = None
 
     def set_abc_buffer(self, abc_buffer):
@@ -94,8 +94,9 @@ class PPOABC(PPO):
 
         seq_log_probs = []
         for t in range(max_T):
+            # Fix 14: GoalEncoder receives ABC gradients (detach_goal_encoder removed)
             raw, (h, c) = self.actor_critic._actor_forward(
-                padded_obs[t], (h, c), detach_goal_encoder=True
+                padded_obs[t], (h, c), detach_goal_encoder=False
             )
             dist = self.actor_critic._make_distribution(raw)
             lp = dist.log_prob(padded_acts[t].long())
@@ -124,11 +125,17 @@ class PPOABC(PPO):
             abc_trajs = self.abc_buffer.sample_trajectories(self.abc_n_trajs)
 
         for epoch in range(self.num_learning_epochs):
+            # Fix 5: compute ABC loss once per epoch so it can be combined with PPO loss
+            # in the last mini-batch → single optimizer step with L = L_PPO + β·L_ABC (per paper)
+            epoch_bc_loss = None
+            if abc_trajs is not None and len(abc_trajs) > 0:
+                epoch_bc_loss = self._compute_abc_loss_sequential(abc_trajs)
+
             # FIX Bug 1: regenerate the BatchSampler each epoch.
             # BatchSampler is a one-shot iterator — reusing the same object
             # across epochs means epochs 2+ silently yield zero mini-batches.
-            batch = self.storage.mini_batch_generator(self.num_mini_batches)
-            for indices in batch:
+            mini_batches = list(self.storage.mini_batch_generator(self.num_mini_batches))
+            for batch_idx, indices in enumerate(mini_batches):
                 obs_batch = self.storage.observations.view(
                     -1, *self.storage.observations.size()[2:]
                 )[indices]
@@ -164,7 +171,9 @@ class PPOABC(PPO):
                     sigma_batch,
                 ) = self.actor_critic.evaluate(obs_batch, states_batch, actions_batch)
 
-                if self.desired_kl is not None and self.schedule == "adaptive":
+                # Fix 16: KL adaptive LR is dead in MC mode (sigma=zeros → KL=0 always).
+                # Guard with use_multicategorical to avoid misleading code path.
+                if self.desired_kl is not None and self.schedule == "adaptive" and not self.actor_critic.use_multicategorical:
                     kl = torch.sum(
                         sigma_batch
                         - old_sigma_batch
@@ -264,6 +273,13 @@ class PPOABC(PPO):
                     + aux_loss_val
                 )
 
+                # Fix 5: on the last mini-batch of each epoch, add ABC loss so gradients
+                # co-mingle in a single optimizer step (L = L_PPO + β·L_ABC per paper)
+                is_last_batch = (batch_idx == len(mini_batches) - 1)
+                if is_last_batch and epoch_bc_loss is not None:
+                    loss = loss + effective_abc_coef * epoch_bc_loss
+                    mean_bc_loss += epoch_bc_loss.item()
+
                 if not torch.isfinite(loss):
                     print(f"[PPO] WARNING: skipping update — non-finite loss ({loss.item():.4f})", flush=True)
                     continue
@@ -278,21 +294,11 @@ class PPOABC(PPO):
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
 
-        # --- ABC update: single forward/backward pass after all PPO epochs ---
-        # Previously this ran inside the mini-batch loop (num_learning_epochs ×
-        # num_mini_batches times) on the same trajectories — pure wasted work.
-        # One ABC step per update() is sufficient and ~12x faster.
-        if abc_trajs is not None and len(abc_trajs) > 0:
-            bc_loss = self._compute_abc_loss_sequential(abc_trajs)
-            self.optimizer.zero_grad()
-            (effective_abc_coef * bc_loss).backward()
-            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-            self.optimizer.step()
-            mean_bc_loss = bc_loss.item()
-
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
+        if self.num_learning_epochs > 0:
+            mean_bc_loss /= self.num_learning_epochs
 
         return (
             mean_value_loss,

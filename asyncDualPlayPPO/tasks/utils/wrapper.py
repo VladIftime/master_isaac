@@ -573,29 +573,7 @@ class AsyncDualPlayEnvWrapper:
             rot_threshold=alice_rot_req,
         )
 
-        # 2b. Minimum XY-displacement filter.
-        # validate_goal passes rotation-only goals (obj spins in place, no XY movement).
-        # When that happens Bob starts the phase with the object already at its goal XY
-        # position → instant success in 1-2 steps with zero learning signal.
-        # Require at least one object to move >7cm in XY (above Bob's 5cm success threshold).
-        _MIN_XY_DISP = 0.07  # 7cm — 2cm margin above Bob's goal_tolerance
-        target_xy_disp = torch.norm(
-            active_goal[:, 0:2] - active_initial[:, 0:2], dim=-1
-        )
-        if self.num_objects == 2:
-            cube_xy_disp = torch.norm(
-                active_goal[:, 6:8] - active_initial[:, 6:8], dim=-1
-            )
-            sufficient_xy = (target_xy_disp > _MIN_XY_DISP) | (
-                cube_xy_disp > _MIN_XY_DISP
-            )
-        else:
-            sufficient_xy = target_xy_disp > _MIN_XY_DISP
-        xy_fail = valid & ~sufficient_xy
-        val_reward = val_reward.clone()
-        val_reward[xy_fail] = 0.0
-        valid = valid & sufficient_xy
-
+        # Fix 10: removed 7cm min-XY filter — paper accepts rotation-only and short-range goals
         self.delayed_alice_reward[env_ids] = val_reward
 
         # 3. Aggregate stats (skip per-env debug prints to prevent CPU-GPU stall on HPC)
@@ -982,37 +960,10 @@ class AsyncDualPlayEnvWrapper:
         rewards = torch.zeros(self.num_envs, device=self.device)
 
         # Alice: NO rewards during her phase receives rewards at goal validation in _handle_alice_completion:
-        # - Valid goal bonus: +1
-        # - Out-of-zone penalty: -3
-        # - Outcome reward (if Bob fails): +5 (applied in train.py)
-        # This prevents per-step penalty accumulation (×50 steps = massive penalties)
-        #
-        # UPDATE: We MUST pass through base_rewards (penalties) for Alice to learn!
-        # Otherwise she gets 0.0 for OOB/Collisions and never learns to avoid them.
+        # Fix 3+11: Alice gets zero per-step reward (paper: only outcome reward at phase end)
+        # Removed: base_rewards passthrough (physics penalties) and bounded potential shaping
         if is_alice.any():
-            rewards[is_alice] = base_rewards[is_alice]
-            # Potential-based shaping for Alice: F(s_{t-1}, s_t) = Φ(s_t) - Φ(s_{t-1})
-            # Φ(s) = dist(obj_xy, alice_start_xy) — larger dist = more exploration.
-            # Telescoping: Σ F over phase = Φ(s_T) - Φ(s_0) = final_dist * 2.0 (bounded).
-            # No wiggle exploit: going back reduces Φ and subtracts from reward.
-            current_pos_xy = self.env.scene["target_object"].data.root_pos_w[:, :2]
-            # On the first step of a new Alice phase, capture start position.
-            fresh = is_alice & ~self._alice_phase_initialized
-            if fresh.any():
-                self.alice_start_pos_xy[fresh] = current_pos_xy[fresh].detach().clone()
-                self.alice_prev_dist[fresh] = 0.0
-                self._alice_phase_initialized[fresh] = True
-            current_dist = torch.norm(current_pos_xy - self.alice_start_pos_xy, dim=-1)
-            # Bounded potential: Φ(s) = C * (1 - exp(-k * dist))
-            # Telescopes to Φ(s_T) - Φ(s_0) ≤ C per phase. No-wiggle preserved.
-            # Gradient always non-zero, but marginal reward shrinks with distance.
-            _C = 3.0   # absolute cumulative cap (tune vs sparse rewards: valid=+1, bob-fail=+5)
-            _k = 5.0   # decay rate: at 0.07m (min XY) Alice earns ≈ 0.89 of 3.0
-            current_potential = _C * (1.0 - torch.exp(-_k * current_dist))
-            prev_potential    = _C * (1.0 - torch.exp(-_k * self.alice_prev_dist))
-            dense = current_potential - prev_potential
-            rewards[is_alice] += dense[is_alice]
-            self.alice_prev_dist[is_alice] = current_dist[is_alice].detach()
+            rewards[is_alice] = 0.0
 
         # Track which envs just achieved completion (for early termination)
         bob_achieved_completion = torch.zeros(
@@ -1089,44 +1040,10 @@ class AsyncDualPlayEnvWrapper:
         pos_dists = dists[..., 0]  # (num_envs, num_objects)
         rot_dists = dists[..., 1]
 
-        # ------------------------------------------------------------------
-        # Potential-based shaping reward (Ng et al. 1999)
-        #   Φ(s)  = −Σ_i pos_dist_i(s)          [more negative = farther from goal]
-        #   F     = γ·Φ(s') − Φ(s)
-        #         = Σ_i pos_dist_old_i − γ·Σ_i pos_dist_new_i
-        #
-        # Key properties:
-        #   • Positive when Bob reduces total distance (reward for progress).
-        #   • Negative when Bob increases total distance (penalty for regress).
-        #   • Telescopes to Φ(s_T) − Φ(s_0) over a full episode, so the total
-        #     shaping magnitude stays bounded and never dominates the +5 sparse bonus.
-        #   • On first Bob step: F = 0 (prev = curr by definition).
-        #   • Only applied to Bob-phase envs; Alice-phase envs get 0.
-        # ------------------------------------------------------------------
-        phi_curr = -pos_dists.sum(dim=1)  # (num_envs,)  Φ(s')
-
-        if self.prev_pos_dists is None:
-            # First step ever — initialize, no shaping signal yet.
-            self.prev_pos_dists = pos_dists.clone()
-
-        phi_prev = -self.prev_pos_dists.sum(dim=1)  # (num_envs,)  Φ(s)
-        shaping = self.shaping_gamma * phi_curr - phi_prev  # F(s, a, s')
-
-        # Zero shaping on the very first step of each Bob phase (prev wasn't from Bob).
-        # Using the same is_first_step mask already computed below.
+        # Fix 4: removed potential-based shaping (paper: Bob gets sparse {+1/-1/+5} only)
         bob_phase_steps = self.episode_manager.phase_step
         is_bob_phase = self.episode_manager.is_bob_phase()
         is_first_step = (bob_phase_steps == 1) & is_bob_phase
-
-        shaping = torch.where(is_first_step, torch.zeros_like(shaping), shaping)
-        shaping = torch.where(is_bob_phase, shaping, torch.zeros_like(shaping))
-
-        # Update prev_pos_dists only for Bob-phase envs.
-        new_prev = self.prev_pos_dists.clone()
-        new_prev[is_bob_phase] = pos_dists[is_bob_phase]
-        # On first Bob step, prev was stale (from Alice) — overwrite immediately.
-        new_prev[is_first_step] = pos_dists[is_first_step]
-        self.prev_pos_dists = new_prev
 
         # Success thresholds
         pos_threshold = self.episode_manager.pos_threshold
@@ -1193,7 +1110,7 @@ class AsyncDualPlayEnvWrapper:
             self.episode_manager.completion_given | should_give_completion
         )
 
-        rewards = step_rewards + completion_bonus + self.shaping_coef * shaping
+        rewards = step_rewards + completion_bonus  # Fix 4: sparse only, no potential shaping
 
         # Skip per-env reward event logging to prevent CPU-GPU stall on HPC
 

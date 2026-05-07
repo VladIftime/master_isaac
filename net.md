@@ -190,715 +190,414 @@ policy ever sees them.
 
 The GoalEncoder's φ MLP therefore receives 6D inputs (pos3 + euler3) and computes
 difference embeddings `φ(goal) − φ(current)` that are meaningful under linear arithmetic
-— an advantage of Euler over quaternion for this structured subtraction.
 
+# cuRobo Training Pipeline (`train_curobo.py`)
 
-storage.py — three fixes:
+This section documents the full training pipeline for the cuRobo-IK variant of ASP, covering the DRL loop, the IK action pipeline, and all adaptive controllers.
 
-traj_maxlen is now a constructor parameter (default 200, YAML sets 500). With 512 envs and ~66% fail rate, the old 200 cycled faster than one iteration — no cross-iteration memory. 500 gives ~1.5 iterations of trajectory history, enough diversity without staleness.
-save serialises _traj_store to CPU before pickling — _traj_store was silently lost on every checkpoint resume, meaning BC always restarted cold.
-load restores _traj_store onto the correct device, respecting the current _traj_maxlen (so changing maxlen between runs still works).
-train.py — ABC two-phase controller:
+---
 
-Phase 1 (iter < abc_anneal_iters): unchanged linear decay 0.5 → 0.0, bootstraps Bob when RL has no useful signal.
-Phase 2: target = abc_coef_start * (1 - bob_sr) — 0.5 when Bob fails completely, 0.0 when Bob always succeeds. EMA with α=0.95 smooths transitions so a single bad SR window doesn't shock the optimizer. When Alice's entropy spikes and Bob's SR drops, abc_coef rises automatically within ~20 iterations.
-ppo_continuous.yaml: abc_coef_ema: 0.95, abc_traj_maxlen: 500 added alongside the existing ABC params.
+## 1. Environment and Solver Setup
 
-ining pipeline/home3/s3426394/master_isaac/README.md
-/home3/s3426394/master_isaac/net.md
+### Import ordering constraint
 
-/home3/s3426394/master_isaac/asyncDualPlayPPO/train.py@contextScopeItemMention @contextScopeItemMention @contextScopeItemMention @contextScopeItemMention @contextScopeItemMention 
+cuRobo must be imported **before** `AppLauncher`. Isaac Sim's `AppLauncher` prepends its own pip bundle to `sys.path`; importing cuRobo after would pick up Isaac Sim's incompatible torch. Additionally, `torch._dynamo`, `torch._C`, and `torch.optim` must be cached in `sys.modules` before `AppLauncher` runs to prevent dynamo conflicts.
 
-Find a top 10 of innfficiencies, in terms of memory and time. The priority is htat THEY DO NOT AFFECT THE FUNCTIONALITY OF THE PIPELINE,
+```python
+# CORRECT order:
+from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
+import torch, torch._dynamo, torch._C, torch.optim  # lock correct versions
+from isaaclab.app import AppLauncher
+```
 
+### Action space replacement (DiffIK → JointPositionActionCfg)
 
-I think the following analysis is wrong prove it if its not show how come:Top 10 Inefficiencies in the ASP Training Pipeline
-NOTE
+In `train_diffik.py` / `train.py`, the environment action is a 6D Cartesian delta processed by Isaac Lab's internal DiffIK controller. In the cuRobo variant, cuRobo computes joint positions externally, so the environment action is replaced with direct joint positions:
 
-All proposed fixes are semantics-preserving — they do not change what the model learns, the reward structure, or the training dynamics. They only reduce wasted GPU time and memory.
+```python
+env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
+    asset_name="robot",
+    joint_names=_ARM_JOINT_NAMES,   # 6 UR5e joints
+    scale=1.0,
+    use_default_offset=False,       # action IS joint position in radians
+)
+```
 
-1. 🔴 Per-Rollout-Step Tensor Allocation Storm (HIGH — ~30% of rollout time)
-Files: 
-train.py:940–944
-, 
-train.py:983–987
-, 
-train.py:1025–1029
-, 
-train.py:1076–1079
-, 
-train.py:1114–1117
+The 7D `env_full` action vector contains `[q0..q5 (arm joints), gripper]`.
 
-Problem: Inside the rollout loop (for t in range(rollout_length)), ~20 tensors are allocated fresh via torch.zeros() every single step. With rollout_length = 256 + 200 = 456 steps, that's ~9,000 CUDA malloc calls per iteration. CUDA malloc is not free — each call hits the allocator, fragments the memory pool, and triggers occasional GC pauses.
+### cuRobo IK solver initialization
 
-Fix: Pre-allocate all these buffers once before the loop and .zero_() them at the start of each step (or just index into pre-allocated storage). The tensors are:
+```python
+_ur5e_yaml = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
+_robot_cfg  = RobotConfig.from_dict(_ur5e_yaml["robot_cfg"], _tensor_args)
+_ik_config  = IKSolverConfig.load_from_robot_config(_robot_cfg, world_model=None, tensor_args=_tensor_args)
+ik_solver   = IKSolver(_ik_config)
+```
 
-a_acts_active, a_logprob_active, a_val_active, a_mu_active, a_sigma_active
-b_acts_active, b_logprob_active, b_val_active, b_mu_active, b_sigma_active
-a_policy, b_policy
-a_lp_full, a_val_full, a_mu_full, a_sigma_full
-b_lp_full, b_val_full, b_mu_full, b_sigma_full
-Safety: ✅ Pure allocation change. Same values written before use.
+**CUDA graph warm-up**: cuRobo traces a CUDA graph on the first `solve_batch()` call for a given batch size. A dummy warm-up call with `num_envs` is made at startup so all subsequent rollout calls reuse the graph (latency: ~3 ms cold → ~0.5 ms warm).
 
-2. 🔴 Historical Policy Deep-Copy Every Iteration (HIGH — memory + time)
-File: 
-historical_pool.py:52
+### Accumulated EE targets
 
-Problem: sample_policy() calls copy.deepcopy(reference_policy) every iteration, duplicating the entire ActorCritic (PI encoder 512-dim, LSTM 256, trunk, etc.) on GPU. This is ~20MB of GPU memory + significant CPU overhead for the deep copy + device transfers, done twice per iteration (once for Alice pool, once for Bob pool).
+Two per-env tensors accumulate the arm's target pose across steps:
 
-Fix: Keep a single persistent _hist_clone on the GPU and just load_state_dict() into it when sampling. No need to deep-copy the architecture each time — only the weights change.
+| Tensor | Shape | Init | Meaning |
+|--------|-------|------|---------|
+| `ee_target_local` | `(N, 3)` | wrist_3_link pos − env_origin | EE position in env-local frame |
+| `ee_target_quat_w` | `(N, 4)` | `[0, 1, 0, 0]` wxyz (tool-down) | EE orientation in world frame |
 
-python
-def sample_policy(self, reference_policy, device):
-    if not self._pool:
-        return None
-    if self._hist_clone is None:
-        self._hist_clone = copy.deepcopy(reference_policy)  # once only
-    snapshot = random.choice(self._pool)
-    self._hist_clone.load_state_dict({k: v.to(device) for k, v in snapshot.items()})
-    self._hist_clone.eval()
-    return self._hist_clone
-Safety: ✅ Same weights loaded, same inference. No gradient flows through historical policy.
+These are **integrals** — each step's decoded delta is added onto the running target. cuRobo then solves IK to that absolute target, not to a delta.
 
-3. 🟠 RolloutStorage.states Wastes 50% of Buffer Memory (MEDIUM — GPU memory)
-File: 
-storage.py:38-40
+---
 
-Problem: self.states is allocated as (num_transitions, num_envs, *states_shape) but asymmetric=False throughout the entire pipeline. This means states_shape == obs_shape, and states is never read (the critic always uses observations). For Alice (35D obs, 456 steps, 256 envs): that's 456 × 256 × 35 × 4 bytes = 16MB of dead GPU memory. Bob has even more (51D). Total: ~40MB wasted per agent.
+## 2. Action Decoding: Bins → IK Targets
 
-Fix: When asymmetric=False, allocate states as a tiny scalar tensor (or skip it entirely and gate all .copy_() calls).
+The policy outputs `(N, 6)` integer bin indices from the MultiCategorical head. The decoder `_bins_to_xyz_rxy_gripper` maps them to continuous deltas:
 
-Safety: ✅ states is only read when self.asymmetric is True, which is never the case.
+```
+Dim layout (11 bins, bin 5 = zero):
+    0-2: XYZ    → (bin − 5) / 5 × max_delta_m        [max_delta_m = 0.04 m]
+    3-4: Rx, Ry → (bin − 5) / 5 × max_delta_rot       [max_delta_rot = 0.05 rad, clamped to ±0.1 rad]
+    5:   Gripper → sticky: bins 0-2 → close (−1), bins 8-10 → open (+1), center → hold
+```
 
-4. 🟠 ABC Buffer Stores 7 Unused Fields (MEDIUM — GPU memory)
-File: 
-storage.py:191-201
+The gripper state is **sticky**: it holds its last value unless a decisive bin is selected. Gripper state is reset to open (1.0) on phase boundary or episode done.
 
-Problem: GPUDemonstrationBuffer allocates rewards, dones, values, returns, advantages, mu, sigma at capacity=50,000 — but none of these are ever used. Only observations, actions, and actions_log_prob matter for the ABC loss. The _traj_store deque is used for sequential LSTM evaluation, and sample() is never called.
+---
 
-With obs_shape=(51,), actions_shape=(6,):
+## 3. Per-Step cuRobo IK Pipeline
 
-Unused fields: rewards(50k×1) + dones(50k×1) + values(50k×1) + returns(50k×1) + advantages(50k×1) + mu(50k×6) + sigma(50k×6) = 50,000 × 17 × 4 bytes = 3.4MB wasted.
-Plus observations and states (50k × 51 × 2 = 20.4MB) are also allocated but never read (only _traj_store is used). Total waste: ~24MB.
+Executed every rollout step for all `N` environments simultaneously.
 
-Fix: Remove unused fields from GPUDemonstrationBuffer, or replace the entire buffer with just the _traj_store deque (since sample() is never called in the pipeline).
+**Step 1 — Decode actions**
+```python
+xyz, rxry, gripper_state = _bins_to_xyz_rxy_gripper(bin_indices, gripper_state)
+```
 
-Safety: ✅ No code path reads the unused fields.
+**Step 2 — Accumulate EE position target**
+```python
+ee_target_local[envs] += xyz           # integrate delta onto running target
+ee_target_local.clamp_(WS_X, WS_Y, WS_Z)  # clamp to workspace
+```
+Workspace limits (env-local frame): X ∈ [−0.50, 0.50], Y ∈ [0.25, 0.70], Z ∈ [0.00, 0.55].
 
-5. 🟠 Per-Env Python Loop in ABC Buffer Population (MEDIUM — time)
-File: 
-train.py:1186-1209
+**Step 3 — Accumulate EE orientation target**
 
-Problem: The ABC demo insertion loop iterates for env_id in valid_ids: in Python, calling bob_ppo.actor_critic.evaluate() once per failed env. With 256 envs and ~66% fail rate, that's ~170 individual forward passes per iteration, each with tiny batch size 1.
+Convert (Rx, Ry) deltas to a delta quaternion and compose with the running orientation:
+```python
+q_delta = quat_mul(q_ry, q_rx)        # Ry applied first, then Rx
+ee_target_quat_w = quat_mul(ee_target_quat_w, q_delta)
+ee_target_quat_w = normalize(ee_target_quat_w)
+```
+Quaternion composition avoids gimbal lock and makes phase sync trivial (just reset to `QUAT_TOOL_DOWN = [0, 1, 0, 0]` wxyz).
 
-Fix: Batch all failed envs together:
-
-Pad all trajectories to the same length
-Run a single evaluate() call with batch dimension = num_failed_envs
-Add all trajectories to _traj_store in one pass
-Safety: ✅ Same data goes into the buffer. Batching doesn't change the values.
-
-6. 🟠 torch.searchsorted for Index Mapping (MEDIUM — time, per step)
-File: 
-train.py:963
-, 
-train.py:971
-, 
-train.py:1006
-, 
-train.py:1014
-
-Problem: torch.searchsorted(alice_indices, curr_ids) is called 4× per rollout step to map global env IDs back to local indices. searchsorted launches a CUDA kernel each time, and the indices are small tensors (~200 elements), so the kernel launch overhead dominates.
-
-Fix: Pre-compute a full reverse-index lookup table once before the loop:
-
-python
-alice_local_idx = torch.zeros(num_envs, dtype=torch.long, device=device)
-alice_local_idx[alice_indices] = torch.arange(len(alice_indices), device=device)
-# Then: curr_local = alice_local_idx[curr_ids]  # O(1) gather, no kernel launch
-Safety: ✅ Produces identical index mapping.
-
-7. 🟡 Redundant .clone() Calls in Extras Dict (LOW — time)
-File: 
-wrapper.py:463-480
-
-Problem: Every env.step() creates clones of 8 tensors for the extras["episode_manager"] dict:
-
-python
-"phase": self.episode_manager.current_phase.clone(),
-"goal_count": self.episode_manager.goal_count.clone(),
-"bob_success": self.episode_manager.bob_success.clone(),
-...
-Most of these are only read once downstream and never modified. Cloning forces a GPU memcpy each time — 8 × num_envs × 4 bytes per step, for 456 steps.
-
-Fix: Only clone tensors that are actually mutated downstream. phase, goal_count, and max_contact_force are never modified after extraction — pass them directly. Only bob_success_this_step and bob_done_this_step (which are freshly allocated) need to stay.
-
-Safety: ✅ Read-only access patterns confirmed by grep.
-
-8. 🟡 Critic Forward Pass Runs on Full Raw Obs (Including Goal+Distance) (LOW — time)
-File: 
-module.py:308-309
-
-Problem: Bob's critic MLP processes the full 51D observation including goal poses and distances. But the goal encoder was specifically designed to compress goals into an 8D embedding for the actor. The critic doesn't benefit from this bottleneck — but it also doesn't need the raw 22D-per-object goal+distance chunk. The first critic layer is Linear(51→512), which could be Linear(35→512) if the critic saw the same encoded representation.
-
-This is more of a latent inefficiency — the critic has 51×512 = 26,112 parameters in layer 1 vs 35×512 = 17,920 if using encoded obs. The extra 8,192 parameters add ~0.5% to backward pass time.
-
-Fix: Feed the critic the PI-encoded + goal-encoded representation instead of raw obs. This would require structural changes to the forward pass, so it's lower priority.
-
-Safety: ⚠️ Changing critic input could slightly alter training dynamics. Best tested in a short comparison run.
-
-9. 🟡 MultiCategorical Creates N Separate Categorical Objects (LOW — time)
-File: 
-module.py:33
-
-Problem: MultiCategorical.__init__ creates a Python list of 6 Categorical distributions via a list comprehension. log_prob() and entropy() then iterate this list with sum(...), launching 6 small CUDA kernels each. PyTorch's Categorical could operate on a single (batch, 6, 11) tensor natively using a single kernel.
-
-Fix: Replace the list of distributions with a single batched operation:
-
-python
-def log_prob(self, bin_indices):
-    # logits: (batch, 6, 11), bin_indices: (batch, 6)
-    return F.cross_entropy(
-        self.logits.reshape(-1, 11), bin_indices.reshape(-1).long(), reduction='none'
-    ).neg().reshape(-1, 6).sum(-1)
-Safety: ✅ Mathematically identical. Just fused kernel execution.
-
-10. 🟡 _alice_dense_accum Tensor Never Used for Anything (LOW — memory)
-File: 
-wrapper.py:170
-, 
-wrapper.py:929
-
-Problem: _alice_dense_accum is accumulated via += dense[is_alice] every step, then zeroed at phase end. But it is never read — no code uses the accumulated value for logging, reward adjustment, or anything else.
-
-Fix: Remove the tensor and the accumulation line entirely.
-
-Safety: ✅ Dead code removal.
-Show less
-I'll read all the relevant files to verify each claim in the analysis.
-
-Bash Find relevant Python files
-IN
-find /home3/s3426394/master_isaac/asyncDualPlayPPO -name "*.py" | grep -E "(train|historical_pool|storage|wrapper|module)" | head -20
-
-OUT
-/home3/s3426394/master_isaac/asyncDualPlayPPO/train.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/train_diffik.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/logs/analyze_training.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/utils/historical_pool.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/tasks/utils/dummy_alice_wrapper.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/tasks/utils/wrapper.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/rl/ppo/module.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/rl/ppo/storage.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/matplotlib/_constrained_layout.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/matplotlib/tests/test_constrainedlayout.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/pip/_vendor/cachecontrol/filewrapper.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/pip/_vendor/cachecontrol/wrapper.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/pip/_vendor/rich/constrain.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/numpy/_core/tests/test_simd_module.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/numpy/f2py/tests/test_modules.py
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/lib/python3.11/site-packages/numpy/typing/tests/data/pass/modules.py
-Read train.py (lines 931-1130)
-Read historical_pool.py
-Read storage.py
-Read wrapper.py (lines 451-510)
-Read module.py (lines 2-61)
-Read module.py (lines 281-340)
-Read wrapper.py (lines 161-190)
-Bash Find all usages of _alice_dense_accum
-IN
-grep -n "_alice_dense_accum" /home3/s3426394/master_isaac/asyncDualPlayPPO/tasks/utils/wrapper.py
-
-OUT
-170:        self._alice_dense_accum = torch.zeros(env.num_envs, device=self.device)
-326:                self._alice_dense_accum[alice_term_ids] = 0.0
-548:        self._alice_dense_accum[env_ids] = 0.0
-929:            self._alice_dense_accum[is_alice] += dense[is_alice]
-Read train.py (lines 1181-1240)
-Bash Check asymmetric usage in train.py
-IN
-grep -n "asymmetric" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -20
-
-OUT
-456:        asymmetric=False,
-477:        asymmetric=False,
-508:        asymmetric=False,
-523:        asymmetric=False,
-Bash Check asymmetric usage in module.py
-IN
-grep -n "asymmetric\|states_shape\|states=" /home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/rl/ppo/module.py | head -20
-
-OUT
-150:        states_shape,
-154:        asymmetric=False,
-158:        self.asymmetric = asymmetric
-308:        critic_in = states_shape[0] if asymmetric else obs_shape[0]
-539:        value = self.critic(states if self.asymmetric else observations)
-565:        value = self.critic(states if self.asymmetric else observations)
-607:            states: states (for asymmetric critic) or None
-616:        value = self.critic(states if self.asymmetric else observations)
-Bash Check how add_transitions is called - what is passed as 'states'
-IN
-grep -n "add_transitions" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -10
-
-OUT
-1097:                alice_ppo.storage.add_transitions(
-1137:                bob_ppo.storage.add_transitions(
-Read train.py (lines 1097-1146)
-Bash Check RolloutStorage initialization in train.py
-IN
-grep -n "RolloutStorage\|states_shape" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -20
-
-OUT
-561:        states_shape=env.bob_observation_space.shape,
-Bash Check RolloutStorage initialization in ppo.py
-IN
-grep -n "RolloutStorage\|states_shape" /home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/rl/ppo/ppo.py 2>/dev/null | head -20
-
-OUT
-16:from .storage import RolloutStorage
-84:        self.storage = RolloutStorage(
-Read ppo.py (lines 85-104)
-Read train.py (lines 456-470)
-Read ppo.py (lines 101-220)
-Read ppo.py (lines 261-360)
-Bash Check how historical policies are sampled
-IN
-grep -n "sample_policy\|hist_alice\|hist_bob" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -30
-
-OUT
-925:        hist_alice = alice_pool.sample_policy(alice_ppo.actor_critic, env.device) if alice_pool.size > 0 else None
-926:        hist_bob = bob_pool.sample_policy(bob_ppo.actor_critic, env.device) if bob_pool.size > 0 else None
-957:                    if len(hist_ids) > 0 and hist_alice is not None:
-958:                        (a_acts_hist, a_logprob_hist, a_val_hist, a_mu_hist, a_sigma_hist, _) = hist_alice.act_with_hidden(current_alice_obs[hist_ids], None, None)
-1000:                    if len(hist_bids) > 0 and hist_bob is not None:
-1001:                        (b_acts_hist, b_lp_hist, b_val_hist, b_mu_hist, b_sig_hist, _) = hist_bob.act_with_hidden(current_bob_obs[hist_bids], None, None)
-Bash Check searchsorted usage
-IN
-grep -n "searchsorted" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py
-
-OUT
-963:                curr_local = torch.searchsorted(alice_indices, curr_ids)
-971:                    hist_local = torch.searchsorted(alice_indices, hist_ids)
-1006:                curr_bloc = torch.searchsorted(bob_indices, curr_bids)
-1014:                    hist_bloc = torch.searchsorted(bob_indices, hist_bids)
-Read train.py (lines 506-535)
-Read wrapper.py (lines 921-940)
-Bash Check if sample() or sample_trajectories() is called on abc_buffer
-IN
-grep -n "sample_trajectories\|abc_buffer\.sample\|demo_buffer\.sample" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -20
-
-OUT
-(Bash completed with no output)
-Bash Check all abc_buffer usage in train.py
-IN
-grep -n "abc_buffer\|demo_buffer" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -30
-
-OUT
-197:        "iteration showing which section (env_step, alice_act, abc_buffer, …) "
-558:    bob_ppo.abc_buffer = GPUDemonstrationBuffer(
-611:        _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
-613:            bob_ppo.abc_buffer.load(_abc_buf_path)
-615:                f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries) from {_abc_buf_path}"
-809:            bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
-1181:                profiler.mark_start("abc_buffer")
-1200:                    bob_ppo.abc_buffer.add_trajectory(
-1210:                profiler.mark_stop("abc_buffer")
-1296:            bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
-1324:        _abc_buf_size = bob_ppo.abc_buffer.size
-1335:            f"ABC buf: {bob_ppo.abc_buffer.size} | "
-Bash Check if sample_trajectories is called
-IN
-grep -n "sample_trajectories\|abc_buffer\.sample\b" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py
-
-OUT
-(Bash completed with no output)
-Bash Search for sample_trajectories usage across algorithms dir
-IN
-grep -rn "sample_trajectories\|abc_buffer\.sample\b" /home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/ /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py 2>/dev/null
-
-OUT
-/home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/rl/ppo/ppo_abc.py:124:            abc_trajs = self.abc_buffer.sample_trajectories(self.abc_n_trajs)
-/home3/s3426394/master_isaac/asyncDualPlayPPO/algorithms/rl/ppo/storage.py:312:    def sample_trajectories(self, n_trajs: int):
-Read ppo_abc.py (lines 111-160)
-Bash Check if ppo_abc update function is called in train.py
-IN
-grep -n "ppo_abc\|PPOabc\|ABC\|abc" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -20
-
-OUT
-165:        "--test_abc_verbose",
-167:        help="Test: print ABC demo content (goal shape, obs range) each time "
-197:        "iteration showing which section (env_step, alice_act, abc_buffer, …) "
-222:    from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
-265:            "abc_coef": 0.5,  # "ABC loss weight β"
-276:            "abc_coef": learn.get("abc_coef", "?"),
-502:    bob_ppo = PPOABC(
-555:    # ABC Buffer for Alice's successful demonstrations
-557:    _abc_act_shape = (num_cat_dims,) if use_mc else env.action_space.shape
-558:    bob_ppo.abc_buffer = GPUDemonstrationBuffer(
-562:        actions_shape=_abc_act_shape,
-564:        traj_maxlen=ppo_cfg["params"]["learn"].get("abc_traj_maxlen", 500),
-611:        _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
-612:        if os.path.isfile(_abc_buf_path):
-613:            bob_ppo.abc_buffer.load(_abc_buf_path)
-615:                f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries) from {_abc_buf_path}"
-632:            bob_ppo.abc_coef = float(_ts["abc_coef"])
-636:                f"abc_coef={bob_ppo.abc_coef:.4f}, "
-642:                f"entropy_coef/abc_coef reset to YAML defaults."
-668:    last_alice_mean_rew = 0.0  # gating value for Bob's ABC loss warmup
-Read wrapper.py (lines 321-335)
-Read wrapper.py (lines 544-553)
-Let me check the actual ABC buffer capacity and module forward pass:
-
-Read train.py (lines 556-570)
-Read module.py (lines 531-560)
-Bash Check rollout length configuration
-IN
-grep -n "rollout_length\|alice_timesteps\|bob_timesteps\|nsteps\|num_transitions" /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -20
-
-OUT
-91:        "--nsteps",
-113:        "Auto-computed as ceil(bob_timesteps / alice_timesteps) * max(1, 64 // num_envs) "
-246:    alice_timesteps = task_cfg.get("alice_timesteps", 150)
-247:    bob_timesteps = task_cfg.get("bob_timesteps", 200)
-250:        f"[Config] Episode structure: alice_timesteps={alice_timesteps}, "
-251:        f"bob_timesteps={bob_timesteps}, max_goals={max_goals_per_episode} "
-296:    if args.nsteps is not None:
-298:            f"[Config] Overriding nsteps: {ppo_cfg['params']['learn']['nsteps']} -> {args.nsteps}"
-300:        ppo_cfg["params"]["learn"]["nsteps"] = args.nsteps
-379:            alice_timesteps=alice_timesteps,
-380:            bob_timesteps=bob_timesteps,
-393:            alice_timesteps=alice_timesteps,
-394:            bob_timesteps=bob_timesteps,
-407:            alice_timesteps=alice_timesteps,
-408:            bob_timesteps=bob_timesteps,
-420:            alice_timesteps=alice_timesteps,
-421:            bob_timesteps=bob_timesteps,
-428:            alice_timesteps=alice_timesteps,
-429:            bob_timesteps=bob_timesteps,
-437:            alice_timesteps=alice_timesteps,
-Bash Check config for rollout length
-IN
-grep -n "alice_timesteps\|bob_timesteps\|nsteps\|num_transitions" /home3/s3426394/master_isaac/asyncDualPlayPPO/cfg/train/FrankaTwoAgentsPPO.yaml 2>/dev/null | head -20
-
-OUT
-(Bash completed with no output)
-Read train.py (lines 906-935)
-Bash Find config files with timestep settings
-IN
-find /home3/s3426394/master_isaac/asyncDualPlayPPO/cfg -name "*.yaml" | xargs grep -l "alice_timesteps\|bob_timesteps" 2>/dev/null
-
-OUT
-/home3/s3426394/master_isaac/asyncDualPlayPPO/cfg/ppo/ppo_continuous.yaml
-/home3/s3426394/master_isaac/asyncDualPlayPPO/cfg/task/AsyncDualPlay.yaml
-Bash Check actual timestep values in config
-IN
-grep "alice_timesteps\|bob_timesteps" /home3/s3426394/master_isaac/asyncDualPlayPPO/cfg/task/AsyncDualPlay.yaml
-
-OUT
-alice_timesteps: 100
-bob_timesteps: 200
-Read train_small.slurm
-Now I have enough to give a precise verdict. Here's what I found:
-
-Verdict: 3 claims are wrong or materially misleading
-Claim #1 — Wrong on numbers AND magnitude
-The stated rollout length is wrong. The analysis says 256 + 200 = 456 steps. The actual values from the config are alice_timesteps=100, bob_timesteps=200, so rollout_length = 300 (train.py:928, AsyncDualPlay.yaml). The 256 comes from NSTEPS=256 in the slurm script — that's the storage buffer size, not the rollout length. The analysis confused the two.
-
-"~30% of rollout time" is almost certainly wrong. PyTorch uses a caching memory allocator — torch.zeros() does not call cudaMalloc each time. It reuses freed blocks from a pool. The allocations are real overhead (especially for dynamically-sized tensors like (len(alice_indices),...) where the count varies step to step, preventing clean pool reuse), but calling it "30% of rollout time" with env.step() (full physics simulation with 256 envs) as the dominant cost is a massive overstatement. The inefficiency pattern is real; the magnitude claim is not.
-
-Claim #3 — Wrong percentage
-The analysis claims states wastes "50% of Buffer Memory". What's true: states is never read during updates when asymmetric=False (ppo_abc.py:135-141), and state_space = observation_space (train.py:459, train.py:511) means it duplicates observations. But "50%" implies states is half the total buffer. In reality, RolloutStorage has ~10 tensor fields (observations, states, rewards, actions, dones, masks, actions_log_prob, values, returns, advantages, mu, sigma). The wasted states is ~9% of total buffer memory, or 50% of the obs+states sub-portion only. The 16MB figure for Alice is correct; the "50%" framing is wrong.
-
-Claim #8 — Should not be in this list at all
-The analysis header explicitly states "All proposed fixes are semantics-preserving — they do not change what the model learns." Claim #8 then proposes changing the critic's input from raw 51D obs to the encoded representation and itself flags it with ⚠️: "Changing critic input could slightly alter training dynamics." This directly contradicts the stated premise of the entire analysis. Claim #8 is a model architecture change, not an efficiency fix, and has no place in a "functionality-preserving" optimization list.
-
-Claims that are correct
-#	Status	Note
-#2	✅	copy.deepcopy once per iteration confirmed at train.py:925-926, fix is valid
-#4	✅	sample() is never called in the pipeline; only sample_trajectories() via _traj_store is used (ppo_abc.py:124); flat 50k-capacity buffer is confirmed dead weight
-#5	✅	Python loop at train.py:1186 confirmed, ~170 sequential evaluate() calls
-#6	✅	4 searchsorted calls per step on GPU tensors confirmed at train.py:963,971,1006,1014
-#7	✅	.clone() confirmed at wrapper.py:463-483, but impact is tiny
-#9	✅	6-Categorical list at module.py:33 confirmed
-#10	✅	_alice_dense_accum accumulated at wrapper.py:929, reset at lines 326 and 548, never read anywhere
-implement the correct fiexes
-Let me read the PPO __init__ and the parts of wrapper.py I need for the fixes:
-
-Read ppo.py (lines 2-84)
-Read ppo_abc.py (lines 2-111)
-Let me read the remaining parts I need before making changes:
-
-Read module.py (lines 61-110)
-Read wrapper.py (lines 2-31)
-Bash Check usage of top-level extras goal_valid and bob_success
-IN
-grep -n 'extras\["goal_valid"\]\|extras\["bob_success"\]' /home3/s3426394/master_isaac/asyncDualPlayPPO/train.py | head -20
-
-OUT
-(Bash completed with no output)
-Read train.py (lines 1156-1185)
-Read wrapper.py (lines 391-470)
-Bash Find all max_contact_force modifications
-IN
-grep -n "max_contact_force" /home3/s3426394/master_isaac/asyncDualPlayPPO/tasks/utils/wrapper.py | head -20
-
-OUT
-457:                    self.episode_manager.max_contact_force = torch.where(
-459:                        torch.max(self.episode_manager.max_contact_force, max_f),
-460:                        self.episode_manager.max_contact_force,
-479:            "max_contact_force": self.episode_manager.max_contact_force.clone(),
-Bash Check in-place modifications of episode_manager fields after extras dict creation
-IN
-grep -n "bob_success\b\|current_phase\b\|goal_count\b\|goal_valid\b\|goal_states\b" /home3/s3426394/master_isaac/asyncDualPlayPPO/tasks/utils/wrapper.py | grep -v "#" | head -30
-
-OUT
-373:        step_bob_success = torch.zeros(
-386:            step_bob_success[bob_done_ids] = success
-413:            self.episode_manager.bob_success[completion_ids] = True
-414:            step_bob_success[completion_ids] = True
-418:            success, pos_err, rot_err = self._check_bob_success(
-425:            completion_goals = self.episode_manager.goal_count[completion_ids].clone()
-436:                self.episode_manager.goal_count[completion_ids]
-464:            "phase": self.episode_manager.current_phase.clone(),
-465:            "goal_count": self.episode_manager.goal_count.clone(),
-466:            "bob_success": self.episode_manager.bob_success.clone(),
-467:            "bob_success_this_step": step_bob_success,
-471:            "goal_valid": self.episode_manager.goal_valid.clone(),
-472:            "goal_states": (
-473:                self.episode_manager.goal_states.clone()
-474:                if self.episode_manager.goal_states is not None
-482:        extras["goal_valid"] = self.episode_manager.goal_valid.clone()
-483:        extras["bob_success"] = self.episode_manager.bob_success.clone()
-568:        self.episode_manager.mark_goal_valid(env_ids, valid)
-625:        success, pos_err, rot_err = self._check_bob_success(obs_dict, env_ids)
-626:        self.episode_manager.mark_bob_success(env_ids, success)
-647:            self.episode_manager.goal_count[env_ids] < self.episode_manager.max_goals
-674:            succeeded = self.episode_manager.bob_success[reset_ids]
-694:            self.episode_manager.goal_count[env_ids] < self.episode_manager.max_goals
-724:    def _check_bob_success(self, obs_dict: Dict, env_ids: torch.Tensor) -> torch.Tensor:
-806:        self, alice_obs: torch.Tensor, goal_states: torch.Tensor
-811:        Assumes alice_obs and goal_states are already in the LOCAL environment frame.
-812:        goal_states must be in Euler format: [pos(3)+euler(3)] per object = 6D each.
-817:        if goal_states.dim() == 1:
-818:            goal_states = goal_states.unsqueeze(0)
-830:        goal_states_reshaped = goal_states.view(-1, self.num_objects, 6)
-Now I have everything needed. Let me implement all 8 fixes across the 6 files in parallel:
-
-Read wrapper.py (lines 371-385)
-Read train.py (lines 1141-1155)
-Now let me implement all fixes. Starting with the isolated files:
-
-Edit historical_pool.py
-Added 1 line
-Edit historical_pool.py
-Added 1 line
-Now fix storage.py — Fix #3 (RolloutStorage asymmetric flag) and Fix #4 (strip GPUDemonstrationBuffer flat buffers):
-
-Edit storage.py
-Added 3 lines
-Edit storage.py
-Added 1 line
-Now replace the entire GPUDemonstrationBuffer class with the stripped-down version:
-
-Edit storage.py
-Removed 141 lines
-Now fix ppo.py to pass asymmetric to RolloutStorage:
-
-Edit ppo.py
-Added 1 line
-Now fix module.py — Fix #9 (batched MultiCategorical):
-
-Edit module.py
-Added 1 line
-Edit module.py
-Added 6 lines
-Now fix wrapper.py — Fix #7 (remove redundant clones) and Fix #10 (remove dead _alice_dense_accum):
-
-Edit wrapper.py
-Removed 3 lines
-Edit wrapper.py
-Removed 1 line
-Edit wrapper.py
-Removed 1 line
-Edit wrapper.py
-Removed 1 line
-Now remove the redundant .clone() calls from the extras dict and the duplicate top-level entries:
-
-Edit wrapper.py
-Removed 3 lines
-Now fix train.py — Fix #5 (batch ABC loop) and Fix #6 (searchsorted → lookup table):
-
-Edit train.py
-Added 8 lines
-Now replace the 4 searchsorted calls with lookup table indexing:
-
-Edit train.py
-Modified
-Edit train.py
-Modified
-Now replace the sequential ABC buffer loop with the batched version (Fix #5), also updating the add_trajectory call signature (Fix #4):
-
-Edit train.py
-Modified
-Now let me verify all changes look correct:
-
-Bash Verify storage, GPUDemonstrationBuffer, and MultiCategorical changes
-IN
-python -c "
-import sys
-sys.path.insert(0, 'asyncDualPlayPPO')
-
-# Test storage changes
-from asyncDualPlayPPO.algorithms.rl.ppo.storage import RolloutStorage, GPUDemonstrationBuffer
-import torch
-
-# Fix #3: states=None when asymmetric=False
-s = RolloutStorage(4, 10, (5,), (5,), (3,), device='cpu', asymmetric=False)
-assert s.states is None, 'states should be None when asymmetric=False'
-
-# add_transitions should not crash with states=None
-obs = torch.zeros(4, 5)
-s.add_transitions(obs, obs, torch.zeros(4, 3), torch.zeros(4), torch.zeros(4).bool(), torch.zeros(4,1), torch.zeros(4), torch.zeros(4,3), torch.zeros(4,3))
-print('Fix #3: RolloutStorage asymmetric=False OK')
-
-# Fix #4: GPUDemonstrationBuffer simplified
-buf = GPUDemonstrationBuffer(50000, (51,), (51,), (6,), device='cpu')
-assert buf.size == 0
-buf.add_trajectory(torch.zeros(10, 51), torch.zeros(10, 6), torch.zeros(10))
-assert buf.size == 1
-trajs = buf.sample_trajectories(1)
-assert len(trajs) == 1 and 'obs' in trajs[0] and 'acts' in trajs[0] and 'old_lp' in trajs[0]
-print('Fix #4: GPUDemonstrationBuffer simplified OK')
-
-# Fix #9: MultiCategorical batched
-from asyncDualPlayPPO.algorithms.rl.ppo.module import MultiCategorical
-logits = torch.randn(32, 6, 11)
-dist = MultiCategorical(logits)
-samples = dist.sample()
-assert samples.shape == (32, 6), f'sample shape wrong: {samples.shape}'
-lp = dist.log_prob(samples)
-assert lp.shape == (32,), f'log_prob shape wrong: {lp.shape}'
-ent = dist.entropy()
-assert ent.shape == (32,), f'entropy shape wrong: {ent.shape}'
-print('Fix #9: MultiCategorical batched OK')
-"
-
-OUT
-Exit code 127
-/bin/bash: line 38: python: command not found
-Bash Verify all Python-testable fixes
-IN
-cd /home3/s3426394/master_isaac/asyncDualPlayPPO && .venv/bin/python -c "
-import sys, torch
-
-# Fix #3: states=None when asymmetric=False
-from algorithms.rl.ppo.storage import RolloutStorage, GPUDemonstrationBuffer
-s = RolloutStorage(4, 10, (5,), (5,), (3,), device='cpu', asymmetric=False)
-assert s.states is None
-s.add_transitions(torch.zeros(4,5), torch.zeros(4,5), torch.zeros(4,3), torch.zeros(4), torch.zeros(4).bool(), torch.zeros(4,1), torch.zeros(4), torch.zeros(4,3), torch.zeros(4,3))
-print('Fix #3: OK')
-
-# Fix #4: GPUDemonstrationBuffer simplified
-buf = GPUDemonstrationBuffer(50000, (51,), (51,), (6,), device='cpu')
-assert buf.size == 0
-buf.add_trajectory(torch.zeros(10,51), torch.zeros(10,6), torch.zeros(10))
-assert buf.size == 1
-trajs = buf.sample_trajectories(1)
-assert len(trajs) == 1 and set(trajs[0].keys()) == {'obs','acts','old_lp'}
-print('Fix #4: OK')
-
-# Fix #9: MultiCategorical batched
-from algorithms.rl.ppo.module import MultiCategorical
-logits = torch.randn(32, 6, 11)
-dist = MultiCategorical(logits)
-samples = dist.sample()
-assert samples.shape == (32, 6)
-lp = dist.log_prob(samples)
-assert lp.shape == (32,)
-ent = dist.entropy()
-assert ent.shape == (32,)
-print('Fix #9: OK')
-
-# Verify log_prob is numerically correct vs old implementation
-from torch.distributions import Categorical
-logits2 = torch.randn(8, 6, 11)
-bins = torch.randint(0, 11, (8, 6))
-old_lp = sum(Categorical(logits=logits2[:,i,:]).log_prob(bins[:,i]) for i in range(6))
-new_lp = MultiCategorical(logits2).log_prob(bins)
-assert torch.allclose(old_lp, new_lp, atol=1e-5), f'max diff={( old_lp - new_lp).abs().max()}'
-print('Fix #9 numerical equivalence: OK')
-"
-
-OUT
-Exit code 1
-Traceback (most recent call last):
-  File "<string>", line 2, in <module>
-ModuleNotFoundError: No module named 'torch'
-Bash Find Python executable
-IN
-find /home3/s3426394/master_isaac/asyncDualPlayPPO/.venv -name "python3" | head -3
-
-OUT
-/home3/s3426394/master_isaac/asyncDualPlayPPO/.venv/bin/python3
-Bash Find system Python
-IN
-which python3 && python3 --version 2>/dev/null || which python3.11 2>/dev/null
-
-OUT
-/usr/bin/python3
-Python 3.6.8
-Bash Verify all fixes with correct Python path
-IN
-cd /home3/s3426394/master_isaac/asyncDualPlayPPO && .venv/bin/python3 -c "
-import sys, torch
-sys.path.insert(0, '.')
-
-from algorithms.rl.ppo.storage import RolloutStorage, GPUDemonstrationBuffer
-
-# Fix #3
-s = RolloutStorage(4, 10, (5,), (5,), (3,), device='cpu', asymmetric=False)
-assert s.states is None
-s.add_transitions(torch.zeros(4,5), torch.zeros(4,5), torch.zeros(4,3), torch.zeros(4), torch.zeros(4).bool(), torch.zeros(4,1), torch.zeros(4), torch.zeros(4,3), torch.zeros(4,3))
-print('Fix #3: OK')
-
-# Fix #4
-buf = GPUDemonstrationBuffer(50000, (51,), (51,), (6,), device='cpu')
-assert buf.size == 0
-buf.add_trajectory(torch.zeros(10,51), torch.zeros(10,6), torch.zeros(10))
-assert buf.size == 1
-trajs = buf.sample_trajectories(1)
-assert len(trajs) == 1 and set(trajs[0].keys()) == {'obs','acts','old_lp'}
-print('Fix #4: OK')
-
-# Fix #9
-from algorithms.rl.ppo.module import MultiCategorical
-from torch.distributions import Categorical
-logits = torch.randn(8, 6, 11)
-bins = torch.randint(0, 11, (8, 6))
-old_lp = sum(Categorical(logits=logits[:,i,:]).log_prob(bins[:,i]) for i in range(6))
-new_lp = MultiCategorical(logits).log_prob(bins)
-assert torch.allclose(old_lp, new_lp, atol=1e-5), f'diff={( old_lp - new_lp).abs().max()}'
-samples = MultiCategorical(logits).sample()
-assert samples.shape == (8, 6)
-ent = MultiCategorical(logits).entropy()
-assert ent.shape == (8,)
-print('Fix #9: OK, numerical equivalence verified')
-
-# Fix #2 - verify historical pool uses persistent clone
-import copy
-from utils.historical_pool import HistoricalPolicyPool
-import torch.nn as nn
-net = nn.Linear(4, 4)
-pool = HistoricalPolicyPool(max_size=3)
-pool.add(net)
-result1 = pool.sample_policy(net, 'cpu')
-result2 = pool.sample_policy(net, 'cpu')
-assert result1 is result2, 'should reuse same clone object'
-assert pool._hist_clone is not None
-print('Fix #2: OK, persistent clone verified')
-"
-
-@asyncDualPlayPPO/logs/26.05.07/chain_0/raw_parsed.csv @asyncDualPlayPPO/logs/26.05.07/chain_0/training_updates.csv 
-
-these are the latest updates from @asyncDualPlayPPO/train_curobo.py . @asyncDualPlayPPO/tasks/async_dual_play_curobo.py @asyncDualPlayPPO/tasks/utils/wrapper.py @asyncDualPlayPPO/tasks/utils/reach_dual_arm_diffik_env_cfg.py @asyncDualPlayPPO/tasks/utils/events.py @asyncDualPlayPPO/algorithms/rl/ppo/ppo_abc.py @asyncDualPlayPPO/algorithms/rl/ppo/module.py  
+**Step 4 — TCP offset correction**
+
+cuRobo targets the `wrist_3_link` frame; the gripper fingertip midpoint is ~5 cm ahead. The offset is computed live from current physics body positions so it tracks any orientation change:
+```python
+tcp_offset = (lf_w + rf_w) / 2 − w3_w    # finger midpoint minus wrist_3 (world frame)
+ik_target  = ee_target_local − tcp_offset  # wrist_3 target needed to place TCP at goal
+```
+Note: `ee_target_local` and `tcp_offset` are both relative to the same origin, so `env_origins` cancel — this subtraction is valid.
+
+**Step 5 — Batch IK solve**
+```python
+result = ik_solver.solve_batch(
+    CuroboPose(position=ik_target, quaternion=ee_target_quat_w),
+    seed_config=prev_joint_cmd.unsqueeze(1),   # (N, 1, 6) — warm-start from last command
+    retract_config=prev_joint_cmd,              # (N, 6)
+)
+```
+Seeding from `_prev_joint_cmd` (not physics joint positions) keeps cuRobo finding solutions along the already-smoothed trajectory.
+
+**Step 6 — IK failure handling**
+
+If `result.success[i]` is False for env `i`:
+- Revert `ee_target_local[i]` and `ee_target_quat_w[i]` to their pre-step snapshot (prevents drift compounding).
+- Fall back to `raw_cmd[i] = cur_joints[i]` (hold current physics state).
+
+IK fail rate is logged to TensorBoard each iteration as `Metrics/IKFailRate`.
+
+**Step 7 — EMA joint smoothing + assemble 7D command**
+```python
+smoothed = 0.2 * raw_cmd + 0.8 * prev_joint_cmd   # α = 0.2
+env_full[:, :6] = smoothed                         # arm joints
+env_full[:, 6]  = gripper_state                    # finger width
+```
+The EMA blends 20% of the new IK solution each step, giving inertia similar to RMPFlow's integrated velocity.
+
+---
+
+## 4. Phase Sync (After `env.step()`)
+
+After each `env.step()`, Isaac Lab's PhysX state is fresh. Any environment where the phase transitioned (Alice→Bob or Bob→Alice) or an episode ended must have its IK accumulators snapped to the current physics state to prevent target drift:
+
+```python
+needs_sync = phase_changed | dones
+if needs_sync.any():
+    tcp_sync = (lf_w[sync_ids] + rf_w[sync_ids]) / 2
+    ee_target_local[sync_ids]  = tcp_sync − env_origins[sync_ids]  # re-anchor position
+    prev_joint_cmd[sync_ids]   = physics_joint_pos[sync_ids]        # re-anchor joints
+    ee_target_quat_w[sync_ids] = QUAT_TOOL_DOWN                     # reset orientation
+```
+
+LSTM hidden states are zeroed on the same events:
+- Alice hidden → zeroed when `dones[alice_ids]` or `_alice_just_ended[alice_ids]`
+- Bob hidden → zeroed when `dones[bob_ids]` or `_bob_just_ended[bob_ids]`
+
+---
+
+## 5. Training Loop Structure
+
+```
+while bob_updates < max_iterations:
+
+    ┌─ ROLLOUT (rollout_length = alice_timesteps + bob_timesteps steps) ─────────────┐
+    │  for t in range(300):                                                           │
+    │    ① Alice acts  (80% current policy + 20% historical snapshot)               │
+    │    ② Bob acts    (80% current policy + 20% historical snapshot)               │
+    │    ③ Record Alice trajectory for ABC (obs, act, traj_len per env)             │
+    │    ④ cuRobo IK pipeline → 7D joint command                                    │
+    │    ⑤ env.step(env_full) → obs, rewards, dones, extras                        │
+    │    ⑥ Phase sync (on transition or done)                                       │
+    │    ⑦ Add to Alice storage / Bob storage                                       │
+    │    ⑧ On bob_done & ~bob_success & goal_valid → add to ABC buffer             │
+    └────────────────────────────────────────────────────────────────────────────────┘
+
+    ┌─ CONTROLLERS ──────────────────────────────────────────────────────────────────┐
+    │  Alice entropy controller (per iteration)                                       │
+    │  Alice LR cosine decay                                                          │
+    │  Bob abc_coef inverse-SR controller                                             │
+    └────────────────────────────────────────────────────────────────────────────────┘
+
+    ┌─ PPO UPDATES ──────────────────────────────────────────────────────────────────┐
+    │  Alice: standard PPO (3 epochs, 4 minibatches)                                 │
+    │  Bob:   PPOABC = PPO + clipped ABC loss + aux GoalEncoder loss                 │
+    └────────────────────────────────────────────────────────────────────────────────┘
+
+    ┌─ CHECKPOINT (every save_interval iters) ───────────────────────────────────────┐
+    │  model_{iter}.pt, abc_buffer.pt, episode_manager_{iter}.pt, train_state.pt     │
+    └────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Rollout timing
+- `alice_timesteps = 100` steps per Alice phase (goal-setting)
+- `bob_timesteps = 200` steps per Bob phase (goal-replication)
+- `rollout_length = 300` total steps per iteration
+- Episodes are staggered at startup across envs so not all envs reset simultaneously.
+
+### Historical policy pool
+- `HIST_FRAC = 0.2` → for each policy's active env subset, 20% use a past snapshot.
+- Snapshot saved every `HIST_SAVE_INTERVAL` iterations to `HistoricalPolicyPool`.
+- `sample_policy()` reuses a persistent `_hist_clone` (load_state_dict, not deepcopy).
+
+---
+
+## 6. ABC Buffer Population
+
+Gate condition (checked every step):
+```python
+just_failed_bob = bob_done_this_step & (~bob_success) & goal_valid
+```
+
+For each gated env:
+1. Retrieve Alice's recorded trajectory `(obs[0:T], act[0:T])` for this episode.
+2. Reject if `T < max(10, alice_timesteps // 2)` (too short to be a valid demo).
+3. Construct Bob's BC observation: `bc_obs = construct_bob_observation(alice_obs, goal_states)` — repackages Alice's obs with the goal appended to each timestep.
+4. Compute `old_log_prob` for the trajectory under current Bob policy (batch evaluate).
+5. Store `(bc_obs, traj_acts, old_lp)` in `GPUDemonstrationBuffer` (sliding window, `traj_maxlen=500`).
+
+Old trajectories are evicted as new failures arrive, keeping BC signal relevant to Alice's current task distribution.
+
+---
+
+## 7. Adaptive Controllers
+
+All controllers run once per iteration, after the rollout and before the PPO updates.
+
+### Alice entropy controller
+
+Two-phase controller keeping Alice at the competence edge of Bob:
+
+**Phase 1** (`iter < 250`): exponential decay
+```
+entropy_coef = 0.05 + 0.95 × exp(−α × iter/250)
+```
+Decays from 1.0 → 0.10 over the first 250 iterations. `α = alice_decay_alpha` (CLI arg).
+
+**Phase 2** (`iter ≥ 250`): one-sided proportional controller
+```
+sr_error = bob_sr − target_sr               # target_sr = 0.5
+if sr_error > 0:                            # Bob too successful → goals too easy
+    entropy_coef += lr × sr_error           # raise entropy to make goals harder
+entropy_coef = clamp(entropy_coef, min=0.10, max=1.0)
+```
+The controller only **raises** entropy (never lowers it below min). This prevents Alice from collapsing when Bob is struggling, while allowing it to explore harder goals when Bob is mastering the current distribution.
+
+### Alice learning rate
+
+Cosine decay over the full training run:
+```
+alice_lr = alice_lr_min + 0.5 × (lr_max − lr_min) × (1 + cos(π × iter/max_iter))
+```
+Range: `lr_max = 3e-4` → `lr_min = 5e-5`.
+
+### Bob abc_coef (inverse-SR controller, active from iter 0)
+
+With `abc_anneal_iters: 0`, the time-based linear decay is skipped entirely. The SR-based controller is active from the first iteration:
+
+```
+target_abc = abc_coef_start × (1 − bob_sr)     # max when Bob fails, 0 when Bob always succeeds
+bob_ppo.abc_coef = 0.95 × abc_coef + 0.05 × target_abc   # EMA smoothing
+```
+
+| `bob_sr` | `target_abc` | Effect |
+|----------|-------------|--------|
+| 0.0 (Bob fails) | 0.5 | Maximum BC signal |
+| 0.5 (target) | 0.25 | Half BC signal |
+| 1.0 (Bob always succeeds) | 0.0 | BC disabled |
+
+The EMA (α=0.95) ramps over ~20 iterations, preventing gradient shocks from sudden Bob SR changes.
+
+---
+
+## 8. PPO Updates
+
+### Alice update (standard PPO)
+- `noptepochs = 3`, `nminibatches = 4`, `cliprange = 0.2`
+- Entropy bonus: `ent_coef × H(π)` (adaptive, see controller above)
+- No ABC or aux loss.
+
+### Bob update (PPOABC)
+
+**PPO loss** (clipped surrogate + value):
+```
+L_PPO = −min(r·A, clip(r, 1−ε, 1+ε)·A) + vf_coef × (V − R)²
+```
+
+**ABC loss** (clipped behavioral cloning, sequential LSTM evaluation):
+
+Trajectories sampled from `GPUDemonstrationBuffer` are evaluated sequentially through the LSTM (not batched) to maintain correct hidden state dependencies:
+```python
+for t in range(max_T):
+    logits, (h, c) = actor_forward(obs[t], (h, c), detach_goal_encoder=True)
+    lp = MultiCategorical(logits).log_prob(acts[t])
+bc_ratio = exp(lp − old_lp)
+L_BC = −mean(min(bc_ratio, clip(bc_ratio, 1−ε, 1+ε)))   # PPO-clipped NLL
+```
+`detach_goal_encoder=True` prevents ABC from distorting the latent goal representation.
+
+**Auxiliary distance loss** (GoalEncoder regularizer):
+```
+L_aux = aux_coef × GoalEncoder.aux_loss(goal_poses, current_poses)
+```
+Trains the encoder to also predict position and rotation distances — adds a geometric inductive bias without a separate training phase.
+
+**Total Bob loss**:
+```
+L_total = L_PPO + abc_coef × L_BC + aux_coef × L_aux
+```
+
+---
+
+## 9. Observation Layouts
+
+### Alice obs (flat, `alice_obs_dim`)
+```
+[robot_state(7) | obj1_state(14) | obj2_state(14)]
+= 35D (2 objects)
+```
+No goal info. `robot_state` = `[joint_pos(6), gripper(1)]`.
+
+### Bob obs (flat, `bob_obs_dim`)
+```
+[robot_state(7) | obj1_state(14) + goal1_pose(6) + dist1(2) | obj2_state(14) + goal2_pose(6) + dist2(2)]
+= 7 + 2×22 = 51D (2 objects)
+```
+`obj_state(14)` = `[pos(3), euler(3), linvel(3), angvel(3), dist(1), contact(1)]`.
+`goal_pose(6)` = `[pos(3), euler(3)]`.
+`dist(2)` = `[pos_dist(1), rot_dist(1)]`.
+
+---
+
+## 10. Network Forward Pass (cuRobo training, no architectural changes)
+
+The network architecture is identical to the DiffIK variant — cuRobo only replaces the IK controller outside the policy.
+
+### Alice forward pass
+```
+alice_obs (35D)
+    │
+    ├─ robot_state (7D) ─────────────────────────────────────────────┐
+    │                                                                  │
+    └─ obj_features (28D → 2×14D) → PermInvEncoder                   │
+           shared MLP: 14→512→512 (LN+ReLU each)                     │
+           max-pool across 2 objects                                   │
+           pool_norm (LayerNorm)                                       │
+           concat robot_state → (7+512 = 519D)                        │
+               │                                                        │
+               └──────────────────────────────────────────────────────┘
+                                    │ (519D)
+                               actor_trunk
+                               Linear(519→512)→ReLU
+                               Linear(512→256)→ReLU
+                               (no goal injection — Alice has no goal)
+                                    │ (256D)
+                               LSTMCell(256→256)
+                                    │ (256D)
+                               actor_head: Linear(256→66)   [6 dims × 11 bins]
+                               reshape → (batch, 6, 11) → MultiCategorical
+```
+
+### Bob forward pass (with GoalEncoder + additive injection)
+```
+bob_obs (51D)
+    │
+    ├─ robot_state (7D)
+    │
+    ├─ per-object chunks: 2 × [obj_state(14) + goal_pose(6) + dist(2)]
+    │       │                           │
+    │       │ obj_state (14D)           │ goal_pose (6D) + current_pose (6D from obj_state)
+    │       │     │                     │
+    │       │     │              GoalEncoder.encode_per_object()
+    │       │     │              MLP variant (default: "difference")
+    │       │     │              per-object embedding: (batch, 2, K=8)
+    │       │     │              sum-pool across objects → g_pooled (batch, 8)
+    │       │     │
+    │       └─ obj_state (14D×2) → PermInvEncoder (same as Alice)
+    │              shared MLP: 14→512→512
+    │              max-pool + pool_norm
+    │              concat robot_state → (519D)
+    │
+    │ (519D from PI encoder)
+    actor_trunk_layer1: Linear(519→512)       ← first layer split out
+    h1 = ReLU(h1)
+    h1 = LayerNorm(h1 + goal_proj(g_pooled))  ← additive goal injection
+    actor_trunk_rest: Linear(512→256)→ReLU   ← remaining trunk layers
+    │ (256D)
+    LSTMCell(256→256)
+    │ (256D)
+    actor_head: Linear(256→66) → (batch, 6, 11) → MultiCategorical
+
+critic (no bottleneck, always full raw obs):
+    obs (51D) → MLP(51→512→256→128→1)
+```
+
+Goal projection: `_goal_proj = Linear(8→512, bias=False)` scaled down by ×0.1 at init to avoid ReLU saturation before training begins.
+
+---
+
+## 11. Checkpoint Files
+
+Each checkpoint saves four artifacts:
+
+| File | Contents |
+|------|----------|
+| `bob/model_{iter}.pt` | Bob ActorCritic weights + optimizer state |
+| `alice/model_{iter}.pt` | Alice ActorCritic weights + optimizer state |
+| `bob/abc_buffer.pt` | GPUDemonstrationBuffer trajectory store |
+| `bob/episode_manager_{iter}.pt` | Phase step counters, goal states |
+| `bob/train_state_{iter}.pt` | `entropy_coef`, `abc_coef`, `bob_success_buf` (deque) |
+
+On `SIGTERM`, the same set is written immediately before exit (emergency checkpoint).
+
+Resume: `--resume_path bob/model_{iter}.pt` loads both Alice and Bob weights, optimizer state, and train_state from the matching iteration.

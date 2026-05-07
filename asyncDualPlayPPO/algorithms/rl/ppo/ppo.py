@@ -223,14 +223,16 @@ class PPO:
                 self.writer.add_scalar("Episode/" + key, value, locs["it"])
                 ep_string += f"""{f"Mean episode {key}:":>{pad}} {value:.4f}\n"""
 
-        mean_std = self.actor_critic.log_std.exp().mean()
         self.writer.add_scalar(
             "Loss/value_function", locs["mean_value_loss"], locs["it"]
         )
         self.writer.add_scalar(
             "Loss/surrogate", locs["mean_surrogate_loss"], locs["it"]
         )
-        self.writer.add_scalar("Policy/mean_noise_std", mean_std.item(), locs["it"])
+        # Fix 15: log_std only exists for Gaussian mode; skip for MultiCategorical
+        if hasattr(self.actor_critic, "log_std"):
+            mean_std = self.actor_critic.log_std.exp().mean()
+            self.writer.add_scalar("Policy/mean_noise_std", mean_std.item(), locs["it"])
 
         if len(locs["rewbuffer"]) > 0:
             self.writer.add_scalar(

@@ -183,7 +183,7 @@ class ActorCritic(nn.Module):
 
         # --- Multi-categorical params ---
         if self.use_multicategorical:
-            self.num_cat_dims = model_cfg.get("num_cat_dims", 4)
+            self.num_cat_dims = model_cfg.get("num_cat_dims", 6)  # Fix 12: paper B.2 uses 6D (XYZ+Rx/Ry+gripper)
             self.num_bins = model_cfg.get("num_bins", 11)
             self.max_delta = model_cfg.get("max_delta_m", 0.05)
             actor_out_dim = self.num_cat_dims * self.num_bins
@@ -424,11 +424,9 @@ class ActorCritic(nn.Module):
             if detach_goal_encoder:
                 g_per_obj = g_per_obj.detach()
 
-            # Sum-pool goal across objects: (batch, K_per_obj)
-            # Sum-pool = "AND" semantics: ALL per-object goal signals contribute.
-            # Scales naturally to N objects (unlike concat which fixes N).
-            # Charlie will output g_pooled directly at inference time to steer Bob.
-            g_pooled = g_per_obj.sum(dim=1)  # (batch, K_per_obj)
+            # Fix 7: max-pool goal across objects — consistent with paper's PI encoder and
+            # GoalEncoder's own internal max-pool (goal_encoder.py:187)
+            g_pooled = g_per_obj.max(dim=1)[0]  # (batch, K_per_obj)
 
             if detach_goal_encoder:
                 g_pooled = g_pooled.detach()
