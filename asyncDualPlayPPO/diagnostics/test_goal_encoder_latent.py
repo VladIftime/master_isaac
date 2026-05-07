@@ -70,6 +70,7 @@ def check_latent_space(ckpt_path: str, cfg_path: str, log_dir: str = None,
         cfg = yaml.safe_load(f)
     model_cfg = cfg["params"]["policy"]
     model_cfg["num_objects"] = num_objects
+    model_cfg["use_goal_encoder"] = True   # set at runtime in train_curobo.py
 
     from asyncDualPlayPPO.algorithms.rl.ppo.module import ActorCritic
 
@@ -77,14 +78,14 @@ def check_latent_space(ckpt_path: str, cfg_path: str, log_dir: str = None,
     state = torch.load(ckpt_path, map_location=device)
     obs_dim = None
     for k, v in state.items():
-        if "encoder" in k and "weight" in k and v.ndim == 2:
+        if "critic.0.weight" in k and v.ndim == 2:
             obs_dim = v.shape[1]
             break
     if obs_dim is None:
-        print("  SKIP: could not infer obs_dim from checkpoint")
+        print(f"  SKIP: could not infer obs_dim from checkpoint")
         sys.exit(0)
 
-    model = ActorCritic(obs_dim, obs_dim, 6, model_cfg=model_cfg, device=device)
+    model = ActorCritic((obs_dim,), (obs_dim,), 6, 1.0, model_cfg=model_cfg)
     model.load_state_dict(state, strict=False)
     model = model.eval().to(device)
 

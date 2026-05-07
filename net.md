@@ -113,9 +113,9 @@ object_state (14D × 2 objects) →  PI Embedding (PermInvEncoder):           �
 
 **Action bins:**
 ```
-dims 0-2: XYZ Cartesian delta   → (bin − 5) / 5 × max_delta  (default 0.05 m)
-dims 3-4: Rx, Ry rotation delta → (bin − 5) / 5 × 0.5 rad
-dim  5:   Gripper               → sign(normalized) ∈ {−1, 0, +1}
+dims 0-2: XYZ Cartesian delta   → (bin − 5) / 5 × max_delta_m        [max_delta_m = 0.04 m]
+dims 3-4: Rx, Ry rotation delta → (bin − 5) / 5 × max_delta_rot       [max_delta_rot = 0.05 rad, clamped ±0.1 rad]
+dim  5:   Gripper               → sticky: bins 0-2 → close (−1), bins 8-10 → open (+1), center → hold
 ```
 
 ### Forward Pass (Bob)
@@ -363,11 +363,11 @@ while bob_updates < max_iterations:
     │    ⑧ On bob_done & ~bob_success & goal_valid → add to ABC buffer             │
     └────────────────────────────────────────────────────────────────────────────────┘
 
-    ┌─ CONTROLLERS ──────────────────────────────────────────────────────────────────┐
-    │  Alice entropy controller (per iteration)                                       │
-    │  Alice LR cosine decay                                                          │
-    │  Bob abc_coef inverse-SR controller                                             │
-    └────────────────────────────────────────────────────────────────────────────────┘
+     ┌─ CONTROLLERS ──────────────────────────────────────────────────────────────────┐
+     │  Alice entropy coef: fixed 0.05 (paper Table 2)                                │
+     │  Alice LR: cosine decay lr_max=3e-4 → lr_min=5e-5                              │
+     │  Bob abc_coef: fixed 0.5 (paper Table 2)                                       │
+     └────────────────────────────────────────────────────────────────────────────────┘
 
     ┌─ PPO UPDATES ──────────────────────────────────────────────────────────────────┐
     │  Alice: standard PPO (3 epochs, 4 minibatches)                                 │
@@ -410,28 +410,16 @@ Old trajectories are evicted as new failures arrive, keeping BC signal relevant 
 
 ---
 
-## 7. Adaptive Controllers
+## 7. Fixed Controllers
 
-All controllers run once per iteration, after the rollout and before the PPO updates.
+All controllers use fixed values per paper Table 2 (Fix 1, Fix 2).  They are set once
+per iteration, after the rollout and before the PPO updates.
 
-### Alice entropy controller
+### Alice entropy coef
 
-Two-phase controller keeping Alice at the competence edge of Bob:
-
-**Phase 1** (`iter < 250`): exponential decay
-```
-entropy_coef = 0.05 + 0.95 × exp(−α × iter/250)
-```
-Decays from 1.0 → 0.10 over the first 250 iterations. `α = alice_decay_alpha` (CLI arg).
-
-**Phase 2** (`iter ≥ 250`): one-sided proportional controller
-```
-sr_error = bob_sr − target_sr               # target_sr = 0.5
-if sr_error > 0:                            # Bob too successful → goals too easy
-    entropy_coef += lr × sr_error           # raise entropy to make goals harder
-entropy_coef = clamp(entropy_coef, min=0.10, max=1.0)
-```
-The controller only **raises** entropy (never lowers it below min). This prevents Alice from collapsing when Bob is struggling, while allowing it to explore harder goals when Bob is mastering the current distribution.
+Fixed at the YAML value (`ent_coef: 0.05` per `ppo_continuous.yaml`).  The two-phase
+SR-coupled controller (exponential decay + PI controller) has been removed to prevent
+a vicious feedback loop causing premature mode collapse.
 
 ### Alice learning rate
 
@@ -441,22 +429,11 @@ alice_lr = alice_lr_min + 0.5 × (lr_max − lr_min) × (1 + cos(π × iter/max_
 ```
 Range: `lr_max = 3e-4` → `lr_min = 5e-5`.
 
-### Bob abc_coef (inverse-SR controller, active from iter 0)
+### Bob abc_coef
 
-With `abc_anneal_iters: 0`, the time-based linear decay is skipped entirely. The SR-based controller is active from the first iteration:
-
-```
-target_abc = abc_coef_start × (1 − bob_sr)     # max when Bob fails, 0 when Bob always succeeds
-bob_ppo.abc_coef = 0.95 × abc_coef + 0.05 × target_abc   # EMA smoothing
-```
-
-| `bob_sr` | `target_abc` | Effect |
-|----------|-------------|--------|
-| 0.0 (Bob fails) | 0.5 | Maximum BC signal |
-| 0.5 (target) | 0.25 | Half BC signal |
-| 1.0 (Bob always succeeds) | 0.0 | BC disabled |
-
-The EMA (α=0.95) ramps over ~20 iterations, preventing gradient shocks from sudden Bob SR changes.
+Fixed at the paper Table 2 value (β = 0.5).  The inverse-SR controller
+(`target_abc = abc_coef_start × (1 − bob_sr)`) has been removed — it injected a
+parasitic second-order feedback loop that destroyed the trust region.
 
 ---
 
@@ -464,7 +441,7 @@ The EMA (α=0.95) ramps over ~20 iterations, preventing gradient shocks from sud
 
 ### Alice update (standard PPO)
 - `noptepochs = 3`, `nminibatches = 4`, `cliprange = 0.2`
-- Entropy bonus: `ent_coef × H(π)` (adaptive, see controller above)
+- Entropy bonus: `ent_coef × H(π)` (fixed, see controller above)
 - No ABC or aux loss.
 
 ### Bob update (PPOABC)
@@ -506,7 +483,7 @@ L_total = L_PPO + abc_coef × L_BC + aux_coef × L_aux
 [robot_state(7) | obj1_state(14) | obj2_state(14)]
 = 35D (2 objects)
 ```
-No goal info. `robot_state` = `[joint_pos(6), gripper(1)]`.
+No goal info. `robot_state` = `[ee_pose(6), gripper(1)]` (ZYX Euler, env-local frame).
 
 ### Bob obs (flat, `bob_obs_dim`)
 ```

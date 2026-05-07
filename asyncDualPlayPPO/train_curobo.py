@@ -322,14 +322,14 @@ def main():
     with SuppressAllOutput():
         base_env = ManagerBasedRLEnv(cfg=env_cfg)
 
-    if args.test_bob_reward:
+    if args.test_bob_reward or args.test_reward_pipeline:
         env = DummyBobWrapper(env=base_env, device=base_env.device,
                               alice_timesteps=alice_timesteps, bob_timesteps=bob_timesteps,
-                              teleport_step=50, num_objects=args.num_objects)
+                              teleport_step=10, num_objects=args.num_objects)
     elif args.dummy_goal_distance:
         env = DummyGoalDistanceWrapper(env=base_env, device=base_env.device,
                                        alice_timesteps=alice_timesteps, bob_timesteps=bob_timesteps,
-                                       teleport_step=30, num_objects=args.num_objects)
+                                       teleport_step=10, num_objects=args.num_objects)
     elif args.test_movement:
         env = DummyMovementWrapper(env=base_env, device=base_env.device,
                                    alice_timesteps=alice_timesteps, bob_timesteps=bob_timesteps,
@@ -695,12 +695,16 @@ def main():
     print("Environment ready. Starting training loop...")
 
     if not (args.chkpt_alice and os.path.isfile(args.chkpt_alice)):
-        _stagger = torch.randint(
-            0, max(1, env.episode_manager.alice_timesteps),
-            (env.num_envs,), device=env.device, dtype=torch.int32,
-        )
-        env.episode_manager.phase_step.copy_(_stagger)
-        print(f"[Init] Phase stagger applied.")
+        if args.test_reward_pipeline or args.test_bob_reward or args.dummy_alice \
+           or args.dummy_goal_distance or args.test_movement or args.diag_alice_exploration:
+            print(f"[Init] Diagnostic mode — skipping stagger (all envs start synchronized).")
+        else:
+            _stagger = torch.randint(
+                0, max(1, env.episode_manager.alice_timesteps),
+                (env.num_envs,), device=env.device, dtype=torch.int32,
+            )
+            env.episode_manager.phase_step.copy_(_stagger)
+            print(f"[Init] Phase stagger applied.")
 
     # Sync initial ee_target with actual robot TCP positions after env reset
     _lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
@@ -1269,7 +1273,7 @@ def main():
             break
 
         # ── Periodic checkpoint ────────────────────────────────────────────────────
-        if bob_updates % args.save_interval == 0:
+        if args.save_interval > 0 and bob_updates % args.save_interval == 0:
             bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates}.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates}.pt"))
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
@@ -1341,8 +1345,12 @@ def main():
     profiler.print_summary()
     alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
     bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))
+    bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
     torch.save(env.episode_manager.state_dict(),
                os.path.join(bob_ppo.log_dir, "episode_manager_final.pt"))
+    torch.save({"entropy_coef": alice_ppo.entropy_coef, "abc_coef": bob_ppo.abc_coef,
+                "bob_success_buf": list(bob_success_buf)},
+               os.path.join(bob_ppo.log_dir, "train_state_final.pt"))
     print("  ✓ Saved final models")
     writer.close()
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run_diagnostic_tests.sh
 #
-# Runs the three ASP diagnostic tests in sequence, saving full logs for each.
+# Runs the four ASP diagnostic tests in sequence, saving full logs for each.
 # All tests run headless — no display required.
 #
 # Usage (from master_isaac/):

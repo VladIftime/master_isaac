@@ -59,30 +59,38 @@ The dual-arm extension adds a second manipulator, doubling the number of objects
 ### Architectural overview
 
 ```
-Alice (PPO):
-    Obs: EE pose(6) + gripper(1) + [obj_state(14)] × 2  = 35D
-    Acts: joint velocity commands → RMPFlow controller
+Alice (PPO, ent_coef=0.05 fixed):
+    Obs: EE pose(6 Euler) + gripper(1) + [obj_state(14 Euler)] × 2  = 35D
+    Acts: MultiCategorical 6D × 11 bins → cuRobo IK → joint positions
     Role: explore and construct interesting goal configurations
 
-Bob (PPO + ABC + Goal Encoder):
+Bob (PPOABC + GoalEncoder, abc_coef=0.5 fixed):
     Obs (interleaved per-object): Robot(7) + [obj_state(14) + goal(6) + dist(2)] × 2 = 51D
-    Goal encoder:      E(goal_state, current_state) → g ∈ ℝ^K
+    Goal encoder: E(goal_pose, current_pose) → g ∈ R^K  (K=8, difference variant, max-pool)
     Acts: same action space as Alice
     Role: reproduce the goal Alice left behind
 
 Episode Manager:
     Stores Alice's final state as the goal for Bob (12D LOCAL Euler per episode)
-    Validates that Alice moved at least one object (pos_threshold or rot_threshold)
-    Manages phase transitions and ABC buffer writes
+    Validates that Alice moved at least one object (position or rotation threshold)
+    Manages phase transitions, ABC buffer writes, and reward backfill
 ```
 
-**State format** (12D per episode, LOCAL frame, Euler):  
-`[target_pos(3), target_euler(3), cube_pos(3), cube_euler(3)]`
+**Kinematic pipeline (cuRobo):**
+```
+Policy output (6D MultiCategorical, 11 bins)
+  → decode: XYZ delta + Rx/Ry delta + sticky gripper
+  → accumulate: ee_target_local (position) + ee_target_quat_w (orientation quat)
+  → TCP offset correction (finger midpoint vs wrist_3_link)
+  → cuRobo solve_batch(N envs) → joint positions
+  → JointPositionActionCfg → Isaac Lab physics (no EMA smoothing, _JC_ALPHA=1.0)
+```
 
-**Bob obs per object** (14D, from `object_states()`):  
-`[pos(3), euler(3), lin_vel(3), ang_vel(3), dist_to_gripper(1), contact(1)]`
-
-**Goal encoder** (`use_goal_encoder = True`, hardcoded in `train.py`): always active for Bob.
+**Fixed controllers (per paper Table 2):**
+- Alice entropy: fixed 0.05 (Fix 2 — SR-coupled PI controller removed)
+- Alice LR: cosine decay 3e-4 → 5e-5
+- Bob abc_coef: fixed 0.5 (Fix 1 — SR-coupled inverse controller removed)
+- ABC active from iteration 1 (warmup_threshold=0.0, Fix 9)
 
 ---
 
@@ -93,10 +101,20 @@ Episode Manager:
 | ZYX Euler angles | Matches OpenAI paper Appendix A.2; avoids quaternion discontinuities in policy input |
 | 12D goal state (pos+euler × 2 objects) | Compact; no velocities needed for goal definition |
 | 51D Bob obs (interleaved) | Object state + goal + distance interleaved per-object; easier for encoder to associate |
-| Alice entropy 1.0 → 0.10 over min(max_iters, 250) iters | Floor raised to 0.10 so Alice retains late-stage exploration; denominator clamped at 250 so annealing always completes |
+| cuRobo IK controller | Batch GPU IK (solve_batch), singularity-aware, seed-conditioned for smooth trajectories |
+| JointPositionActionCfg | cuRobo computes joint positions externally; env accepts 7D [joints(6), gripper(1)] |
+| Max-pool (PI encoder + GoalEncoder) | DeepSets standard; robust to varying object counts (Fix 7) |
+| Alice entropy 0.05 fixed | Paper Table 2; SR-coupled controller removed to prevent mode collapse (Fix 2) |
 | ABC filter: Bob-failure only | Follows paper §3.3; avoids cloning trivial successes |
-| Historical pool 20% | Paper ratio; pool holds last 5 snapshots (max_size=5 in HistoricalPolicyPool) |
+| ABC coef 0.5 fixed | Paper Table 2; SR-coupled controller removed (Fix 1) |
+| ABC active from iter 1 | warmup_threshold=0.0 unconditionally (Fix 9) |
+| No EMA joint smoothing | _JC_ALPHA=1.0 — paper uses direct TCP servoing (Fix 8) |
+| Historical pool 20% | Paper ratio; pool holds last 5 snapshots (max_size=5) |
 | Success threshold 0.05 m (pos), ~2° (rot) | 0.04 m from paper; relaxed to 0.05 m in wrapper |
+| GoalEncoder difference variant | φ(goal) − φ(current); additive injection after actor layer 1 |
+| GoalEncoder aux loss kept | Provides geometric inductive bias without separate training phase (Fix 13, intentional) |
+| detach_goal_encoder=False in ABC | GoalEncoder receives ABC gradients (Fix 14) |
+| IK failure: hold last valid pose | No episode reset; Alice learns to move away from unreachable targets |
 
 ---
 
@@ -104,7 +122,9 @@ Episode Manager:
 
 ```
 asyncDualPlayPPO/
-├── train.py                            # Main training loop (Alice+Bob PPO, ABC, historical pool)
+├── train_curobo.py                     # Main training loop (cuRobo IK, Alice+Bob PPO, ABC, historical pool)
+├── train_diffik.py                     # Legacy DiffIK variant
+├── train.py                            # Legacy RMPFlow variant
 ├── run_diagnostic_tests.sh             # Three-test diagnostic suite (headless, logs to runs/diag_*)
 ├── optuna_sweep.py                     # Hyperparameter sweep with Optuna
 ├── buffers.py                          # Low-level buffer utilities
@@ -123,7 +143,8 @@ asyncDualPlayPPO/
 │       └── storage.py                  # RolloutStorage + GPUDemonstrationBuffer
 │
 ├── tasks/
-│   ├── async_dual_play.py              # IsaacLab env config (scene, observations, rewards)
+│   ├── async_dual_play_curobo.py       # cuRobo env config (alias for DiffIK cfg)
+│   ├── async_dual_play_diffik.py       # DiffIK env config (scene, observations, rewards)
 │   └── utils/
 │       ├── wrapper.py                  # AsyncDualPlayEnvWrapper: phase management, rewards
 │       ├── observations.py             # Observation functions (EE, objects, goals, distances)
@@ -136,16 +157,34 @@ asyncDualPlayPPO/
 ├── utils/
 │   ├── episode_manager.py              # EpisodeManager: phase tracking, goal storage
 │   ├── goal_validator.py               # validate_goal: movement threshold check
-│   └── historical_pool.py             # HistoricalPolicyPool: past-5-snapshot ring buffer
+│   ├── historical_pool.py             # HistoricalPolicyPool: past-5-snapshot ring buffer
+│   └── profiler.py                     # TrainingProfiler: per-section timing, IK overhead
+│
+├── diagnostics/
+│   ├── run_diagnostics.sh              # Full CI diagnostic suite (Tests 1-4)
+│   ├── test_reward_pipeline.py         # Test 1: teleport → SR check
+│   ├── test_alice_sandbox.py           # Test 2: offline TB analysis
+│   ├── test_ppo_abc_balance.py         # Test 3a: ABC/PPO balance
+│   ├── test_checkpoint_chain.py        # Test 3b: ABC buffer round-trip
+│   ├── test_abc_goal_encoder.py        # Test 4a: GoalEncoder forward/grad
+│   └── test_goal_encoder_latent.py     # Test 4b: t-SNE + noise invariance
 │
 ├── tests/
 │   ├── test_abc.py                     # End-to-end ABC pipeline tests
-│   └── test_abc_goal_encoder.py        # Goal encoder integration tests
+│   ├── test_abc_goal_encoder.py        # Goal encoder integration tests
+│   └── test_curobo_follow_target.py    # cuRobo IK interactive test
 │
 ├── hpc/
-│   ├── train_high.slurm                # Production HPC job (A100, 512 envs)
-│   ├── train_medium.slurm              # Medium-scale HPC job
-│   ├── train_low.slurm                 # Small-scale HPC job
+│   ├── train_curobo.slurm              # Production cuRobo training (A100, 512 envs)
+│   ├── train_curobo_large.slurm        # Large-scale (512+ envs)
+│   ├── train_curobo_profile.slurm       # 3-iteration profiler
+│   ├── diagnostic_tests.slurm          # Runs full 4-test suite on HPC
+│   ├── test1_ppo_reward.slurm          # Test 1 only
+│   ├── test2_alice_exploration.slurm   # Test 2 only
+│   ├── test3_asp_tug_of_war.slurm      # Test 3 only
+│   ├── train_high.slurm                # Legacy RMPFlow production job
+│   ├── train_medium.slurm              # Legacy medium-scale job
+│   ├── train_low.slurm                 # Legacy small-scale job
 │   └── run_interactive.sh              # Interactive session helper
 │
 ├── extras/                             # Offline analysis / visualisation scripts
@@ -154,39 +193,52 @@ asyncDualPlayPPO/
 │   ├── diagnose_logs.py
 │   └── extract_updates.py
 │
-└── paper-async/
-    ├── asymetric-self-play.pdf         # OpenAI ASP paper (Plappert et al. 2021)
-    └── asymetric-self-play_charlie.pdf # Charlie/HSP paper (Sukhbaatar et al. 2018)
-```
+├── paper-async/
+│   ├── asymetric-self-play.pdf         # OpenAI ASP paper (Plappert et al. 2021)
+│   └── asymetric-self-play_charlie.pdf # Charlie/HSP paper (Sukhbaatar et al. 2018)
+│
+└── IMPLEMENTATION_STATUS.md            # Full branch status, fix tracker, hardware mapping
 
 ---
 
 ## Running
 
-### Local (headless)
+### Local (headless, cuRobo IK)
 ```bash
-python train.py --num_envs 16 --max_iterations 500 --exp_name test_run --headless
+python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 500 --exp_name test_run --headless
 ```
 
 ### HPC (Apptainer / Isaac Lab container)
 ```bash
-sbatch hpc/train_high.slurm
+sbatch asyncDualPlayPPO/hpc/train_curobo.slurm
 ```
 
-### Diagnostic tests (3-test suite)
+### Diagnostic tests (4-test suite)
 ```bash
 # Locally (from master_isaac/):
-bash asyncDualPlayPPO/run_diagnostic_tests.sh
+bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 
 # Individual tests:
-# Test 1 — reward pipeline (DummyBobWrapper teleports target→goal, expect SR > 0)
-python -m asyncDualPlayPPO.train --headless --num_envs 16 --max_iterations 50 --test_bob_reward
+# Test 1 — reward pipeline (teleport targets→goal, expect SR > 0)
+python -m asyncDualPlayPPO.train_curobo --headless --num_envs 16 --test_reward_pipeline
 
 # Test 2 — Alice exploration sandbox (watch ValidGoals climb)
-python -m asyncDualPlayPPO.train --headless --num_envs 32 --max_iterations 200
+python -m asyncDualPlayPPO.train_curobo --headless --num_envs 32 --max_iterations 200 --alice_sandbox
 
 # Test 3 — PPO vs ABC balance (watch Loss/Bob/ABC vs Loss/Bob/Surrogate)
-python -m asyncDualPlayPPO.train --headless --num_envs 64 --max_iterations 300
+python -m asyncDualPlayPPO.train_curobo --headless --num_envs 32 --max_iterations 50
+
+# Test 4 — GoalEncoder integration + latent space (requires checkpoint)
+python -m asyncDualPlayPPO.diagnostics.test_abc_goal_encoder \
+    --ckpt runs/exp/bob/model_50.pt --cfg asyncDualPlayPPO/cfg/ppo/ppo_continuous.yaml
+python -m asyncDualPlayPPO.diagnostics.test_goal_encoder_latent \
+    --ckpt runs/exp/bob/model_500.pt --cfg asyncDualPlayPPO/cfg/ppo/ppo_continuous.yaml \
+    --log_dir runs/exp/summary
+```
+
+### Hyperparameter audit
+```bash
+python -m asyncDualPlayPPO.train_curobo --test_hparams
 ```
 
 ---
@@ -208,7 +260,7 @@ python -m asyncDualPlayPPO.train --headless --num_envs 64 --max_iterations 300
   year={2018}
 }
 ```
-# cuRobo IK Integration — Feasibility Analysis
+# cuRobo IK Integration — Implemented
 
 > **Context**: The project trains Alice+Bob PPO with Asymmetric Self-Play (Plappert et al. 2021)
 > augmented with a Charlie-style GoalEncoder (Sukhbaatar et al. 2018) on two UR5e arms in Isaac Lab.
@@ -454,16 +506,30 @@ when Alice explores configurations at the edges of the workspace.
 
 ---
 
-## Latest Updates (May 2026)
+## Latest Updates (from IMPLEMENTATION_STATUS.md)
 
-### 1. Environment & Object Spawning
-*   **Startup Randomization**: The `TargetObject` and `Cube` are now randomly selected from a pool (`concave`, `cube`, `cylinder`, `rect`, `triangle`) at simulation startup. This provides visual and geometric variety for each training run while maintaining simulation stability.
-*   **Visual Enhancements**:
-    *   **Scale**: All blocks have been scaled up to **(1.5, 1.5, 1.5)** for significantly better visibility and easier interaction for the robot arms.
-    *   **Color**: All target-related objects are now consistently colored **Green** `(0.1, 0.8, 0.1)`.
-    *   **Table Feedback**: In non-headless mode, the table color now dynamically switches based on the active agent: **Red** for Alice and **Blue** for Bob.
+### Critical Fixes Applied
+| Fix | Issue | Resolution |
+|-----|-------|-----------|
+| Fix 1 | SR-coupled abc_coef (β=0.5 adaptive → second-order feedback) | Fixed at `abc_coef=0.5` per paper Table 2 |
+| Fix 2 | SR-coupled Alice entropy (PI controller → mode collapse) | Fixed at `ent_coef=0.05` per YAML |
+| Fix 3 | Dense potential shaping for Alice (rewarded displacement) | Alice per-step rewards set to 0.0 unconditionally |
+| Fix 4 | Dense potential shaping for Bob (γ·Φ(s') − Φ(s)) | Removed; sparse {+1/−1/+5} only |
+| Fix 5 | ABC as separate backward pass (PPO + ABC never co-mingled) | ABC loss added to last mini-batch per epoch (L = L_PPO + β·L_ABC) |
+| Fix 7 | Sum-pool for goal embedding | Changed to max-pool (paper-consistent DeepSets) |
+| Fix 8 | EMA joint smoothing (_JC_ALPHA=0.2) | Set to 1.0 (no smoothing; paper uses direct TCP servoing) |
+| Fix 12 | num_cat_dims default 4 (silent truncation) | Default changed to 6 (XYZ + Rx/Ry + gripper) |
+| Fix 14 | GoalEncoder frozen during ABC (no gradient) | `detach_goal_encoder=False` during ABC evaluation |
 
-### 2. cuRobo Training Refinements (`train_curobo.py`)
-*   **Continuous Episodes (No IK Resets)**: Removed the immediate episode reset on IK failure. If the cuRobo solver cannot find a solution (e.g., the agent commands a pose inside the table), the robot now **holds its last valid pose** and the episode continues. This allows Alice to learn how to touch and push blocks without being interrupted by a reset.
-*   **Target Persistence**: Removed target synchronization on IK failure. The target no longer "snaps" back to the hand if a command fails, forcing the agent to learn to move away from unreachable or colliding configurations.
-*   **Stability**: Switched to **Startup Randomization** for USD references to prevent invalidating the PhysX tensor backend views during training rollouts. Resolved import errors (`NameError`, `AttributeError`) associated with custom spawner implementation.
+### Intentional Differences from Paper
+| Item | Reason |
+|-----|--------|
+| GoalEncoder φ-MLP (separate from PI encoder) | Charlie paper architecture; enables hierarchical control (Fix 6) |
+| Aux loss on GoalEncoder (pos_dist + rot_dist prediction) | Geometric inductive bias without separate phase (Fix 13) |
+| curobo IK instead of DiffIK/RMPFlow | Batch GPU IK, singularity-aware, seed-conditioned |
+| No IK failure episode reset | Robot holds last valid pose; Alice learns workspace boundaries |
+
+### Environment & Visual
+- Object pool at startup: randomly selects from [concave, cube, cylinder, rect, triangle]
+- Objects scaled (1.5, 1.5, 1.5), colored green
+- Table color: red (Alice phase), blue (Bob phase) in non-headless mode

@@ -12,7 +12,7 @@ trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=t
 set -o pipefail
 
 NUM_ENVS=512
-NSTEPS=256
+NSTEPS=300
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10
 NUM_OBJECTS=1
@@ -85,10 +85,10 @@ if [ ! -f "$PROJECT_ROOT/curobo_overlay.img" ]; then
     exit 1
 fi
 
-apptainer exec --nv --overlay "$PROJECT_ROOT/curobo_overlay.img":ro \
+apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
+    --overlay "$PROJECT_ROOT/curobo_overlay.img":ro \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
-    --bind "$LOCAL_RUNS":"$PROJECT_ROOT/runs" \
-    --bind "$LOCAL_RUNS":/workspace/isaaclab/logs \
+    --bind "$LOCAL_RUNS":/workspace/isaaclab/user_project/asyncDualPlayPPO/runs \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \

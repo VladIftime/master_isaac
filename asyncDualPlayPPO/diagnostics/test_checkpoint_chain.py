@@ -37,7 +37,14 @@ def check_checkpoint_chain(buf_path: str):
         sys.exit(0)
 
     # Load original
-    buf_orig = GPUDemonstrationBuffer()
+    buf_orig = GPUDemonstrationBuffer(
+        capacity=50000,
+        obs_shape=(7,),
+        states_shape=(7,),
+        actions_shape=(6,),
+        device="cpu",
+        traj_maxlen=500,
+    )
     buf_orig.load(buf_path)
     orig_size = buf_orig.size
 

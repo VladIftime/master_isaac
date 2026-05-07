@@ -9,7 +9,7 @@ Reads a tensorboard event directory from a completed training run and verifies:
 
 Usage:
     # 1. Run 50 iterations of full pipeline:
-    python -m asyncDualPlayPPO.train --num_envs 32 --max_iterations 50 \\
+    python -m asyncDualPlayPPO.train_curobo --num_envs 32 --max_iterations 50 \\
         --headless --exp_name diag_t3
 
     # 2. Analyse:

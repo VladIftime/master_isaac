@@ -38,24 +38,26 @@ def check_goal_encoder_integration(ckpt_path: str, cfg_path: str, num_objects: i
         cfg = yaml.safe_load(f)
     model_cfg = cfg["params"]["policy"]
     model_cfg["num_objects"] = num_objects
+    model_cfg["use_goal_encoder"] = True   # set at runtime in train_curobo.py
 
     from asyncDualPlayPPO.algorithms.rl.ppo.module import ActorCritic
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Infer obs_dim from checkpoint
+    # Infer observation dimension from checkpoint's critic input size.
+    # The critic always sees raw obs (no PI encoder).  The actor computes its
+    # own input dim (robot+PI) internally via _encode_obs.
     state = torch.load(ckpt_path, map_location=device)
-    # Find a weight that tells us input size
     obs_dim = None
     for k, v in state.items():
-        if "encoder" in k and "weight" in k and v.ndim == 2:
+        if "critic.0.weight" in k and v.ndim == 2:
             obs_dim = v.shape[1]
             break
     if obs_dim is None:
-        print("  SKIP: could not infer obs_dim from checkpoint")
+        print(f"  SKIP: could not infer obs_dim from checkpoint")
         sys.exit(0)
 
-    model = ActorCritic(obs_dim, obs_dim, 6, model_cfg=model_cfg, device=device)
+    model = ActorCritic((obs_dim,), (obs_dim,), 6, 1.0, model_cfg=model_cfg)
     model.load_state_dict(state, strict=False)
     model = model.to(device)
 
@@ -99,6 +101,9 @@ def check_goal_encoder_integration(ckpt_path: str, cfg_path: str, num_objects: i
 
     grad_missing = []
     for name, p in model.goal_encoder.named_parameters():
+        # aux_head is only used in aux_loss(), not _encode_obs — no grad expected
+        if "aux_head" in name:
+            continue
         if p.requires_grad and p.grad is None:
             grad_missing.append(name)
 

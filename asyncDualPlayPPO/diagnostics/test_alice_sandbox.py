@@ -6,7 +6,7 @@ call check_sandbox_run() to assert curriculum health from the event file.
 
 Usage:
     # 1. Generate the run (from master_isaac/ root):
-    python -m asyncDualPlayPPO.train --alice_sandbox --num_envs 32 \\
+    python -m asyncDualPlayPPO.train_curobo --alice_sandbox --num_envs 32 \\
         --max_iterations 200 --headless --exp_name diag_sandbox
 
     # 2. Analyse the run:
