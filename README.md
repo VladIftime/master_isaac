@@ -203,22 +203,84 @@ asyncDualPlayPPO/
 
 ## Running
 
-### Local (headless, cuRobo IK)
+The recommended variant is `train_curobo.py` (cuRobo IK). cuRobo must be installed
+separately — it is not bundled with Isaac Lab. See [asyncDualPlayPPO/curobo_ik_integration.md](asyncDualPlayPPO/curobo_ik_integration.md) Section 0 for the full install guide.
+
+**Stack**: Isaac Sim 5.1.0 · Isaac Lab 2.3.0 · **cuRobo 0.7.5** · PyTorch 2.7.0+cu128 · Python 3.11.5
+
+---
+
+### 1. Install cuRobo (one-time, local)
+
 ```bash
-python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 500 --exp_name test_run --headless
+# Activate the Isaac Lab virtual environment first
+source /home/vlad/env_isaaclab/bin/activate
+
+# Verify PyTorch + CUDA before installing
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
+# Expected: 2.7.0+cu128  12.8
+
+# Clone and install cuRobo v0.7.5 (last release with IKSolver / Pose / solve_batch API)
+git clone https://github.com/NVlabs/curobo.git /tmp/curobo
+cd /tmp/curobo && git checkout v0.7.5
+pip install -e ".[no_dev]" --no-build-isolation
+# --no-build-isolation: reuse the container's existing PyTorch to avoid CUDA mismatch
+
+# Verify
+python -c "import curobo; print(curobo.__version__)"
+# Expected: 0.7.5
 ```
 
-### HPC (Apptainer / Isaac Lab container)
+> **Why v0.7.5?** cuRobo 0.8.x renamed `IKSolver`, `Pose`, and `TensorDeviceType`.
+> v0.7.5 is the last release compatible with the imports used in `train_curobo.py`.
+
+---
+
+### 2. Local run
+
 ```bash
-sbatch asyncDualPlayPPO/hpc/train_curobo.slurm
+# From master_isaac/
+source /home/vlad/env_isaaclab/bin/activate
+
+# Smoke test (16 envs, 10 iterations)
+python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 10 --headless
+
+# Full local training (500 iters)
+python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 500 \
+    --exp_name curobo_local --headless
+
+# Resume from checkpoint
+python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 1000 \
+    --chkpt_alice runs/curobo_local/alice/model_500.pt \
+    --chkpt_bob   runs/curobo_local/bob/model_500.pt \
+    --resume_iteration 500 --headless
 ```
 
-### Diagnostic tests (4-test suite)
+---
+
+### 3. HPC (Apptainer / Isaac Lab container)
+
+cuRobo is installed into a writable Apptainer overlay (`curobo_overlay.img`).
+See [asyncDualPlayPPO/HPC_SETUP.md](asyncDualPlayPPO/HPC_SETUP.md) for the full one-time setup.
+
 ```bash
-# Locally (from master_isaac/):
+cd /home/<you>/master_isaac/asyncDualPlayPPO
+
+# Full production run (4096 envs, 100 000 iters, auto-resume)
+sbatch hpc/train_curobo.slurm
+
+# Monitor
+tail -f slurm-<JOBID>-curobo.out
+```
+
+---
+
+### 4. Diagnostic tests (4-test suite)
+
+```bash
+# Run all four tests (from master_isaac/)
 bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 
-# Individual tests:
 # Test 1 — reward pipeline (teleport targets→goal, expect SR > 0)
 python -m asyncDualPlayPPO.train_curobo --headless --num_envs 16 --test_reward_pipeline
 
@@ -236,7 +298,7 @@ python -m asyncDualPlayPPO.diagnostics.test_goal_encoder_latent \
     --log_dir runs/exp/summary
 ```
 
-### Hyperparameter audit
+### 5. Hyperparameter audit
 ```bash
 python -m asyncDualPlayPPO.train_curobo --test_hparams
 ```

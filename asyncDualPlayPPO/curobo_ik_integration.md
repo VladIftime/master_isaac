@@ -1,9 +1,148 @@
-# cuRobo IK Integration — Feasibility Analysis
+# cuRobo IK Integration
 
 > **Context**: The project trains Alice+Bob PPO with Asymmetric Self-Play (Plappert et al. 2021)
 > augmented with a Charlie-style GoalEncoder (Sukhbaatar et al. 2018) on two UR5e arms in Isaac Lab.
-> Current controllers: **RMPFlow** (`train.py`) and **DifferentialIK** (`train_diffik.py`).
-> Goal: a third variant `train_curobo.py` replacing the low-level controller with cuRobo IK.
+> Three controller variants exist: **RMPFlow** (`train.py`), **DifferentialIK** (`train_diffik.py`),
+> and **cuRobo IK** (`train_curobo.py`). cuRobo is the primary/recommended variant.
+
+---
+
+## 0. Stack Versions & Setup
+
+### 0.1 Versions
+
+| Component | Version |
+|---|---|
+| Isaac Sim | 5.1.0 |
+| Isaac Lab | 2.3.0 (commit `6c151ea`) |
+| **cuRobo** | **0.7.5** — last release with the `IKSolver`/`solve_batch`/`Pose` API used in `train_curobo.py` |
+| PyTorch | 2.7.0+cu128 |
+| Python | 3.11.5 |
+| Container (HPC) | `nvcr.io/nvidia/isaac-lab:2.3.0` (Apptainer `.sif`) |
+| GPU (HPC) | RTX Pro 6000 (96 GB VRAM) |
+
+> **Why v0.7.5?** The `0.8.x` series renamed several classes (`IKSolver`, `Pose`, `TensorDeviceType`).
+> Using a newer tag will fail at import unless you update the import block at the top of
+> `train_curobo.py` and `tests/test_curobo_follow_target.py`.
+
+### 0.2 Installing cuRobo locally
+
+cuRobo is **not** pip-installable from PyPI. Install from source inside your active Isaac Lab virtualenv:
+
+```bash
+# 1. Activate the Isaac Lab environment
+source /home/vlad/env_isaaclab/bin/activate
+
+# 2. Verify torch/CUDA first — must match the container
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
+# Expected: 2.7.0+cu128  12.8
+
+# 3. Clone and pin to v0.7.5
+git clone https://github.com/NVlabs/curobo.git /tmp/curobo
+cd /tmp/curobo
+git checkout v0.7.5
+
+# 4. Install (no-build-isolation keeps the existing CUDA 12.8 PyTorch;
+#    build isolation would pull a mismatched second PyTorch and break imports)
+pip install -e ".[no_dev]" --no-build-isolation
+
+# 5. Verify
+python -c "import curobo; print(curobo.__version__)"
+# Expected: 0.7.5
+```
+
+### 0.3 Running locally
+
+```bash
+# From master_isaac/ — module-style invocation so Python resolves asyncDualPlayPPO properly
+source /home/vlad/env_isaaclab/bin/activate
+cd /home3/s3426394/master_isaac
+
+# Minimal smoke test (headless, 16 envs, 500 iters)
+python -m asyncDualPlayPPO.train_curobo \
+    --num_envs 16 \
+    --max_iterations 500 \
+    --exp_name curobo_test \
+    --headless
+
+# Full local run (512 envs, matches HPC config)
+python -m asyncDualPlayPPO.train_curobo \
+    --num_envs 512 \
+    --nsteps 300 \
+    --max_iterations 100000 \
+    --save_interval 100 \
+    --exp_name curobo_local \
+    --headless
+
+# Resume from checkpoint
+python -m asyncDualPlayPPO.train_curobo \
+    --num_envs 512 \
+    --max_iterations 100000 \
+    --exp_name curobo_local \
+    --resume_path runs/curobo_local/bob/model_1000.pt \
+    --resume_path_alice runs/curobo_local/alice/model_1000.pt \
+    --resume_iteration 1000 \
+    --headless
+```
+
+### 0.4 Running on HPC (SLURM / Apptainer)
+
+cuRobo is not bundled in the Isaac Lab container. It is installed into an Apptainer overlay image. This is a one-time setup step — see `HPC_SETUP.md` for the full walkthrough. The short version:
+
+```bash
+# One-time: create a writable overlay image (~8 GB)
+apptainer overlay create --size 8192 curobo_overlay.img
+
+# One-time: install cuRobo v0.7.5 inside the overlay
+apptainer exec --nv --overlay curobo_overlay.img:rw isaac-lab.sif bash
+# (inside the shell:)
+git clone https://github.com/NVlabs/curobo.git /tmp/curobo
+cd /tmp/curobo && git checkout v0.7.5
+pip install -e ".[no_dev]" --no-build-isolation
+exit
+
+# Verify overlay + Isaac Lab both import cleanly
+apptainer exec --nv --overlay curobo_overlay.img:ro isaac-lab.sif \
+    python -c "import curobo; import isaaclab; print('OK')"
+
+# Submit training job (auto-resumes on time limit)
+cd /home3/s3426394/master_isaac
+sbatch asyncDualPlayPPO/hpc/train_curobo.slurm
+```
+
+> The slurm script expects both `isaac-lab.sif` and `curobo_overlay.img` to exist in the
+> directory where you call `sbatch` (i.e. `master_isaac/`). It will error with a clear
+> message if either is missing.
+
+### 0.5 Diagnostic tests
+
+```bash
+# Full 4-test suite (locally)
+bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
+
+# Test 1 — reward pipeline: teleport targets to goal, verify SR > 0
+python -m asyncDualPlayPPO.train_curobo --headless --num_envs 16 --test_reward_pipeline
+
+# Test 2 — Alice sandbox: watch ValidGoals climb over 200 iters
+python -m asyncDualPlayPPO.train_curobo --headless --num_envs 32 --max_iterations 200 --alice_sandbox
+
+# Test 3 — PPO vs ABC balance: check Loss/Bob/ABC vs Loss/Bob/Surrogate in TensorBoard
+python -m asyncDualPlayPPO.train_curobo --headless --num_envs 32 --max_iterations 50
+
+# Test 4a — GoalEncoder forward pass + gradient flow
+python -m asyncDualPlayPPO.diagnostics.test_abc_goal_encoder \
+    --ckpt runs/exp/bob/model_50.pt \
+    --cfg asyncDualPlayPPO/cfg/ppo/ppo_continuous.yaml
+
+# Test 4b — GoalEncoder latent space (t-SNE)
+python -m asyncDualPlayPPO.diagnostics.test_goal_encoder_latent \
+    --ckpt runs/exp/bob/model_500.pt \
+    --cfg asyncDualPlayPPO/cfg/ppo/ppo_continuous.yaml \
+    --log_dir runs/exp/summary
+
+# HPC — full 4-test suite via SLURM
+sbatch asyncDualPlayPPO/hpc/diagnostic_tests.slurm
+```
 
 ---
 
