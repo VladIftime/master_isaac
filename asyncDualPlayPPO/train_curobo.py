@@ -1307,7 +1307,8 @@ def main():
         _goal_validity_rate = _valid_goals / max(1, _valid_goals + _invalid_goals)
         writer.add_scalar("Metrics/Alice/GoalValidityRate", _goal_validity_rate, bob_updates)
         _alice_disp_3d_sum = _stats.get("alice_disp_3d_sum", 0.0)
-        _mean_disp_3d = _alice_disp_3d_sum / max(1, _valid_goals)
+        _alice_total_phases = _stats.get("alice_total", 1)
+        _mean_disp_3d = _alice_disp_3d_sum / max(1, _alice_total_phases)
         writer.add_scalar("Metrics/Alice/MeanDisp3D", _mean_disp_3d, bob_updates)
         _abc_buf_size = bob_ppo.abc_buffer.size
         writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
