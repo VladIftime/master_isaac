@@ -491,6 +491,13 @@ class AsyncDualPlayEnvWrapper:
             self._handle_bob_success_transition(completion_ids)
             self._iter_stats["bob_successes"] += len(completion_ids)
 
+            alice_success_penalty = torch.full(
+                (len(completion_ids),),
+                reward_utils.ALICE_BOB_SUCCESS_REWARD,
+                device=self.device,
+            )
+            self.delayed_alice_reward[completion_ids] += alice_success_penalty
+
             extras["alice_total_reward"][completion_ids] = self.delayed_alice_reward[
                 completion_ids
             ]
@@ -964,6 +971,17 @@ class AsyncDualPlayEnvWrapper:
         # Removed: base_rewards passthrough (physics penalties) and bounded potential shaping
         if is_alice.any():
             rewards[is_alice] = 0.0
+
+            # Diagnostic per-step shaping (--diag_alice_shaping).
+            # Temporarily reward EE→object proximity to confirm Alice can learn contact
+            # manipulation.  Remove after the diagnostic confirms ValidGoals trends upward
+            # in the --alice_sandbox test.
+            if getattr(self, "_diag_alice_shaping", False):
+                obj_pos = obs_dict["object_state"][is_alice, :3]
+                ee_pos  = obs_dict["ee_pose"][is_alice, :3]
+                delta   = (obj_pos - ee_pos).norm(dim=-1)
+                shaping = 0.005 * torch.clamp(0.3 - delta, 0.0, 0.3)
+                rewards[is_alice] += shaping
 
         # Track which envs just achieved completion (for early termination)
         bob_achieved_completion = torch.zeros(

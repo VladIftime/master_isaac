@@ -578,3 +578,204 @@ Each checkpoint saves four artifacts:
 On `SIGTERM`, the same set is written immediately before exit (emergency checkpoint).
 
 Resume: `--resume_path bob/model_{iter}.pt` loads both Alice and Bob weights, optimizer state, and train_state from the matching iteration.
+
+---
+
+# Bug Fixes Applied — Post-run Analysis (2026-05-08)
+
+Four fixes applied based on analysis of `curobo_train512_1obj.txt` (Run A, job 28838810,
+resumed from iter 3230) and `slurm-28838828-curobo.out` (Run B, fresh 230 iters).
+
+## Fix 1 (P0) — ABC Gate Disables Imitation Learning on Negative Alice Reward
+
+### The bug
+
+`ppo_abc.py:116`:
+
+```python
+if alice_mean_rew < self.abc_warmup_threshold:  # threshold = 0.0
+    effective_abc_coef = 0.0
+```
+
+`alice_mean_rew` is `last_alice_mean_rew` — the raw (non-EMA) per-iteration mean.
+Alice gets −3.0 for every early termination (`objects_off_table`, `robot_through_table`).
+With 167+ `robot_through_table` events per iteration, her raw mean reward easily goes
+negative → `−1.5 < 0.0` is True → ABC silently disabled.
+
+**Logging mismatch**: `train_curobo.py:1305` used `ema_alice_rew >= 0` for the warm
+display, while the actual gate used the raw `last_alice_mean_rew`. The log could show
+"ABC warm: YES" while ABC was actually disabled.
+
+### The fix
+
+**`ppo_abc.py:115-117`** — Remove the gate entirely (Fix 9 already declared ABC always active):
+
+```python
+# BEFORE:
+effective_abc_coef = self.abc_coef
+if alice_mean_rew < self.abc_warmup_threshold:
+    effective_abc_coef = 0.0
+
+# AFTER:
+effective_abc_coef = self.abc_coef  # always active per Fix 9
+```
+
+**`train_curobo.py:1305`** — Fix the warm display to match reality:
+
+```python
+# BEFORE:
+_abc_warm = 1.0 if ema_alice_rew >= bob_ppo.abc_warmup_threshold else 0.0
+
+# AFTER:
+_abc_warm = 1.0 if bob_ppo.abc_buffer.size > 0 else 0.0
+```
+
+---
+
+## Fix 2 (P0) — `ALICE_BOB_SUCCESS_REWARD = 0` Instead of −1
+
+### The bug
+
+`rewards.py:14`:
+
+```python
+ALICE_BOB_SUCCESS_REWARD: float = 0.0  # Bob succeeded → Alice gets nothing
+```
+
+Per the ASP paper, Alice should get a **negative** reward when Bob succeeds so she is
+pushed to find harder goals. With 0.0, there is no adversarial pressure — Alice has no
+reason to ever make goals harder.
+
+**Secondary bug**: The early-success path in `wrapper.py:491-497` (Bob achieves
+completion mid-episode) reads `delayed_alice_reward` **without** first applying the
+outcome reward (unlike the normal `_handle_bob_completion` path at line 687).
+
+### The fix
+
+**`rewards.py:14`** — Give Alice a penalty when Bob succeeds:
+
+```python
+# BEFORE:
+ALICE_BOB_SUCCESS_REWARD: float = 0.0  # Bob succeeded
+
+# AFTER:
+ALICE_BOB_SUCCESS_REWARD: float = -1.0  # Bob succeeded — Alice gets penalty
+```
+
+**`wrapper.py:491-497`** — Apply outcome reward before reading in early-success path:
+
+```python
+# ADD_BEFORE the extras["alice_total_reward"] assignment:
+alice_success_penalty = torch.full(
+    (len(completion_ids),),
+    reward_utils.ALICE_BOB_SUCCESS_REWARD,
+    device=self.device,
+)
+self.delayed_alice_reward[completion_ids] += alice_success_penalty
+```
+
+---
+
+## Fix 3 (P1) — Diagnostic: Alice Contact-Manipulation Shaping
+
+### Context
+
+90%+ of Alice episodes end with 0 reward (object not moved). PPO gets a diffuse
+negative advantage but no directional signal toward contact. This is a classic
+sparse-reward exploration failure.
+
+### Procedure
+
+1. **Run `--alice_sandbox`** to isolate Alice from the adversarial loop:
+
+   ```bash
+   python train_curobo.py --num_envs 64 --max_iterations 200 \
+     --exp_name "diag_sandbox_post_fix" --alice_sandbox --headless
+   ```
+
+2. **Run diagnostic** on the output:
+
+   ```bash
+   python -m asyncDualPlayPPO.diagnostics.test_alice_sandbox \
+     --log_dir "runs/diag_sandbox_post_fix/summary"
+   ```
+
+3. **If ValidGoals still declines** → the problem is kinematic (PPO can't learn
+   contact with 0 per-step reward). Enable the diagnostic shaping flag to confirm:
+
+   ```bash
+   python train_curobo.py --num_envs 64 --max_iterations 200 \
+     --exp_name "diag_shaping_test" --alice_sandbox --diag_alice_shaping --headless
+   ```
+
+4. **Remove diagnostic shaping after confirming** — it is NOT intended as a
+   permanent addition. It violates Fix 3 (Alice gets zero per-step reward).
+
+### Code added
+
+**`train_curobo.py:174-178`** — New flag `--diag_alice_shaping`:
+
+```
+parser.add_argument("--diag_alice_shaping", action="store_true",
+    help="Diagnostic: small per-step EE→object proximity shaping for Alice.")
+```
+
+**`train_curobo.py:361-363`** — Wire flag to wrapper:
+
+```python
+if args.diag_alice_shaping:
+    env._diag_alice_shaping = True
+```
+
+**`wrapper.py:965-978`** — Shaping logic (only executes when flag is set):
+
+```python
+if getattr(self, "_diag_alice_shaping", False):
+    obj_pos = obs_dict["object_state"][is_alice, :3]
+    ee_pos  = obs_dict["ee_pose"][is_alice, :3]
+    delta   = (obj_pos - ee_pos).norm(dim=-1)
+    shaping = 0.005 * torch.clamp(0.3 - delta, 0.0, 0.3)
+    rewards[is_alice] += shaping
+```
+
+---
+
+## Fix 4 (P2) — Test A: MeanDisp3D Floor Assertion
+
+### Context
+
+MeanDisp3D is already logged to TensorBoard (`train_curobo.py:1300-1302`). The
+diagnostic suite had no assertion that Alice's mean object displacement stays above
+a minimum floor — meaning micro-displacement exploitation (Alice learning to barely
+nudge objects) could go undetected.
+
+### Code added
+
+**`diagnostics/test_alice_sandbox.py:106-114`** — Check 6:
+
+```python
+# 6. MeanDisp3D floor — Alice must be moving objects, not exploiting micro-displacement
+disp3d = df[df["tag"] == "Metrics/Alice/MeanDisp3D"]["value"]
+if len(disp3d) >= 20:
+    late_disp = disp3d.values[-20:].mean()
+    if late_disp <= 0.04:
+        failures.append(
+            f"FAIL: MeanDisp3D floor violated: {late_disp:.4f}m (need > 0.04m). "
+            "Alice is exploiting micro-displacement — objects are not meaningfully moved."
+        )
+```
+
+---
+
+## Summary of Files Changed
+
+| Fix | File | Lines | Change |
+|-----|------|-------|--------|
+| 1 | `ppo_abc.py` | 115-117 | Removed `alice_mean_rew < 0.0` gate; ABC always active |
+| 1 | `train_curobo.py` | 1305 | Warm display uses buffer size, not EMA reward |
+| 2 | `rewards.py` | 14 | `ALICE_BOB_SUCCESS_REWARD` 0.0 → −1.0 |
+| 2 | `wrapper.py` | 494-497 | Added outcome reward in early-success path |
+| 3 | `train_curobo.py` | 174-178 | New `--diag_alice_shaping` flag |
+| 3 | `train_curobo.py` | 361-363 | Wire flag to wrapper attribute |
+| 3 | `wrapper.py` | 965-978 | EE→object proximity shaping (conditional on flag) |
+| 4 | `test_alice_sandbox.py` | 106-114 | Test A: MeanDisp3D > 0.04m floor assertion |

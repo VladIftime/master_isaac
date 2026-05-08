@@ -167,6 +167,12 @@ def main():
     parser.add_argument("--dummy_goal_distance", action="store_true")
     parser.add_argument("--test_movement", action="store_true")
     parser.add_argument(
+        "--diag_alice_shaping",
+        action="store_true",
+        help="Diagnostic: add small per-step proximity shaping for Alice to "
+             "confirm she can learn contact manipulation. Remove after confirmed.",
+    )
+    parser.add_argument(
         "--profile",
         action="store_true",
         help="Enable per-iteration timing profiler (includes curobo_ik section).",
@@ -352,6 +358,9 @@ def main():
             device=base_env.device,
             arm_config=args.arm_config,
         )
+        if args.diag_alice_shaping:
+            env._diag_alice_shaping = True
+            print("[Config] Diagnostic Alice per-step shaping ENABLED (EE→object proximity bonus).")
 
     print("Environment ready.")
 
@@ -1302,7 +1311,7 @@ def main():
         writer.add_scalar("Metrics/Alice/MeanDisp3D", _mean_disp_3d, bob_updates)
         _abc_buf_size = bob_ppo.abc_buffer.size
         writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
-        _abc_warm = 1.0 if ema_alice_rew >= bob_ppo.abc_warmup_threshold else 0.0
+        _abc_warm = 1.0 if bob_ppo.abc_buffer.size > 0 else 0.0
         writer.add_scalar("Metrics/ABC/IsWarm", _abc_warm, bob_updates)
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
         writer.add_scalar("Metrics/IKFailRate", _ik_fr, bob_updates)

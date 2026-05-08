@@ -1,0 +1,1544 @@
+[INFO] Resuming from iteration 3230
+[INFO]   Alice: /home3/s3426394/master_isaac/asyncDualPlayPPO/runs/hpc_curobo_512env_1obj/alice/model_3230.pt
+[INFO]   Bob:   /home3/s3426394/master_isaac/asyncDualPlayPPO/runs/hpc_curobo_512env_1obj/bob/model_3230.pt
+[INFO] Global iteration start: 3230
+[INFO] Max iterations target:  100000
+[INFO] Job ID:        28838810
+[INFO] Node:          rtx6000gpu2
+[INFO] Envs × nsteps: 512 × 300
+[INFO] Local runs:    /tmp/runs_28838810
+INFO:    FUSE2FS (3): Warning: Mounting unchecked fs, running e2fsck is recommended.
+[3gH    H    H    H    H    H    H    H    H    H    H    H    H    H    H    H    H    H    H    H   [INFO] Using python from: /workspace/isaaclab/_isaac_sim/python.sh
+Loading user config located at: '/isaac-sim/kit/data/Kit/Isaac-Sim/5.1/user.config.json'
+[Info] [carb] Logging to file: /isaac-sim/kit/logs/Kit/Isaac-Sim/5.1/kit_20260508_010258.log
+2026-05-07T23:02:58Z [13ms] [Warning] [omni.ext.plugin] [ext: .isaac_cache] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/.isaac_cache' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/.isaac_cache/config'
+2026-05-07T23:02:58Z [13ms] [Warning] [omni.ext.plugin] [ext: runs] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/runs' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/runs/config'
+2026-05-07T23:02:58Z [13ms] [Warning] [omni.ext.plugin] [ext: .venv] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/.venv' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/.venv/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: .cache] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/.cache' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/.cache/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: assets] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/assets' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/assets/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: .vscode] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/.vscode' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/.vscode/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: extras] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/extras' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/extras/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: cfg] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/cfg' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/cfg/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: .claude] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/.claude' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/.claude/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: meshes] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/meshes' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/meshes/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: logs] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/logs' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/logs/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: tasks] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/tasks' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/tasks/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: urdf] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/urdf' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/urdf/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: algorithms] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/algorithms' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/algorithms/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: hpc] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/hpc' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/hpc/config'
+2026-05-07T23:02:58Z [14ms] [Warning] [omni.ext.plugin] [ext: __pycache__] Extensions config 'extension.toml' doesn't exist '/workspace/isaaclab/user_project/asyncDualPlayPPO/__pycache__' or '/workspace/isaaclab/user_project/asyncDualPlayPPO/__pycache__/config'
+[INFO][AppLauncher]: Using device: cuda:0
+[INFO][AppLauncher]: Loading experience file: /workspace/isaaclab/apps/isaaclab.python.headless.kit
+[Config] Episode structure: alice_timesteps=100, bob_timesteps=200, max_goals=5
+[Config] cuRobo action space: 6D × 11 bins (XYZ + Rx/Ry + gripper)  max_delta=4.0 cm  max_rot=2.9 deg/step
+[Config] num_objects=1: removing cube from scene and observations.
+[Config] Rotated arm configuration: shoulder −90°
+Creating environment (suppressing URDF/Lula warnings)...
+[INFO]: Base environment:
+	Environment device    : cuda:0
+	Environment seed      : None
+	Physics step-size     : 0.02
+	Rendering step-size   : 0.02
+	Environment step-size : 0.02
+[INFO]: Time taken for scene creation : 115.979926 seconds
+[INFO]: Scene manager:  <class InteractiveScene>
+	Number of environments: 512
+	Environment spacing   : 2.5
+	Source prim name      : /World/envs/env_0
+	Global prim paths     : []
+	Replicate physics     : False
+[INFO]: Starting the simulation. This may take a few seconds. Please wait...
+[INFO]: Time taken for simulation start : 2.017281 seconds
+[INFO] Command Manager:  <CommandManager> contains 0 active terms.
++------------------------+
+|  Active Command Terms  |
++--------+-------+-------+
+| Index  | Name  |  Type |
++--------+-------+-------+
++--------+-------+-------+
+
+[INFO] Event Manager:  <EventManager> contains 1 active terms.
++---------------------------------+
+| Active Event Terms in Mode: 'reset' |
++------------+--------------------+
+|   Index    | Name               |
++------------+--------------------+
+|     0      | reset_all          |
++------------+--------------------+
+
+[INFO] Recorder Manager:  <RecorderManager> contains 0 active terms.
++---------------------+
+| Active Recorder Terms |
++-----------+---------+
+|   Index   | Name    |
++-----------+---------+
++-----------+---------+
+
+[INFO] Action Manager:  <ActionManager> contains 2 active terms.
++------------------------------------+
+|   Active Action Terms (shape: 7)   |
++-------+----------------+-----------+
+| Index | Name           | Dimension |
++-------+----------------+-----------+
+|   0   | arm_action     |         6 |
+|   1   | gripper_action |         1 |
++-------+----------------+-----------+
+
+[INFO] Observation Manager: <ObservationManager> contains 2 groups.
++------------------------------------------------------------+
+| Active Observation Terms in Group: 'alice_policy' (shape: (21,)) |
++--------------+------------------------------+--------------+
+|    Index     | Name                         |    Shape     |
++--------------+------------------------------+--------------+
+|      0       | ee_pose                      |     (6,)     |
+|      1       | gripper_pos                  |     (1,)     |
+|      2       | object_state                 |    (14,)     |
++--------------+------------------------------+--------------+
++----------------------------------------------------------+
+| Active Observation Terms in Group: 'bob_policy' (shape: (29,)) |
++-------------+------------------------------+-------------+
+|    Index    | Name                         |    Shape    |
++-------------+------------------------------+-------------+
+|      0      | ee_pose                      |     (6,)    |
+|      1      | gripper_pos                  |     (1,)    |
+|      2      | object_state                 |    (14,)    |
+|      3      | goal_state                   |     (6,)    |
+|      4      | goal_distance                |     (2,)    |
++-------------+------------------------------+-------------+
+
+[INFO] Termination Manager:  <TerminationManager> contains 2 active terms.
++----------------------------------------+
+|        Active Termination Terms        |
++-------+---------------------+----------+
+| Index | Name                | Time Out |
++-------+---------------------+----------+
+|   0   | robot_through_table |  False   |
+|   1   | objects_off_table   |  False   |
++-------+---------------------+----------+
+
+[INFO] Reward Manager:  <RewardManager> contains 0 active terms.
++-----------------------+
+|  Active Reward Terms  |
++-------+------+--------+
+| Index | Name | Weight |
++-------+------+--------+
++-------+------+--------+
+
+[INFO] Curriculum Manager:  <CurriculumManager> contains 0 active terms.
++----------------------+
+| Active Curriculum Terms |
++-----------+----------+
+|   Index   | Name     |
++-----------+----------+
++-----------+----------+
+
+[INFO]: Completed setting up the environment...
+[EpisodeManager] Initialized for 512 envs
+  Alice timesteps: 100
+  Bob timesteps: 200
+  Max goals per episode: 5
+  Success thresholds: pos=0.040m, rot=0.200rad
+[Wrapper] Dynamically set Alice Obs Dim: 21, Bob Obs Dim: 29
+[AsyncDualPlayEnvWrapper] Initialized (task-space mode)
+  Alice obs: 21, Bob obs: 29
+  Robot state: 7 (EE pose 6 euler + gripper 1)
+Environment ready.
+[cuRobo] Initialising IK solver…
+[cuRobo] IK solver created.
+[cuRobo] Warming up CUDA graph for N=512 envs…
+[cuRobo] CUDA graph warm-up done.
+Actor trunk: Sequential(
+  (0): Linear(in_features=519, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+)
+Actor LSTM: LSTMCell(128, 256)
+Actor head: Linear(in_features=256, out_features=66, bias=True)
+Sequential(
+  (0): Linear(in_features=50, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+  (5): ReLU()
+  (6): Linear(in_features=128, out_features=1, bias=True)
+)
+Actor trunk: Sequential(
+  (0): Linear(in_features=519, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+)
+Actor LSTM: LSTMCell(128, 256)
+Actor head: Linear(in_features=256, out_features=66, bias=True)
+Sequential(
+  (0): Linear(in_features=21, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+  (5): ReLU()
+  (6): Linear(in_features=128, out_features=1, bias=True)
+)
+[GoalEncoder] K_per_obj=8, objects=1, variant=difference
+Actor trunk_layer1: Linear(in_features=519, out_features=512, bias=True)
+Actor trunk_rest: Sequential(
+  (0): Linear(in_features=512, out_features=256, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=256, out_features=128, bias=True)
+)
+Actor goal_proj: Linear(in_features=8, out_features=512, bias=False)
+Actor LSTM: LSTMCell(128, 256)
+Actor head: Linear(in_features=256, out_features=66, bias=True)
+Sequential(
+  (0): Linear(in_features=50, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+  (5): ReLU()
+  (6): Linear(in_features=128, out_features=1, bias=True)
+)
+[GoalEncoder] K_per_obj=8, objects=1, variant=difference
+Actor trunk_layer1: Linear(in_features=519, out_features=512, bias=True)
+Actor trunk_rest: Sequential(
+  (0): Linear(in_features=512, out_features=256, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=256, out_features=128, bias=True)
+)
+Actor goal_proj: Linear(in_features=8, out_features=512, bias=False)
+Actor LSTM: LSTMCell(128, 256)
+Actor head: Linear(in_features=256, out_features=66, bias=True)
+Sequential(
+  (0): Linear(in_features=29, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+  (5): ReLU()
+  (6): Linear(in_features=128, out_features=1, bias=True)
+)
+[Resume] Loaded Alice from runs/hpc_curobo_512env_1obj/alice/model_3230.pt
+[Resume] Loaded Bob from runs/hpc_curobo_512env_1obj/bob/model_3230.pt
+[Resume] Loaded ABC buffer (500 entries)
+[EpisodeManager] State restored: 193 Alice-phase envs, 319 Bob-phase envs
+[Resume] Loaded EpisodeManager state
+[Resume] Restored train state: entropy_coef=0.1000
+
+================================================================================
+TRAINING RUN: hpc_curobo_512env_1obj
+LOG DIR: /workspace/isaaclab/user_project/asyncDualPlayPPO/runs/hpc_curobo_512env_1obj
+================================================================================
+
+Initialising environment (suppressing URDF/Lula warnings)...
+Environment ready. Starting training loop...
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=0 goal_valid=1 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=224 failed=224 goal_valid=224 gate=224 min_steps=50
+  [ABC dbg] too_short=0 accepted=224 buf_size=500
+  [cuRobo] IK fail rate: 0.0543 (8336/153600 active steps)
+  [Alice] Entropy Coef: 0.1000 (fixed)
+  [Bob] ABCCoef: 0.5000 (fixed)
+  [Alice Update 3230] Loss: 0.1638 | Val: 1.0816 | Rew: 0.7928
+  [Bob Update 3230] Loss: 0.0104 | Val: 0.0026 | Rew: 0.0002 | ABC: -1.0000 | SR: 0.0006 | ABCCoef: 0.5000
+[Iter 3231] SR=0.00 | IK_fail=0.054 | Goals valid=513 invalid=116 | Bob succ=1 fail=224 | Terminations: objects_off_table=108  robot_through_table=255 | ABC buf: 500 | ABC warm: YES
+  [AliceDisp] 513/629 valid | avg 3D=0.272m  avg XY=0.267m  max XY=1.197m  avg Y=0.141m  avg Z=0.018m | not-moved(≤0.05m): 121/629
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=42 failed=42 goal_valid=42 gate=42 min_steps=50
+  [ABC dbg] too_short=42 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=10 failed=10 goal_valid=10 gate=10 min_steps=50
+  [ABC dbg] too_short=10 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=0 accepted=3 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=0 accepted=3 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=0 accepted=3 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=0 accepted=3 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=90 failed=90 goal_valid=90 gate=90 min_steps=50
+  [ABC dbg] too_short=0 accepted=90 buf_size=500
+  [cuRobo] IK fail rate: 0.0482 (7403/153600 active steps)
+  [Alice] Entropy Coef: 0.1000 (fixed)
+  [Bob] ABCCoef: 0.5000 (fixed)
+  [Alice Update 3231] Loss: 0.1218 | Val: 0.7582 | Rew: 0.2549
+  [Bob Update 3231] Loss: -0.0082 | Val: 0.0059 | Rew: 0.0002 | ABC: -0.9999 | SR: 0.0006 | ABCCoef: 0.5000
+[Iter 3232] SR=0.00 | IK_fail=0.048 | Goals valid=478 invalid=140 | Bob succ=0 fail=310 | Terminations: objects_off_table=89  robot_through_table=234 | ABC buf: 500 | ABC warm: YES
+  [AliceDisp] 478/618 valid | avg 3D=0.250m  avg XY=0.247m  max XY=1.201m  avg Y=0.131m  avg Z=0.014m | not-moved(≤0.05m): 147/618
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=5 failed=5 goal_valid=5 gate=5 min_steps=50
+  [ABC dbg] too_short=5 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=4 failed=4 goal_valid=4 gate=4 min_steps=50
+  [ABC dbg] too_short=4 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=42 failed=42 goal_valid=42 gate=42 min_steps=50
+  [ABC dbg] too_short=42 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=4 failed=4 goal_valid=4 gate=4 min_steps=50
+  [ABC dbg] too_short=4 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=5 failed=5 goal_valid=5 gate=5 min_steps=50
+  [ABC dbg] too_short=5 accepted=0 buf_size=500
+  [ABC dbg] bob_done=4 failed=4 goal_valid=4 gate=4 min_steps=50
+  [ABC dbg] too_short=4 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=17 failed=17 goal_valid=17 gate=17 min_steps=50
+  [ABC dbg] too_short=17 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=0 accepted=3 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=0 accepted=3 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=0 accepted=2 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=0 accepted=1 buf_size=500
+  [ABC dbg] bob_done=39 failed=39 goal_valid=39 gate=39 min_steps=50
+  [ABC dbg] too_short=0 accepted=39 buf_size=500
+  [cuRobo] IK fail rate: 0.0565 (8685/153600 active steps)
+  [Alice] Entropy Coef: 0.1000 (fixed)
+  [Bob] ABCCoef: 0.5000 (fixed)
+  [Alice Update 3232] Loss: 0.0963 | Val: 0.7149 | Rew: 0.3248
+  [Bob Update 3232] Loss: -0.0008 | Val: 0.0077 | Rew: 0.0004 | ABC: -1.0000 | SR: 0.0006 | ABCCoef: 0.5000
+[Iter 3233] SR=0.00 | IK_fail=0.057 | Goals valid=435 invalid=170 | Bob succ=0 fail=355 | Terminations: objects_off_table=72  robot_through_table=223 | ABC buf: 500 | ABC warm: YES
+  [AliceDisp] 435/605 valid | avg 3D=0.221m  avg XY=0.218m  max XY=1.172m  avg Y=0.119m  avg Z=0.014m | not-moved(≤0.05m): 180/605
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+slurmstepd: error: *** JOB 28838810 ON rtx6000gpu2 CANCELLED AT 2026-05-08T01:06:36 ***
+[INFO] Syncing results from /tmp/runs_28838810 → /home3/s3426394/master_isaac/asyncDualPlayPPO/runs ...
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=1 failed=1 goal_valid=1 gate=1 min_steps=50
+  [ABC dbg] too_short=1 accepted=0 buf_size=500
+  [ABC dbg] bob_done=3 failed=3 goal_valid=3 gate=3 min_steps=50
+  [ABC dbg] too_short=3 accepted=0 buf_size=500
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=0 failed=0 goal_valid=0 gate=0 min_steps=50
+  [ABC dbg] bob_done=2 failed=2 goal_valid=2 gate=2 min_steps=50
+  [ABC dbg] too_short=2 accepted=0 buf_size=500
+[INFO] Sync complete.
+[INFO] Training complete or stop requested — no resubmission.
+
+###############################################################################
+Hábrók Cluster
+Job 28838810 for user s3426394
+Finished at: Fri May  8 01:06:43 CEST 2026
+
+Job details:
+============
+
+Job ID                         : 28838810
+Name                           : asp_curobo
+User                           : s3426394
+Partition                      : gpumedium
+Nodes                          : rtx6000gpu2
+Number of Nodes                : 1
+Cores                          : 16
+Number of Tasks                : 1
+State                          : CANCELLED by user  
+Submit                         : 2026-05-08T01:00:51
+Start                          : 2026-05-08T01:02:43
+End                            : 2026-05-08T01:06:37
+Reserved walltime              : 23:00:00
+Used walltime                  : 00:03:54
+Used CPU time                  : 00:02:36 (Efficiency:  4.18%)
+% User (Computation)           : 91.43%
+% System (I/O)                 :  8.57%
+Total memory reserved          : 64G
+Maximum memory used            : 9.09G
+Requested GPUs                 : rtx_pro_6000=1
+Allocated GPUs                 : rtx_pro_6000=1
+Max GPU utilization            : 85%
+Max GPU memory used            : 18.28G
+Hints and tips      :
+ 1) You requested much more CPU memory than your program used.
+    Please reduce the requested amount of memory.
+ *) For more information on these issues see:
+    https://wiki.hpc.rug.nl/habrok/additional_information/job_hints
+
+Acknowledgements:
+=================
+
+Please see this page for information about acknowledging Hábrók in your publications:
+
+https://wiki.hpc.rug.nl/habrok/introduction/scientific_output
+
+################################################################################

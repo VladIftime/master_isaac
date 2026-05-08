@@ -103,6 +103,17 @@ def check_sandbox_run(log_dir: str):
         if vals.isna().any():
             failures.append(f"FAIL: NaN values in {tag}")
 
+    # 6. MeanDisp3D floor — Alice must be moving objects, not exploiting micro-displacement
+    disp3d = df[df["tag"] == "Metrics/Alice/MeanDisp3D"]["value"]
+    if len(disp3d) >= 20:
+        late_disp = disp3d.values[-20:].mean()
+        print(f"  MeanDisp3D: late_avg={late_disp:.4f}m  (floor=0.04m)")
+        if late_disp <= 0.04:
+            failures.append(
+                f"FAIL: MeanDisp3D floor violated: {late_disp:.4f}m (need > 0.04m). "
+                "Alice is exploiting micro-displacement — objects are not meaningfully moved."
+            )
+
     if failures:
         print()
         for f in failures:

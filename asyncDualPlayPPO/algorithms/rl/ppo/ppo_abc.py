@@ -112,9 +112,7 @@ class PPOABC(PPO):
         mean_surrogate_loss = 0
         mean_bc_loss = 0
 
-        effective_abc_coef = self.abc_coef
-        if alice_mean_rew < self.abc_warmup_threshold:
-            effective_abc_coef = 0.0
+        effective_abc_coef = self.abc_coef  # always active per Fix 9
 
         abc_trajs = None
         if (
