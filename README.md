@@ -48,6 +48,28 @@ A high-level **Charlie controller** can also generate goal embeddings g_t to dir
 
 This codebase merges the two frameworks and extends them to a **dual-arm robotic platform** (two UR5e robots with Robotiq grippers) simulated in **Isaac Lab / Isaac Sim**.
 
+### Push-PPO Baseline (NEW)
+
+A simpler single-agent PPO baseline for comparison against the ASP framework:
+
+- **Single PPO agent** controls the arm via **push primitive macro-actions** (no ASP, no ABC)
+- Agent predicts push parameters (approach offset, push direction, gripper yaw) as a 6D MultiCategorical action
+- Push trajectory is executed over 28 physics substeps using cuRobo IK (approach → orient → descend → push → retract)
+- **Dense reward**: `10.0 · (d_prev − d_now) − 0.5 · d_now` + completion bonus
+- Observation: 29D flat vector (robot_state + object_state + goal_pose + goal_distance)
+- Network: flat MLP(29→512→256) + LSTM(256) + actor/critic heads — no PI encoder, no goal encoder
+- Validated against the same `validation_configs.py` test suite for direct A/B comparison
+
+```bash
+# Train the push-PPO baseline
+python -m asyncDualPlayPPO.train_push --num_envs 64 --max_iterations 500 --exp_name push_baseline --headless
+
+# Validate a trained model
+python -m asyncDualPlayPPO.tests.validate_push --chkpt runs/push_baseline/agent/model_best.pt --num_tests 10 --headless
+```
+
+---
+
 ### Why the combination?
 
 OpenAI's ASP provides an automatic curriculum (Alice discovers goals of increasing difficulty) and efficient exploration via ABC. However, raw goal-state concatenation in Bob's observation grows linearly with the number of objects and makes the policy sensitive to irrelevant goal dimensions.
@@ -69,6 +91,12 @@ Bob (PPOABC + GoalEncoder, abc_coef=0.5 fixed):
     Goal encoder: E(goal_pose, current_pose) → g ∈ R^K  (K=8, difference variant, max-pool)
     Acts: same action space as Alice
     Role: reproduce the goal Alice left behind
+
+Push-PPO Baseline (single-agent PPO, no ASP):
+    Obs: Robot(7) + obj_state(14) + goal(6) + dist(2) = 29D
+    Acts: MultiCategorical 6D × 11 bins → push parameters → 28-step trajectory
+    Network: flat MLP(29→512→256) + LSTM(256)
+    Reward: dense improvement reward (d_prev − d_now) + completion bonus
 
 Episode Manager:
     Stores Alice's final state as the goal for Bob (12D LOCAL Euler per episode)
@@ -123,6 +151,7 @@ Policy output (6D MultiCategorical, 11 bins)
 ```
 asyncDualPlayPPO/
 ├── train_curobo.py                     # Main training loop (cuRobo IK, Alice+Bob PPO, ABC, historical pool)
+├── train_push.py                       # Push-PPO baseline (single agent, push primitive macro-actions)
 ├── train_diffik.py                     # Legacy DiffIK variant
 ├── train.py                            # Legacy RMPFlow variant
 ├── run_diagnostic_tests.sh             # Three-test diagnostic suite (headless, logs to runs/diag_*)
@@ -138,6 +167,7 @@ asyncDualPlayPPO/
 │   ├── goal_encoder.py                 # GoalEncoder φ MLP + aux distance-prediction head
 │   └── rl/ppo/
 │       ├── module.py                   # ActorCritic, PermInvEncoder, MultiCategorical
+│       ├── module_push.py              # ActorCriticPush (flat MLP + LSTM, no PI/goal encoder)
 │       ├── ppo.py                      # Base PPO (Alice)
 │       ├── ppo_abc.py                  # PPOABC: PPO + Alice Behavioral Cloning (Bob)
 │       └── storage.py                  # RolloutStorage + GPUDemonstrationBuffer
@@ -145,8 +175,11 @@ asyncDualPlayPPO/
 ├── tasks/
 │   ├── async_dual_play_curobo.py       # cuRobo env config (alias for DiffIK cfg)
 │   ├── async_dual_play_diffik.py       # DiffIK env config (scene, observations, rewards)
+│   ├── push_task_curobo.py             # Push-PPO env config (single agent, single object)
 │   └── utils/
 │       ├── wrapper.py                  # AsyncDualPlayEnvWrapper: phase management, rewards
+│       ├── wrapper_push.py             # PushEnvWrapper: push macro-action, dense reward, goals
+│       ├── action_push.py              # Push primitive: waypoint generation for cuRobo IK
 │       ├── observations.py             # Observation functions (EE, objects, goals, distances)
 │       ├── rewards.py                  # Alice reward constants + reward functions
 │       ├── events.py                   # Reset events (objects, robot joints)
@@ -172,7 +205,9 @@ asyncDualPlayPPO/
 ├── tests/
 │   ├── test_abc.py                     # End-to-end ABC pipeline tests
 │   ├── test_abc_goal_encoder.py        # Goal encoder integration tests
-│   └── test_curobo_follow_target.py    # cuRobo IK interactive test
+│   ├── test_curobo_follow_target.py    # cuRobo IK interactive test
+│   ├── validate_push.py                # Push-PPO validation (uses test configs)
+│   └── validation_configs.py           # 50 deterministic test scenes
 │
 ├── hpc/
 │   ├── train_curobo.slurm              # Production cuRobo training (A100, 512 envs)

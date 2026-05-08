@@ -1,0 +1,454 @@
+"""
+Push-PPO baseline training script.
+
+Single-agent PPO with push primitive macro-actions.  No ASP, no ABC, no
+historical pool — just a single PPO agent learning to push objects to goals.
+
+Architecture:
+  Agent predicts 6D push parameters → push waypoints → cuRobo IK per
+  waypoint → physics step → dense reward after push completes → PPO update.
+
+Run locally:
+  python -m asyncDualPlayPPO.train_push --num_envs 16 --max_iterations 500 --exp_name push_test --headless
+"""
+
+# ── cuRobo MUST be imported before AppLauncher ────────────────────────────────
+try:
+    from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
+    from curobo.types.math import Pose as CuroboPose
+    from curobo.types.robot import RobotConfig
+    from curobo.types.base import TensorDeviceType
+    from curobo.util_file import get_robot_configs_path, join_path, load_yaml as curobo_load_yaml
+except ModuleNotFoundError:
+    print(
+        "\n[ERROR] cuRobo not found. Install it in the active venv before training.\n"
+        "  Check: apptainer exec --nv isaac-lab.sif python -c 'import curobo'\n"
+    )
+    import sys
+    sys.exit(1)
+
+import torch
+import torch._dynamo    # noqa: F401
+import torch._C         # noqa: F401
+import torch.optim      # noqa: F401
+
+from isaaclab.app import AppLauncher
+
+import gc
+import math
+import os
+import signal
+import sys
+import yaml
+import argparse
+from collections import deque
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+_ARM_JOINT_NAMES = [
+    "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
+    "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
+]
+
+
+def load_cfg(path):
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
+
+
+class SuppressAllOutput:
+    def __enter__(self):
+        self.stdout_fd = sys.stdout.fileno()
+        self.stderr_fd = sys.stderr.fileno()
+        self.saved_stdout = os.dup(self.stdout_fd)
+        self.saved_stderr = os.dup(self.stderr_fd)
+        self.devnull = os.open(os.devnull, os.O_RDWR)
+        os.dup2(self.devnull, self.stdout_fd)
+        os.dup2(self.devnull, self.stderr_fd)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        os.dup2(self.saved_stdout, self.stdout_fd)
+        os.dup2(self.saved_stderr, self.stderr_fd)
+        os.close(self.saved_stdout)
+        os.close(self.saved_stderr)
+        os.close(self.devnull)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Push-PPO Baseline Training")
+    parser.add_argument("--exp_name", type=str, default="push_ppo_baseline")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--num_envs", type=int, default=64)
+    parser.add_argument("--max_iterations", type=int, default=1000)
+    parser.add_argument("--save_interval", type=int, default=50)
+    parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--chkpt", type=str, default=None,
+                        help="Resume from checkpoint path")
+    AppLauncher.add_app_launcher_args(parser)
+    args = parser.parse_args()
+
+    app_launcher = AppLauncher(args)
+    simulation_app = app_launcher.app
+
+    import torch
+    import numpy as np
+    import copy
+    import gymnasium as gym_mc
+    import threading
+    from torch.utils.tensorboard import SummaryWriter
+
+    from isaaclab.envs import ManagerBasedRLEnv
+    import isaaclab.envs.mdp as mdp
+    from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
+    from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
+    from asyncDualPlayPPO.tasks.utils.action_push import (
+        decode_push_action, compute_push_waypoints, total_push_substeps,
+    )
+    from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
+    from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
+    from asyncDualPlayPPO.algorithms.rl.ppo.storage import RolloutStorage
+
+    ppo_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
+    ppo_cfg = load_cfg(ppo_cfg_path)
+
+    # ── Push hyperparameters ─────────────────────────────────────────────────
+    max_pushes_per_episode = 20
+    push_nsteps = 32          # pushes per PPO rollout (per env)
+    noptepochs = 3
+    nminibatches = 4
+    cliprange = 0.2
+    ent_coef = 0.01
+    gamma = 0.998
+    lam = 0.95
+    learning_rate = 3e-4
+
+    _learn_cfg = ppo_cfg["params"]["learn"]
+    _policy_cfg = ppo_cfg["params"]["policy"]
+
+    num_cat_dims = 6
+    num_bins = _policy_cfg.get("num_bins", 11)
+    use_lstm = _policy_cfg.get("use_lstm", True)
+
+    print(f"[Push-PPO] Config: {push_nsteps} pushes/rollout, {num_cat_dims}D×{num_bins} bins, LSTM={use_lstm}")
+
+    # ── Environment config ────────────────────────────────────────────────────
+    env_cfg = PushTaskCuRoboEnvCfg()
+    env_cfg.scene.num_envs = args.num_envs
+
+    env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=_ARM_JOINT_NAMES,
+        scale=1.0,
+        use_default_offset=False,
+    )
+
+    print("Creating environment...")
+    with SuppressAllOutput():
+        base_env = ManagerBasedRLEnv(cfg=env_cfg)
+
+    env = PushEnvWrapper(
+        env=base_env,
+        device=base_env.device,
+        num_objects=1,
+        max_pushes_per_episode=max_pushes_per_episode,
+        headless=args.headless,
+    )
+    print("Environment ready.")
+
+    # ── cuRobo IK solver ──────────────────────────────────────────────────────
+    print("[cuRobo] Initialising IK solver...")
+    _tensor_args = TensorDeviceType(device=torch.device(env.device), dtype=torch.float32)
+    _ur5e_yaml = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
+    _robot_cfg = RobotConfig.from_dict(_ur5e_yaml["robot_cfg"], _tensor_args)
+    _ik_config = IKSolverConfig.load_from_robot_config(
+        _robot_cfg, world_model=None, tensor_args=_tensor_args,
+    )
+    ik_solver = IKSolver(_ik_config)
+    print("[cuRobo] IK solver created.")
+
+    # Warm-up CUDA graph
+    print(f"[cuRobo] Warming up CUDA graph for N={env.num_envs} envs...")
+    _wup_pos = torch.zeros(env.num_envs, 3, device=env.device)
+    _wup_quat = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32).expand(env.num_envs, 4)
+    ik_solver.solve_batch(
+        CuroboPose(position=_wup_pos, quaternion=_wup_quat),
+        seed_config=torch.zeros(env.num_envs, 1, 6, device=env.device),
+        retract_config=torch.zeros(env.num_envs, 6, device=env.device),
+    )
+    print("[cuRobo] Warm-up done.")
+
+    _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
+
+    # ── Robot body/joint indices ──────────────────────────────────────────────
+    _robot_scene = env.env.scene["robot"]
+    _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
+    _wrist3_ids, _ = _robot_scene.find_bodies("wrist_3_link")
+    _lf_ids, _ = _robot_scene.find_bodies("left_inner_finger")
+    _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
+
+    # ── PPO agent ─────────────────────────────────────────────────────────────
+    _mc_space = gym_mc.spaces.Box(
+        low=0.0, high=float(num_bins - 1), shape=(num_cat_dims,), dtype=np.float32,
+    )
+
+    agent_cfg = copy.deepcopy(ppo_cfg["params"])
+    agent_cfg["learn"]["nsteps"] = push_nsteps
+    agent_cfg["learn"]["noptepochs"] = noptepochs
+    agent_cfg["learn"]["nminibatches"] = nminibatches
+    agent_cfg["learn"]["cliprange"] = cliprange
+    agent_cfg["learn"]["ent_coef"] = ent_coef
+    agent_cfg["learn"]["gamma"] = gamma
+    agent_cfg["learn"]["lam"] = lam
+    agent_cfg["learn"]["optim_stepsize"] = learning_rate
+
+    agent = PPO(
+        vec_env=env,
+        cfg_train=agent_cfg,
+        device=env.device,
+        sampler="sequential",
+        log_dir=f"runs/{args.exp_name}/agent",
+        asymmetric=False,
+    )
+    agent.observation_space = env.observation_space
+    agent.state_space = env.state_space
+    agent.action_space = _mc_space
+    agent.desired_kl = None
+
+    agent.actor_critic = ActorCriticPush(
+        agent.observation_space.shape,
+        agent.state_space.shape,
+        agent.action_space.shape,
+        agent.init_noise_std,
+        agent.model_cfg,
+        asymmetric=False,
+    ).to(env.device)
+
+    agent.storage = RolloutStorage(
+        agent.vec_env.num_envs,
+        push_nsteps,
+        agent.observation_space.shape,
+        agent.state_space.shape,
+        agent.action_space.shape,
+        agent.device,
+        "sequential",
+    )
+
+    agent.optimizer = torch.optim.Adam(
+        agent.actor_critic.parameters(), lr=agent.learning_rate,
+    )
+
+    if args.chkpt and os.path.isfile(args.chkpt):
+        agent.load(args.chkpt)
+        print(f"[Resume] Loaded agent from {args.chkpt}")
+
+    # ── LSTM hidden state ─────────────────────────────────────────────────────
+    if use_lstm:
+        _lsz = agent.actor_critic.lstm_hidden_size
+        hidden_state = [
+            torch.zeros(env.num_envs, _lsz, device=env.device),
+            torch.zeros(env.num_envs, _lsz, device=env.device),
+        ]
+    else:
+        hidden_state = None
+
+    # ── Training state ────────────────────────────────────────────────────────
+    writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
+    run_dir = os.path.abspath(f"runs/{args.exp_name}")
+    best_success_rate = -1.0
+    iteration = 0
+    rew_buf = deque(maxlen=push_nsteps * env.num_envs)
+    sr_buf = deque(maxlen=200)
+
+    print(f"\n{'='*80}\nPUSH-PPO BASELINE: {args.exp_name}\nLOG DIR: {run_dir}\n{'='*80}\n")
+
+    # ── Init environment ──────────────────────────────────────────────────────
+    print("Initialising environment...")
+    with SuppressAllOutput():
+        obs = env.reset()
+    print("Training loop starting...")
+
+    # Per-env state accumulators
+    def _tcp_pos_local():
+        lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
+        rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
+        return ((lf_w + rf_w) / 2.0 - env.env.scene.env_origins).clone()
+
+    ee_pos_local = _tcp_pos_local()
+    ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
+    prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
+
+    # TCP offset: finger midpoint minus wrist_3
+    def _compute_tcp_offset():
+        lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
+        rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
+        w3_w = _robot_scene.data.body_pos_w[:, _wrist3_ids[0]]
+        return (lf_w + rf_w) / 2.0 - w3_w
+
+    # ── SIGTERM handler ──────────────────────────────────────────────────────
+    _shutdown_requested = False
+
+    def _sigterm_handler(signum, frame):
+        nonlocal _shutdown_requested
+        print("[INFO] SIGTERM received — checkpoint after current iteration.", flush=True)
+        _shutdown_requested = True
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+
+    # ── TRAINING LOOP ────────────────────────────────────────────────────────
+    while iteration < args.max_iterations:
+        agent.storage.clear()
+
+        if hidden_state is not None:
+            hidden_state[0].zero_()
+            hidden_state[1].zero_()
+
+        total_ik_fails = 0
+        total_ik_steps = 0
+
+        obs_pre_push = obs.clone()
+        env.capture_pre_push(obs)
+
+        for push_step in range(push_nsteps):
+            # ── Agent predicts push action ────────────────────────────────────
+            with torch.no_grad():
+                h_in = (hidden_state[0], hidden_state[1]) if hidden_state else None
+                actions, log_prob, value, mu, sigma, new_h = agent.actor_critic.act_with_hidden(
+                    obs, None, h_in,
+                )
+                if hidden_state is not None and new_h is not None:
+                    hidden_state[0] = new_h[0]
+                    hidden_state[1] = new_h[1]
+
+            push_params = decode_push_action(actions, num_bins=num_bins)
+
+            # ── Compute push waypoints ────────────────────────────────────────
+            obj_pos = env._get_obj_pos(obs)
+
+            waypoints = compute_push_waypoints(
+                offset_x=push_params[:, 0],
+                offset_y=push_params[:, 1],
+                push_dx=push_params[:, 2],
+                push_dy=push_params[:, 3],
+                yaw=push_params[:, 4],
+                push_dz=push_params[:, 5],
+                obj_pos=obj_pos,
+                current_ee_pos=ee_pos_local,
+                current_ee_quat=ee_quat_w,
+                device=env.device,
+            )
+
+            # ── Execute push trajectory ───────────────────────────────────────
+            for wp_idx, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
+                tcp_offs = _compute_tcp_offset()
+                ik_target = wp_pos - tcp_offs
+
+                result = ik_solver.solve_batch(
+                    CuroboPose(position=ik_target, quaternion=wp_quat),
+                    seed_config=prev_joint_cmd.unsqueeze(1),
+                    retract_config=prev_joint_cmd,
+                )
+
+                ik_ok = result.success.squeeze(-1)
+                cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
+
+                total_ik_steps += env.num_envs
+                total_ik_fails += int((~ik_ok).sum().item())
+
+                solved = result.solution.view(env.num_envs, 6)
+                raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, cur_joints)
+                prev_joint_cmd = raw_cmd.detach().clone()
+
+                env_full = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+                env_full[:, :6] = raw_cmd
+                env_full[:, 6] = wp_grip
+
+                obs, _, terminated, truncated, _ = env.step(env_full)
+
+                if terminated.any():
+                    obs_dict_full = env.env.reset()[0]
+                    obs_new = env._build_obs(obs_dict_full)
+                    obs[terminated] = obs_new[terminated]
+
+            # ── After push: compute reward & done ────────────────────────────
+            reward = env.compute_push_reward(obs)
+            done = env.check_done(obs, terminated)
+
+            # ── Record transition ────────────────────────────────────────────
+            agent.storage.add_transitions(
+                obs_pre_push, obs_pre_push, actions, reward, done,
+                value, log_prob, mu, sigma,
+                masks=torch.ones(env.num_envs, device=env.device),
+            )
+
+            rew_buf.extend(reward.cpu().tolist())
+            cur_at_goal = env.at_goal.float()
+            sr_buf.extend(cur_at_goal.cpu().tolist())
+
+            # ── Handle done envs ──────────────────────────────────────────────
+            if done.any():
+                env.reset_done_envs(done)
+                if hidden_state is not None:
+                    hidden_state[0][done] = 0.0
+                    hidden_state[1][done] = 0.0
+                obs_dict_full = env.env.reset()[0]
+                obs_new = env._build_obs(obs_dict_full)
+                obs[done] = obs_new[done]
+                ee_pos_local[done] = _tcp_pos_local()[done]
+                ee_quat_w[done] = _QUAT_TOOL_DOWN.expand(done.sum().item(), 4).to(env.device)
+                prev_joint_cmd[done] = _robot_scene.data.joint_pos[:, _arm_jids][done]
+
+            # ── Update EE position tracker for next push ─────────────────────
+            ee_pos_local = _tcp_pos_local()
+            ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
+
+            obs_pre_push = obs.clone()
+            env.capture_pre_push(obs)
+
+        # ── PPO UPDATE ────────────────────────────────────────────────────────
+        with torch.no_grad():
+            _, _, last_val, _, _ = agent.actor_critic.act(obs, None)
+        agent.storage.compute_returns(last_val, agent.gamma, agent.lam)
+        loss_val, loss_surr = agent.update()
+        agent.storage.clear()
+
+        mean_rew = np.mean(rew_buf) if rew_buf else 0.0
+        sr = np.mean(sr_buf) if sr_buf else 0.0
+        ik_fail_rate = total_ik_fails / max(1, total_ik_steps)
+
+        writer.add_scalar("Loss/Agent/Value", loss_val, iteration)
+        writer.add_scalar("Loss/Agent/Surrogate", loss_surr, iteration)
+        writer.add_scalar("Reward/Mean", mean_rew, iteration)
+        writer.add_scalar("Metrics/SuccessRate", sr, iteration)
+        writer.add_scalar("Metrics/IKFailRate", ik_fail_rate, iteration)
+
+        print(
+            f"  [Iter {iteration:5d}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | "
+            f"Rew: {mean_rew:.4f} | SR: {sr:.4f} | IKFail: {ik_fail_rate:.4f}",
+            flush=True,
+        )
+
+        if sr > best_success_rate:
+            best_success_rate = sr
+            agent.save(os.path.join(agent.log_dir, "model_best.pt"))
+
+        # ── Checkpoint ────────────────────────────────────────────────────────
+        if iteration > 0 and iteration % args.save_interval == 0:
+            agent.save(os.path.join(agent.log_dir, f"model_{iteration}.pt"))
+            print(f"  [Checkpoint] Saved model_{iteration}.pt")
+
+        rew_buf.clear()
+        sr_buf.clear()
+        iteration += 1
+
+        if _shutdown_requested:
+            agent.save(os.path.join(agent.log_dir, f"model_{iteration}_emergency.pt"))
+            print("[INFO] Emergency checkpoint saved. Shutting down.")
+            break
+
+    print(f"\nTraining complete. Best SR: {best_success_rate:.4f}")
+    agent.save(os.path.join(agent.log_dir, "model_final.pt"))
+    simulation_app.close()
+
+
+if __name__ == "__main__":
+    main()

@@ -26,8 +26,15 @@ import argparse
 import os
 import sys
 import torch
+import torch._dynamo          # noqa: F401  lock venv torch before AppLauncher prepends Isaac Sim's pip_prebundle
+import torch._C               # noqa: F401
+import torch.optim            # noqa: F401
 
-# CuRobo MUST be imported before AppLauncher to avoid library conflicts.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+# cuRobo MUST be imported before AppLauncher — importing after causes a native
+# crash in librtx.scenedb.plugin.so because CuRobo's CUDA context init races
+# with the RTX rendering background thread (carbOnPluginStartup).
 try:
     from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
     from curobo.types.math import Pose
@@ -35,12 +42,10 @@ try:
     from curobo.types.base import TensorDeviceType
     from curobo.util_file import get_robot_configs_path, join_path, load_yaml
 except ModuleNotFoundError:
-    print("\n[ERROR] CuRobo not found in .master_venv. Ensure it is installed.")
+    print("\n[ERROR] CuRobo not found. Ensure it is installed.")
     sys.exit(1)
 
 from isaaclab.app import AppLauncher
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from asyncDualPlayPPO.tests.validation_configs import (
     get_test_count,
@@ -56,6 +61,13 @@ def main():
     parser.add_argument("--gamepad_idx", type=int,   default=1,   help="Carb gamepad index (0=first, 1=second, …)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+
+    # Force synchronous RTX rendering so SceneDB is fully initialized before
+    # SetLightingMenuModeCommand fires — avoids a race-condition crash on
+    # slower GPUs (RTX 3060 Ti + IOMMU enabled).
+    for _flag in ("--/app/asyncRendering=false", "--/app/asyncRenderingLowLatency=false"):
+        if _flag not in sys.argv:
+            sys.argv.append(_flag)
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app

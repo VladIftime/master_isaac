@@ -779,3 +779,193 @@ if len(disp3d) >= 20:
 | 3 | `train_curobo.py` | 361-363 | Wire flag to wrapper attribute |
 | 3 | `wrapper.py` | 965-978 | EE→object proximity shaping (conditional on flag) |
 | 4 | `test_alice_sandbox.py` | 106-114 | Test A: MeanDisp3D > 0.04m floor assertion |
+
+---
+
+# Push-PPO Baseline (`train_push.py`)
+
+This section documents the single-agent PPO baseline that uses **push primitive
+macro-actions** instead of per-step EE delta control.  No ASP, no Alice/Bob, no
+ABC — a minimal PPO agent learns to push a single object to a target position.
+
+---
+
+## 1. Architecture Overview
+
+```
+Agent (Push-PPO)
+    │
+    │  obs (29D): [ee_pose(6)|gripper(1)|obj_state(14)|goal_pose(6)|goal_dist(2)]
+    ▼
+┌──────────────────────────────────────────────────────────┐
+│  ActorCriticPush                                          │
+│                                                            │
+│  obs (29D)                                                 │
+│    │                                                       │
+│    ├─ Linear(29→512)→ReLU                                 │
+│    ├─ Linear(512→256)→ReLU                                │
+│    ├─ LSTMCell(256→256)                                   │
+│    │                                                       │
+│    ├─ Actor: Linear(256→66) → (6,11) → MultiCategorical   │
+│    └─ Critic: Linear(29→512)→ReLU→256→ReLU→128→ReLU→1    │
+└──────────────────────────────────────────────────────────┘
+    │
+    │  push params (6D): [offset_x, offset_y, push_dx, push_dy, yaw, push_dz]
+    ▼
+┌──────────────────────────────────────────────────────────┐
+│  Push Primitive (action_push.py)                          │
+│                                                            │
+│  Multi-phase trajectory:                                   │
+│    1. Approach (5 steps): EE→above object, tool-down      │
+│    2. Orient   (3 steps): rotate to target yaw            │
+│    3. Descend  (3 steps): move down to surface contact    │
+│    4. Engage   (1 step):  close gripper                   │
+│    5. Push     (12 steps): move in push direction         │
+│    6. Release  (1 step):  open gripper                    │
+│    7. Retract  (3 steps): move up                         │
+│                                                            │
+│  Total: 28 substeps per push macro-action                  │
+│  Each substep: cuRobo IK → joint positions → env.step()   │
+└──────────────────────────────────────────────────────────┘
+    │
+    │  cumulative reward after push completes
+    ▼
+┌──────────────────────────────────────────────────────────┐
+│  Dense Reward (wrapper_push.py)                           │
+│                                                            │
+│  reward = 10.0 · (d_prev − d_now) − 0.5 · d_now          │
+│           + 5.0 · completion_bonus                        │
+│                                                            │
+│  d_prev = L2 distance before push                          │
+│  d_now  = L2 distance after push                          │
+│  completion: object within 0.05m pos / 0.035rad rot       │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Observation Layout (Push Agent)
+
+```
+push_obs (29D) = [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_distance(2)]
+
+ee_pose(6)       = [pos_x, pos_y, pos_z, roll, pitch, yaw]  — ZYX Euler, local frame
+gripper(1)       = [finger_joint_angle]                       — raw joint position
+obj_state(14)    = [pos(3)|euler(3)|linvel(3)|angvel(3)|ee_dist(1)|contact(1)]
+goal_pose(6)     = [pos_x, pos_y, pos_z, roll, pitch, yaw]   — ZYX Euler
+goal_distance(2) = [pos_dist(1), rot_dist(1)]                 — L2 position + max-Euler diff
+```
+
+No PI encoder, no goal encoder — flat MLP input.
+
+---
+
+## 3. Action Space (Push Parameters)
+
+MultiCategorical: **6D × 11 bins**.  Decoded to push parameters via `decode_push_action()`.
+
+| Dim | Parameter | Range | Description |
+|-----|-----------|-------|-------------|
+| 0 | `offset_x` | [-0.15, 0.15] m | Gripper approach offset X from object |
+| 1 | `offset_y` | [-0.15, 0.15] m | Gripper approach offset Y from object |
+| 2 | `push_dx` | [-0.30, 0.30] m | Push direction X (from contact point) |
+| 3 | `push_dy` | [-0.30, 0.30] m | Push direction Y (from contact point) |
+| 4 | `yaw` | [-π, π] rad | Gripper yaw angle (rotation around Z) |
+| 5 | `push_dz` | [-0.03, 0.03] m | Push vertical component |
+
+---
+
+## 4. Network Forward Pass (Push Agent)
+
+```
+obs (29D)
+    │
+    ├─ actor_trunk: Linear(29→512)→ReLU → Linear(512→256)→ReLU
+    │      │ (256D)
+    │   LSTMCell(256→256)
+    │      │ (256D)
+    │   actor_head: Linear(256→66) → reshape(6,11) → MultiCategorical
+    │
+    └─ critic: Linear(29→512)→ReLU → Linear(512→256)→ReLU
+                → Linear(256→128)→ReLU → Linear(128→1)
+```
+
+Simpler than the ASP model: no PI encoder, no goal encoder, no additive injection.
+The LSTM is preserved for learning sequential push strategies (multiple pushes
+per episode).
+
+---
+
+## 5. Training Loop
+
+```
+while iteration < max_iterations:
+    ┌─ ROLLOUT (push_nsteps = 32 pushes per env) ──────────────────────────┐
+    │  for push_step in range(32):                                          │
+    │    ① Agent predicts push params (6D bins)                            │
+    │    ② Decode → push parameters                                        │
+    │    ③ compute_push_waypoints() → 28-waypoint trajectory              │
+    │    ④ for each waypoint:                                              │
+    │         cuRobo IK → joint positions → env.step()                     │
+    │    ⑤ compute_push_reward() → dense improvement reward               │
+    │    ⑥ storage.add_transitions() → one transition per push            │
+    │    ⑦ handle done envs (reset, clear LSTM hidden)                    │
+    └──────────────────────────────────────────────────────────────────────┘
+
+    ┌─ PPO UPDATE ─────────────────────────────────────────────────────────┐
+    │  compute_returns() → standard PPO update (3 epochs, 4 minibatches)   │
+    └──────────────────────────────────────────────────────────────────────┘
+
+    ┌─ LOGGING ────────────────────────────────────────────────────────────┐
+    │  Loss/Agent/Value, Loss/Agent/Surrogate                               │
+    │  Reward/Mean, Metrics/SuccessRate, Metrics/IKFailRate                │
+    └──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 6. Key Differences from ASP Model
+
+| | ASP (`train_curobo.py`) | Push-PPO (`train_push.py`) |
+|---|---|---|
+| **Agents** | Alice + Bob (adversarial) | Single agent |
+| **Action type** | EE delta (6D, per-step) | Push parameters (6D, macro-action) |
+| **Action frequency** | Every physics step | Every 28 physics steps (one push) |
+| **Controller** | Alice/Bob phases, ABC, historical pool | None — pure PPO |
+| **Network** | PI encoder + GoalEncoder + LSTM | Flat MLP + LSTM |
+| **Observation** | 35D (Alice) / 51D (Bob) | 29D |
+| **Reward** | Sparse {+1/−1/+5} per physics step | Dense improvement reward per push |
+| **Objects** | 1–2 objects | 1 object |
+
+---
+
+## 7. Files
+
+```
+asyncDualPlayPPO/
+├── train_push.py                        # Training entry point
+├── tasks/
+│   ├── push_task_curobo.py              # Env config (scene, observations, actions)
+│   └── utils/
+│       ├── wrapper_push.py              # Push env wrapper (obs, reward, reset, goals)
+│       └── action_push.py               # Push primitive (waypoints + IK)
+├── algorithms/rl/ppo/
+│   └── module_push.py                  # ActorCriticPush (flat MLP + LSTM)
+└── tests/
+    └── validate_push.py                 # Validation against test configs
+```
+
+---
+
+## 8. Validation
+
+Uses the same `validation_configs.py` test suite as the ASP evaluation:
+
+```bash
+python -m asyncDualPlayPPO.tests.validate_push \
+    --chkpt runs/push_ppo_baseline/agent/model_best.pt \
+    --num_tests 10 --headless
+```
+
+Reports success rate, average pushes per test, and per-test position/rotation errors.
+Comparable metrics to the ASP evaluation for direct A/B comparison.

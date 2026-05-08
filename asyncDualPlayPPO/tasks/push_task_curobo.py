@@ -1,0 +1,123 @@
+"""
+Environment configuration for single-agent push task — cuRobo variant.
+
+Minimal scene: one UR5e robot, one table, one object (random from pool).
+Observations: single 29D vector (robot + object state + goal).
+Actions: JointPositionActionCfg (cuRobo computes joint positions externally).
+"""
+
+from dataclasses import MISSING
+import sys
+import os
+
+from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.managers import ObservationGroupCfg as ObsGroup
+from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import RewardTermCfg as RewTerm
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.utils import configclass
+from isaaclab.sensors import ContactSensorCfg, patterns
+
+from .utils.reach_dual_arm_diffik_env_cfg import (
+    ReachDualArmDiffIKEnvCfg,
+    ReachDualArmSceneCfg,
+    ActionsCfg,
+    EventCfg,
+    TerminationsCfg,
+)
+from .utils import observations
+
+
+@configclass
+class PushTaskObservationsCfg:
+    """
+    Single-agent observation for push-PPO baseline.
+
+    Layout (flat, 29D for 1 object):
+      [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_dist(2)]
+    """
+
+    @configclass
+    class PushPolicyCfg(ObsGroup):
+        """Push agent observations — robot state + object state + goal."""
+
+        ee_pose = ObsTerm(
+            func=observations.ee_poses,
+            params={
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+            },
+        )
+        gripper_pos = ObsTerm(
+            func=observations.gripper_positions,
+            params={
+                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
+            },
+        )
+        object_state = ObsTerm(
+            func=observations.object_states,
+            params={
+                "object_cfg": SceneEntityCfg("target_object"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": None,
+            },
+        )
+        goal_state = ObsTerm(
+            func=observations.goal_states,
+            params={"object_cfg": SceneEntityCfg("target_object")},
+        )
+        goal_distance = ObsTerm(
+            func=observations.goal_distance,
+            params={"object_cfg": SceneEntityCfg("target_object")},
+        )
+
+        def __post_init__(self):
+            self.enable_corruption = True
+            self.concatenate_terms = True
+
+    push_policy: PushPolicyCfg = PushPolicyCfg()
+
+
+@configclass
+class PushTaskRewardsCfg:
+    """
+    Reward config for push task — all reward computation happens in the
+    wrapper, not via Isaac Lab's reward terms.  This class exists only to
+    satisfy the ManagerBasedRLEnv interface.
+    """
+    pass
+
+
+@configclass
+class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
+    """
+    Full environment configuration for the push-PPO baseline.
+
+    Inherits scene/actions/terminations/events from ReachDualArmDiffIKEnvCfg.
+    Uses JointPositionActionCfg for cuRobo-driven joint control.
+    """
+
+    @configclass
+    class PushTaskSceneCfg(ReachDualArmSceneCfg):
+        """Scene restricted to a single object."""
+        cube = None
+        cylinder = None
+        rect = None
+        triangle = None
+        camera = None
+        contact_forces = None
+
+    scene: PushTaskSceneCfg = PushTaskSceneCfg(num_envs=4, env_spacing=2.5)
+    observations: PushTaskObservationsCfg = PushTaskObservationsCfg()
+    actions: ActionsCfg = ActionsCfg()
+    rewards: PushTaskRewardsCfg = PushTaskRewardsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
+
+    def __post_init__(self):
+        self.decimation = 1
+        self.episode_length_s = 10000.0
+        self.sim.dt = 0.02
+        self.sim.render_interval = self.decimation
+        self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
