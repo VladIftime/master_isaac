@@ -82,7 +82,7 @@ def create_t_shape_usda():
     UsdPhysics.MassAPI.Apply(root)
 
     mass_attr = root.GetAttribute("physics:mass")
-    mass_attr.Set(0.08)
+    mass_attr.Set(0.1)
 
     inertia_attr = root.GetAttribute("physics:diagonalInertia")
     if not inertia_attr.IsValid():

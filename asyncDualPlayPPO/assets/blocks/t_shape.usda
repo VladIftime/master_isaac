@@ -12,7 +12,7 @@ def Xform "t_shape" (
 {
     float3 physics:centerOfMass = (0.0, 0.013, 0.015)
     float3 physics:diagonalInertia = (1.0, 1.0, 1.0)
-    float physics:mass = 0.01
+    float physics:mass = 0.1
 
     def Scope "visuals" (
         prepend apiSchemas = ["PhysicsCollisionAPI"]
