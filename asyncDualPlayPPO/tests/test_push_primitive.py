@@ -161,6 +161,7 @@ def main():
     _arm_jids, _  = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
     _lf_ids, _    = _robot_scene.find_bodies("left_inner_finger")
     _rf_ids, _    = _robot_scene.find_bodies("right_inner_finger")
+    _t0_ids, _    = _robot_scene.find_bodies("tool0")
     _w3_ids, _    = _robot_scene.find_bodies("wrist_3_link")
 
     def _tcp_local() -> torch.Tensor:
@@ -171,8 +172,8 @@ def main():
     def _tcp_offset() -> torch.Tensor:
         lf = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
         rf = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
-        w3 = _robot_scene.data.body_pos_w[:, _w3_ids[0]]
-        return (lf + rf) / 2.0 - w3
+        t0 = _robot_scene.data.body_pos_w[:, _t0_ids[0]]
+        return (lf + rf) / 2.0 - t0
 
     def _viewer_step():
         if not headless:
