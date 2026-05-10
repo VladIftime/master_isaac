@@ -288,8 +288,12 @@ def main():
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
+                    # Use current wrist orientation (avoids cuRobo tool0 frame mismatch)
+                    cur_w3_quat = _robot_scene.data.body_quat_w[:, _w3_ids[0]]
+                    cur_w3_quat = cur_w3_quat / cur_w3_quat.norm(dim=-1, keepdim=True)
+
                     result    = ik_solver.solve_batch(
-                        CuroboPose(position=ik_target, quaternion=wp_quat),
+                        CuroboPose(position=ik_target, quaternion=cur_w3_quat),
                         seed_config=prev_jcmd.unsqueeze(1),
                         retract_config=prev_jcmd,
                     )
