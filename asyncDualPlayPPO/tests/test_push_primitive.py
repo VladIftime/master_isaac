@@ -297,13 +297,18 @@ def main():
                     if success.any():
                         ik_ok += 1
 
-                    if wp_i < 3:
+                    if wp_i < 5:
                         ee_pos = _tcp_local()
+                        tcp_off = _tcp_offset()
+                        wrist_pos = _robot_scene.data.body_pos_w[:, _w3_ids[0]] - env.env.scene.env_origins
                         print(
                             f"    wp {wp_i}: "
                             f"ee=({float(ee_pos[0,0]):+.3f},{float(ee_pos[0,1]):+.3f},{float(ee_pos[0,2]):+.3f})  "
-                            f"wp_target=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
-                            f"ik_ok={bool(success.any())}",
+                            f"wp=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
+                            f"ik_tgt=({float(ik_target[0,0]):+.3f},{float(ik_target[0,1]):+.3f},{float(ik_target[0,2]):+.3f})  "
+                            f"wrist=({float(wrist_pos[0,0]):+.3f},{float(wrist_pos[0,1]):+.3f},{float(wrist_pos[0,2]):+.3f})  "
+                            f"toff=({float(tcp_off[0,0]):+.3f},{float(tcp_off[0,1]):+.3f},{float(tcp_off[0,2]):+.3f})  "
+                            f"ik={bool(success.any())}",
                             flush=True,
                         )
 
