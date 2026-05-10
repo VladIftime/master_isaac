@@ -45,6 +45,11 @@ _ARM_JOINT_NAMES = [
 
 _N_SPIN = 8     # substeps for the spin phase
 
+# Workspace clamp limits (local / env-origin-relative frame, metres)
+_WS_X = (-0.50, 0.50)
+_WS_Y = (0.25,  0.70)
+_WS_Z = ( 0.00, 0.55)
+
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
 # Each push: {offset_x, offset_y, push_dx, push_dy, yaw, spin_yaw}
 # Approach offset is ~2 cm behind object center (offset_y ≈ -0.02)
@@ -281,6 +286,9 @@ def main():
                         break
 
                     ik_target = wp_pos - _tcp_offset()
+                    ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
+                    ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
+                    ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
                         seed_config=prev_jcmd.unsqueeze(1),
