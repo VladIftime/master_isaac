@@ -140,7 +140,7 @@ def main():
     # ── cuRobo IK ─────────────────────────────────────────────────────────────
     print("[Setup] Initialising cuRobo IK solver...")
     _tensor_args = TensorDeviceType(device=torch.device(device), dtype=torch.float32)
-    _ur5e_yaml   = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
+    _ur5e_yaml   = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e_robotiq_2f_140.yml"))
     _robot_cfg   = RobotConfig.from_dict(_ur5e_yaml["robot_cfg"], _tensor_args)
     _ik_config   = IKSolverConfig.load_from_robot_config(
         _robot_cfg, world_model=None, tensor_args=_tensor_args,
@@ -151,8 +151,8 @@ def main():
             position=torch.zeros(1, 3, device=device),
             quaternion=torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device),
         ),
-        seed_config=torch.zeros(1, 1, 6, device=device),
-        retract_config=torch.zeros(1, 6, device=device),
+        seed_config=torch.zeros(1, 1, 7, device=device),
+        retract_config=torch.zeros(1, 7, device=device),
     )
     print("[Setup] IK warm-up done.")
 
@@ -282,7 +282,7 @@ def main():
                         _viewer_step()
                         prev_grip = wp_grip.clone()
 
-                    ik_target = wp_pos - _tcp_offset()
+                    ik_target = wp_pos
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
@@ -292,13 +292,13 @@ def main():
                     # Use smooth interpolation from current to target
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
-                        seed_config=cur_joints.unsqueeze(1),
-                        retract_config=cur_joints,
+                        seed_config=torch.cat([cur_joints, torch.zeros(1, 1, device=device)], dim=-1).unsqueeze(1),
+                        retract_config=torch.cat([cur_joints, torch.zeros(1, 1, device=device)], dim=-1),
                     )
                     success = result.success.squeeze(-1)
                     if success.any():
                         ik_ok += 1
-                        last_good_joints = result.solution.view(1, 6).clone()
+                        last_good_joints = result.solution[:, :6].view(1, 6).clone()
 
                     raw_cmd = last_good_joints.clone()
 
