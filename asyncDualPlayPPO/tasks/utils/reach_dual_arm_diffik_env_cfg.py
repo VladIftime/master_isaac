@@ -200,15 +200,15 @@ UR5e_CFG = ArticulationCfg(
         fix_base=True,
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
             gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
-                stiffness=1000.0,
-                damping=50.0,
+                stiffness=4000.0,
+                damping=200.0,
             ),
         ),
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
-            solver_position_iteration_count=4,
-            solver_velocity_iteration_count=0,
+            solver_position_iteration_count=16,
+            solver_velocity_iteration_count=4,
         ),
         activate_contact_sensors=False,
     ),
