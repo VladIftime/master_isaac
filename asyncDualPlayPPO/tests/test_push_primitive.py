@@ -265,9 +265,23 @@ def main():
 
                 # ── Execute push ──────────────────────────────────────────────
                 ik_ok = 0
+                prev_grip = torch.ones(1, device=device)  # start open
                 for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
+
+                    cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
+
+                    # If gripper state changes, apply it as a separate hold step
+                    # so _tcp_offset is computed with the correct finger positions
+                    grip_changed = bool((wp_grip != prev_grip).any())
+                    if grip_changed:
+                        env_full        = torch.zeros(1, env.action_space.shape[0], device=device)
+                        env_full[:, :6] = cur_joints
+                        env_full[:, 6]  = wp_grip
+                        obs, _, _, _, _ = env.step(env_full)
+                        _viewer_step()
+                        prev_grip = wp_grip.clone()
 
                     ik_target = wp_pos - _tcp_offset()
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
@@ -293,7 +307,6 @@ def main():
                             flush=True,
                         )
 
-                    cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
                     raw_cmd    = torch.where(
                         success.unsqueeze(-1), result.solution.view(1, 6), cur_joints
                     )
