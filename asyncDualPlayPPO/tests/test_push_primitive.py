@@ -55,9 +55,9 @@ _WS_Z = ( 0.00, 0.55)
 SCENARIOS = [
     # S0: Push1=Fwd + Push2=Left + Spin CW
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.1, "offset_y": 0.1, "push_dx": 0.1,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.10, "push_dy": -0.3,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.2, "offset_y": 0.2, "push_dx": 0.2,   "push_dy": 0.2,  "yaw": 0.2, "spin_yaw": math.pi / 4},
     ],
     # S1: Push1=Fwd + Push2=Right + Spin CCW
     [
@@ -290,8 +290,10 @@ def main():
                     # Velocity smooth: limit how far target moves per step
                     delta_target = ik_target - (last_good_joints.unsqueeze(0) if False else ik_target)
                     # Use smooth interpolation from current to target
+                    cur_w3_quat = _robot_scene.data.body_quat_w[:, _w3_ids[0]]
+                    cur_w3_quat = cur_w3_quat / cur_w3_quat.norm(dim=-1, keepdim=True)
                     result    = ik_solver.solve_batch(
-                        CuroboPose(position=ik_target, quaternion=wp_quat),
+                        CuroboPose(position=ik_target, quaternion=cur_w3_quat),
                         seed_config=cur_joints.unsqueeze(1),
                         retract_config=cur_joints,
                     )
