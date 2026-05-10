@@ -14,7 +14,7 @@ def Xform "t_shape_urdf" (
     )
     {
         rel material:binding = </t_shape_urdf/Looks/TBlockMat>
-        point3f physics:centerOfMass = (0, 0.013, 0.015)
+        point3f physics:centerOfMass = (0, 0.013, 0.025)
         float3 physics:diagonalInertia = (1, 1, 1)
         float physics:mass = 0.1
         bool physics:rigidBodyEnabled = 1

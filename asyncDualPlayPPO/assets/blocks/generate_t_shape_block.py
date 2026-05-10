@@ -26,7 +26,7 @@ TOP_W = 0.08    # top bar width (X) — diffusion_policy 4:1 ratio
 TOP_D = 0.02    # top bar depth (Y)
 STEM_W = 0.02   # stem width (X)
 STEM_D = 0.06   # stem depth (Y) — diffusion_policy 1:3 ratio
-HEIGHT = 0.03   # total height (Z)
+HEIGHT = 0.05   # total height (Z)
 
 # Derived positions  so the T is centered at origin
 TOP_CY = STEM_D / 2.0 - TOP_D / 2.0               # top bar center Y
