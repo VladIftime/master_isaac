@@ -246,6 +246,7 @@ def main():
                     device=device,
                     n_spin=_N_SPIN,
                     spin_yaw=torch.tensor([spin_yaw], device=device) if spin_yaw != 0.0 else None,
+                    table_z=0.11,
                 )
 
                 label = f"Push {push_i + 1}"
