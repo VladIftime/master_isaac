@@ -44,7 +44,6 @@ def create_t_shape_usda():
 
     root = stage.GetPrimAtPath("/t_shape")
     root.SetKind("component")
-    root.SetInstanceable(True)
     root.SetTypeName("Xform")
 
     # ---- Visual meshes (two boxes forming a T) ----

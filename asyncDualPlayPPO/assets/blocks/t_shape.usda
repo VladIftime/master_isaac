@@ -7,7 +7,6 @@
 
 def Xform "t_shape" (
     kind = "component"
-    instanceable = true
     prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
 )
 {
