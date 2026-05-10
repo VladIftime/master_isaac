@@ -89,6 +89,30 @@ SCENARIOS = [
         {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": -0.10, "yaw": 0.0, "spin_yaw": 0.0},
         {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": -math.pi / 4},
     ],
+    # S6: Diagonal Forward-Right at 30° yaw + Spin CW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.07, "push_dy": 0.07, "yaw": math.pi / 6, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0,       "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0,       "spin_yaw": math.pi / 4},
+    ],
+    # S7: Forward at 45° yaw + Right + Spin CCW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.10, "yaw": math.pi / 4, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0,        "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0,        "spin_yaw": -math.pi / 4},
+    ],
+    # S8: Diagonal Left-Back -30° + Forward + Spin CW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": -0.07, "push_dy": -0.07, "yaw": -math.pi / 6, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.10,  "yaw": 0.0,         "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,   "yaw": 0.0,         "spin_yaw": math.pi / 4},
+    ],
+    # S9: Right at -45° + Back at 30° + Spin CCW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.10,  "push_dy": 0.0,   "yaw": -math.pi / 4, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": -0.10, "yaw": math.pi / 6,  "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,   "yaw": 0.0,          "spin_yaw": -math.pi / 4},
+    ],
 ]
 
 _PAUSE_STEPS = 60  # ~1.2 s between pushes inside a scenario
@@ -249,12 +273,10 @@ def main():
                 )
 
                 label = f"Push {push_i + 1}"
-                if push_i == 0:
-                    label += f"  ({push_dx:+.2f}, {push_dy:+.2f}) m"
-                elif push_i == 1:
-                    label += f"  ({push_dx:+.2f}, {push_dy:+.2f}) m"
-                else:
+                if push_i == 2:
                     label += f"  spin {math.degrees(spin_yaw):+.0f}\u00b0"
+                else:
+                    label += f"  ({push_dx:+.2f}, {push_dy:+.2f})m yaw={math.degrees(yaw):+.0f}\u00b0"
 
                 print(
                     f"\n  [{scenario_idx}.{push_i + 1}] "
