@@ -326,17 +326,15 @@ def main():
 
                     raw_cmd = last_good_joints.clone()
 
-                    if wp_i < 3:
+                    if wp_i % 3 == 0:
                         ee_pos = _tcp_local()
                         wrist_pos = _robot_scene.data.body_pos_w[:, _w3_ids[0]] - env.env.scene.env_origins
+                        obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6] if 'obs' in dir() else torch.zeros(3)
                         print(
                             f"    wp {wp_i}: "
                             f"ee=({float(ee_pos[0,0]):+.3f},{float(ee_pos[0,1]):+.3f},{float(ee_pos[0,2]):+.3f})  "
-                            f"wp=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
-                            f"wrist=({float(wrist_pos[0,0]):+.3f},{float(wrist_pos[0,1]):+.3f},{float(wrist_pos[0,2]):+.3f})  "
-                            f"ik_cmd=({float(ik_target[0,0]):+.3f},{float(ik_target[0,1]):+.3f},{float(ik_target[0,2]):+.3f})  "
-                            f"joints={[f'{float(raw_cmd[0,i]):.2f}' for i in range(6)]} "
-                            f"ik={bool(success.any())}",
+                            f"obj=({float(obj_pos_obs[0,0]):+.3f},{float(obj_pos_obs[0,1]):+.3f},{float(obj_pos_obs[0,2]):+.3f})  "
+                            f"euler=({float(math.degrees(obj_euler[0])):+.0f},{float(math.degrees(obj_euler[1])):+.0f},{float(math.degrees(obj_euler[2])):+.0f})\u00b0",
                             flush=True,
                         )
                     prev_jcmd = raw_cmd.detach().clone()
@@ -354,9 +352,17 @@ def main():
                 n_wp = len(waypoints)
                 obj_after = obs[0, env.robot_dim:env.robot_dim + 3]
                 disp = obj_after - obj_pos_obs[0]
+                obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6]
+                obj_linvel = obs[0, env.robot_dim + 6:env.robot_dim + 9]
+                obj_angvel = obs[0, env.robot_dim + 9:env.robot_dim + 12]
+                obj_contact = obs[0, env.robot_dim + 13]
                 print(
                     f"         IK {ik_ok}/{n_wp}  "
-                    f"disp=({float(disp[0]):+.3f},{float(disp[1]):+.3f}) m",
+                    f"disp=({float(disp[0]):+.3f},{float(disp[1]):+.3f})m  "
+                    f"obj=({float(obj_after[0]):+.3f},{float(obj_after[1]):+.3f},{float(obj_after[2]):+.3f})  "
+                    f"euler=({float(math.degrees(obj_euler[0])):+.0f},{float(math.degrees(obj_euler[1])):+.0f},{float(math.degrees(obj_euler[2])):+.0f})°  "
+                    f"vel=({float(obj_linvel[0]):+.3f},{float(obj_linvel[1]):+.3f},{float(obj_linvel[2]):+.3f})m/s  "
+                    f"contact={float(obj_contact):.0f}",
                     flush=True,
                 )
 
