@@ -17,8 +17,13 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 from isaaclab.sensors import ContactSensorCfg, patterns
+from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
+from isaaclab.sim.spawners.from_files import spawn_from_usd
+from isaaclab.assets import RigidObjectCfg
+import isaaclab.sim as sim_utils
 
 from .utils.reach_dual_arm_diffik_env_cfg import (
+    ISAACLAB_DUAL_ARM_EXT_DIR,
     ReachDualArmDiffIKEnvCfg,
     ReachDualArmSceneCfg,
     ActionsCfg,
@@ -98,13 +103,28 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
 
     @configclass
     class PushTaskSceneCfg(ReachDualArmSceneCfg):
-        """Scene restricted to a single object."""
+        """Scene with T-shaped object for push task."""
         cube = None
         cylinder = None
         rect = None
         triangle = None
         camera = None
         contact_forces = None
+
+        target_object = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/TargetObject",
+            init_state=RigidObjectCfg.InitialStateCfg(
+                pos=[0.0, 0.7, 0.03],
+                rot=[0.0, 0.0, 0.0, 1.0],
+            ),
+            spawn=UsdFileCfg(
+                func=spawn_from_usd,
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usd",
+                scale=(1.0, 1.0, 1.0),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
+            ),
+        )
 
     scene: PushTaskSceneCfg = PushTaskSceneCfg(num_envs=4, env_spacing=2.5)
     observations: PushTaskObservationsCfg = PushTaskObservationsCfg()
