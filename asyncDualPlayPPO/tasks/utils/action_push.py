@@ -92,12 +92,13 @@ def compute_push_waypoints(
     Phases (when n_spin > 0):
       1. Approach: EE→above object (tool-down)
       2. Orient:   rotate to initial yaw
-      3. Descend:  move down to surface contact, gripper ramps open→closed
-      4. Push:     move in push direction (gripper closed, yaw unchanged)
-      5. Spin:     change yaw by spin_yaw while gripper closed
-      6. Release:  open gripper (1 step)
-      7. Retract:  move up above push target
-      8. Return:   move back above pre-push start position
+      3. Engage:   close gripper at approach height (1 step)
+      4. Descend:  move down to surface contact (gripper closed)
+      5. Push:     move in push direction (gripper closed, yaw unchanged)
+      6. Spin:     change yaw by spin_yaw while gripper closed
+      7. Release:  open gripper (1 step)
+      8. Retract:  move up above push target
+      9. Return:   move back above pre-push start position
 
     When n_spin == 0 or spin_yaw is None:
       1. Approach: EE→above object (tool-down)
@@ -171,12 +172,12 @@ def compute_push_waypoints(
     # ── Phase 3: conditional — engage before descend for spin, after for standard ─
     do_spin = (n_spin > 0) and (spin_yaw is not None)
     if do_spin:
-        # close gradually during descend (open at top → closed at contact)
+        # close at approach height, then descend with gripper closed
+        waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
         for i in range(1, n_descend + 1):
             alpha = i / n_descend
             pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
-            grip = open_g * (1.0 - alpha) + close_g * alpha
-            waypoints.append((pos, target_quat.clone(), grip))
+            waypoints.append((pos, target_quat.clone(), close_g.clone()))
         descend_end = contact_pos.clone()
         grasp_quat = target_quat.clone()
     else:
