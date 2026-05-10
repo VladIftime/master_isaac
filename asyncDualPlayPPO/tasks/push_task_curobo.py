@@ -122,7 +122,9 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                 func=spawn_from_usd,
                 usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usda",
                 scale=(1.0, 1.0, 1.0),
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    disable_gravity=False,
+                ),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
             ),
         )

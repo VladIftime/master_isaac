@@ -9,16 +9,9 @@ def Xform "t_shape_urdf" (
     kind = "component"
 )
 {
-    def Xform "baseLink" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
+    def Xform "baseLink"
     {
         rel material:binding = </t_shape_urdf/Looks/TBlockMat>
-        point3f physics:centerOfMass = (0, 0.013, 0.025)
-        float3 physics:diagonalInertia = (1, 1, 1)
-        float physics:mass = 0.1
-        bool physics:rigidBodyEnabled = 1
-        custom bool physics:startsAsSleep = 0
 
         def Scope "colliders"
         {
@@ -36,8 +29,6 @@ def Xform "t_shape_urdf" (
                     int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
                     uniform token physics:approximation = "convexHull"
                     bool physics:collisionEnabled = 1
-                    custom rel physics:collisionGroup
-                    prepend rel physics:collisionGroup = </t_shape_urdf/collidersCollisionGroup>
                     point3f[] points = [(-0.04, -0.01, -0.025), (0.04, -0.01, -0.025), (0.04, 0.01, -0.025), (-0.04, 0.01, -0.025), (-0.04, -0.01, 0.025), (0.04, -0.01, 0.025), (0.04, 0.01, 0.025), (-0.04, 0.01, 0.025)]
                     uniform token purpose = "guide"
                 }
@@ -57,8 +48,6 @@ def Xform "t_shape_urdf" (
                     int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
                     uniform token physics:approximation = "convexHull"
                     bool physics:collisionEnabled = 1
-                    custom rel physics:collisionGroup
-                    prepend rel physics:collisionGroup = </t_shape_urdf/collidersCollisionGroup>
                     point3f[] points = [(-0.01, -0.03, -0.025), (0.01, -0.03, -0.025), (0.01, 0.03, -0.025), (-0.01, 0.03, -0.025), (-0.01, -0.03, 0.025), (0.01, -0.03, 0.025), (0.01, 0.03, 0.025), (-0.01, 0.03, 0.025)]
                     uniform token purpose = "guide"
                 }
@@ -97,10 +86,6 @@ def Xform "t_shape_urdf" (
                 }
             }
         }
-    }
-
-    def PhysicsCollisionGroup "collidersCollisionGroup"
-    {
     }
 
     def "Looks"
