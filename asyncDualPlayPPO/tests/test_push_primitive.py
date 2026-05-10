@@ -297,24 +297,23 @@ def main():
                     if success.any():
                         ik_ok += 1
 
-                    if wp_i < 5:
+                    raw_cmd    = torch.where(
+                        success.unsqueeze(-1), result.solution.view(1, 6), cur_joints
+                    )
+
+                    if wp_i < 3:
                         ee_pos = _tcp_local()
-                        tcp_off = _tcp_offset()
                         wrist_pos = _robot_scene.data.body_pos_w[:, _w3_ids[0]] - env.env.scene.env_origins
                         print(
                             f"    wp {wp_i}: "
                             f"ee=({float(ee_pos[0,0]):+.3f},{float(ee_pos[0,1]):+.3f},{float(ee_pos[0,2]):+.3f})  "
                             f"wp=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
-                            f"ik_tgt=({float(ik_target[0,0]):+.3f},{float(ik_target[0,1]):+.3f},{float(ik_target[0,2]):+.3f})  "
                             f"wrist=({float(wrist_pos[0,0]):+.3f},{float(wrist_pos[0,1]):+.3f},{float(wrist_pos[0,2]):+.3f})  "
-                            f"toff=({float(tcp_off[0,0]):+.3f},{float(tcp_off[0,1]):+.3f},{float(tcp_off[0,2]):+.3f})  "
-                            f"ik={bool(success.any())}",
+                            f"ik_cmd=({float(ik_target[0,0]):+.3f},{float(ik_target[0,1]):+.3f},{float(ik_target[0,2]):+.3f})  "
+                            f"joints cmd={[f'{float(raw_cmd[0,i]):.2f}' for i in range(6)]} "
+                            f"cur={[f'{float(cur_joints[0,i]):.2f}' for i in range(6)]}",
                             flush=True,
                         )
-
-                    raw_cmd    = torch.where(
-                        success.unsqueeze(-1), result.solution.view(1, 6), cur_joints
-                    )
                     prev_jcmd = raw_cmd.detach().clone()
 
                     env_full        = torch.zeros(1, env.action_space.shape[0], device=device)
