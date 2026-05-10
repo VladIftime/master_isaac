@@ -10,9 +10,9 @@ def Xform "t_shape" (
     prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
 )
 {
-    float3 physics:centerOfMass = (0.0, -0.01, 0.015)
+    float3 physics:centerOfMass = (0.0, -0.001, 0.015)
     float3 physics:diagonalInertia = (1.0, 1.0, 1.0)
-    float physics:mass = 0.08
+    float physics:mass = 0.005
 
     def Scope "visuals" (
         prepend apiSchemas = ["PhysicsCollisionAPI"]
@@ -22,11 +22,11 @@ def Xform "t_shape" (
             prepend apiSchemas = ["PhysicsCollisionAPI"]
         )
         {
-            float3[] extent = [(-0.06, -0.02, -0.015), (0.06, 0.02, 0.015)]
+            float3[] extent = [(-0.006, -0.002, -0.015), (0.006, 0.002, 0.015)]
             bool physics:collisionEnabled = 0
             uniform token purpose = "default"
-            double3 xformOp:scale = (0.12, 0.04, 0.03)
-            double3 xformOp:translate = (0.0, 0.03, 0.015)
+            double3 xformOp:scale = (0.012, 0.004, 0.03)
+            double3 xformOp:translate = (0.0, 0.003, 0.015)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         }
 
@@ -34,11 +34,11 @@ def Xform "t_shape" (
             prepend apiSchemas = ["PhysicsCollisionAPI"]
         )
         {
-            float3[] extent = [(-0.02, -0.05, -0.015), (0.02, 0.05, 0.015)]
+            float3[] extent = [(-0.002, -0.005, -0.015), (0.002, 0.005, 0.015)]
             bool physics:collisionEnabled = 0
             uniform token purpose = "default"
-            double3 xformOp:scale = (0.04, 0.10, 0.03)
-            double3 xformOp:translate = (0.0, -0.035, 0.015)
+            double3 xformOp:scale = (0.004, 0.01, 0.03)
+            double3 xformOp:translate = (0.0, -0.003, 0.015)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         }
     }
@@ -51,10 +51,10 @@ def Xform "t_shape" (
             prepend apiSchemas = ["PhysicsCollisionAPI"]
         )
         {
-            float3[] extent = [(-0.06, -0.02, -0.015), (0.06, 0.02, 0.015)]
+            float3[] extent = [(-0.006, -0.002, -0.015), (0.006, 0.002, 0.015)]
             uniform token purpose = "guide"
-            double3 xformOp:scale = (0.12, 0.04, 0.03)
-            double3 xformOp:translate = (0.0, 0.03, 0.015)
+            double3 xformOp:scale = (0.012, 0.004, 0.03)
+            double3 xformOp:translate = (0.0, 0.003, 0.015)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         }
 
@@ -62,10 +62,10 @@ def Xform "t_shape" (
             prepend apiSchemas = ["PhysicsCollisionAPI"]
         )
         {
-            float3[] extent = [(-0.02, -0.05, -0.015), (0.02, 0.05, 0.015)]
+            float3[] extent = [(-0.002, -0.005, -0.015), (0.002, 0.005, 0.015)]
             uniform token purpose = "guide"
-            double3 xformOp:scale = (0.04, 0.10, 0.03)
-            double3 xformOp:translate = (0.0, -0.035, 0.015)
+            double3 xformOp:scale = (0.004, 0.01, 0.03)
+            double3 xformOp:translate = (0.0, -0.003, 0.015)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         }
     }

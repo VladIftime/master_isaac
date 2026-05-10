@@ -22,10 +22,10 @@ BLOCKS_DIR = os.path.dirname(os.path.abspath(__file__))
 CFG_DIR = os.path.join(BLOCKS_DIR, "configuration")
 
 # T-shape dimensions (meters)
-TOP_W = 0.12    # top bar width (X)
-TOP_D = 0.04    # top bar depth (Y)
-STEM_W = 0.04   # stem width (X)
-STEM_D = 0.10   # stem depth (Y)
+TOP_W = 0.012   # top bar width (X)
+TOP_D = 0.004   # top bar depth (Y)
+STEM_W = 0.004  # stem width (X)
+STEM_D = 0.01   # stem depth (Y)
 HEIGHT = 0.03   # total height (Z)
 
 # Derived positions so the T is centered at origin

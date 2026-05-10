@@ -110,11 +110,12 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
         triangle = None
         camera = None
         contact_forces = None
+        goal_ghost = None
 
         target_object = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/TargetObject",
             init_state=RigidObjectCfg.InitialStateCfg(
-                pos=[0.0, 0.7, 0.03],
+                pos=[0.0, 0.7, 0.02],
                 rot=[0.0, 0.0, 0.0, 1.0],
             ),
             spawn=UsdFileCfg(

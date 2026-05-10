@@ -6,7 +6,6 @@ Cycles through push scenarios. Each scenario is a 3-push sequence:
   2. Drag left/right 10 cm
   3. Spin 45° with gripper closed
 
-The pink ghost shows the cumulative final position.
 Loops forever until you close the viewport window or press Ctrl+C.
 
 Usage:
@@ -207,13 +206,8 @@ def main():
             scenario = SCENARIOS[scenario_idx % len(SCENARIOS)]
             scenario_idx += 1
 
-            # Compute cumulative displacement for the ghost
-            total_dx = sum(p["push_dx"] for p in scenario)
-            total_dy = sum(p["push_dy"] for p in scenario)
-
             print(f"{'='*64}")
             print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}  "
-                  f"final disp=({total_dx:+.2f}, {total_dy:+.2f}) m  "
                   f"{'spin CW' if scenario[-1]['spin_yaw'] > 0 else 'spin CCW'}")
             print(f"{'='*64}")
 
@@ -233,17 +227,7 @@ def main():
                 obs         = env._build_obs(obs_dict)
                 obj_pos_obs = obs[:, env.robot_dim:env.robot_dim + 3].clone()
 
-                # ── Move ghost on first push to show cumulative final target ──
-                if push_i == 0:
-                    goal_local = torch.tensor(
-                        [obj_pos_obs[0, 0] + total_dx, obj_pos_obs[0, 1] + total_dy, 0.02],
-                        device=device, dtype=torch.float32,
-                    )
-                    env.goal_pos_euler[0, :3] = goal_local
-                    env.goal_pos_euler[0, 3:] = 0.0
-                    env._update_goal_in_extras()
-                    env._move_goal_ghost(torch.tensor([0], device=device))
-                    _viewer_step()
+
 
                 # ── Compute waypoints ─────────────────────────────────────────
                 prev_jcmd  = _robot_scene.data.joint_pos[:, _arm_jids].clone()
