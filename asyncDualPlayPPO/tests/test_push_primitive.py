@@ -1,12 +1,12 @@
 """
 test_push_primitive.py  —  Interactive push loop
 =================================================
-Continuously executes push macro-actions with randomised parameters.
+Cycles through push scenarios. Each scenario is a 3-push sequence:
+  1. Push forward/backward 10 cm (offset ~2 cm behind object center)
+  2. Drag left/right 10 cm
+  3. Spin 45° with gripper closed
 
-Each push randomises approach offset, push displacement, and gripper yaw.
-The block accumulates pushes (not teleported).  Every 3 pushes the
-environment is fully reset, placing the block back at its initial position.
-
+The pink ghost shows the cumulative final position.
 Loops forever until you close the viewport window or press Ctrl+C.
 
 Usage:
@@ -43,33 +43,51 @@ _ARM_JOINT_NAMES = [
     "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
 ]
 
-# ── Randomisation ranges (env-local frame, metres / radians) ─────────────────
-_OFFSET_X_RANGE = (-0.05,  0.05)           # gripper lateral approach offset
-_OFFSET_Y_RANGE = (-0.10, -0.02)           # gripper depth behind object
-_PUSH_DX_RANGE  = (-0.12,  0.12)           # push X component
-_PUSH_DY_RANGE  = ( 0.10,  0.28)           # push Y component (forward)
-_YAW_RANGE      = (-math.pi / 4, math.pi / 4)   # gripper yaw
+_N_SPIN = 8     # substeps for the spin phase
 
-_PUSHES_PER_ROUND = 10
-_PAUSE_STEPS      = 75    # ~1.5 s at 50 Hz between pushes
-_RESET_EVERY_N    = 3     # full env reset every N pushes to return block to start
+# ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
+# Each push: {offset_x, offset_y, push_dx, push_dy, yaw, spin_yaw}
+# Approach offset is ~2 cm behind object center (offset_y ≈ -0.02)
+SCENARIOS = [
+    # S0: Forward (+Y) + Left (-X) + Spin CW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+    ],
+    # S1: Forward (+Y) + Right (+X) + Spin CCW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+    ],
+    # S2: Backward (-Y) + Left (-X) + Spin CW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": -0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": -0.10, "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": math.pi / 4},
+    ],
+    # S3: Backward (-Y) + Right (+X) + Spin CCW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": -0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.10, "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": -math.pi / 4},
+    ],
+    # S4: Right (+X) + Forward (+Y) + Spin CW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.10, "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.10,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,  "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": math.pi / 4},
+    ],
+    # S5: Left (-X) + Backward (-Y) + Spin CCW
+    [
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": -0.10, "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": -0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": -0.02, "push_dx": 0.0,   "push_dy": 0.0,   "yaw": 0.0, "spin_yaw": -math.pi / 4},
+    ],
+]
 
-
-def _rnd(lo: float, hi: float, device) -> float:
-    return lo + (hi - lo) * torch.rand(1, device=device).item()
-
-
-def _gen_round(n: int, device) -> list:
-    return [
-        {
-            "offset_x": _rnd(*_OFFSET_X_RANGE, device),
-            "offset_y": _rnd(*_OFFSET_Y_RANGE, device),
-            "push_dx":  _rnd(*_PUSH_DX_RANGE, device),
-            "push_dy":  _rnd(*_PUSH_DY_RANGE, device),
-            "yaw":      _rnd(*_YAW_RANGE, device),
-        }
-        for _ in range(n)
-    ]
+_PAUSE_STEPS = 60  # ~1.2 s between pushes inside a scenario
 
 
 def main():
@@ -95,8 +113,8 @@ def main():
 
     # ── Environment ───────────────────────────────────────────────────────────
     print("\n" + "=" * 64)
-    print("  Push Primitive — Interactive Loop")
-    print(f"  {_PUSHES_PER_ROUND} pushes / round  |  reset every {_RESET_EVERY_N} pushes")
+    print("  Push Primitive — Scenario Loop")
+    print(f"  {len(SCENARIOS)} scenarios  |  3 pushes per scenario")
     if not headless and args.step_delay == 0.0:
         print("  Tip: --step-delay 0.05 slows down for visual inspection.")
     print("=" * 64)
@@ -176,21 +194,25 @@ def main():
         _pause(20)
 
     # ── Main loop ─────────────────────────────────────────────────────────────
-    round_num = 0
-    pushes_since_reset = 0
+    scenario_idx = 0
     print("\n[Loop] Starting — close the viewport window to exit.\n")
 
     try:
         while simulation_app.is_running():
-            round_num += 1
-            configs = _gen_round(_PUSHES_PER_ROUND, device)
+            scenario = SCENARIOS[scenario_idx % len(SCENARIOS)]
+            scenario_idx += 1
+
+            # Compute cumulative displacement for the ghost
+            total_dx = sum(p["push_dx"] for p in scenario)
+            total_dy = sum(p["push_dy"] for p in scenario)
 
             print(f"{'='*64}")
-            print(f"  Round {round_num}  ({_PUSHES_PER_ROUND} pushes  |  "
-                  f"reset every {_RESET_EVERY_N})")
+            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}  "
+                  f"final disp=({total_dx:+.2f}, {total_dy:+.2f}) m  "
+                  f"{'spin CW' if scenario[-1]['spin_yaw'] > 0 else 'spin CCW'}")
             print(f"{'='*64}")
 
-            for push_num, cfg in enumerate(configs, 1):
+            for push_i, cfg in enumerate(scenario):
                 if not simulation_app.is_running():
                     break
 
@@ -199,24 +221,17 @@ def main():
                 push_dx  = cfg["push_dx"]
                 push_dy  = cfg["push_dy"]
                 yaw      = cfg["yaw"]
-
-                # ── Every _RESET_EVERY_N pushes, fully reset the environment ──
-                if pushes_since_reset >= _RESET_EVERY_N:
-                    print(f"\n  --- Environment reset after {_RESET_EVERY_N} pushes ---")
-                    env.reset()
-                    _viewer_step()
-                    _pause(10)
-                    pushes_since_reset = 0
+                spin_yaw = cfg["spin_yaw"]
 
                 # ── Get current object position from observation ──────────────
                 obs_dict    = env.env.observation_manager.compute()
                 obs         = env._build_obs(obs_dict)
                 obj_pos_obs = obs[:, env.robot_dim:env.robot_dim + 3].clone()
 
-                # ── Move visual ghost only every reset cycle (reduce physics disturbance) ──
-                if pushes_since_reset == 0:
+                # ── Move ghost on first push to show cumulative final target ──
+                if push_i == 0:
                     goal_local = torch.tensor(
-                        [obj_pos_obs[0, 0] + push_dx, obj_pos_obs[0, 1] + push_dy, 0.02],
+                        [obj_pos_obs[0, 0] + total_dx, obj_pos_obs[0, 1] + total_dy, 0.02],
                         device=device, dtype=torch.float32,
                     )
                     env.goal_pos_euler[0, :3] = goal_local
@@ -240,14 +255,22 @@ def main():
                     current_ee_pos =current_ee,
                     current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),
                     device=device,
+                    n_spin=_N_SPIN,
+                    spin_yaw=torch.tensor([spin_yaw], device=device) if spin_yaw != 0.0 else None,
                 )
 
+                label = f"Push {push_i + 1}"
+                if push_i == 0:
+                    label += f"  ({push_dx:+.2f}, {push_dy:+.2f}) m"
+                elif push_i == 1:
+                    label += f"  ({push_dx:+.2f}, {push_dy:+.2f}) m"
+                else:
+                    label += f"  spin {math.degrees(spin_yaw):+.0f}\u00b0"
+
                 print(
-                    f"\n  [{round_num}.{push_num:02d}] "
+                    f"\n  [{scenario_idx}.{push_i + 1}] "
                     f"obj=({float(obj_pos_obs[0, 0]):+.2f},{float(obj_pos_obs[0, 1]):+.2f})  "
-                    f"off=({offset_x:+.2f},{offset_y:+.2f})  "
-                    f"push=({push_dx:+.2f},{push_dy:+.2f})  "
-                    f"yaw={math.degrees(yaw):+.0f}°",
+                    f"{label}",
                     flush=True,
                 )
 
@@ -292,8 +315,13 @@ def main():
                     flush=True,
                 )
 
-                pushes_since_reset += 1
                 _pause(_PAUSE_STEPS)
+
+            # ── End of scenario ───────────────────────────────────────────────
+            print(f"\n  --- End of scenario --- resetting environment ---\n")
+            env.reset()
+            _viewer_step()
+            _pause(15)
 
     except KeyboardInterrupt:
         print("\n[Loop] Interrupted by user.")

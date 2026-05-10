@@ -76,8 +76,10 @@ def compute_push_waypoints(
     n_orient: int = PUSH_NSTEPS_ORIENT,
     n_descend: int = PUSH_NSTEPS_DESCEND,
     n_push: int = PUSH_NSTEPS_PUSH,
+    n_spin: int = 0,           # substeps for spin phase (yaw change while gripper closed)
     n_retract: int = PUSH_NSTEPS_RETRACT,
     n_return: int = PUSH_NSTEPS_RETURN,
+    spin_yaw: torch.Tensor = None,  # (N,)  additional yaw applied during spin phase while gripper closed
 ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Generate push trajectory waypoints for N environments.
@@ -87,15 +89,18 @@ def compute_push_waypoints(
       - quaternion: (N, 4) TCP target orientation (wxyz)
       - gripper_cmd: (N,)  -1.0 = close, +1.0 = open
 
-    Phases:
+    Phases (when n_spin > 0):
       1. Approach: EE→above object (tool-down)
-      2. Orient:   rotate to target yaw
+      2. Orient:   rotate to initial yaw
       3. Descend:  move down to surface contact
       4. Engage:   close gripper (1 step)
-      5. Push:     move in push direction
-      6. Release:  open gripper (1 step)
-      7. Retract:  move up above push target
-      8. Return:   move back above pre-push start position
+      5. Push:     move in push direction (gripper closed, yaw unchanged)
+      6. Spin:     change yaw by spin_yaw while gripper closed
+      7. Release:  open gripper (1 step)
+      8. Retract:  move up above push target
+      9. Return:   move back above pre-push start position
+
+    When n_spin == 0 or spin_yaw is None, phases 6 is omitted (8-phase trajectory).
     """
     N = offset_x.shape[0]
     _ones = torch.ones(N, device=device)
@@ -171,16 +176,36 @@ def compute_push_waypoints(
         pos = contact_pos * (1.0 - alpha) + push_target * alpha
         waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
-    # ── Phase 6: Release (open gripper) ───────────────────────────────────
-    waypoints.append((push_target.clone(), target_quat.clone(), open_g.clone()))
+    # ── Phase 6: Spin (yaw change while gripper closed, optional) ────────
+    do_spin = (n_spin > 0) and (spin_yaw is not None)
+    if do_spin:
+        q_spin_yaw = torch.stack([
+            torch.cos((yaw + spin_yaw) / 2.0),
+            _zeros,
+            _zeros,
+            torch.sin((yaw + spin_yaw) / 2.0),
+        ], dim=-1)
+        spin_quat = _quat_mul(q_spin_yaw, q_tool_down)
+        spin_quat = spin_quat / spin_quat.norm(dim=-1, keepdim=True)
+        for i in range(1, n_spin + 1):
+            alpha = i / n_spin
+            t = torch.full((N, 1), alpha, device=device)
+            quat = _quat_slerp(target_quat, spin_quat, t)
+            waypoints.append((push_target.clone(), quat, close_g.clone()))
+        spin_end_quat = spin_quat.clone()
+    else:
+        spin_end_quat = target_quat.clone()
 
-    # ── Phase 7: Retract (push target → up) ───────────────────────────────
+    # ── Phase 7: Release (open gripper) ───────────────────────────────────
+    waypoints.append((push_target.clone(), spin_end_quat, open_g.clone()))
+
+    # ── Phase 8: Retract (push target → up) ───────────────────────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
         waypoints.append((pos, q_tool_down, open_g.clone()))
 
-    # ── Phase 8: Return (above push target → above pre-push start) ────────
+    # ── Phase 9: Return (above push target → above pre-push start) ────────
     # Elevates start XY to approach_height so the arm never dips mid-transit.
     home_pos = torch.stack([
         start_pos[:, 0],
@@ -244,6 +269,7 @@ class PushConfig:
     n_orient: int = PUSH_NSTEPS_ORIENT
     n_descend: int = PUSH_NSTEPS_DESCEND
     n_push: int = PUSH_NSTEPS_PUSH
+    n_spin: int = 0
     n_retract: int = PUSH_NSTEPS_RETRACT
     n_return: int = PUSH_NSTEPS_RETURN
     num_bins: int = 11
@@ -254,4 +280,4 @@ def total_push_substeps(cfg: PushConfig = None) -> int:
     if cfg is None:
         cfg = PushConfig()
     return (cfg.n_approach + cfg.n_orient + cfg.n_descend
-            + 1 + cfg.n_push + 1 + cfg.n_retract + cfg.n_return)
+            + 1 + cfg.n_push + cfg.n_spin + 1 + cfg.n_retract + cfg.n_return)
