@@ -142,3 +142,6 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
         self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
         self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
+        # Disable terminations (they cause auto-resets mid-trajectory)
+        self.terminations.robot_through_table = None
+        self.terminations.objects_off_table = None
