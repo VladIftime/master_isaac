@@ -24,42 +24,42 @@ def Xform "t_shape_urdf" (
         {
             def Xform "top_bar"
             {
-                double3 xformOp:translate = (0, 0.019999999552965164, 0.014999999664723873)
+                double3 xformOp:translate = (0, 0.019999999552965164, 0.02500000037252903)
                 uniform token[] xformOpOrder = ["xformOp:translate"]
 
                 def Mesh "mesh" (
                     prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 )
                 {
-                    float3[] extent = [(-0.04, -0.01, -0.015), (0.04, 0.01, 0.015)]
+                    float3[] extent = [(-0.04, -0.01, -0.025), (0.04, 0.01, 0.025)]
                     int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
                     int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
                     uniform token physics:approximation = "convexHull"
                     bool physics:collisionEnabled = 1
                     custom rel physics:collisionGroup
                     prepend rel physics:collisionGroup = </t_shape_urdf/collidersCollisionGroup>
-                    point3f[] points = [(-0.04, -0.01, -0.015), (0.04, -0.01, -0.015), (0.04, 0.01, -0.015), (-0.04, 0.01, -0.015), (-0.04, -0.01, 0.015), (0.04, -0.01, 0.015), (0.04, 0.01, 0.015), (-0.04, 0.01, 0.015)]
+                    point3f[] points = [(-0.04, -0.01, -0.025), (0.04, -0.01, -0.025), (0.04, 0.01, -0.025), (-0.04, 0.01, -0.025), (-0.04, -0.01, 0.025), (0.04, -0.01, 0.025), (0.04, 0.01, 0.025), (-0.04, 0.01, 0.025)]
                     uniform token purpose = "guide"
                 }
             }
 
             def Xform "stem"
             {
-                double3 xformOp:translate = (0, -0.019999999552965164, 0.014999999664723873)
+                double3 xformOp:translate = (0, -0.019999999552965164, 0.02500000037252903)
                 uniform token[] xformOpOrder = ["xformOp:translate"]
 
                 def Mesh "mesh" (
                     prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 )
                 {
-                    float3[] extent = [(-0.01, -0.03, -0.015), (0.01, 0.03, 0.015)]
+                    float3[] extent = [(-0.01, -0.03, -0.025), (0.01, 0.03, 0.025)]
                     int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
                     int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
                     uniform token physics:approximation = "convexHull"
                     bool physics:collisionEnabled = 1
                     custom rel physics:collisionGroup
                     prepend rel physics:collisionGroup = </t_shape_urdf/collidersCollisionGroup>
-                    point3f[] points = [(-0.01, -0.03, -0.015), (0.01, -0.03, -0.015), (0.01, 0.03, -0.015), (-0.01, 0.03, -0.015), (-0.01, -0.03, 0.015), (0.01, -0.03, 0.015), (0.01, 0.03, 0.015), (-0.01, 0.03, 0.015)]
+                    point3f[] points = [(-0.01, -0.03, -0.025), (0.01, -0.03, -0.025), (0.01, 0.03, -0.025), (-0.01, 0.03, -0.025), (-0.01, -0.03, 0.025), (0.01, -0.03, 0.025), (0.01, 0.03, 0.025), (-0.01, 0.03, 0.025)]
                     uniform token purpose = "guide"
                 }
             }
@@ -69,30 +69,30 @@ def Xform "t_shape_urdf" (
         {
             def Xform "top_bar"
             {
-                double3 xformOp:translate = (0, 0.019999999552965164, 0.014999999664723873)
+                double3 xformOp:translate = (0, 0.019999999552965164, 0.02500000037252903)
                 uniform token[] xformOpOrder = ["xformOp:translate"]
 
                 def Mesh "mesh"
                 {
-                    float3[] extent = [(-0.04, -0.01, -0.015), (0.04, 0.01, 0.015)]
+                    float3[] extent = [(-0.04, -0.01, -0.025), (0.04, 0.01, 0.025)]
                     int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
                     int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
-                    point3f[] points = [(-0.04, -0.01, -0.015), (0.04, -0.01, -0.015), (0.04, 0.01, -0.015), (-0.04, 0.01, -0.015), (-0.04, -0.01, 0.015), (0.04, -0.01, 0.015), (0.04, 0.01, 0.015), (-0.04, 0.01, 0.015)]
+                    point3f[] points = [(-0.04, -0.01, -0.025), (0.04, -0.01, -0.025), (0.04, 0.01, -0.025), (-0.04, 0.01, -0.025), (-0.04, -0.01, 0.025), (0.04, -0.01, 0.025), (0.04, 0.01, 0.025), (-0.04, 0.01, 0.025)]
                     uniform token purpose = "default"
                 }
             }
 
             def Xform "stem"
             {
-                double3 xformOp:translate = (0, -0.019999999552965164, 0.014999999664723873)
+                double3 xformOp:translate = (0, -0.019999999552965164, 0.02500000037252903)
                 uniform token[] xformOpOrder = ["xformOp:translate"]
 
                 def Mesh "mesh"
                 {
-                    float3[] extent = [(-0.01, -0.03, -0.015), (0.01, 0.03, 0.015)]
+                    float3[] extent = [(-0.01, -0.03, -0.025), (0.01, 0.03, 0.025)]
                     int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
                     int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
-                    point3f[] points = [(-0.01, -0.03, -0.015), (0.01, -0.03, -0.015), (0.01, 0.03, -0.015), (-0.01, 0.03, -0.015), (-0.01, -0.03, 0.015), (0.01, -0.03, 0.015), (0.01, 0.03, 0.015), (-0.01, 0.03, 0.015)]
+                    point3f[] points = [(-0.01, -0.03, -0.025), (0.01, -0.03, -0.025), (0.01, 0.03, -0.025), (-0.01, 0.03, -0.025), (-0.01, -0.03, 0.025), (0.01, -0.03, 0.025), (0.01, 0.03, 0.025), (-0.01, 0.03, 0.025)]
                     uniform token purpose = "default"
                 }
             }
