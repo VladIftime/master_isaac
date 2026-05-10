@@ -124,6 +124,11 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                 scale=(1.0, 1.0, 1.0),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
+                    solver_position_iteration_count=16,
+                    solver_velocity_iteration_count=4,
+                    max_linear_velocity=1000.0,
+                    max_angular_velocity=1000.0,
+                    max_depenetration_velocity=10000.0,
                 ),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
             ),
