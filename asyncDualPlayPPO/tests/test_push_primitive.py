@@ -51,43 +51,43 @@ _WS_Z = ( 0.00, 0.55)
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
 # Each push: {offset_x, offset_y, push_dx, push_dy, yaw, spin_yaw}
-# Push 1 always: approach 5cm left of object, push forward 10cm
+# Push 1 always: approach centered on stem, push forward 10cm
 SCENARIOS = [
     # S0: Push1=Fwd + Push2=Left + Spin CW
     [
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
     ],
     # S1: Push1=Fwd + Push2=Right + Spin CCW
     [
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
     ],
     # S2: Push1=Fwd + Push2=Bwd + Spin CW
     [
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
     ],
     # S3: Push1=Fwd + Push2=Fwd + Spin CCW
     [
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
     ],
     # S4: Push1=Fwd + Push2=LeftFwd + Spin CW
     [
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
     ],
     # S5: Push1=Fwd + Push2=RightFwd + Spin CCW
     [
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": -0.05, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
     ],
 ]
 
