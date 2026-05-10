@@ -265,7 +265,7 @@ def main():
 
                 # ── Execute push ──────────────────────────────────────────────
                 ik_ok = 0
-                for wp_pos, wp_quat, wp_grip in waypoints:
+                for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
 
@@ -273,6 +273,7 @@ def main():
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
+
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
                         seed_config=prev_jcmd.unsqueeze(1),
@@ -281,6 +282,16 @@ def main():
                     success = result.success.squeeze(-1)
                     if success.any():
                         ik_ok += 1
+
+                    if wp_i < 3:
+                        ee_pos = _tcp_local()
+                        print(
+                            f"    wp {wp_i}: "
+                            f"ee=({float(ee_pos[0,0]):+.3f},{float(ee_pos[0,1]):+.3f},{float(ee_pos[0,2]):+.3f})  "
+                            f"wp_target=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
+                            f"ik_ok={bool(success.any())}",
+                            flush=True,
+                        )
 
                     cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
                     raw_cmd    = torch.where(
