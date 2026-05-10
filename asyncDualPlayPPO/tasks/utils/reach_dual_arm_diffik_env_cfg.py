@@ -335,7 +335,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
     table = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.5, 0.06], rot=[1.0, 0, 0, 0]
+            pos=[0.0, 0.5, -0.05], rot=[1.0, 0, 0, 0]
         ),
         spawn=sim_utils.CuboidCfg(
             size=(2.0, 2.0, 0.1),
