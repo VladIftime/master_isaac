@@ -144,6 +144,7 @@ def main():
     _robot_cfg   = RobotConfig.from_dict(_ur5e_yaml["robot_cfg"], _tensor_args)
     _ik_config   = IKSolverConfig.load_from_robot_config(
         _robot_cfg, world_model=None, tensor_args=_tensor_args,
+        self_collision_check=False, self_collision_opt=False,
     )
     ik_solver = IKSolver(_ik_config)
     ik_solver.solve_batch(
