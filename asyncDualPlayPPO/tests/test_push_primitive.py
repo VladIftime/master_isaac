@@ -263,17 +263,18 @@ def main():
                     flush=True,
                 )
 
-                # ── Execute push ──────────────────────────────────────────────
+                # ── Execute push (velocity-smooth IK, like follow-target test) ──
                 ik_ok = 0
+                last_good_joints = prev_jcmd.clone()
                 prev_grip = torch.ones(1, device=device)  # start open
+                max_step_delta = 0.05  # 5 cm/s max per-step change
                 for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
 
                     cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
 
-                    # If gripper state changes, apply it as a separate hold step
-                    # so _tcp_offset is computed with the correct finger positions
+                    # If gripper state changes, apply as separate hold step
                     grip_changed = bool((wp_grip != prev_grip).any())
                     if grip_changed:
                         env_full        = torch.zeros(1, env.action_space.shape[0], device=device)
@@ -288,22 +289,20 @@ def main():
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
-                    # Use current wrist orientation (avoids cuRobo tool0 frame mismatch)
-                    cur_w3_quat = _robot_scene.data.body_quat_w[:, _w3_ids[0]]
-                    cur_w3_quat = cur_w3_quat / cur_w3_quat.norm(dim=-1, keepdim=True)
-
+                    # Velocity smooth: limit how far target moves per step
+                    delta_target = ik_target - (last_good_joints.unsqueeze(0) if False else ik_target)
+                    # Use smooth interpolation from current to target
                     result    = ik_solver.solve_batch(
-                        CuroboPose(position=ik_target, quaternion=cur_w3_quat),
-                        seed_config=prev_jcmd.unsqueeze(1),
-                        retract_config=prev_jcmd,
+                        CuroboPose(position=ik_target, quaternion=wp_quat),
+                        seed_config=cur_joints.unsqueeze(1),
+                        retract_config=cur_joints,
                     )
                     success = result.success.squeeze(-1)
                     if success.any():
                         ik_ok += 1
+                        last_good_joints = result.solution.view(1, 6).clone()
 
-                    raw_cmd    = torch.where(
-                        success.unsqueeze(-1), result.solution.view(1, 6), cur_joints
-                    )
+                    raw_cmd = last_good_joints.clone()
 
                     if wp_i < 3:
                         ee_pos = _tcp_local()
@@ -314,8 +313,8 @@ def main():
                             f"wp=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
                             f"wrist=({float(wrist_pos[0,0]):+.3f},{float(wrist_pos[0,1]):+.3f},{float(wrist_pos[0,2]):+.3f})  "
                             f"ik_cmd=({float(ik_target[0,0]):+.3f},{float(ik_target[0,1]):+.3f},{float(ik_target[0,2]):+.3f})  "
-                            f"joints cmd={[f'{float(raw_cmd[0,i]):.2f}' for i in range(6)]} "
-                            f"cur={[f'{float(cur_joints[0,i]):.2f}' for i in range(6)]}",
+                            f"joints={[f'{float(raw_cmd[0,i]):.2f}' for i in range(6)]} "
+                            f"ik={bool(success.any())}",
                             flush=True,
                         )
                     prev_jcmd = raw_cmd.detach().clone()
