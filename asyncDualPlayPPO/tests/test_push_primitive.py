@@ -6,7 +6,6 @@ Continuously executes push macro-actions with randomised parameters.
 Each push randomises approach offset, push displacement, and gripper yaw.
 The block accumulates pushes (not teleported).  Every 3 pushes the
 environment is fully reset, placing the block back at its initial position.
-The ghost moves to show the predicted goal (current block pos + push delta).
 
 Loops forever until you close the viewport window or press Ctrl+C.
 
@@ -214,16 +213,17 @@ def main():
                 obs         = env._build_obs(obs_dict)
                 obj_pos_obs = obs[:, env.robot_dim:env.robot_dim + 3].clone()
 
-                # ── Set ghost goal: obj_current + push_delta ──────────────────
-                goal_local = torch.tensor(
-                    [obj_pos_obs[0, 0] + push_dx, obj_pos_obs[0, 1] + push_dy, 0.02],
-                    device=device, dtype=torch.float32,
-                )
-                env.goal_pos_euler[0, :3] = goal_local
-                env.goal_pos_euler[0, 3:] = 0.0
-                env._update_goal_in_extras()
-                env._move_goal_ghost(torch.tensor([0], device=device))
-                _viewer_step()
+                # ── Move visual ghost only every reset cycle (reduce physics disturbance) ──
+                if pushes_since_reset == 0:
+                    goal_local = torch.tensor(
+                        [obj_pos_obs[0, 0] + push_dx, obj_pos_obs[0, 1] + push_dy, 0.02],
+                        device=device, dtype=torch.float32,
+                    )
+                    env.goal_pos_euler[0, :3] = goal_local
+                    env.goal_pos_euler[0, 3:] = 0.0
+                    env._update_goal_in_extras()
+                    env._move_goal_ghost(torch.tensor([0], device=device))
+                    _viewer_step()
 
                 # ── Compute waypoints ─────────────────────────────────────────
                 prev_jcmd  = _robot_scene.data.joint_pos[:, _arm_jids].clone()
