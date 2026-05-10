@@ -26,7 +26,7 @@ TOP_W = 0.12    # top bar width (X)
 TOP_D = 0.04    # top bar depth (Y)
 STEM_W = 0.04   # stem width (X)
 STEM_D = 0.10   # stem depth (Y)
-HEIGHT = 0.04   # total height (Z)
+HEIGHT = 0.03   # total height (Z)
 
 # Derived positions so the T is centered at origin
 TOP_CY = STEM_D / 2.0 - TOP_D / 2.0               # top bar center Y

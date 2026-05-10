@@ -13,7 +13,6 @@ def Xform "t_shape" (
 {
     float3 physics:centerOfMass = (0.0, -0.01, 0.015)
     float3 physics:diagonalInertia = (1.0, 1.0, 1.0)
-    float3 physics:principalAxes = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
     float physics:mass = 0.08
 
     def Scope "visuals" (
