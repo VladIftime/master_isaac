@@ -90,14 +90,15 @@ def compute_push_waypoints(
       - gripper_cmd: (N,)  -1.0 = close, +1.0 = open
 
     Phases:
-      1. Approach: EE→above object (tool-down)
-      2. Orient:   rotate to target yaw
-      3. Descend:  move down to surface contact
-      4. Engage:   close gripper (1 step)
-      5. Push:     move in push direction
-      6. Release:  open gripper (1 step)
-      7. Retract:  move up above push target
-      8. Return:   move back above pre-push start position
+      1. Approach: EE→above object (tool-down, gripper open)
+      2. Orient:   rotate to target yaw (gripper open)
+      3. Engage:   close gripper at approach height (1 step)
+      4. Descend:  move down to surface contact (gripper closed)
+      5. Push:     move in push direction (gripper closed)
+      6. Spin:     change yaw while gripper closed (optional)
+      7. Retract:  move up above push target (gripper closed)
+      8. Release:  open gripper at approach height (1 step)
+      9. Return:   move back above pre-push start position
     """
     N = offset_x.shape[0]
 
@@ -157,16 +158,16 @@ def compute_push_waypoints(
         quat = _quat_slerp(q_tool_down, target_quat, t)
         waypoints.append((approach_pos.clone(), quat, open_g.clone()))
 
-    # ── Phase 3: Descend (approach → contact) ─────────────────────────────
+    # ── Phase 3: Engage at approach height (close gripper before descend) ─
+    waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
+
+    # ── Phase 4: Descend (approach → contact, gripper closed) ────────────
     for i in range(1, n_descend + 1):
         alpha = i / n_descend
         pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
-        waypoints.append((pos, target_quat.clone(), open_g.clone()))
+        waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
-    # ── Phase 4: Engage (close gripper) ───────────────────────────────────
-    waypoints.append((contact_pos.clone(), target_quat.clone(), close_g.clone()))
-
-    # ── Phase 5: Push (contact → push target) ─────────────────────────────
+    # ── Phase 5: Push (contact → push target, gripper closed) ────────────
     for i in range(1, n_push + 1):
         alpha = i / n_push
         pos = contact_pos * (1.0 - alpha) + push_target * alpha
@@ -192,14 +193,14 @@ def compute_push_waypoints(
     else:
         spin_end_quat = target_quat.clone()
 
-    # ── Phase 7: Release (open gripper) ───────────────────────────────────
-    waypoints.append((push_target.clone(), spin_end_quat, open_g.clone()))
-
-    # ── Phase 7: Retract (push target → up) ───────────────────────────────
+    # ── Phase 7: Retract (push target → up, gripper still closed) ────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
-        waypoints.append((pos, q_tool_down, open_g.clone()))
+        waypoints.append((pos, q_tool_down, close_g.clone()))
+
+    # ── Phase 8: Release (open gripper after retract, at approach height) ─
+    waypoints.append((retract_pos.clone(), q_tool_down, open_g.clone()))
 
     # ── Phase 8: Return (above push target → above pre-push start) ────────
     # Elevates start XY to approach_height so the arm never dips mid-transit.
