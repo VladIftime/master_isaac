@@ -92,15 +92,23 @@ def compute_push_waypoints(
     Phases (when n_spin > 0):
       1. Approach: EE→above object (tool-down)
       2. Orient:   rotate to initial yaw
-      3. Descend:  move down to surface contact
-      4. Engage:   close gripper (1 step)
+      3. Engage:   close gripper at approach height (1 step)
+      4. Descend:  move down to surface contact (gripper closed)
       5. Push:     move in push direction (gripper closed, yaw unchanged)
       6. Spin:     change yaw by spin_yaw while gripper closed
       7. Release:  open gripper (1 step)
       8. Retract:  move up above push target
       9. Return:   move back above pre-push start position
 
-    When n_spin == 0 or spin_yaw is None, phases 6 is omitted (8-phase trajectory).
+    When n_spin == 0 or spin_yaw is None:
+      1. Approach: EE→above object (tool-down)
+      2. Orient:   rotate to target yaw
+      3. Descend:  move down to surface contact (gripper open)
+      4. Engage:   close gripper at contact (1 step)
+      5. Push:     move in push direction (gripper closed)
+      6. Release:  open gripper (1 step)
+      7. Retract:  move up above push target
+      8. Return:   move back above pre-push start position
     """
     N = offset_x.shape[0]
     _ones = torch.ones(N, device=device)
@@ -161,23 +169,34 @@ def compute_push_waypoints(
         quat = _quat_slerp(q_tool_down, target_quat, t)
         waypoints.append((approach_pos.clone(), quat, open_g.clone()))
 
-    # ── Phase 3: Descend (approach → contact) ─────────────────────────────
-    for i in range(1, n_descend + 1):
-        alpha = i / n_descend
-        pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
-        waypoints.append((pos, target_quat.clone(), open_g.clone()))
+    # ── Phase 3: conditional — engage before descend for spin, after for standard ─
+    do_spin = (n_spin > 0) and (spin_yaw is not None)
+    if do_spin:
+        # close at approach height, then descend with gripper closed on object
+        waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
+        for i in range(1, n_descend + 1):
+            alpha = i / n_descend
+            pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
+            waypoints.append((pos, target_quat.clone(), close_g.clone()))
+        descend_end = contact_pos.clone()
+        grasp_quat = target_quat.clone()
+    else:
+        # descend open, then close at contact (standard push)
+        for i in range(1, n_descend + 1):
+            alpha = i / n_descend
+            pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
+            waypoints.append((pos, target_quat.clone(), open_g.clone()))
+        descend_end = contact_pos.clone()
+        waypoints.append((descend_end, target_quat.clone(), close_g.clone()))
+        grasp_quat = target_quat.clone()
 
-    # ── Phase 4: Engage (close gripper) ───────────────────────────────────
-    waypoints.append((contact_pos.clone(), target_quat.clone(), close_g.clone()))
-
-    # ── Phase 5: Push (contact → push target) ─────────────────────────────
+    # ── Phase 4: Push (descend_end → push target) ─────────────────────────
     for i in range(1, n_push + 1):
         alpha = i / n_push
-        pos = contact_pos * (1.0 - alpha) + push_target * alpha
-        waypoints.append((pos, target_quat.clone(), close_g.clone()))
+        pos = descend_end * (1.0 - alpha) + push_target * alpha
+        waypoints.append((pos, grasp_quat, close_g.clone()))
 
-    # ── Phase 6: Spin (yaw change while gripper closed, optional) ────────
-    do_spin = (n_spin > 0) and (spin_yaw is not None)
+    # ── Phase 5: Spin (yaw change while gripper closed, optional) ────────
     if do_spin:
         q_spin_yaw = torch.stack([
             torch.cos((yaw + spin_yaw) / 2.0),
@@ -190,22 +209,22 @@ def compute_push_waypoints(
         for i in range(1, n_spin + 1):
             alpha = i / n_spin
             t = torch.full((N, 1), alpha, device=device)
-            quat = _quat_slerp(target_quat, spin_quat, t)
+            quat = _quat_slerp(grasp_quat, spin_quat, t)
             waypoints.append((push_target.clone(), quat, close_g.clone()))
         spin_end_quat = spin_quat.clone()
     else:
-        spin_end_quat = target_quat.clone()
+        spin_end_quat = grasp_quat.clone()
 
-    # ── Phase 7: Release (open gripper) ───────────────────────────────────
+    # ── Phase 6: Release (open gripper) ───────────────────────────────────
     waypoints.append((push_target.clone(), spin_end_quat, open_g.clone()))
 
-    # ── Phase 8: Retract (push target → up) ───────────────────────────────
+    # ── Retract (push target → up) ────────────────────────────────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
         waypoints.append((pos, q_tool_down, open_g.clone()))
 
-    # ── Phase 9: Return (above push target → above pre-push start) ────────
+    # ── Return (above push target → above pre-push start) ─────────────────
     # Elevates start XY to approach_height so the arm never dips mid-transit.
     home_pos = torch.stack([
         start_pos[:, 0],
