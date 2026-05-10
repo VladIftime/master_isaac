@@ -18,7 +18,8 @@ PUSH_NSTEPS_ORIENT = 3
 PUSH_NSTEPS_DESCEND = 3
 PUSH_NSTEPS_PUSH = 12
 PUSH_NSTEPS_RETRACT = 3
-# Total: 5 + 3 + 3 + 1(engage) + 12 + 1(release) + 3 = 28 substeps per push
+PUSH_NSTEPS_RETURN = 5
+# Total: 5 + 3 + 3 + 1(engage) + 12 + 1(release) + 3 + 5(return) = 33 substeps per push
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
 PUSH_APPROACH_HEIGHT = 0.15   # Z height for approach / retract (above table)
@@ -76,6 +77,7 @@ def compute_push_waypoints(
     n_descend: int = PUSH_NSTEPS_DESCEND,
     n_push: int = PUSH_NSTEPS_PUSH,
     n_retract: int = PUSH_NSTEPS_RETRACT,
+    n_return: int = PUSH_NSTEPS_RETURN,
 ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Generate push trajectory waypoints for N environments.
@@ -92,7 +94,8 @@ def compute_push_waypoints(
       4. Engage:   close gripper (1 step)
       5. Push:     move in push direction
       6. Release:  open gripper (1 step)
-      7. Retract:  move up
+      7. Retract:  move up above push target
+      8. Return:   move back above pre-push start position
     """
     N = offset_x.shape[0]
     _ones = torch.ones(N, device=device)
@@ -177,6 +180,18 @@ def compute_push_waypoints(
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
         waypoints.append((pos, q_tool_down, open_g.clone()))
 
+    # ── Phase 8: Return (above push target → above pre-push start) ────────
+    # Elevates start XY to approach_height so the arm never dips mid-transit.
+    home_pos = torch.stack([
+        start_pos[:, 0],
+        start_pos[:, 1],
+        torch.full((N,), approach_height, device=device),
+    ], dim=-1)
+    for i in range(1, n_return + 1):
+        alpha = i / n_return
+        pos = retract_pos * (1.0 - alpha) + home_pos * alpha
+        waypoints.append((pos, q_tool_down, open_g.clone()))
+
     return waypoints
 
 
@@ -230,6 +245,7 @@ class PushConfig:
     n_descend: int = PUSH_NSTEPS_DESCEND
     n_push: int = PUSH_NSTEPS_PUSH
     n_retract: int = PUSH_NSTEPS_RETRACT
+    n_return: int = PUSH_NSTEPS_RETURN
     num_bins: int = 11
 
 
@@ -238,4 +254,4 @@ def total_push_substeps(cfg: PushConfig = None) -> int:
     if cfg is None:
         cfg = PushConfig()
     return (cfg.n_approach + cfg.n_orient + cfg.n_descend
-            + 1 + cfg.n_push + 1 + cfg.n_retract)
+            + 1 + cfg.n_push + 1 + cfg.n_retract + cfg.n_return)

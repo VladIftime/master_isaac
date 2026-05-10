@@ -21,11 +21,88 @@ from isaaclab.sim.spawners.from_files import spawn_from_usd
 # Define block variety
 BLOCK_FILES = ["concave.usd", "cube.usd", "cylinder.usd", "rect.usd", "triangle.usd"]
 
+def spawn_ghost_block(prim_path: str, cfg: UsdFileCfg, translation=None, orientation=None):
+    """
+    Spawn a block USD as a fully non-colliding ghost.
+
+    Isaac Lab's modify_collision_properties uses @apply_nested which stops
+    descending into a prim's children on first match, leaving inner collision
+    meshes (e.g. baseLink/collisions/mesh_N) still enabled.  We fix this by
+    walking the full subtree with Usd.PrimRange after spawn.
+
+    Path resolution: Isaac Lab expands {ENV_REGEX_NS} → /World/envs/env_.*
+    before calling the spawn func.  Replacing ".*" with the env integer index
+    (e.g. 0, 1, …) gives the concrete prim path — same logic spawn_random_block
+    uses.  The previous code replaced ".*" with the full child name "env_0",
+    producing the invalid double-prefix "env_env_0".
+    """
+    from isaacsim.core.utils.stage import get_current_stage
+    from pxr import UsdPhysics, Usd
+
+    prim = spawn_random_block(prim_path, cfg, translation, orientation)
+
+    stage = get_current_stage()
+
+    # Build concrete paths by substituting the env integer index for ".*".
+    if ".*" in prim_path or "{ENV_REGEX_NS}" in prim_path:
+        env_folder = stage.GetPrimAtPath("/World/envs")
+        concrete_paths = []
+        if env_folder.IsValid():
+            for child in env_folder.GetChildren():
+                name = child.GetName()
+                if not name.startswith("env_"):
+                    continue
+                try:
+                    env_idx = int(name.split("_")[-1])
+                except ValueError:
+                    continue
+                # Replace {ENV_REGEX_NS} first (if still present), then .*
+                cp = prim_path.replace("{ENV_REGEX_NS}", f"/World/envs/env_{env_idx}")
+                cp = cp.replace(".*", str(env_idx))
+                concrete_paths.append(cp)
+    else:
+        concrete_paths = [prim_path]
+
+    def _disable_all_collision(root):
+        # Un-instance any USD instances first so their children become
+        # directly authorable.  Without this, attribute writes on
+        # prototype-owned prims (e.g. baseLink/collisions) are silently ignored.
+        for p in Usd.PrimRange(root):
+            if p.IsInstanceable():
+                p.SetInstanceable(False)
+
+        for p in Usd.PrimRange(root):
+            if p.HasAPI(UsdPhysics.CollisionAPI):
+                api = UsdPhysics.CollisionAPI(p)
+                attr = api.GetCollisionEnabledAttr()
+                if attr and attr.IsAuthored():
+                    attr.Set(False)
+                else:
+                    api.CreateCollisionEnabledAttr(False)
+
+    disabled = 0
+    for pp in concrete_paths:
+        root_prim = stage.GetPrimAtPath(pp)
+        if root_prim.IsValid():
+            _disable_all_collision(root_prim)
+            disabled += 1
+
+    if not concrete_paths or disabled == 0:
+        print(
+            f"[spawn_ghost_block] WARNING: no valid prims found to disable collision "
+            f"(prim_path={prim_path!r}, tried {len(concrete_paths)} paths). "
+            "Ghost will still collide.",
+            flush=True,
+        )
+
+    return prim
+
+
 def spawn_random_block(prim_path: str, cfg: UsdFileCfg, translation=None, orientation=None):
     """
     Custom spawner that picks a USD file based on the environment index.
-    
-    Ensures that different environments have different shapes, providing variety 
+
+    Ensures that different environments have different shapes, providing variety
     across the parallel training batch without breaking the physics tensor backend.
     """
     import isaaclab.sim as sim_utils
@@ -349,18 +426,15 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
             rot=[0.0, 0.0, 0.0, 1.0],
         ),
         spawn=UsdFileCfg(
-            func=spawn_random_block, # Use same custom randomizer to match shape
+            func=spawn_ghost_block,  # walks subtree to disable ALL collision prims
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-            scale=(1.52, 1.52, 1.52), # Slightly larger to avoid Z-fighting/clipping if they overlap perfectly
+            scale=(1.52, 1.52, 1.52),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                collision_enabled=False # No collisions for the ghost
-            ),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(1.0, 0.4, 0.7), # Pink
+                diffuse_color=(1.0, 0.4, 0.7),  # Pink
             ),
         ),
     )

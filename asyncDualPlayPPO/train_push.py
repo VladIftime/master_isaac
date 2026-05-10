@@ -9,7 +9,7 @@ Architecture:
   waypoint → physics step → dense reward after push completes → PPO update.
 
 Run locally:
-  python -m asyncDualPlayPPO.train_push --num_envs 16 --max_iterations 500 --exp_name push_test --headless
+  python -m asyncDualPlayPPO.train_push --num_envs 16 --max_iterations 500 --exp_name push_test
 """
 
 # ── cuRobo MUST be imported before AppLauncher ────────────────────────────────
@@ -34,8 +34,6 @@ import torch.optim      # noqa: F401
 
 from isaaclab.app import AppLauncher
 
-import gc
-import math
 import os
 import signal
 import sys
@@ -81,7 +79,6 @@ def main():
     parser.add_argument("--num_envs", type=int, default=64)
     parser.add_argument("--max_iterations", type=int, default=1000)
     parser.add_argument("--save_interval", type=int, default=50)
-    parser.add_argument("--headless", action="store_true")
     parser.add_argument("--chkpt", type=str, default=None,
                         help="Resume from checkpoint path")
     AppLauncher.add_app_launcher_args(parser)
@@ -122,7 +119,6 @@ def main():
     lam = 0.95
     learning_rate = 3e-4
 
-    _learn_cfg = ppo_cfg["params"]["learn"]
     _policy_cfg = ppo_cfg["params"]["policy"]
 
     num_cat_dims = 6
@@ -304,6 +300,8 @@ def main():
 
         total_ik_fails = 0
         total_ik_steps = 0
+        env.episode_push_counts.clear()
+        env.episode_successes.clear()
 
         obs_pre_push = obs.clone()
         env.capture_pre_push(obs)
@@ -338,6 +336,7 @@ def main():
             )
 
             # ── Execute push trajectory ───────────────────────────────────────
+            terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
             for wp_idx, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                 tcp_offs = _compute_tcp_offset()
                 ik_target = wp_pos - tcp_offs
@@ -362,12 +361,10 @@ def main():
                 env_full[:, :6] = raw_cmd
                 env_full[:, 6] = wp_grip
 
-                obs, _, terminated, truncated, _ = env.step(env_full)
-
-                if terminated.any():
-                    obs_dict_full = env.env.reset()[0]
-                    obs_new = env._build_obs(obs_dict_full)
-                    obs[terminated] = obs_new[terminated]
+                obs, _, step_terminated, truncated, _ = env.step(env_full)
+                # terminated envs are auto-reset by the base env inside step();
+                # obs already contains post-reset observations for those envs.
+                terminated |= step_terminated
 
             # ── After push: compute reward & done ────────────────────────────
             reward = env.compute_push_reward(obs)
@@ -390,9 +387,14 @@ def main():
                 if hidden_state is not None:
                     hidden_state[0][done] = 0.0
                     hidden_state[1][done] = 0.0
-                obs_dict_full = env.env.reset()[0]
-                obs_new = env._build_obs(obs_dict_full)
-                obs[done] = obs_new[done]
+                # Only at_goal / max_pushes envs need explicit reset; terminated
+                # ones were already auto-reset by the base env inside step().
+                needs_reset = done & ~terminated
+                if needs_reset.any():
+                    reset_ids = torch.where(needs_reset)[0]
+                    obs_dict_r, _ = env.env.reset(env_ids=reset_ids)
+                    obs_new = env._build_obs(obs_dict_r)
+                    obs[needs_reset] = obs_new[needs_reset]
                 ee_pos_local[done] = _tcp_pos_local()[done]
                 ee_quat_w[done] = _QUAT_TOOL_DOWN.expand(done.sum().item(), 4).to(env.device)
                 prev_joint_cmd[done] = _robot_scene.data.joint_pos[:, _arm_jids][done]
@@ -415,15 +417,33 @@ def main():
         sr = np.mean(sr_buf) if sr_buf else 0.0
         ik_fail_rate = total_ik_fails / max(1, total_ik_steps)
 
+        ep_push_counts = list(env.episode_push_counts)
+        ep_successes = list(env.episode_successes)
+        avg_pushes = np.mean(ep_push_counts) if ep_push_counts else float("nan")
+        ep_sr = np.mean(ep_successes) if ep_successes else float("nan")
+        n_episodes = len(ep_push_counts)
+
         writer.add_scalar("Loss/Agent/Value", loss_val, iteration)
         writer.add_scalar("Loss/Agent/Surrogate", loss_surr, iteration)
         writer.add_scalar("Reward/Mean", mean_rew, iteration)
         writer.add_scalar("Metrics/SuccessRate", sr, iteration)
         writer.add_scalar("Metrics/IKFailRate", ik_fail_rate, iteration)
+        writer.add_scalar("Metrics/EpisodicSR", ep_sr if not np.isnan(ep_sr) else 0.0, iteration)
+        writer.add_scalar("Metrics/AvgPushesPerEpisode", avg_pushes if not np.isnan(avg_pushes) else 0.0, iteration)
+        writer.add_scalar("Metrics/Episodes", n_episodes, iteration)
 
+        # Machine-parseable per-update line
         print(
-            f"  [Iter {iteration:5d}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | "
-            f"Rew: {mean_rew:.4f} | SR: {sr:.4f} | IKFail: {ik_fail_rate:.4f}",
+            f"[Push Update {iteration:5d}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | "
+            f"Rew: {mean_rew:.4f} | SR: {sr:.4f}",
+            flush=True,
+        )
+        # Machine-parseable iteration summary line
+        avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"
+        print(
+            f"[Iter {iteration:5d}] SR={sr:.4f} | IK_fail={ik_fail_rate:.4f} | "
+            f"Rew={mean_rew:.4f} | AvgPushes={avg_pushes_str} | "
+            f"Episodes={n_episodes} | BestSR={best_success_rate:.4f}",
             flush=True,
         )
 

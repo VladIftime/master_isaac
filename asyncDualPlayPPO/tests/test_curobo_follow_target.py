@@ -117,14 +117,50 @@ def main():
             self._lb_held = False
             self._rb_held = False
             self._lock = threading.Lock()
-            self._fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
+            self._fd = -1
+            self._connected = False
+            self._preferred_device = device  # try this first; fall back to scan
+            self._try_connect()
             threading.Thread(target=self._loop, daemon=True).start()
-            print(f"  [XboxJoystick] opened {device}")
+
+        def _scan_device(self):
+            """Return the first available /dev/input/jsN path, preferring _preferred_device."""
+            if os.path.exists(self._preferred_device):
+                return self._preferred_device
+            for i in range(10):
+                p = f"/dev/input/js{i}"
+                if os.path.exists(p):
+                    return p
+            return None
+
+        def _try_connect(self):
+            dev = self._scan_device()
+            if dev is None:
+                return False
+            try:
+                fd = os.open(dev, os.O_RDONLY | os.O_NONBLOCK)
+                with self._lock:
+                    self._fd = fd
+                    self._connected = True
+                print(f"  [XboxJoystick] connected {dev}")
+                return True
+            except OSError:
+                return False
 
         def _loop(self):
+            import time
             while True:
+                with self._lock:
+                    fd = self._fd
+                    connected = self._connected
+                if not connected:
+                    if self._try_connect():
+                        pass
+                    else:
+                        time.sleep(2.0)
+                    continue
                 try:
-                    data = os.read(self._fd, 8)
+                    data = os.read(fd, 8)
                     _ts, value, etype, number = struct.unpack("IhBB", data)
                     etype &= ~0x80  # strip init flag
                     with self._lock:
@@ -148,11 +184,22 @@ def main():
                                 self._lb_held = bool(value)
                             if number == 7:  # RB — rotate CW
                                 self._rb_held = bool(value)
-                            # D-pad up (button 11 on xpad mappings, also try 0x72)
                             if number == 11 and value == 1 and prev == 0:
                                 self._next_test_requested = True
                 except BlockingIOError:
-                    import time; time.sleep(0.001)
+                    time.sleep(0.001)
+                except OSError:
+                    # Device disconnected — reset state and wait for reconnect.
+                    with self._lock:
+                        try: os.close(self._fd)
+                        except OSError: pass
+                        self._fd = -1
+                        self._connected = False
+                        self._axes    = [0.0] * 16
+                        self._buttons = [0]   * 16
+                        self._lb_held = False
+                        self._rb_held = False
+                    print("  [XboxJoystick] disconnected — reconnecting automatically…")
                 except Exception:
                     break
 
@@ -164,6 +211,8 @@ def main():
             """Return 7-element tensor [dx, dy, dz, drx, dry, drz, gripper]
             in the same convention as Se3Gamepad.advance()."""
             with self._lock:
+                if not self._connected:
+                    return torch.zeros(7, dtype=torch.float32)
                 # Left stick: axis 0 = X (L/R), axis 1 = Y (up=neg, invert)
                 # Se3Gamepad convention: cmd[0] = left-stick-up (+), cmd[1] = left-stick-right (+)
                 cmd0 =   self._ax(0) * self.pos_sensitivity   # left stick X, right=+
@@ -274,6 +323,8 @@ def main():
     # Use XboxJoystick (direct /dev/input reader) instead of Se3Gamepad so the
     # Bluetooth Xbox controller works regardless of carb gamepad enumeration.
     gamepad = XboxJoystick(device=f"/dev/input/js{args.gamepad_idx}")
+    if not gamepad._connected:
+        print(f"  [XboxJoystick] js{args.gamepad_idx} not found — will connect automatically when available")
 
     # ── CuRobo IK solver ──────────────────────────────────────────────────────
     print("\nInitializing CuRobo IKSolver...")

@@ -24,9 +24,10 @@ PUSH_COMPLETION_BONUS = 5.0
 PUSH_DENSE_ALPHA = 10.0   # improvement gain
 PUSH_DENSE_BETA = 0.5     # absolute distance penalty
 
-# Workspace bounds for goal sampling (local frame)
+# Workspace bounds for goal sampling (local frame, relative to env origin)
 _GOAL_X_RANGE = (-0.40, 0.40)
 _GOAL_Y_RANGE = (0.30, 0.70)
+_GOAL_Z = 0.02   # just above table surface so the ghost marker is visible
 
 # Observation layout indices (see push_task_curobo.py)
 # [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 29D
@@ -44,6 +45,19 @@ def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Ten
     return diff.max(dim=-1)[0]
 
 
+def _euler_to_quat(euler: torch.Tensor) -> torch.Tensor:
+    """ZYX Euler (roll, pitch, yaw) → unit quaternion (w, x, y, z)."""
+    roll, pitch, yaw = euler[..., 0], euler[..., 1], euler[..., 2]
+    cr, sr = torch.cos(roll * 0.5), torch.sin(roll * 0.5)
+    cp, sp = torch.cos(pitch * 0.5), torch.sin(pitch * 0.5)
+    cy, sy = torch.cos(yaw * 0.5), torch.sin(yaw * 0.5)
+    w = cr * cp * cy + sr * sp * sy
+    x = sr * cp * cy - cr * sp * sy
+    y = cr * sp * cy + sr * cp * sy
+    z = cr * cp * sy - sr * sp * cy
+    return torch.stack([w, x, y, z], dim=-1)
+
+
 class PushEnvWrapper:
     """
     Wraps a ManagerBasedRLEnv for single-agent push-PPO.
@@ -51,7 +65,8 @@ class PushEnvWrapper:
     The wrapper:
       - Provides a single observation space for the push agent (29D)
       - Computes dense reward after each push macro-action
-      - Samples random goals on episode reset
+      - Samples random goals on episode reset (and per-episode for done envs)
+      - Moves the scene's goal_ghost marker to the sampled goal in world frame
       - Tracks object positions for improvement computation
     """
 
@@ -65,7 +80,6 @@ class PushEnvWrapper:
     ):
         self.env = env
         self.device = device
-        self.num_envs = env.num_envs
         self.num_objects = num_objects
         self.max_pushes_per_episode = max_pushes_per_episode
         self.headless = headless
@@ -96,14 +110,16 @@ class PushEnvWrapper:
         self.episode_rew_ema = 0.0
 
     def reset(self) -> torch.Tensor:
-        """Reset environment and sample new goals."""
+        """Reset all environments and sample new goals."""
         self.push_count.zero_()
         self.at_goal.zero_()
         self._gave_completion.zero_()
 
         obs_dict = self.env.reset()[0]
-        self._sample_goals()
+        all_ids = torch.arange(self.num_envs, device=self.device)
+        self._sample_goals(all_ids)
         self._update_goal_in_extras()
+        self._move_goal_ghost(all_ids)
         obs = self._build_obs(obs_dict)
         self._capture_prev_obj(obs)
 
@@ -114,7 +130,7 @@ class PushEnvWrapper:
         Single physics step.  Reward is always zero — push reward is computed
         by compute_push_reward() after the full trajectory completes.
         """
-        obs_dict, reward, terminated, truncated = self.env.step(action)
+        obs_dict, reward, terminated, truncated, _ = self.env.step(action)
         obs = self._build_obs(obs_dict)
         return obs, torch.zeros_like(reward), terminated, truncated, {}
 
@@ -132,7 +148,6 @@ class PushEnvWrapper:
 
         reward = α · (d_prev − d_now) − β · d_now + completion_bonus
         """
-        N = obs.shape[0]
         cur_obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
         cur_obj_euler = obs[:, _OBS_ROBOT_DIM + 3: _OBS_ROBOT_DIM + 6]
         goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM: _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
@@ -157,38 +172,59 @@ class PushEnvWrapper:
 
         return reward
 
-    def check_done(self, obs: torch.Tensor, terminated: torch.Tensor) -> torch.Tensor:
+    def check_done(self, _obs: torch.Tensor, terminated: torch.Tensor) -> torch.Tensor:
         """Episode ends: base termination, at-goal success, or max pushes reached."""
         max_pushes = self.push_count >= self.max_pushes_per_episode
         return terminated | self.at_goal | max_pushes
 
     def reset_done_envs(self, dones: torch.Tensor):
-        """Reset per-env state for envs that finished this push."""
+        """Reset per-env state and resample goals for envs that finished an episode."""
         done_ids = torch.where(dones)[0]
         if len(done_ids) == 0:
             return
+        self.episode_push_counts.extend(self.push_count[done_ids].cpu().tolist())
+        self.episode_successes.extend(self.at_goal[done_ids].cpu().tolist())
         self.push_count[done_ids] = 0
         self.at_goal[done_ids] = False
         self._gave_completion[done_ids] = False
+        # Give each done env a fresh goal for the next episode
+        self._sample_goals(done_ids)
+        self._update_goal_in_extras()
+        self._move_goal_ghost(done_ids)
 
-        done_cpu = dones.cpu().numpy()
-        self.episode_push_counts.extend(self.push_count[done_ids].cpu().tolist())
-        self.episode_successes.extend(self.at_goal[done_ids].cpu().tolist())
+    # ── Goal management ────────────────────────────────────────────────────────
 
-    def _sample_goals(self):
-        N = self.num_envs
+    def _sample_goals(self, env_ids: torch.Tensor):
+        """Sample random goal positions (local frame) for the specified envs."""
+        N = len(env_ids)
         gx = torch.empty(N, device=self.device).uniform_(*_GOAL_X_RANGE)
         gy = torch.empty(N, device=self.device).uniform_(*_GOAL_Y_RANGE)
-        gz = torch.zeros(N, device=self.device)
+        gz = torch.full((N,), _GOAL_Z, device=self.device)
         geuler = torch.zeros(N, 3, device=self.device)
-        self.goal_pos_euler = torch.cat([
+        self.goal_pos_euler[env_ids] = torch.cat([
             gx.unsqueeze(-1), gy.unsqueeze(-1), gz.unsqueeze(-1), geuler,
         ], dim=-1)
 
     def _update_goal_in_extras(self):
+        """Write the current goal tensor into env.extras so observation fns can read it."""
         if not hasattr(self.env, "extras"):
             self.env.extras = {}
-        self.env.extras["goal_states"] = self.goal_pos_euler
+        # Key matches what observations.goal_states() reads
+        self.env.extras["goal_state"] = self.goal_pos_euler
+
+    def _move_goal_ghost(self, env_ids: torch.Tensor):
+        """Teleport the visual goal_ghost marker to the sampled goal in world frame."""
+        if "goal_ghost" not in self.env.scene.rigid_objects:
+            return
+        origins = self.env.scene.env_origins[env_ids]          # (N, 3) world
+        goal_pos_local = self.goal_pos_euler[env_ids, :3]      # (N, 3) local
+        goal_euler = self.goal_pos_euler[env_ids, 3:6]         # (N, 3) euler
+        goal_pos_world = goal_pos_local + origins              # (N, 3) world
+        goal_quat = _euler_to_quat(goal_euler)                 # (N, 4) wxyz
+        pose_7d = torch.cat([goal_pos_world, goal_quat], dim=-1)
+        self.env.scene["goal_ghost"].write_root_pose_to_sim(pose_7d, env_ids=env_ids)
+
+    # ── Internal helpers ───────────────────────────────────────────────────────
 
     def _capture_prev_obj(self, obs: torch.Tensor):
         self.prev_obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3].clone()
