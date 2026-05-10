@@ -41,17 +41,21 @@ def _quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 def _quat_slerp(q0: torch.Tensor, q1: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     """Spherical linear interpolation between two quaternions (wxyz, (N,4))."""
+    # Ensure shortest path
     dot = (q0 * q1).sum(dim=-1, keepdim=True)
     flip = dot < 0.0
     q1 = torch.where(flip.expand_as(q1), -q1, q1)
     dot = torch.where(flip, -dot, dot)
+
     dot = dot.clamp(-1.0, 1.0)
     theta = torch.acos(dot) * t.squeeze(-1)
     sin_theta = torch.sin(theta)
     sin_full = torch.sin(torch.acos(dot))
+
     mask = sin_full > 1e-6
     s0 = torch.where(mask, torch.cos(theta) - dot.squeeze(-1) * sin_theta / sin_full, 1.0 - t.squeeze(-1))
     s1 = torch.where(mask, sin_theta / sin_full, t.squeeze(-1))
+
     return s0.unsqueeze(-1) * q0 + s1.unsqueeze(-1) * q1
 
 
@@ -91,15 +95,14 @@ def compute_push_waypoints(
       3. Descend:  move down to surface contact
       4. Engage:   close gripper (1 step)
       5. Push:     move in push direction
-      6. Spin:     change yaw while gripper closed (optional, n_spin > 0)
-      7. Release:  open gripper (1 step)
-      8. Retract:  move up above push target
-      9. Return:   move back above pre-push start position
+      6. Release:  open gripper (1 step)
+      7. Retract:  move up above push target
+      8. Return:   move back above pre-push start position
     """
     N = offset_x.shape[0]
-    _ones = torch.ones(N, device=device)
-    _zeros = torch.zeros(N, device=device)
 
+    # ── Target quaternion: yaw rotation (Z-axis) then tool-down (X=π) ─────
+    _zeros = torch.zeros(N, device=device)
     q_yaw = torch.stack([
         torch.cos(yaw / 2.0),
         _zeros,
@@ -107,9 +110,10 @@ def compute_push_waypoints(
         torch.sin(yaw / 2.0),
     ], dim=-1)
     q_tool_down = _QUAT_TOOL_DOWN.to(device).expand(N, 4).contiguous()
-    target_quat = _quat_mul(q_yaw, q_tool_down)
+    target_quat = _quat_mul(q_yaw, q_tool_down)       # yaw then tool-down
     target_quat = target_quat / target_quat.norm(dim=-1, keepdim=True)
 
+    # ── Key positions ─────────────────────────────────────────────────────
     approach_pos = torch.stack([
         obj_pos[:, 0] + offset_x,
         obj_pos[:, 1] + offset_y,
@@ -119,7 +123,7 @@ def compute_push_waypoints(
     contact_pos = torch.stack([
         obj_pos[:, 0] + offset_x,
         obj_pos[:, 1] + offset_y,
-        torch.full((N,), table_z + 0.015, device=device),
+        torch.full((N,), table_z + 0.015, device=device),  # slightly above table
     ], dim=-1)
 
     push_target = torch.stack([
@@ -173,8 +177,8 @@ def compute_push_waypoints(
     if do_spin:
         q_spin_yaw = torch.stack([
             torch.cos((yaw + spin_yaw) / 2.0),
-            _zeros,
-            _zeros,
+            torch.zeros(N, device=device),
+            torch.zeros(N, device=device),
             torch.sin((yaw + spin_yaw) / 2.0),
         ], dim=-1)
         spin_quat = _quat_mul(q_spin_yaw, q_tool_down)
@@ -191,13 +195,14 @@ def compute_push_waypoints(
     # ── Phase 7: Release (open gripper) ───────────────────────────────────
     waypoints.append((push_target.clone(), spin_end_quat, open_g.clone()))
 
-    # ── Phase 8: Retract (push target → up) ───────────────────────────────
+    # ── Phase 7: Retract (push target → up) ───────────────────────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
         waypoints.append((pos, q_tool_down, open_g.clone()))
 
-    # ── Phase 9: Return (above push target → above pre-push start) ────────
+    # ── Phase 8: Return (above push target → above pre-push start) ────────
+    # Elevates start XY to approach_height so the arm never dips mid-transit.
     home_pos = torch.stack([
         start_pos[:, 0],
         start_pos[:, 1],
@@ -214,13 +219,28 @@ def compute_push_waypoints(
 def decode_push_action(
     bin_indices: torch.Tensor,   # (N, 6) integer bin indices
     num_bins: int = 11,
-    max_offset_xy: float = 0.15,
-    max_push_delta: float = 0.30,
-    max_yaw: float = 3.14159,
-    max_push_dz: float = 0.03,
+    max_offset_xy: float = 0.15,  # max approach offset in XY (meters)
+    max_push_delta: float = 0.30, # max push delta in XY (meters)
+    max_yaw: float = 3.14159,     # max yaw (radians)
+    max_push_dz: float = 0.03,    # max push delta in Z (meters)
 ) -> torch.Tensor:
+    """
+    Decode 6D MultiCategorical bin indices → push parameters.
+
+    Returns (N, 6) tensor:
+      [offset_x, offset_y, push_dx, push_dy, yaw, push_dz]
+
+    Dim layout:
+      0: approach_offset_x  → (bin − center)/center × max_offset_xy
+      1: approach_offset_y  → (bin − center)/center × max_offset_xy
+      2: push_dx            → (bin − center)/center × max_push_delta
+      3: push_dy            → (bin − center)/center × max_push_delta
+      4: yaw                → (bin − center)/center × max_yaw
+      5: push_dz            → (bin − center)/center × max_push_dz
+    """
     center = (num_bins - 1) / 2.0
-    normalized = (bin_indices.float() - center) / center
+    normalized = (bin_indices.float() - center) / center  # (N, 6), range [-1, 1]
+
     params = torch.empty_like(normalized)
     params[:, 0] = normalized[:, 0] * max_offset_xy
     params[:, 1] = normalized[:, 1] * max_offset_xy
@@ -228,11 +248,13 @@ def decode_push_action(
     params[:, 3] = normalized[:, 3] * max_push_delta
     params[:, 4] = normalized[:, 4] * max_yaw
     params[:, 5] = normalized[:, 5] * max_push_dz
+
     return params
 
 
 @dataclass
 class PushConfig:
+    """Configuration for push trajectory generation."""
     max_offset_xy: float = 0.15
     max_push_delta: float = 0.30
     max_yaw: float = 3.14159
@@ -243,14 +265,14 @@ class PushConfig:
     n_orient: int = PUSH_NSTEPS_ORIENT
     n_descend: int = PUSH_NSTEPS_DESCEND
     n_push: int = PUSH_NSTEPS_PUSH
-    n_spin: int = 0
     n_retract: int = PUSH_NSTEPS_RETRACT
     n_return: int = PUSH_NSTEPS_RETURN
     num_bins: int = 11
 
 
 def total_push_substeps(cfg: PushConfig = None) -> int:
+    """Return total number of substeps per push macro-action."""
     if cfg is None:
         cfg = PushConfig()
     return (cfg.n_approach + cfg.n_orient + cfg.n_descend
-            + 1 + cfg.n_push + cfg.n_spin + 1 + cfg.n_retract + cfg.n_return)
+            + 1 + cfg.n_push + 1 + cfg.n_retract + cfg.n_return)
