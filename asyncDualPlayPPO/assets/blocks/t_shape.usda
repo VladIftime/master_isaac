@@ -6,13 +6,16 @@
 )
 
 def Xform "t_shape_urdf" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
     kind = "component"
 )
 {
+    rel material:binding = </t_shape_urdf/Looks/TBlockMat>
+    float3 physics:diagonalInertia = (1, 1, 1)
+    float physics:mass = 0.1
+
     def Xform "baseLink"
     {
-        rel material:binding = </t_shape_urdf/Looks/TBlockMat>
-
         def Scope "colliders"
         {
             def Xform "top_bar"
