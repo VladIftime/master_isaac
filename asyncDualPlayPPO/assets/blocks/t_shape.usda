@@ -1,80 +1,113 @@
 #usda 1.0
 (
-    defaultPrim = "t_shape"
-    metersPerUnit = 1.0
+    defaultPrim = "t_shape_urdf"
+    metersPerUnit = 1
     upAxis = "Z"
 )
 
-def Xform "t_shape" (
+def Xform "t_shape_urdf" (
     kind = "component"
-    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
 )
 {
-    float3 physics:centerOfMass = (0.0, 0.013, 0.015)
-    float3 physics:diagonalInertia = (1.0, 1.0, 1.0)
-    float physics:mass = 0.1
-
-    def Scope "visuals" (
-        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    def Xform "baseLink" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
     )
     {
-        def Cube "top_bar" (
-            prepend apiSchemas = ["PhysicsCollisionAPI"]
-        )
+        rel material:binding = </t_shape_urdf/Looks/TBlockMat>
+        point3f physics:centerOfMass = (0, 0.013, 0.015)
+        float3 physics:diagonalInertia = (1, 1, 1)
+        float physics:mass = 0.1
+        bool physics:rigidBodyEnabled = 1
+        custom bool physics:startsAsSleep = 0
+    }
+
+    def PhysicsCollisionGroup "collidersCollisionGroup"
+    {
+    }
+
+    def Scope "colliders"
+    {
+        def Xform "top_bar"
         {
-            float3[] extent = [(-0.04, -0.01, -0.015), (0.04, 0.01, 0.015)]
-            bool physics:collisionEnabled = 0
-            uniform token purpose = "default"
-            double3 xformOp:scale = (0.08, 0.02, 0.03)
-            double3 xformOp:translate = (0.0, 0.02, 0.015)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            double3 xformOp:translate = (0, 0.019999999552965164, 0.014999999664723873)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def Mesh "mesh" (
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            )
+            {
+                float3[] extent = [(-0.04, -0.01, -0.015), (0.04, 0.01, 0.015)]
+                int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+                int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
+                uniform token physics:approximation = "convexHull"
+                bool physics:collisionEnabled = 1
+                custom rel physics:collisionGroup
+                prepend rel physics:collisionGroup = </t_shape_urdf/collidersCollisionGroup>
+                point3f[] points = [(-0.04, -0.01, -0.015), (0.04, -0.01, -0.015), (0.04, 0.01, -0.015), (-0.04, 0.01, -0.015), (-0.04, -0.01, 0.015), (0.04, -0.01, 0.015), (0.04, 0.01, 0.015), (-0.04, 0.01, 0.015)]
+                uniform token purpose = "guide"
+            }
         }
 
-        def Cube "stem" (
-            prepend apiSchemas = ["PhysicsCollisionAPI"]
-        )
+        def Xform "stem"
         {
-            float3[] extent = [(-0.01, -0.03, -0.015), (0.01, 0.03, 0.015)]
-            bool physics:collisionEnabled = 0
-            uniform token purpose = "default"
-            double3 xformOp:scale = (0.02, 0.06, 0.03)
-            double3 xformOp:translate = (0.0, -0.02, 0.015)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            double3 xformOp:translate = (0, -0.019999999552965164, 0.014999999664723873)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def Mesh "mesh" (
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            )
+            {
+                float3[] extent = [(-0.01, -0.03, -0.015), (0.01, 0.03, 0.015)]
+                int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+                int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
+                uniform token physics:approximation = "convexHull"
+                bool physics:collisionEnabled = 1
+                custom rel physics:collisionGroup
+                prepend rel physics:collisionGroup = </t_shape_urdf/collidersCollisionGroup>
+                point3f[] points = [(-0.01, -0.03, -0.015), (0.01, -0.03, -0.015), (0.01, 0.03, -0.015), (-0.01, 0.03, -0.015), (-0.01, -0.03, 0.015), (0.01, -0.03, 0.015), (0.01, 0.03, 0.015), (-0.01, 0.03, 0.015)]
+                uniform token purpose = "guide"
+            }
         }
     }
 
-    def Scope "colliders" (
-        prepend apiSchemas = ["PhysicsCollisionAPI"]
-    )
+    def Scope "visuals"
     {
-        def Cube "top_bar" (
-            prepend apiSchemas = ["PhysicsCollisionAPI"]
-        )
+        def Xform "top_bar"
         {
-            float3[] extent = [(-0.04, -0.01, -0.015), (0.04, 0.01, 0.015)]
-            uniform token purpose = "guide"
-            double3 xformOp:scale = (0.08, 0.02, 0.03)
-            double3 xformOp:translate = (0.0, 0.02, 0.015)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            double3 xformOp:translate = (0, 0.019999999552965164, 0.014999999664723873)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def Mesh "mesh"
+            {
+                float3[] extent = [(-0.04, -0.01, -0.015), (0.04, 0.01, 0.015)]
+                int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+                int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
+                point3f[] points = [(-0.04, -0.01, -0.015), (0.04, -0.01, -0.015), (0.04, 0.01, -0.015), (-0.04, 0.01, -0.015), (-0.04, -0.01, 0.015), (0.04, -0.01, 0.015), (0.04, 0.01, 0.015), (-0.04, 0.01, 0.015)]
+                uniform token purpose = "default"
+            }
         }
 
-        def Cube "stem" (
-            prepend apiSchemas = ["PhysicsCollisionAPI"]
-        )
+        def Xform "stem"
         {
-            float3[] extent = [(-0.01, -0.03, -0.015), (0.01, 0.03, 0.015)]
-            uniform token purpose = "guide"
-            double3 xformOp:scale = (0.02, 0.06, 0.03)
-            double3 xformOp:translate = (0.0, -0.02, 0.015)
-            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+            double3 xformOp:translate = (0, -0.019999999552965164, 0.014999999664723873)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
+
+            def Mesh "mesh"
+            {
+                float3[] extent = [(-0.01, -0.03, -0.015), (0.01, 0.03, 0.015)]
+                int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+                int[] faceVertexIndices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 0, 3, 7, 0, 7, 4, 1, 2, 6, 1, 6, 5]
+                point3f[] points = [(-0.01, -0.03, -0.015), (0.01, -0.03, -0.015), (0.01, 0.03, -0.015), (-0.01, 0.03, -0.015), (-0.01, -0.03, 0.015), (0.01, -0.03, 0.015), (0.01, 0.03, 0.015), (-0.01, 0.03, 0.015)]
+                uniform token purpose = "default"
+            }
         }
     }
 
-    def Scope "Looks"
+    def "Looks"
     {
         def Material "TBlockMat"
         {
-            token outputs:surface.connect = </t_shape/Looks/TBlockMat/Shader.outputs:surface>
+            token outputs:surface.connect = </t_shape_urdf/Looks/TBlockMat/Shader.outputs:surface>
 
             def Shader "Shader"
             {
@@ -86,3 +119,4 @@ def Xform "t_shape" (
         }
     }
 }
+

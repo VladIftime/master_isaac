@@ -90,9 +90,9 @@ def compute_push_waypoints(
       - gripper_cmd: (N,)  -1.0 = close, +1.0 = open
 
     Phases (when n_spin > 0):
-      1. Approach: EE→above object (tool-down)
-      2. Orient:   rotate to initial yaw
-      3. Engage:   close gripper at approach height (1 step)
+      1. Engage:   close gripper at current position (1 step, before any motion)
+      2. Approach: EE→above object (gripper closed)
+      3. Orient:   rotate to target yaw (gripper closed)
       4. Descend:  move down to surface contact (gripper closed)
       5. Push:     move in push direction (gripper closed, yaw unchanged)
       6. Spin:     change yaw by spin_yaw while gripper closed
@@ -155,25 +155,21 @@ def compute_push_waypoints(
 
     waypoints: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
 
-    # ── Phase 1: Approach (current → above object, tool-down) ─────────────
-    start_pos = current_ee_pos.clone()
-    for i in range(1, n_approach + 1):
-        alpha = i / n_approach
-        pos = start_pos * (1.0 - alpha) + approach_pos * alpha
-        waypoints.append((pos, q_tool_down, open_g.clone()))
-
-    # ── Phase 2: Orient (tool-down → target yaw) ──────────────────────────
-    for i in range(1, n_orient + 1):
-        alpha = i / n_orient
-        t = torch.full((N, 1), alpha, device=device)
-        quat = _quat_slerp(q_tool_down, target_quat, t)
-        waypoints.append((approach_pos.clone(), quat, open_g.clone()))
-
-    # ── Phase 3: conditional — engage before descend for spin, after for standard ─
     do_spin = (n_spin > 0) and (spin_yaw is not None)
+    start_pos = current_ee_pos.clone()
+
     if do_spin:
-        # close at approach height, then descend with gripper closed
-        waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
+        # ── Close at current position, then approach with gripper closed ──
+        waypoints.append((start_pos.clone(), q_tool_down, close_g.clone()))
+        for i in range(1, n_approach + 1):
+            alpha = i / n_approach
+            pos = start_pos * (1.0 - alpha) + approach_pos * alpha
+            waypoints.append((pos, q_tool_down, close_g.clone()))
+        for i in range(1, n_orient + 1):
+            alpha = i / n_orient
+            t = torch.full((N, 1), alpha, device=device)
+            quat = _quat_slerp(q_tool_down, target_quat, t)
+            waypoints.append((approach_pos.clone(), quat, close_g.clone()))
         for i in range(1, n_descend + 1):
             alpha = i / n_descend
             pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
@@ -181,7 +177,16 @@ def compute_push_waypoints(
         descend_end = contact_pos.clone()
         grasp_quat = target_quat.clone()
     else:
-        # descend open, then close at contact (standard push)
+        # ── Approach, orient, descend open, then close at contact ──
+        for i in range(1, n_approach + 1):
+            alpha = i / n_approach
+            pos = start_pos * (1.0 - alpha) + approach_pos * alpha
+            waypoints.append((pos, q_tool_down, open_g.clone()))
+        for i in range(1, n_orient + 1):
+            alpha = i / n_orient
+            t = torch.full((N, 1), alpha, device=device)
+            quat = _quat_slerp(q_tool_down, target_quat, t)
+            waypoints.append((approach_pos.clone(), quat, open_g.clone()))
         for i in range(1, n_descend + 1):
             alpha = i / n_descend
             pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
