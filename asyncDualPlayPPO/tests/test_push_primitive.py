@@ -55,9 +55,9 @@ _WS_Z = ( 0.00, 0.55)
 SCENARIOS = [
     # S0: Push1=Fwd + Push2=Left + Spin CW
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.1, "offset_y": 0.1, "push_dx": 0.05,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.2, "offset_y": 0.04, "push_dx": -0.10, "push_dy": -0.15,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.03, "offset_y": 0.05, "push_dx": 0.10,   "push_dy": -0.01,  "yaw": 0.0, "spin_yaw": math.pi / 4},
     ],
     # S1: Push1=Fwd + Push2=Right + Spin CCW
     [
@@ -293,7 +293,6 @@ def main():
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
                         seed_config=cur_joints.unsqueeze(1),
-                        retract_config=cur_joints,
                     )
                     success = result.success.squeeze(-1)
                     if success.any():
