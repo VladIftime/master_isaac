@@ -158,17 +158,20 @@ def compute_push_waypoints(
     do_spin = (n_spin > 0) and (spin_yaw is not None)
     start_pos = current_ee_pos.clone()
 
+    # Use current EE orientation for approach (avoids conflicting constraints with IK)
+    approach_quat = current_ee_quat.clone()
+
     if do_spin:
         # ── Close at current position, then approach with gripper closed ──
-        waypoints.append((start_pos.clone(), q_tool_down, close_g.clone()))
+        waypoints.append((start_pos.clone(), approach_quat, close_g.clone()))
         for i in range(1, n_approach + 1):
             alpha = i / n_approach
             pos = start_pos * (1.0 - alpha) + approach_pos * alpha
-            waypoints.append((pos, q_tool_down, close_g.clone()))
+            waypoints.append((pos, approach_quat, close_g.clone()))
         for i in range(1, n_orient + 1):
             alpha = i / n_orient
             t = torch.full((N, 1), alpha, device=device)
-            quat = _quat_slerp(q_tool_down, target_quat, t)
+            quat = _quat_slerp(approach_quat, target_quat, t)
             waypoints.append((approach_pos.clone(), quat, close_g.clone()))
         for i in range(1, n_descend + 1):
             alpha = i / n_descend
@@ -181,11 +184,11 @@ def compute_push_waypoints(
         for i in range(1, n_approach + 1):
             alpha = i / n_approach
             pos = start_pos * (1.0 - alpha) + approach_pos * alpha
-            waypoints.append((pos, q_tool_down, open_g.clone()))
+            waypoints.append((pos, approach_quat, open_g.clone()))
         for i in range(1, n_orient + 1):
             alpha = i / n_orient
             t = torch.full((N, 1), alpha, device=device)
-            quat = _quat_slerp(q_tool_down, target_quat, t)
+            quat = _quat_slerp(approach_quat, target_quat, t)
             waypoints.append((approach_pos.clone(), quat, open_g.clone()))
         waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
         for i in range(1, n_descend + 1):
