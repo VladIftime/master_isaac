@@ -90,6 +90,7 @@ def main():
     simulation_app = app_launcher.app
 
     # ── Log file tee (after AppLauncher so stdout is the real fd) ─────────────
+    # Must support .fileno() because SuppressAllOutput uses fd-level dup2.
     _log_fh = None
     if args.log_file:
         _log_fh = open(args.log_file, "a", buffering=1)
@@ -101,8 +102,10 @@ def main():
             def flush(self):
                 _orig_stdout.flush()
                 _log_fh.flush()
+            def fileno(self):
+                return _orig_stdout.fileno()
         sys.stdout = _Tee()
-        print(f"[Init] Logging to {args.log_file}")
+        print(f"[Init] Logging to {args.log_file}", flush=True)
 
     import torch
     import numpy as np
