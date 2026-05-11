@@ -59,33 +59,33 @@ SCENARIOS = [
     ],
     # S1: Push1=Fwd + Push2=Right + Push3=Spin (all closed)
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
     # S2: Push1=Fwd(closed) + Push2=Bwd(closed) + Push3=open flick
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
     ],
     # S3: Push1=Fwd + Push2=Fwd + Spin (all closed)
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
     # S4: Push1=Fwd(closed) + Push2=LeftFwd(closed) + Push3=open flick
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
     ],
     # S5: Push1=Fwd + Push2=RightFwd + Spin (all closed)
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
 ]
 
