@@ -53,25 +53,25 @@ _WS_Z = ( 0.055, 0.55)
 SCENARIOS = [
     # S0: Push1=Fwd(closed) + Push2=Left(closed) + Push3=open flick
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": math.pi / 2, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": math.pi/3, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": math.pi / 2, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": math.pi/3, "grip": 1.0},
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": math.pi/4, "grip": 1.0},
     ],
     # S1: Push1=Fwd + Push2=Right + Push3=Spin (all closed)
     [
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
     ],
     # S2: Push1=Fwd(closed) + Push2=Bwd(closed) + Push3=open flick
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "grip": 1.0},
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
     ],
     # S3: Push1=Fwd + Push2=Fwd + Spin (all closed)
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": 1.0},
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
@@ -138,7 +138,7 @@ def main():
     # ── cuRobo IK ─────────────────────────────────────────────────────────────
     print("[Setup] Initialising cuRobo IK solver...")
     _tensor_args = TensorDeviceType(device=torch.device(device), dtype=torch.float32)
-    _ur5e_yaml   = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e_robotiq_2f_140.yml"))
+    _ur5e_yaml   = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
     _robot_cfg   = RobotConfig.from_dict(_ur5e_yaml["robot_cfg"], _tensor_args)
     _ik_config   = IKSolverConfig.load_from_robot_config(
         _robot_cfg, world_model=None, tensor_args=_tensor_args,
@@ -279,7 +279,7 @@ def main():
                         _viewer_step()
                         prev_grip = wp_grip.clone()
 
-                    ik_target = wp_pos
+                    ik_target = wp_pos - _tcp_offset()
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
