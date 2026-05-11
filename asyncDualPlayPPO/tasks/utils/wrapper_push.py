@@ -202,9 +202,11 @@ class PushEnvWrapper:
         return reward
 
     def check_done(self, _obs: torch.Tensor, terminated: torch.Tensor) -> torch.Tensor:
-        """Episode ends: base termination, at-goal success, or max pushes reached."""
+        """Episode ends: base termination, at-goal success, max pushes, or object launched."""
         max_pushes = self.push_count >= self.max_pushes_per_episode
-        return terminated | self.at_goal | max_pushes
+        obj_z = _obs[:, _OBS_ROBOT_DIM + 2]  # object Z (index 2 of position)
+        launched = obj_z > 0.05
+        return terminated | self.at_goal | max_pushes | launched
 
     def reset_done_envs(self, dones: torch.Tensor):
         """Reset per-env state and resample goals for envs that finished an episode."""

@@ -83,7 +83,7 @@ def compute_push_waypoints(
     contact_pos = torch.stack([
         obj_pos[:, 0] + offset_x,
         obj_pos[:, 1] + offset_y,
-        torch.full((N,), table_z + 0.08, device=device),  # contact height above table
+        torch.full((N,), table_z + 0.04, device=device),  # contact height above table
     ], dim=-1)
 
     push_target = torch.stack([
