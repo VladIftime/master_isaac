@@ -179,19 +179,28 @@ def main():
     _WS_Y = (0.25,  0.70)
     _WS_Z = ( 0.00, 0.55)
 
+    # ── Robot body/joint indices ──────────────────────────────────────────────
+    _robot_scene = env.env.scene["robot"]
+    _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
+    _wrist3_ids, _ = _robot_scene.find_bodies("wrist_3_link")
+    _lf_ids, _ = _robot_scene.find_bodies("left_inner_finger")
+    _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
+
     # Fixed TCP→wrist3 offset in tool-down orientation.
-    # Calibrated once at startup: drives env 0 to a neutral tool-down pose,
-    # settles for 30 PD steps, then freezes the measured offset for all envs.
+    # Drive all envs to a neutral tool-down pose, settle 30 PD steps, then
+    # freeze the offset measured from env 0 (identical geometry across envs).
     print("[Setup] Calibrating TCP→wrist3 offset...")
-    _calib_pos = torch.tensor([[0.0, 0.50, 0.25]], device=env.device)
-    _calib_cur = _robot_scene.data.joint_pos[0:1, _arm_jids]
+    _calib_pos = torch.zeros(env.num_envs, 3, device=env.device)
+    _calib_pos[:, 1] = 0.50
+    _calib_pos[:, 2] = 0.25
+    _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
     _calib_res = ik_solver.solve_batch(
-        CuroboPose(position=_calib_pos, quaternion=_QUAT_TOOL_DOWN),
+        CuroboPose(position=_calib_pos, quaternion=_QUAT_TOOL_DOWN.expand(env.num_envs, 4)),
         seed_config=_calib_cur.unsqueeze(1),
         retract_config=_calib_cur,
     )
-    _calib_cmd = _calib_res.solution.view(1, 6)
-    _calib_act = torch.zeros(1, env.action_space.shape[0], device=env.device)
+    _calib_cmd = _calib_res.solution.view(env.num_envs, 6)
+    _calib_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
     _calib_act[:, :6] = _calib_cmd
     _calib_act[:, 6] = 1.0
     for _ in range(30):
@@ -199,19 +208,11 @@ def main():
     _lf_w = _robot_scene.data.body_pos_w[0, _lf_ids[0]]
     _rf_w = _robot_scene.data.body_pos_w[0, _rf_ids[0]]
     _w3_w = _robot_scene.data.body_pos_w[0, _wrist3_ids[0]]
-    _static_offset = ((_lf_w + _rf_w) / 2.0 - _w3_w).unsqueeze(0)
-    _FIXED_TCP_OFFSET = _static_offset.clone()
+    _FIXED_TCP_OFFSET = ((_lf_w + _rf_w) / 2.0 - _w3_w).unsqueeze(0).clone()
     print(
         f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
         f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
     )
-
-    # ── Robot body/joint indices ──────────────────────────────────────────────
-    _robot_scene = env.env.scene["robot"]
-    _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
-    _wrist3_ids, _ = _robot_scene.find_bodies("wrist_3_link")
-    _lf_ids, _ = _robot_scene.find_bodies("left_inner_finger")
-    _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
 
     # ── PPO agent ─────────────────────────────────────────────────────────────
     _mc_space = gym_mc.spaces.Box(
@@ -283,8 +284,10 @@ def main():
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     best_success_rate = -1.0
     iteration = 0
-    rew_buf = deque(maxlen=push_nsteps * env.num_envs)
-    sr_buf = deque(maxlen=200)
+    rew_buf     = deque(maxlen=push_nsteps * env.num_envs)
+    sr_buf      = deque(maxlen=200)
+    pos_err_buf = deque(maxlen=push_nsteps * env.num_envs)
+    ema_rew     = 0.0
 
     print(f"\n{'='*80}\nPUSH-PPO BASELINE: {args.exp_name}\nLOG DIR: {run_dir}\n{'='*80}\n")
 
@@ -416,6 +419,7 @@ def main():
             rew_buf.extend(reward.cpu().tolist())
             cur_at_goal = env.at_goal.float()
             sr_buf.extend(cur_at_goal.cpu().tolist())
+            pos_err_buf.extend(env._last_pos_err.cpu().tolist())
 
             # ── Handle done envs ──────────────────────────────────────────────
             if done.any():
@@ -449,9 +453,12 @@ def main():
         loss_val, loss_surr = agent.update()
         agent.storage.clear()
 
-        mean_rew = np.mean(rew_buf) if rew_buf else 0.0
+        mean_rew    = np.mean(rew_buf) if rew_buf else 0.0
+        mean_pos_err = np.mean(pos_err_buf) if pos_err_buf else 0.0
         sr = np.mean(sr_buf) if sr_buf else 0.0
         ik_fail_rate = total_ik_fails / max(1, total_ik_steps)
+
+        ema_rew = 0.9 * ema_rew + 0.1 * mean_rew
 
         ep_push_counts = list(env.episode_push_counts)
         ep_successes = list(env.episode_successes)
@@ -459,27 +466,31 @@ def main():
         ep_sr = np.mean(ep_successes) if ep_successes else float("nan")
         n_episodes = len(ep_push_counts)
 
-        writer.add_scalar("Loss/Agent/Value", loss_val, iteration)
-        writer.add_scalar("Loss/Agent/Surrogate", loss_surr, iteration)
-        writer.add_scalar("Reward/Mean", mean_rew, iteration)
-        writer.add_scalar("Metrics/SuccessRate", sr, iteration)
-        writer.add_scalar("Metrics/IKFailRate", ik_fail_rate, iteration)
-        writer.add_scalar("Metrics/EpisodicSR", ep_sr if not np.isnan(ep_sr) else 0.0, iteration)
-        writer.add_scalar("Metrics/AvgPushesPerEpisode", avg_pushes if not np.isnan(avg_pushes) else 0.0, iteration)
-        writer.add_scalar("Metrics/Episodes", n_episodes, iteration)
+        loss_delta = loss_surr - getattr(agent, "_last_loss_surr", 0.0)
+        agent._last_loss_surr = loss_surr
 
-        # Machine-parseable per-update line
-        print(
-            f"[Push Update {iteration:5d}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | "
-            f"Rew: {mean_rew:.4f} | SR: {sr:.4f}",
-            flush=True,
-        )
-        # Machine-parseable iteration summary line
+        writer.add_scalar("Loss/Agent/Value",        loss_val,      iteration)
+        writer.add_scalar("Loss/Agent/Surrogate",    loss_surr,     iteration)
+        writer.add_scalar("Reward/Mean",             mean_rew,      iteration)
+        writer.add_scalar("Reward/EMA",              ema_rew,       iteration)
+        writer.add_scalar("Metrics/SuccessRate",     sr,            iteration)
+        writer.add_scalar("Metrics/PosError",        mean_pos_err,  iteration)
+        writer.add_scalar("Metrics/IKFailRate",      ik_fail_rate,  iteration)
+        writer.add_scalar("Metrics/EpisodicSR",      ep_sr if not np.isnan(ep_sr) else 0.0, iteration)
+        writer.add_scalar("Metrics/AvgPushesPerEpisode", avg_pushes if not np.isnan(avg_pushes) else 0.0, iteration)
+        writer.add_scalar("Metrics/Episodes",        n_episodes,    iteration)
+
+        # Single compact iteration line — machine-parseable
         avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"
+        trend = "↓" if loss_delta < -0.01 else ("↑" if loss_delta > 0.01 else "→")
         print(
-            f"[Iter {iteration:5d}] SR={sr:.4f} | IK_fail={ik_fail_rate:.4f} | "
-            f"Rew={mean_rew:.4f} | AvgPushes={avg_pushes_str} | "
-            f"Episodes={n_episodes} | BestSR={best_success_rate:.4f}",
+            f"[Iter {iteration:5d}] "
+            f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
+            f"Rew={mean_rew:+.4f} (EMA {ema_rew:+.4f}) | "
+            f"PosErr={mean_pos_err:.4f} | SR={sr:.4f} | "
+            f"IK_fail={ik_fail_rate:.3f} | "
+            f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
+            f"BestSR={best_success_rate:.4f}",
             flush=True,
         )
 
@@ -494,6 +505,7 @@ def main():
 
         rew_buf.clear()
         sr_buf.clear()
+        pos_err_buf.clear()
         iteration += 1
 
         if _shutdown_requested:

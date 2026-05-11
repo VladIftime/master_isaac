@@ -104,6 +104,7 @@ class PushEnvWrapper:
         self.at_goal = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
         self.goal_pos_euler = torch.zeros(self.num_envs, 6, device=device)
         self._gave_completion = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
+        self._last_pos_err = torch.zeros(self.num_envs, device=device)
 
         self.episode_push_counts = []
         self.episode_successes = []
@@ -157,6 +158,7 @@ class PushEnvWrapper:
         d_now = (cur_obj_pos - goal_pos).norm(dim=-1)
 
         pos_err = d_now
+        self._last_pos_err = pos_err  # exposed for training-log metrics
         rot_err = _rot_distance_rad(cur_obj_euler, goal_euler)
         at_goal = (pos_err < PUSH_SUCCESS_THRESHOLD_POS) & (rot_err < PUSH_SUCCESS_THRESHOLD_ROT)
 
