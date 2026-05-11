@@ -344,8 +344,8 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.6,
-                dynamic_friction=0.6,
+                static_friction=0.3,
+                dynamic_friction=0.3,
                 restitution=0.5,
             ),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.2, 0.2)),
