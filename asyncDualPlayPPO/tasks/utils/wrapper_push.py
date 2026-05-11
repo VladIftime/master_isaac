@@ -203,6 +203,7 @@ class PushEnvWrapper:
         gy = torch.empty(N, device=self.device).uniform_(*_GOAL_Y_RANGE)
         gz = torch.full((N,), _GOAL_Z, device=self.device)
         geuler = torch.zeros(N, 3, device=self.device)
+        geuler[:, 2] = torch.empty(N, device=self.device).uniform_(0, 2 * torch.pi)
         self.goal_pos_euler[env_ids] = torch.cat([
             gx.unsqueeze(-1), gy.unsqueeze(-1), gz.unsqueeze(-1), geuler,
         ], dim=-1)
