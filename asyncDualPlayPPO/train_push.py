@@ -450,10 +450,15 @@ def main():
             if done.any():
                 done_ids = torch.where(done)[0]
                 # Snapshot goal/object positions before reset clears them
-                obj_pos_done  = obs[done_ids, env.robot_dim:env.robot_dim + 3]
-                goal_pos_done = obs[done_ids, env.robot_dim + env.obj_state_dim:
-                                     env.robot_dim + env.obj_state_dim + 3]
-                pos_err_done  = (obj_pos_done - goal_pos_done).norm(dim=-1)
+                obj_pos_done   = obs[done_ids, env.robot_dim:env.robot_dim + 3]
+                obj_euler_done = obs[done_ids, env.robot_dim + 3:env.robot_dim + 6]
+                goal_pos_done  = obs[done_ids, env.robot_dim + env.obj_state_dim:
+                                      env.robot_dim + env.obj_state_dim + 3]
+                goal_euler_done = obs[done_ids, env.robot_dim + env.obj_state_dim + 3:
+                                       env.robot_dim + env.obj_state_dim + 6]
+                pos_err_done   = (obj_pos_done - goal_pos_done).norm(dim=-1)
+                rot_diff = (obj_euler_done - goal_euler_done).abs()
+                rot_err_done  = torch.min(rot_diff, 2 * torch.pi - rot_diff).max(dim=-1)[0]
                 ep_pushes_pre = len(env.episode_push_counts)
                 env.reset_done_envs(done)
                 ep_pushes_post = len(env.episode_push_counts)
@@ -464,14 +469,17 @@ def main():
                     for i, (p, s) in enumerate(zip(new_pushes, new_successes)):
                         status = "SUCCESS" if s else "fail"
                         gi = min(i, len(done_ids) - 1)
-                        g = goal_pos_done[gi]
+                        g_pos = goal_pos_done[gi]
+                        g_rot = goal_euler_done[gi]
                         o = obj_pos_done[gi]
-                        e = pos_err_done[gi]
+                        pe = pos_err_done[gi]
+                        re = float(rot_err_done[gi])
                         _pr(
                             f"  [Episode] pushes={p}  {status}  "
-                            f"goal=({g[0]:+.3f},{g[1]:+.3f},{g[2]:+.3f})  "
+                            f"goal=({g_pos[0]:+.3f},{g_pos[1]:+.3f},{g_pos[2]:+.3f}) "
+                            f"orient=({g_rot[0]:+.3f},{g_rot[1]:+.3f},{g_rot[2]:+.3f})  "
                             f"final=({o[0]:+.3f},{o[1]:+.3f},{o[2]:+.3f})  "
-                            f"err={e:.3f}m"
+                            f"err_pos={pe:.3f}m  err_rot={re:.3f}rad"
                         )
                 if hidden_state is not None:
                     hidden_state[0][done] = 0.0
