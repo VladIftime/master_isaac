@@ -81,11 +81,28 @@ def main():
     parser.add_argument("--save_interval", type=int, default=50)
     parser.add_argument("--chkpt", type=str, default=None,
                         help="Resume from checkpoint path")
+    parser.add_argument("--log-file", type=str, default=None,
+                        help="Write terminal output to this file as well")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
+
+    # ── Log file tee (after AppLauncher so stdout is the real fd) ─────────────
+    _log_fh = None
+    if args.log_file:
+        _log_fh = open(args.log_file, "a", buffering=1)
+        _orig_stdout = sys.stdout
+        class _Tee:
+            def write(self, s):
+                _orig_stdout.write(s)
+                _log_fh.write(s)
+            def flush(self):
+                _orig_stdout.flush()
+                _log_fh.flush()
+        sys.stdout = _Tee()
+        print(f"[Init] Logging to {args.log_file}")
 
     import torch
     import numpy as np
