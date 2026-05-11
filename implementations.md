@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-10 (Fix 17: EE home offset)
+**Last updated**: 2026-05-11 (Push primitive refactor: no yaw/grip/spin, fixed offset calibration)
 
 ---
 
@@ -13,6 +13,7 @@
 4. [cuRobo IK Integration](#curobo-ik)
 5. [HPC Setup & Run Guide](#hpc-setup)
 6. [Push-PPO Baseline](#push-ppo)
+7. [Push Primitive Test](#push-primitive-test)
 
 ---
 
@@ -664,52 +665,37 @@ environment executes a multi-step push trajectory using cuRobo IK.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
+| Orientation | Fixed tool-down `[0,1,0,0]` | No yaw rotation — simplifies IK, all pushes face forward |
+| Gripper | Always closed during push | Simplest possible baseline |
 | Action space | Relative offsets from object | Generalizes across object positions |
-| Push trajectory | Vertical retract | Physically realistic tabletop pushing |
-| Objects | Single object only | Simplest possible baseline |
 | Action frequency | Macro-action | Agent predicts push params once; env executes multi-step trajectory |
 
 ### 6.3 Push Primitive Architecture
 
 ```
-Phase 1: Approach (10 steps)
-  EE → approach_pos = obj_pos + (offset_x, offset_y, approach_height_z)
-  Orientation: tool-down, gripper open
+Phase 1: Approach   (18 steps)  EE → above object, tool-down, gripper open
+Phase 2: Engage     ( 5 steps)  Close gripper at approach height
+Phase 3: Descend    (20 steps)  EE down to contact height (table + 0.015 m)
+Phase 4: Push       (30 steps)  EE moves: contact_xy → contact_xy + (push_dx, push_dy)
+Phase 5: Retract    (10 steps)  EE up to approach height, gripper closed
+Phase 6: Release    ( 5 steps)  Open gripper at approach height
+Phase 7: Return     (12 steps)  EE back to current TCP position at approach height
 
-Phase 2: Orient (5 steps)
-  EE rotates to target_yaw (around Z axis)
-
-Phase 3: Descend (5 steps)
-  EE moves down to (obj_x+offset_x, obj_y+offset_y, table_z)
-
-Phase 4: Engage (3 steps)
-  Close gripper
-
-Phase 5: Push (20 steps)
-  EE moves straight: (approach_xy) → (approach_xy + push_dx, push_dy)
-  Gripper closed, linear interpolation with cuRobo IK per substep
-
-Phase 6: Release (3 steps)
-  Open gripper
-
-Phase 7: Retract (5 steps)
-  EE moves up to safe height
-
-Total: ~51 steps per push macro-action
+Total: 100 substeps per push macro-action (2.0 s at 50 Hz)
 ```
 
 ### 6.4 Action Space
 
 MultiCategorical: **6D × 11 bins**
 
-| Dim | Parameter | Range | Bin → Value |
-|-----|-----------|-------|-------------|
-| 0 | `approach_offset_x` | [-0.15, 0.15] m | `(bin-5)/5 * 0.15` |
-| 1 | `approach_offset_y` | [-0.15, 0.15] m | `(bin-5)/5 * 0.15` |
-| 2 | `push_dx` | [-0.30, 0.30] m | `(bin-5)/5 * 0.30` |
-| 3 | `push_dy` | [-0.30, 0.30] m | `(bin-5)/5 * 0.30` |
-| 4 | `yaw` | [-π, π] rad | `(bin-5)/5 * π` |
-| 5 | `push_dz` | [-0.03, 0.03] m | `(bin-5)/5 * 0.03` |
+| Dim | Parameter | Range |
+|-----|-----------|-------|
+| 0 | `approach_offset_x` | [-0.15, 0.15] m |
+| 1 | `approach_offset_y` | [-0.15, 0.15] m |
+| 2 | `push_dx` | [-0.30, 0.30] m |
+| 3 | `push_dy` | [-0.30, 0.30] m |
+| 4 | `yaw` | [-π, π] rad (predicted but NOT used by waypoint generator) |
+| 5 | `push_dz` | [-0.03, 0.03] m |
 
 ### 6.5 Observation Space (29D)
 
@@ -719,23 +705,7 @@ MultiCategorical: **6D × 11 bins**
  pos_dist(1) | rot_dist(1)]
 ```
 
-### 6.6 Network Architecture
-
-```
-obs (29D)
-  │
-  ├─ Linear(29 → 512) → ReLU
-  ├─ Linear(512 → 256) → ReLU
-  ├─ LSTM(256 → 256)
-  │
-  ├─ Actor head:  Linear(256 → 66) → (6, 11) → MultiCategorical
-  └─ Critic head: Linear(256 → 128) → ReLU → Linear(128 → 1)
-```
-
-No PI encoder, no goal encoder injection — simpler than the ASP model, but keeps LSTM for
-sequential push strategies.
-
-### 6.7 Reward Structure
+### 6.6 Reward Structure
 
 Dense shaping computed **after each push macro-action**:
 
@@ -749,16 +719,30 @@ where:
 - `β = 0.5` (remaining-distance penalty)
 - `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 2°)
 
+### 6.7 Network Architecture
+
+```
+obs (29D)
+  │
+  ├─ Linear(29 → 512) → ReLU
+  ├─ Linear(512 → 256) → ReLU
+  ├─ LSTM(256 → 256)
+  │
+  ├─ Actor head:  Linear(256 → 66) → (6, 11) → MultiCategorical
+  └─ Critic head: Linear(256 → 128) → ReLU → Linear(128 → 1)
+```
+
 ### 6.8 Files
 
 | File | Purpose |
 |------|---------|
-| `asyncDualPlayPPO/tasks/push_task_curobo.py` | Environment config (single agent, single object) |
-| `asyncDualPlayPPO/tasks/utils/wrapper_push.py` | Push env wrapper: macro-action execution, reward, reset |
-| `asyncDualPlayPPO/tasks/utils/action_push.py` | Push primitive: trajectory generation + cuRobo IK |
-| `asyncDualPlayPPO/algorithms/rl/ppo/module_push.py` | Simplified ActorCritic (flat MLP + LSTM) |
-| `asyncDualPlayPPO/train_push.py` | Training script |
-| `asyncDualPlayPPO/tests/validate_push.py` | Validation script |
+| `tasks/push_task_curobo.py` | Environment config (single agent, single object) |
+| `tasks/utils/wrapper_push.py` | Push env wrapper: macro-action execution, reward, reset |
+| `tasks/utils/action_push.py` | Push primitive: trajectory generation + cuRobo IK |
+| `algorithms/rl/ppo/module_push.py` | Simplified ActorCritic (flat MLP + LSTM) |
+| `train_push.py` | Training script |
+| `tests/validate_push.py` | Validation script |
+| `tests/test_push_primitive.py` | Interactive scenario-loop test |
 
 ### 6.9 Running
 
@@ -815,39 +799,96 @@ reset, so `obs` returned from `PushEnvWrapper.step()` already contains post-rese
 1. Initialize `terminated = zeros(bool)` before the waypoint loop; accumulate `terminated |= step_terminated` each substep.
 2. Removed mid-trajectory `if terminated.any(): env.env.reset()` block entirely.
 3. In the post-push done block, replaced `env.env.reset()` with `env.env.reset(env_ids=reset_ids)` for only `done & ~terminated` envs.
-4. Removed unused imports `gc`, `math` and unused variable `_learn_cfg`.
 
 ---
 
 #### Goal ghost placed at world origin instead of on table — 2026-05-10
 
-Four bugs in `wrapper_push.py`:
-
-1. **Ghost never moved** — `_update_goal_in_extras()` only wrote to `env.extras`; never called `write_root_pose_to_sim()` on the `goal_ghost` rigid object.
-2. **Wrong extras key** — stored `"goal_states"` (plural) but `observations.goal_states()` reads `"goal_state"` (singular); agent always received zeros.
-3. **Goal Z = 0** — goals sampled at `gz = 0.0`, placing marker below the table surface. Changed to `_GOAL_Z = 0.02`.
-4. **No per-episode resampling** — `reset_done_envs()` never sampled a new goal.
-
 **Fix (`wrapper_push.py`):**
-- Added inline `_euler_to_quat()` helper (pure torch).
 - `_sample_goals(env_ids)` takes explicit env ids, writes into `self.goal_pos_euler[env_ids]` in-place.
-- `_move_goal_ghost(env_ids)`: converts goal pos → world frame (`goal_pos_local + env.scene.env_origins[env_ids]`), converts euler → quat, calls `write_root_pose_to_sim(pose_7d, env_ids=env_ids)`.
+- `_move_goal_ghost(env_ids)`: converts goal pos → world frame, calls `write_root_pose_to_sim()`.
 - `_update_goal_in_extras()` now writes `env.extras["goal_state"]` (singular).
-- `reset()` calls `_sample_goals(all_ids)` → `_update_goal_in_extras()` → `_move_goal_ghost(all_ids)`.
-- `reset_done_envs(dones)` calls the same chain for the done subset so each episode gets a fresh goal.
+- `reset()` and `reset_done_envs(dones)` call the full chain.
 
 ---
 
-### 6.11 Dependencies on Existing Code
+#### EE cannot reach contact height — 2026-05-11
 
-| Dependency | Usage |
-|------------|-------|
-| `train_curobo.py` | cuRobo import ordering, IK solver setup, action decoding pattern |
-| `module.py` / `ActorCritic` | MultiCategorical, LSTM, encoding patterns |
-| `ppo.py` / `PPO` | Base PPO class (reused as-is) |
-| `storage.py` / `RolloutStorage` | PPO storage (reused as-is) |
-| `observations.py` | Observation functions (ee_poses, object_states, goal_distance) |
-| `rewards.py` | Reward constants |
-| `validation_configs.py` | Test scene configurations |
-| `test_curobo_follow_target.py` | cuRobo IK usage pattern, workspace clamping, TCP offset |
-| `wrapper.py` | Sparse reward computation, env wrapper pattern |
+The UR5e with tool-down `[0,1,0,0]` orientation has an effective minimum TCP Z of ~0.115 m
+due to kinematic workspace limits. cuRobo reports IK success (position error < 5 mm for the
+ee_link) but converges to the closest feasible point when the target is below the reachable
+workspace.
+
+**Fix (`test_push_primitive.py`):**
+- **Fixed TCP→wrist3 offset calibration**: instead of using the live `_tcp_offset()` (which
+  drifts during approach/orient because the arm isn't yet at tool-down), a frozen offset is
+  measured once at startup. The calibration solves IK for a tool-down pose at Z=0.25 m
+  seeded from the current joint configuration, steps the PD controller 30 times to settle,
+  then freezes the measured offset. `ik_target = wp_pos - _FIXED_TCP_OFFSET` is used for
+  all subsequent waypoints.
+- **Workspace clamp**: `_WS_Z = (0.00, 0.55)` clamps the wrist3-target Z to prevent cuRobo
+  from receiving infeasible targets. The minimum can be raised if needed.
+
+---
+
+## 7. Push Primitive Test <a name="push-primitive-test"></a>
+
+**Date**: 2026-05-11
+
+### 7.1 Overview
+
+`tests/test_push_primitive.py` — interactive scenario-loop test that cycles through
+pre-defined push scenarios to visually validate the push primitive. Runs in the viewer;
+press Ctrl+C or close the viewport to exit.
+
+### 7.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│  SCENARIOS[6] — each is a 3-push sequence          │
+│                                                     │
+│  Each push: {offset_x, offset_y, push_dx, push_dy}  │
+│                                                     │
+│  ① Get object position from observation             │
+│  ② compute_push_waypoints() → 100 waypoints         │
+│  ③ Per waypoint:                                    │
+│     ik_target = wp_pos − _FIXED_TCP_OFFSET           │
+│     cuRobo solve_batch → joint positions            │
+│     env.step() → physics                            │
+│  ④ Print displacement / contact / velocity          │
+│  ⑤ Pause 60 steps between pushes                    │
+│  ⑥ Reset environment after each scenario            │
+└─────────────────────────────────────────────────────┘
+```
+
+### 7.3 Key Configuration
+
+| Setting | Value |
+|---------|-------|
+| cuRobo config | `ur5e.yml` (ee_link: tool0) |
+| Orientation | Fixed tool-down `[0,1,0,0]` |
+| Gripper | Always closed during push |
+| Steps per push | 100: 18+5+20+30+10+5+12 |
+| TCP offset | Calibrated fixed offset at startup (30-step PD settle) |
+| Workspace | X=[-0.5,0.5], Y=[0.25,0.70], Z=[0.00,0.55] |
+| Pause between pushes | 60 steps (~1.2 s) |
+
+### 7.4 Scenarios
+
+| S# | Push 1 | Push 2 | Push 3 |
+|----|--------|--------|--------|
+| 0 | Fwd 0.10 | Left 0.10 | Fwd 0.20 |
+| 1 | Fwd 0.10 | Right 0.10 | (no-op) |
+| 2 | Fwd 0.10 | Bwd 0.10 | (no-op) |
+| 3 | Fwd 0.10 | Fwd 0.10 | (no-op) |
+| 4 | Fwd 0.10 | LeftFwd 0.07 | (no-op) |
+| 5 | Fwd 0.10 | RightFwd 0.07 | (no-op) |
+
+All scenarios use `offset_x=0.05, offset_y=0.05` (5 cm safety margin from object center).
+
+### 7.5 Running
+
+```bash
+python -m asyncDualPlayPPO.tests.test_push_primitive
+python -m asyncDualPlayPPO.tests.test_push_primitive --step-delay 0.05
+```

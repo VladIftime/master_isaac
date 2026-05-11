@@ -1,10 +1,8 @@
 """
 test_push_primitive.py  —  Interactive push loop
 =================================================
-Cycles through push scenarios. Each scenario is a 3-push sequence:
-  1. Push forward/backward 10 cm (offset ~2 cm behind object center)
-  2. Drag left/right 10 cm
-  3. Spin 45° with gripper closed
+Cycles through push scenarios. Each scenario is a 3-push sequence
+with the gripper closed, tool-down orientation, no yaw rotation.
 
 Loops forever until you close the viewport window or press Ctrl+C.
 
@@ -246,8 +244,6 @@ def main():
                 obs         = env._build_obs(obs_dict)
                 obj_pos_obs = obs[:, env.robot_dim:env.robot_dim + 3].clone()
 
-
-
                 # ── Compute waypoints ─────────────────────────────────────────
                 prev_jcmd  = _robot_scene.data.joint_pos[:, _arm_jids].clone()
                 current_ee = _tcp_local()
@@ -277,7 +273,6 @@ def main():
                 ik_ok = 0
                 last_good_joints = prev_jcmd.clone()
                 prev_grip = torch.ones(1, device=device)  # start open
-                max_step_delta = 0.05  # 5 cm/s max per-step change
                 for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
@@ -299,9 +294,6 @@ def main():
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
-                    # Velocity smooth: limit how far target moves per step
-                    delta_target = ik_target - (last_good_joints.unsqueeze(0) if False else ik_target)
-                    # Use smooth interpolation from current to target
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
                         seed_config=cur_joints.unsqueeze(1),
@@ -316,7 +308,6 @@ def main():
 
                     if wp_i % 3 == 0:
                         ee_pos = _tcp_local()
-                        wrist_pos = _robot_scene.data.body_pos_w[:, _w3_ids[0]] - env.env.scene.env_origins
                         obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6] if 'obs' in dir() else torch.zeros(3)
                         print(
                             f"    wp {wp_i}: "
