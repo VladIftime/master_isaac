@@ -42,52 +42,50 @@ _ARM_JOINT_NAMES = [
     "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
 ]
 
-_N_SPIN = 8     # substeps for the spin phase
-
-# Workspace clamp limits (local / env-origin-relative frame, metres)
+# Workspace clamp limits
 _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
 _WS_Z = ( 0.055, 0.55)
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
-# Each push: {offset_x, offset_y, push_dx, push_dy, yaw, spin_yaw}
-# Push 1 always: approach centered on stem, push forward 10cm
+# Each push: {offset_x, offset_y, push_dx, push_dy, yaw, grip}
+#   grip: -1.0 = closed, +1.0 = open (flick / nudge)
 SCENARIOS = [
-    # S0: Push1=Fwd + Push2=Left + Spin CW
+    # S0: Push1=Fwd(closed) + Push2=Left(closed) + Push3=open flick
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": math.pi / 2},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": 0.0, "spin_yaw": math.pi /3},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": math.pi / 2, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": math.pi/3, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": math.pi/4, "grip": 1.0},
     ],
-    # S1: Push1=Fwd + Push2=Right + Spin CCW
+    # S1: Push1=Fwd + Push2=Right + Push3=Spin (all closed)
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
-    # S2: Push1=Fwd + Push2=Bwd + Spin CW
+    # S2: Push1=Fwd(closed) + Push2=Bwd(closed) + Push3=open flick
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
     ],
-    # S3: Push1=Fwd + Push2=Fwd + Spin CCW
+    # S3: Push1=Fwd + Push2=Fwd + Spin (all closed)
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
-    # S4: Push1=Fwd + Push2=LeftFwd + Spin CW
+    # S4: Push1=Fwd(closed) + Push2=LeftFwd(closed) + Push3=open flick
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
     ],
-    # S5: Push1=Fwd + Push2=RightFwd + Spin CCW
+    # S5: Push1=Fwd + Push2=RightFwd + Spin (all closed)
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": -math.pi / 4},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
     ],
 ]
 
@@ -208,7 +206,7 @@ def main():
 
             print(f"{'='*64}")
             print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}  "
-                  f"{'spin CW' if scenario[-1]['spin_yaw'] > 0 else 'spin CCW'}")
+                  f"{'grip: open' if scenario[-1]['grip'] > 0.0 else 'grip: closed'}")
             print(f"{'='*64}")
 
             for push_i, cfg in enumerate(scenario):
@@ -220,7 +218,7 @@ def main():
                 push_dx  = cfg["push_dx"]
                 push_dy  = cfg["push_dy"]
                 yaw      = cfg["yaw"]
-                spin_yaw = cfg["spin_yaw"]
+                grip_val = cfg["grip"]
 
                 # ── Get current object position from observation ──────────────
                 obs_dict    = env.env.observation_manager.compute()
@@ -244,13 +242,12 @@ def main():
                     current_ee_pos =current_ee,
                     current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),
                     device=device,
-                    n_spin=_N_SPIN,
-                    spin_yaw=torch.tensor([spin_yaw], device=device) if spin_yaw != 0.0 else None,
+                    grip=grip_val,
                 )
 
                 label = f"Push {push_i + 1}"
-                if push_i == 2:
-                    label += f"  spin {math.degrees(spin_yaw):+.0f}\u00b0"
+                if grip_val > 0.0:
+                    label += f"  open flick  yaw={math.degrees(yaw):+.0f}\u00b0"
                 else:
                     label += f"  ({push_dx:+.2f}, {push_dy:+.2f})m yaw={math.degrees(yaw):+.0f}\u00b0"
 

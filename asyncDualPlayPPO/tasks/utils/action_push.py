@@ -13,13 +13,15 @@ import torch
 
 
 # ── Default steps-per-phase ────────────────────────────────────────────────────
-PUSH_NSTEPS_APPROACH = 16
-PUSH_NSTEPS_ORIENT = 10
-PUSH_NSTEPS_DESCEND = 12
-PUSH_NSTEPS_PUSH = 35
-PUSH_NSTEPS_RETRACT = 10
-PUSH_NSTEPS_RETURN = 15
-# Total: 16 + 10 + 12 + 1(engage) + 35 + 1(release) + 10 + 15 = 100 substeps per push
+PUSH_NSTEPS_APPROACH = 13
+PUSH_NSTEPS_ORIENT   = 10
+PUSH_NSTEPS_ENGAGE   = 5
+PUSH_NSTEPS_DESCEND  = 10
+PUSH_NSTEPS_PUSH     = 35
+PUSH_NSTEPS_RETRACT  = 10
+PUSH_NSTEPS_RELEASE  = 5
+PUSH_NSTEPS_RETURN   = 12
+# Total: 13 + 10 + 5 + 10 + 35 + 10 + 5 + 12 = 100 substeps per push
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
 PUSH_APPROACH_HEIGHT = 0.15   # Z height for approach / retract (above table)
@@ -74,12 +76,13 @@ def compute_push_waypoints(
     table_z: float = PUSH_TABLE_SURFACE,
     n_approach: int = PUSH_NSTEPS_APPROACH,
     n_orient: int = PUSH_NSTEPS_ORIENT,
+    n_engage: int = PUSH_NSTEPS_ENGAGE,
     n_descend: int = PUSH_NSTEPS_DESCEND,
     n_push: int = PUSH_NSTEPS_PUSH,
-    n_spin: int = 0,
     n_retract: int = PUSH_NSTEPS_RETRACT,
+    n_release: int = PUSH_NSTEPS_RELEASE,
     n_return: int = PUSH_NSTEPS_RETURN,
-    spin_yaw: Optional[torch.Tensor] = None,
+    grip: float = -1.0,
 ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Generate push trajectory waypoints for N environments.
@@ -92,13 +95,15 @@ def compute_push_waypoints(
     Phases:
       1. Approach: EE→above object (tool-down, gripper open)
       2. Orient:   rotate to target yaw (gripper open)
-      3. Engage:   close gripper at approach height (1 step)
-      4. Descend:  move down to surface contact (gripper closed)
-      5. Push:     move in push direction (gripper closed)
-      6. Spin:     change yaw while gripper closed (optional)
-      7. Retract:  move up above push target (gripper closed)
-      8. Release:  open gripper at approach height (1 step)
-      9. Return:   move back above pre-push start position
+      3. Engage:   set gripper to desired grip at approach height
+      4. Descend:  move down to surface contact
+      5. Push:     move in push direction
+      6. Retract:  move up above push target
+      7. Release:  open gripper at approach height
+      8. Return:   move back above pre-push start position
+
+    grip = -1.0: gripper closes before descend, pushes object while gripping.
+    grip = +1.0: gripper stays open — a "flick" or "nudge" push.
     """
     N = offset_x.shape[0]
 
@@ -140,7 +145,7 @@ def compute_push_waypoints(
     ], dim=-1)
 
     open_g = torch.ones(N, device=device)
-    close_g = -torch.ones(N, device=device)
+    grip_cmd = torch.full_like(open_g, grip)
 
     waypoints: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
 
@@ -158,52 +163,33 @@ def compute_push_waypoints(
         quat = _quat_slerp(q_tool_down, target_quat, t)
         waypoints.append((approach_pos.clone(), quat, open_g.clone()))
 
-    # ── Phase 3: Engage at approach height (close gripper before descend) ─
-    waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
+    # ── Phase 3: Engage (set gripper at approach height) ──────────────────
+    for i in range(1, n_engage + 1):
+        waypoints.append((approach_pos.clone(), target_quat.clone(), grip_cmd.clone()))
 
-    # ── Phase 4: Descend (approach → contact, gripper closed) ────────────
+    # ── Phase 4: Descend (approach → contact) ─────────────────────────────
     for i in range(1, n_descend + 1):
         alpha = i / n_descend
         pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
-        waypoints.append((pos, target_quat.clone(), close_g.clone()))
+        waypoints.append((pos, target_quat.clone(), grip_cmd.clone()))
 
-    # ── Phase 5: Push (contact → push target, gripper closed) ────────────
+    # ── Phase 5: Push (contact → push target) ─────────────────────────────
     for i in range(1, n_push + 1):
         alpha = i / n_push
         pos = contact_pos * (1.0 - alpha) + push_target * alpha
-        waypoints.append((pos, target_quat.clone(), close_g.clone()))
+        waypoints.append((pos, target_quat.clone(), grip_cmd.clone()))
 
-    # ── Phase 6: Spin (yaw change while gripper closed, optional) ────────
-    do_spin = (n_spin > 0) and (spin_yaw is not None)
-    if do_spin:
-        q_spin_yaw = torch.stack([
-            torch.cos((yaw + spin_yaw) / 2.0),
-            torch.zeros(N, device=device),
-            torch.zeros(N, device=device),
-            torch.sin((yaw + spin_yaw) / 2.0),
-        ], dim=-1)
-        spin_quat = _quat_mul(q_spin_yaw, q_tool_down)
-        spin_quat = spin_quat / spin_quat.norm(dim=-1, keepdim=True)
-        for i in range(1, n_spin + 1):
-            alpha = i / n_spin
-            t = torch.full((N, 1), alpha, device=device)
-            quat = _quat_slerp(target_quat, spin_quat, t)
-            waypoints.append((push_target.clone(), quat, close_g.clone()))
-        spin_end_quat = spin_quat.clone()
-    else:
-        spin_end_quat = target_quat.clone()
-
-    # ── Phase 7: Retract (push target → up, gripper still closed) ────────
+    # ── Phase 6: Retract (push target → up) ──────────────────────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
-        waypoints.append((pos, q_tool_down, close_g.clone()))
+        waypoints.append((pos, target_quat.clone(), grip_cmd.clone()))
 
-    # ── Phase 8: Release (open gripper after retract, at approach height) ─
-    waypoints.append((retract_pos.clone(), q_tool_down, open_g.clone()))
+    # ── Phase 7: Release (open gripper at approach height) ────────────────
+    for i in range(1, n_release + 1):
+        waypoints.append((retract_pos.clone(), target_quat.clone(), open_g.clone()))
 
     # ── Phase 8: Return (above push target → above pre-push start) ────────
-    # Elevates start XY to approach_height so the arm never dips mid-transit.
     home_pos = torch.stack([
         start_pos[:, 0],
         start_pos[:, 1],
@@ -264,9 +250,11 @@ class PushConfig:
     table_z: float = PUSH_TABLE_SURFACE
     n_approach: int = PUSH_NSTEPS_APPROACH
     n_orient: int = PUSH_NSTEPS_ORIENT
+    n_engage: int = PUSH_NSTEPS_ENGAGE
     n_descend: int = PUSH_NSTEPS_DESCEND
     n_push: int = PUSH_NSTEPS_PUSH
     n_retract: int = PUSH_NSTEPS_RETRACT
+    n_release: int = PUSH_NSTEPS_RELEASE
     n_return: int = PUSH_NSTEPS_RETURN
     num_bins: int = 11
 
@@ -275,5 +263,5 @@ def total_push_substeps(cfg: PushConfig = None) -> int:
     """Return total number of substeps per push macro-action."""
     if cfg is None:
         cfg = PushConfig()
-    return (cfg.n_approach + cfg.n_orient + cfg.n_descend
-            + 1 + cfg.n_push + 1 + cfg.n_retract + cfg.n_return)
+    return (cfg.n_approach + cfg.n_orient + cfg.n_engage + cfg.n_descend
+            + cfg.n_push + cfg.n_retract + cfg.n_release + cfg.n_return)
