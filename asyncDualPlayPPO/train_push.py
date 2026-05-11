@@ -296,6 +296,7 @@ def main():
     with SuppressAllOutput():
         obs = env.reset()
     print("Training loop starting...")
+    sys.stdout.flush()
 
     # Per-env state accumulators
     def _tcp_pos_local():
@@ -483,16 +484,17 @@ def main():
         # Single compact iteration line — machine-parseable
         avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"
         trend = "↓" if loss_delta < -0.01 else ("↑" if loss_delta > 0.01 else "→")
-        print(
+        line = (
             f"[Iter {iteration:5d}] "
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
             f"Rew={mean_rew:+.4f} (EMA {ema_rew:+.4f}) | "
             f"PosErr={mean_pos_err:.4f} | SR={sr:.4f} | "
             f"IK_fail={ik_fail_rate:.3f} | "
             f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
-            f"BestSR={best_success_rate:.4f}",
-            flush=True,
+            f"BestSR={best_success_rate:.4f}"
         )
+        print(line, flush=True)
+        sys.stdout.flush()
 
         if sr > best_success_rate:
             best_success_rate = sr
