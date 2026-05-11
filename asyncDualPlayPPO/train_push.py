@@ -438,9 +438,29 @@ def main():
             sr_buf.extend(cur_at_goal.cpu().tolist())
             pos_err_buf.extend(env._last_pos_err.cpu().tolist())
 
+            # Per-push compact summary (every 4 pushes to avoid spam)
+            if push_step % 4 == 0:
+                _pr(
+                    f"  [Push {push_step:3d}] "
+                    f"rew={reward.mean().item():+.3f}  pos_err={env._last_pos_err.mean().item():.3f}  "
+                    f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}"
+                )
+
             # ── Handle done envs ──────────────────────────────────────────────
             if done.any():
+                done_ids = torch.where(done)[0]
+                # Snapshot per-episode stats before reset clears them
+                n_done = len(done_ids)
+                ep_pushes_pre = len(env.episode_push_counts)
                 env.reset_done_envs(done)
+                ep_pushes_post = len(env.episode_push_counts)
+                n_new = ep_pushes_post - ep_pushes_pre
+                if n_new > 0:
+                    new_pushes = env.episode_push_counts[-n_new:]
+                    new_successes = env.episode_successes[-n_new:]
+                    for p, s in zip(new_pushes, new_successes):
+                        status = "SUCCESS" if s else "fail"
+                        _pr(f"  [Episode] pushes={p}  {status}")
                 if hidden_state is not None:
                     hidden_state[0][done] = 0.0
                     hidden_state[1][done] = 0.0
