@@ -15,10 +15,10 @@ import torch
 # ── Default steps-per-phase ────────────────────────────────────────────────────
 PUSH_NSTEPS_APPROACH = 18
 PUSH_NSTEPS_ENGAGE   = 5
-PUSH_NSTEPS_DESCEND  = 20
+PUSH_NSTEPS_DESCEND  = 27
 PUSH_NSTEPS_PUSH     = 30
 PUSH_NSTEPS_RETRACT  = 10
-PUSH_NSTEPS_RELEASE  = 5
+PUSH_NSTEPS_RELEASE  = 2
 PUSH_NSTEPS_RETURN   = 12
 # Total: 18 + 5 + 20 + 30 + 10 + 5 + 12 = 100 substeps per push
 
