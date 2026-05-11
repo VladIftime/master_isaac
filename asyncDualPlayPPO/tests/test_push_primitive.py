@@ -190,6 +190,31 @@ def main():
     env.reset()
     _viewer_step()
 
+    # Calibrate the fixed TCP→wrist_3 offset in tool-down orientation.
+    # The live _tcp_offset() drifts during approach/orient because the arm
+    # isn't yet at tool-down.  Using a frozen offset measured after PD settle
+    # ensures ik_target = wp_pos - _FIXED_OFFSET maps TCP→wrist3 correctly.
+    print("[Setup] Calibrating TCP→wrist3 offset...")
+    _calib_pos = torch.tensor([[0.0, 0.50, 0.25]], device=device)
+    _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
+    _calib_res = ik_solver.solve_batch(
+        CuroboPose(position=_calib_pos, quaternion=_QUAT_DOWN),
+        seed_config=_calib_cur.unsqueeze(1),
+        retract_config=_calib_cur,
+    )
+    _calib_cmd = _calib_res.solution.view(1, 6)
+    _calib_act = torch.zeros(1, env.action_space.shape[0], device=device)
+    _calib_act[:, :6] = _calib_cmd
+    _calib_act[:, 6] = 1.0
+    for _ in range(30):
+        env.step(_calib_act)
+        _viewer_step()
+    _FIXED_TCP_OFFSET = _tcp_offset().clone()
+    print(
+        f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
+        f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
+    )
+
     # Warm-up hold so the viewer initialises before the first push
     if not headless:
         _pause(20)
@@ -269,7 +294,7 @@ def main():
                         _viewer_step()
                         prev_grip = wp_grip.clone()
 
-                    ik_target = wp_pos - _tcp_offset()
+                    ik_target = wp_pos - _FIXED_TCP_OFFSET
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
