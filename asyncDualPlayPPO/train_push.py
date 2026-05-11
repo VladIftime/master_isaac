@@ -175,6 +175,15 @@ def main():
 
     _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
 
+    # Workspace clamp limits (local / env-origin-relative frame, metres)
+    _WS_X = (-0.50, 0.50)
+    _WS_Y = (0.25,  0.70)
+    _WS_Z = ( 0.00, 0.55)
+
+    # Fixed TCP→wrist3 offset in tool-down orientation.
+    # Hardcoded from URDF geometry — invariant under Z-axis yaw.
+    _FIXED_TCP_OFFSET = torch.tensor([[0.0, -0.1, -0.12]], device=env.device)
+
     # ── Robot body/joint indices ──────────────────────────────────────────────
     _robot_scene = env.env.scene["robot"]
     _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
@@ -273,13 +282,6 @@ def main():
     ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
     prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
 
-    # TCP offset: finger midpoint minus wrist_3
-    def _compute_tcp_offset():
-        lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
-        rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
-        w3_w = _robot_scene.data.body_pos_w[:, _wrist3_ids[0]]
-        return (lf_w + rf_w) / 2.0 - w3_w
-
     # ── SIGTERM handler ──────────────────────────────────────────────────────
     _shutdown_requested = False
 
@@ -309,6 +311,11 @@ def main():
         for push_step in range(push_nsteps):
             # ── Agent predicts push action ────────────────────────────────────
             with torch.no_grad():
+                # Zero LSTM hidden before each push so evaluate() (which uses
+                # zero context) matches collection — avoids GAE ratio corruption.
+                if hidden_state is not None:
+                    hidden_state[0].zero_()
+                    hidden_state[1].zero_()
                 h_in = (hidden_state[0], hidden_state[1]) if hidden_state else None
                 actions, log_prob, value, mu, sigma, new_h = agent.actor_critic.act_with_hidden(
                     obs, None, h_in,
@@ -337,8 +344,10 @@ def main():
             # ── Execute push trajectory ───────────────────────────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
             for wp_idx, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
-                tcp_offs = _compute_tcp_offset()
-                ik_target = wp_pos - tcp_offs
+                ik_target = wp_pos - _FIXED_TCP_OFFSET
+                ik_target[:, 0].clamp_(_WS_X[0], _WS_X[1])
+                ik_target[:, 1].clamp_(_WS_Y[0], _WS_Y[1])
+                ik_target[:, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
                 result = ik_solver.solve_batch(
                     CuroboPose(position=ik_target, quaternion=wp_quat),
@@ -373,7 +382,7 @@ def main():
             agent.storage.add_transitions(
                 obs_pre_push, obs_pre_push, actions, reward, done,
                 value, log_prob, mu, sigma,
-                masks=torch.ones(env.num_envs, device=env.device),
+                masks=(~done).float(),
             )
 
             rew_buf.extend(reward.cpu().tolist())
@@ -407,7 +416,7 @@ def main():
 
         # ── PPO UPDATE ────────────────────────────────────────────────────────
         with torch.no_grad():
-            _, _, last_val, _, _ = agent.actor_critic.act(obs, None)
+            last_val = agent.actor_critic.critic(obs)
         agent.storage.compute_returns(last_val, agent.gamma, agent.lam)
         loss_val, loss_surr = agent.update()
         agent.storage.clear()

@@ -133,7 +133,9 @@ class ActorCriticPush(nn.Module):
         return actions, log_prob, value, mu, sigma, new_hidden
 
     def evaluate(self, observations, states, actions):
-        raw, _ = self._actor_forward(observations, None)
+        B = observations.shape[0]
+        zero_h = torch.zeros(B, self.lstm_hidden_size, device=observations.device)
+        raw, _ = self._actor_forward(observations, (zero_h, zero_h))
         dist = self._make_distribution(raw)
         log_prob = dist.log_prob(actions.long())
         entropy = dist.entropy()
