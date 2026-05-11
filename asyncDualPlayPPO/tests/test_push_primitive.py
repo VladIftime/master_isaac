@@ -151,8 +151,8 @@ def main():
             position=torch.zeros(1, 3, device=device),
             quaternion=torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=device),
         ),
-        seed_config=torch.zeros(1, 1, 7, device=device),
-        retract_config=torch.zeros(1, 7, device=device),
+        seed_config=torch.zeros(1, 1, 6, device=device),
+        retract_config=torch.zeros(1, 6, device=device),
     )
     print("[Setup] IK warm-up done.")
 
@@ -292,13 +292,13 @@ def main():
                     # Use smooth interpolation from current to target
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
-                        seed_config=torch.cat([cur_joints, torch.zeros(1, 1, device=device)], dim=-1).unsqueeze(1),
-                        retract_config=torch.cat([cur_joints, torch.zeros(1, 1, device=device)], dim=-1),
+                        seed_config=cur_joints.unsqueeze(1),
+                        retract_config=cur_joints,
                     )
                     success = result.success.squeeze(-1)
                     if success.any():
                         ik_ok += 1
-                        last_good_joints = result.solution[:, :6].view(1, 6).clone()
+                        last_good_joints = result.solution.view(1, 6).clone()
 
                     raw_cmd = last_good_joints.clone()
 
