@@ -16,12 +16,12 @@ import torch
 PUSH_NSTEPS_APPROACH = 13
 PUSH_NSTEPS_ORIENT   = 10
 PUSH_NSTEPS_ENGAGE   = 5
-PUSH_NSTEPS_DESCEND  = 10
-PUSH_NSTEPS_PUSH     = 35
+PUSH_NSTEPS_DESCEND  = 15
+PUSH_NSTEPS_PUSH     = 30
 PUSH_NSTEPS_RETRACT  = 10
 PUSH_NSTEPS_RELEASE  = 5
 PUSH_NSTEPS_RETURN   = 12
-# Total: 13 + 10 + 5 + 10 + 35 + 10 + 5 + 12 = 100 substeps per push
+# Total: 13 + 10 + 5 + 15 + 30 + 10 + 5 + 12 = 100 substeps per push
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
 PUSH_APPROACH_HEIGHT = 0.15   # Z height for approach / retract (above table)
@@ -82,7 +82,6 @@ def compute_push_waypoints(
     n_retract: int = PUSH_NSTEPS_RETRACT,
     n_release: int = PUSH_NSTEPS_RELEASE,
     n_return: int = PUSH_NSTEPS_RETURN,
-    grip: float = -1.0,
 ) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Generate push trajectory waypoints for N environments.
@@ -95,15 +94,12 @@ def compute_push_waypoints(
     Phases:
       1. Approach: EE→above object (tool-down, gripper open)
       2. Orient:   rotate to target yaw (gripper open)
-      3. Engage:   set gripper to desired grip at approach height
-      4. Descend:  move down to surface contact
-      5. Push:     move in push direction
-      6. Retract:  move up above push target
+      3. Engage:   close gripper at approach height
+      4. Descend:  move down to surface contact (gripper closed)
+      5. Push:     move in push direction (gripper closed)
+      6. Retract:  move up above push target (gripper closed)
       7. Release:  open gripper at approach height
       8. Return:   move back above pre-push start position
-
-    grip = -1.0: gripper closes before descend, pushes object while gripping.
-    grip = +1.0: gripper stays open — a "flick" or "nudge" push.
     """
     N = offset_x.shape[0]
 
@@ -145,7 +141,7 @@ def compute_push_waypoints(
     ], dim=-1)
 
     open_g = torch.ones(N, device=device)
-    grip_cmd = torch.full_like(open_g, grip)
+    close_g = -torch.ones(N, device=device)
 
     waypoints: List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
 
@@ -165,25 +161,25 @@ def compute_push_waypoints(
 
     # ── Phase 3: Engage (set gripper at approach height) ──────────────────
     for i in range(1, n_engage + 1):
-        waypoints.append((approach_pos.clone(), target_quat.clone(), grip_cmd.clone()))
+        waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
 
     # ── Phase 4: Descend (approach → contact) ─────────────────────────────
     for i in range(1, n_descend + 1):
         alpha = i / n_descend
         pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
-        waypoints.append((pos, target_quat.clone(), grip_cmd.clone()))
+        waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
     # ── Phase 5: Push (contact → push target) ─────────────────────────────
     for i in range(1, n_push + 1):
         alpha = i / n_push
         pos = contact_pos * (1.0 - alpha) + push_target * alpha
-        waypoints.append((pos, target_quat.clone(), grip_cmd.clone()))
+        waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
     # ── Phase 6: Retract (push target → up) ──────────────────────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
-        waypoints.append((pos, target_quat.clone(), grip_cmd.clone()))
+        waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
     # ── Phase 7: Release (open gripper at approach height) ────────────────
     for i in range(1, n_release + 1):

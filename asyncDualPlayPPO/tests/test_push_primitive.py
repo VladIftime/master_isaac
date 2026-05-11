@@ -45,47 +45,46 @@ _ARM_JOINT_NAMES = [
 # Workspace clamp limits
 _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
-_WS_Z = ( 0.055, 0.55)
+_WS_Z = ( 0.050, 0.55)
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
-# Each push: {offset_x, offset_y, push_dx, push_dy, yaw, grip}
-#   grip: -1.0 = closed, +1.0 = open (flick / nudge)
+# Each push: {offset_x, offset_y, push_dx, push_dy, yaw}
 SCENARIOS = [
-    # S0: Push1=Fwd(closed) + Push2=Left(closed) + Push3=open flick
+    # S0: Push1=Fwd + Push2=Left
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": math.pi / 2, "grip": 1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": math.pi/3, "grip": 1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": math.pi/4, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": math.pi / 2},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": math.pi/3},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": math.pi/4},
     ],
-    # S1: Push1=Fwd + Push2=Right + Push3=Spin (all closed)
+    # S1: Push1=Fwd + Push2=Right
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0},
     ],
-    # S2: Push1=Fwd(closed) + Push2=Bwd(closed) + Push3=open flick
+    # S2: Push1=Fwd + Push2=Bwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": 1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0, "grip": 1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0},
     ],
-    # S3: Push1=Fwd + Push2=Fwd + Spin (all closed)
+    # S3: Push1=Fwd + Push2=Fwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": 1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0},
     ],
-    # S4: Push1=Fwd(closed) + Push2=LeftFwd(closed) + Push3=open flick
+    # S4: Push1=Fwd + Push2=LeftFwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "grip": 1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0},
     ],
-    # S5: Push1=Fwd + Push2=RightFwd + Spin (all closed)
+    # S5: Push1=Fwd + Push2=RightFwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0, "grip": -1.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0, "grip": -1.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0},
     ],
 ]
 
@@ -205,8 +204,7 @@ def main():
             scenario_idx += 1
 
             print(f"{'='*64}")
-            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}  "
-                  f"{'grip: open' if scenario[-1]['grip'] > 0.0 else 'grip: closed'}")
+            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}")
             print(f"{'='*64}")
 
             for push_i, cfg in enumerate(scenario):
@@ -218,7 +216,6 @@ def main():
                 push_dx  = cfg["push_dx"]
                 push_dy  = cfg["push_dy"]
                 yaw      = cfg["yaw"]
-                grip_val = cfg["grip"]
 
                 # ── Get current object position from observation ──────────────
                 obs_dict    = env.env.observation_manager.compute()
@@ -242,14 +239,9 @@ def main():
                     current_ee_pos =current_ee,
                     current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),
                     device=device,
-                    grip=grip_val,
                 )
 
-                label = f"Push {push_i + 1}"
-                if grip_val > 0.0:
-                    label += f"  open flick  yaw={math.degrees(yaw):+.0f}\u00b0"
-                else:
-                    label += f"  ({push_dx:+.2f}, {push_dy:+.2f})m yaw={math.degrees(yaw):+.0f}\u00b0"
+                label = f"Push {push_i + 1}  ({push_dx:+.2f}, {push_dy:+.2f})m yaw={math.degrees(yaw):+.0f}\u00b0"
 
                 print(
                     f"\n  [{scenario_idx}.{push_i + 1}] "
