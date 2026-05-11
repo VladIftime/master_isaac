@@ -76,8 +76,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-06 | Fixed workspace clamp / IK fail-rate bugs; HPC cuRobo overlay |
 | 2026-05-07 | Removed ABC warmup gate (Fix 9); all diagnostics pass with cuRobo |
 | 2026-05-08 | SR-coupled controllers reverted (Fixes 1 & 2); cuRobo install docs; all tests green |
-| 2026-05-10 | Push-PPO baseline fixes: `--headless` conflict, `num_envs` setter, env-reset correctness, goal ghost placement |
-| 2026-05-10 | Fix 17: EE home offset (X+2 cm, Z=5 cm) applied after every IK sync — arm settles to low-hover resting pose at phase start |
+| 2026-05-11 | Push primitive refactor (no yaw/grip/spin, fixed TCP offset), rotation reward function, goal yaw randomization |
+| 2026-05-11 | Reward function: position+rotation improvement (Akella & Mason 1998), no distance penalty |
 
 ---
 
@@ -710,14 +710,24 @@ MultiCategorical: **6D × 11 bins**
 Dense shaping computed **after each push macro-action**:
 
 ```
-reward = α · (d_prev − d_now) − β · d_now + completion_bonus
+R = α·max(0, d_prev − d_now)  +  γ·max(0, r_prev − r_now)  +  completion_bonus
 ```
 
 where:
 - `d_prev` / `d_now` = L2 position error before / after the push (metres)
-- `α = 10.0` (improvement gain)
-- `β = 0.5` (remaining-distance penalty)
-- `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 2°)
+- `r_prev` / `r_now` = max absolute Euler-angle difference before / after (radians, wraparound-aware)
+- `α = 10.0` (position improvement gain)
+- `γ = 2.0` (rotation improvement gain — lower weight because 1 rad ≈ 57° is harder to change than 1 cm via planar pushing)
+- `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 0.035 rad ≈ 2°)
+
+**Key insight** (Akella & Mason 1998, "Posing Polygonal Objects in the Plane by Pushing", IJRR):
+off-center pushes induce torque — the `(offset_x, offset_y)` parameters create a moment arm
+relative to the object's center of mass. The agent can learn to chain pushes (e.g. push right
+side to spin CCW, then centered push to translate) to achieve any target pose. The rotation
+improvement term rewards exactly this behavior.
+
+Unlike the old reward (`10 × improvement − 0.5 × d_now`), there is **no distance penalty** —
+agents are only rewarded for getting closer, never penalized for staying still or moving away.
 
 ### 6.7 Network Architecture
 

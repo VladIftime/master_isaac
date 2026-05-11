@@ -443,6 +443,7 @@ def main():
                 _pr(
                     f"  [Push {push_step:3d}] "
                     f"rew={reward.mean().item():+.3f}  pos_err={env._last_pos_err.mean().item():.3f}  "
+                    f"rot_err={env._last_rot_err.mean().item():.3f}  "
                     f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}"
                 )
 
