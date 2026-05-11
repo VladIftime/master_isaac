@@ -91,7 +91,6 @@ def main():
     import numpy as np
     import copy
     import gymnasium as gym_mc
-    import threading
     from torch.utils.tensorboard import SummaryWriter
 
     from isaaclab.envs import ManagerBasedRLEnv
@@ -181,8 +180,31 @@ def main():
     _WS_Z = ( 0.00, 0.55)
 
     # Fixed TCP→wrist3 offset in tool-down orientation.
-    # Hardcoded from URDF geometry — invariant under Z-axis yaw.
-    _FIXED_TCP_OFFSET = torch.tensor([[0.0, -0.1, -0.12]], device=env.device)
+    # Calibrated once at startup: drives env 0 to a neutral tool-down pose,
+    # settles for 30 PD steps, then freezes the measured offset for all envs.
+    print("[Setup] Calibrating TCP→wrist3 offset...")
+    _calib_pos = torch.tensor([[0.0, 0.50, 0.25]], device=env.device)
+    _calib_cur = _robot_scene.data.joint_pos[0:1, _arm_jids]
+    _calib_res = ik_solver.solve_batch(
+        CuroboPose(position=_calib_pos, quaternion=_QUAT_TOOL_DOWN),
+        seed_config=_calib_cur.unsqueeze(1),
+        retract_config=_calib_cur,
+    )
+    _calib_cmd = _calib_res.solution.view(1, 6)
+    _calib_act = torch.zeros(1, env.action_space.shape[0], device=env.device)
+    _calib_act[:, :6] = _calib_cmd
+    _calib_act[:, 6] = 1.0
+    for _ in range(30):
+        env.step(_calib_act)
+    _lf_w = _robot_scene.data.body_pos_w[0, _lf_ids[0]]
+    _rf_w = _robot_scene.data.body_pos_w[0, _rf_ids[0]]
+    _w3_w = _robot_scene.data.body_pos_w[0, _wrist3_ids[0]]
+    _static_offset = ((_lf_w + _rf_w) / 2.0 - _w3_w).unsqueeze(0)
+    _FIXED_TCP_OFFSET = _static_offset.clone()
+    print(
+        f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
+        f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
+    )
 
     # ── Robot body/joint indices ──────────────────────────────────────────────
     _robot_scene = env.env.scene["robot"]
@@ -296,10 +318,6 @@ def main():
     while iteration < args.max_iterations:
         agent.storage.clear()
 
-        if hidden_state is not None:
-            hidden_state[0].zero_()
-            hidden_state[1].zero_()
-
         total_ik_fails = 0
         total_ik_steps = 0
         env.episode_push_counts.clear()
@@ -343,6 +361,7 @@ def main():
 
             # ── Execute push trajectory ───────────────────────────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+            prev_grip = torch.ones(env.num_envs, device=env.device)
             for wp_idx, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                 ik_target = wp_pos - _FIXED_TCP_OFFSET
                 ik_target[:, 0].clamp_(_WS_X[0], _WS_X[1])
@@ -362,8 +381,17 @@ def main():
                 total_ik_fails += int((~ik_ok).sum().item())
 
                 solved = result.solution.view(env.num_envs, 6)
-                raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, cur_joints)
+                raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, prev_joint_cmd)
                 prev_joint_cmd = raw_cmd.detach().clone()
+
+                # Gripper-change pre-step: hold joints while toggling gripper
+                if (wp_grip != prev_grip).any():
+                    grip_hold = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+                    grip_hold[:, :6] = cur_joints
+                    grip_hold[:, 6] = wp_grip
+                    obs, _, step_term2, _, _ = env.step(grip_hold)
+                    terminated |= step_term2
+                    prev_grip = wp_grip.clone()
 
                 env_full = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
                 env_full[:, :6] = raw_cmd
