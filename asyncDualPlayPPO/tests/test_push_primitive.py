@@ -45,46 +45,46 @@ _ARM_JOINT_NAMES = [
 # Workspace clamp limits
 _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
-_WS_Z = ( 0.050, 0.55)
+_WS_Z = ( 0.00, 0.55)
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
-# Each push: {offset_x, offset_y, push_dx, push_dy, yaw}
+# Each push: {offset_x, offset_y, push_dx, push_dy}
 SCENARIOS = [
     # S0: Push1=Fwd + Push2=Left
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": math.pi / 2},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": math.pi/3},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": math.pi/4},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2},
     ],
     # S1: Push1=Fwd + Push2=Right
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0,  "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0},
     ],
     # S2: Push1=Fwd + Push2=Bwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10,"yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0},
     ],
     # S3: Push1=Fwd + Push2=Fwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0},
     ],
     # S4: Push1=Fwd + Push2=LeftFwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.07, "push_dy": 0.07, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.07, "push_dy": 0.07},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0},
     ],
     # S5: Push1=Fwd + Push2=RightFwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.07, "push_dy": 0.07, "yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0,  "yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.07, "push_dy": 0.07},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0},
     ],
 ]
 
@@ -215,7 +215,6 @@ def main():
                 offset_y = cfg["offset_y"]
                 push_dx  = cfg["push_dx"]
                 push_dy  = cfg["push_dy"]
-                yaw      = cfg["yaw"]
 
                 # ── Get current object position from observation ──────────────
                 obs_dict    = env.env.observation_manager.compute()
@@ -233,7 +232,6 @@ def main():
                     offset_y=torch.tensor([offset_y], device=device),
                     push_dx =torch.tensor([push_dx],  device=device),
                     push_dy =torch.tensor([push_dy],  device=device),
-                    yaw     =torch.tensor([yaw],       device=device),
                     push_dz =torch.tensor([0.0],       device=device),
                     obj_pos =obj_pos_obs,
                     current_ee_pos =current_ee,
@@ -241,7 +239,7 @@ def main():
                     device=device,
                 )
 
-                label = f"Push {push_i + 1}  ({push_dx:+.2f}, {push_dy:+.2f})m yaw={math.degrees(yaw):+.0f}\u00b0"
+                label = f"Push {push_i + 1}  ({push_dx:+.2f}, {push_dy:+.2f})m"
 
                 print(
                     f"\n  [{scenario_idx}.{push_i + 1}] "

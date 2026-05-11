@@ -7,21 +7,20 @@ waypoints and calls cuRobo IK per substep.
 """
 
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 import torch
 
 
 # ── Default steps-per-phase ────────────────────────────────────────────────────
-PUSH_NSTEPS_APPROACH = 13
-PUSH_NSTEPS_ORIENT   = 10
+PUSH_NSTEPS_APPROACH = 18
 PUSH_NSTEPS_ENGAGE   = 5
-PUSH_NSTEPS_DESCEND  = 15
+PUSH_NSTEPS_DESCEND  = 20
 PUSH_NSTEPS_PUSH     = 30
 PUSH_NSTEPS_RETRACT  = 10
 PUSH_NSTEPS_RELEASE  = 5
 PUSH_NSTEPS_RETURN   = 12
-# Total: 13 + 10 + 5 + 15 + 30 + 10 + 5 + 12 = 100 substeps per push
+# Total: 18 + 5 + 20 + 30 + 10 + 5 + 12 = 100 substeps per push
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
 PUSH_APPROACH_HEIGHT = 0.15   # Z height for approach / retract (above table)
@@ -32,41 +31,11 @@ PUSH_TABLE_SURFACE = 0.00     # table surface Z in local frame (object sits on t
 _QUAT_TOOL_DOWN = torch.tensor([0.0, 1.0, 0.0, 0.0], dtype=torch.float32)
 
 
-def _quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """Batch quaternion multiply, wxyz convention. Both (N,4) → (N,4)."""
-    w = a[:, 0]*b[:, 0] - a[:, 1]*b[:, 1] - a[:, 2]*b[:, 2] - a[:, 3]*b[:, 3]
-    x = a[:, 0]*b[:, 1] + a[:, 1]*b[:, 0] + a[:, 2]*b[:, 3] - a[:, 3]*b[:, 2]
-    y = a[:, 0]*b[:, 2] - a[:, 1]*b[:, 3] + a[:, 2]*b[:, 0] + a[:, 3]*b[:, 1]
-    z = a[:, 0]*b[:, 3] + a[:, 1]*b[:, 2] - a[:, 2]*b[:, 1] + a[:, 3]*b[:, 0]
-    return torch.stack([w, x, y, z], dim=1)
-
-
-def _quat_slerp(q0: torch.Tensor, q1: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-    """Spherical linear interpolation between two quaternions (wxyz, (N,4))."""
-    # Ensure shortest path
-    dot = (q0 * q1).sum(dim=-1, keepdim=True)
-    flip = dot < 0.0
-    q1 = torch.where(flip.expand_as(q1), -q1, q1)
-    dot = torch.where(flip, -dot, dot)
-
-    dot = dot.clamp(-1.0, 1.0)
-    theta = torch.acos(dot) * t.squeeze(-1)
-    sin_theta = torch.sin(theta)
-    sin_full = torch.sin(torch.acos(dot))
-
-    mask = sin_full > 1e-6
-    s0 = torch.where(mask, torch.cos(theta) - dot.squeeze(-1) * sin_theta / sin_full, 1.0 - t.squeeze(-1))
-    s1 = torch.where(mask, sin_theta / sin_full, t.squeeze(-1))
-
-    return s0.unsqueeze(-1) * q0 + s1.unsqueeze(-1) * q1
-
-
 def compute_push_waypoints(
     offset_x: torch.Tensor,   # (N,)  approach offset X from object
     offset_y: torch.Tensor,   # (N,)  approach offset Y from object
     push_dx: torch.Tensor,    # (N,)  push delta X
     push_dy: torch.Tensor,    # (N,)  push delta Y
-    yaw: torch.Tensor,        # (N,)  gripper yaw angle (rad)
     push_dz: torch.Tensor,    # (N,)  push delta Z
     obj_pos: torch.Tensor,    # (N,3) object position (local frame)
     current_ee_pos: torch.Tensor,  # (N,3) current EE position (local frame, TCP)
@@ -75,7 +44,6 @@ def compute_push_waypoints(
     approach_height: float = PUSH_APPROACH_HEIGHT,
     table_z: float = PUSH_TABLE_SURFACE,
     n_approach: int = PUSH_NSTEPS_APPROACH,
-    n_orient: int = PUSH_NSTEPS_ORIENT,
     n_engage: int = PUSH_NSTEPS_ENGAGE,
     n_descend: int = PUSH_NSTEPS_DESCEND,
     n_push: int = PUSH_NSTEPS_PUSH,
@@ -88,32 +56,22 @@ def compute_push_waypoints(
 
     Returns a list of (position, quaternion, gripper_cmd) tuples.
       - position:  (N, 3) TCP target position in local frame
-      - quaternion: (N, 4) TCP target orientation (wxyz)
+      - quaternion: (N, 4) TCP target orientation (wxyz) — always tool-down
       - gripper_cmd: (N,)  -1.0 = close, +1.0 = open
 
     Phases:
       1. Approach: EE→above object (tool-down, gripper open)
-      2. Orient:   rotate to target yaw (gripper open)
-      3. Engage:   close gripper at approach height
-      4. Descend:  move down to surface contact (gripper closed)
-      5. Push:     move in push direction (gripper closed)
-      6. Retract:  move up above push target (gripper closed)
-      7. Release:  open gripper at approach height
-      8. Return:   move back above pre-push start position
+      2. Engage:   close gripper at approach height
+      3. Descend:  move down to surface contact (gripper closed)
+      4. Push:     move in push direction (gripper closed)
+      5. Retract:  move up above push target (gripper closed)
+      6. Release:  open gripper at approach height
+      7. Return:   move back above pre-push start position
     """
     N = offset_x.shape[0]
 
-    # ── Target quaternion: yaw rotation (Z-axis) then tool-down (X=π) ─────
-    _zeros = torch.zeros(N, device=device)
-    q_yaw = torch.stack([
-        torch.cos(yaw / 2.0),
-        _zeros,
-        _zeros,
-        torch.sin(yaw / 2.0),
-    ], dim=-1)
     q_tool_down = _QUAT_TOOL_DOWN.to(device).expand(N, 4).contiguous()
-    target_quat = _quat_mul(q_yaw, q_tool_down)       # yaw then tool-down
-    target_quat = target_quat / target_quat.norm(dim=-1, keepdim=True)
+    target_quat = q_tool_down.clone()
 
     # ── Key positions ─────────────────────────────────────────────────────
     approach_pos = torch.stack([
@@ -152,40 +110,33 @@ def compute_push_waypoints(
         pos = start_pos * (1.0 - alpha) + approach_pos * alpha
         waypoints.append((pos, q_tool_down, open_g.clone()))
 
-    # ── Phase 2: Orient (tool-down → target yaw) ──────────────────────────
-    for i in range(1, n_orient + 1):
-        alpha = i / n_orient
-        t = torch.full((N, 1), alpha, device=device)
-        quat = _quat_slerp(q_tool_down, target_quat, t)
-        waypoints.append((approach_pos.clone(), quat, open_g.clone()))
-
-    # ── Phase 3: Engage (set gripper at approach height) ──────────────────
+    # ── Phase 2: Engage (close gripper at approach height) ────────────────
     for i in range(1, n_engage + 1):
         waypoints.append((approach_pos.clone(), target_quat.clone(), close_g.clone()))
 
-    # ── Phase 4: Descend (approach → contact) ─────────────────────────────
+    # ── Phase 3: Descend (approach → contact) ─────────────────────────────
     for i in range(1, n_descend + 1):
         alpha = i / n_descend
         pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
         waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
-    # ── Phase 5: Push (contact → push target) ─────────────────────────────
+    # ── Phase 4: Push (contact → push target) ─────────────────────────────
     for i in range(1, n_push + 1):
         alpha = i / n_push
         pos = contact_pos * (1.0 - alpha) + push_target * alpha
         waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
-    # ── Phase 6: Retract (push target → up) ──────────────────────────────
+    # ── Phase 5: Retract (push target → up) ──────────────────────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
         waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
-    # ── Phase 7: Release (open gripper at approach height) ────────────────
+    # ── Phase 6: Release (open gripper at approach height) ────────────────
     for i in range(1, n_release + 1):
         waypoints.append((retract_pos.clone(), target_quat.clone(), open_g.clone()))
 
-    # ── Phase 8: Return (above push target → above pre-push start) ────────
+    # ── Phase 7: Return (above push target → above pre-push start) ────────
     home_pos = torch.stack([
         start_pos[:, 0],
         start_pos[:, 1],
@@ -245,7 +196,6 @@ class PushConfig:
     approach_height: float = PUSH_APPROACH_HEIGHT
     table_z: float = PUSH_TABLE_SURFACE
     n_approach: int = PUSH_NSTEPS_APPROACH
-    n_orient: int = PUSH_NSTEPS_ORIENT
     n_engage: int = PUSH_NSTEPS_ENGAGE
     n_descend: int = PUSH_NSTEPS_DESCEND
     n_push: int = PUSH_NSTEPS_PUSH
@@ -253,11 +203,12 @@ class PushConfig:
     n_release: int = PUSH_NSTEPS_RELEASE
     n_return: int = PUSH_NSTEPS_RETURN
     num_bins: int = 11
+    num_bins: int = 11
 
 
 def total_push_substeps(cfg: PushConfig = None) -> int:
     """Return total number of substeps per push macro-action."""
     if cfg is None:
         cfg = PushConfig()
-    return (cfg.n_approach + cfg.n_orient + cfg.n_engage + cfg.n_descend
+    return (cfg.n_approach + cfg.n_engage + cfg.n_descend
             + cfg.n_push + cfg.n_retract + cfg.n_release + cfg.n_return)

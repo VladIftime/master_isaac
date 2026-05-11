@@ -327,7 +327,6 @@ def main():
                 offset_y=push_params[:, 1],
                 push_dx=push_params[:, 2],
                 push_dy=push_params[:, 3],
-                yaw=push_params[:, 4],
                 push_dz=push_params[:, 5],
                 obj_pos=obj_pos,
                 current_ee_pos=ee_pos_local,
