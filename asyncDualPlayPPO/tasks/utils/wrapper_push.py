@@ -107,6 +107,10 @@ class PushEnvWrapper:
         self._gave_completion = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
         self._last_pos_err = torch.zeros(self.num_envs, device=device)
         self._last_rot_err = torch.zeros(self.num_envs, device=device)
+        self._last_pos_imp = torch.zeros(self.num_envs, device=device)
+        self._last_rot_imp = torch.zeros(self.num_envs, device=device)
+        self._last_penalty  = torch.zeros(self.num_envs, device=device)
+        self._last_completion = torch.zeros(self.num_envs, device=device)
 
         self.episode_push_counts = []
         self.episode_successes = []
@@ -169,18 +173,29 @@ class PushEnvWrapper:
         rot_err = r_now
         self._last_pos_err = pos_err
         self._last_rot_err = rot_err
+        self._last_d_prev = d_prev
+        self._last_d_now  = d_now
+        self._last_r_prev = r_prev
+        self._last_r_now  = r_now
         at_goal = (pos_err < PUSH_SUCCESS_THRESHOLD_POS) & (rot_err < PUSH_SUCCESS_THRESHOLD_ROT)
 
-        reward = (
-            PUSH_DENSE_ALPHA * (d_prev - d_now)
-            + PUSH_DENSE_ROT_ALPHA * (r_prev - r_now)
-            - PUSH_DENSE_BETA * d_now
-        )
+        pos_imp  = PUSH_DENSE_ALPHA * (d_prev - d_now)
+        rot_imp  = PUSH_DENSE_ROT_ALPHA * (r_prev - r_now)
+        penalty  = -PUSH_DENSE_BETA * d_now
+        reward = pos_imp + rot_imp + penalty
 
         new_completion = at_goal & ~self._gave_completion
-        reward = torch.where(new_completion, reward + PUSH_COMPLETION_BONUS, reward)
+        completion = torch.where(new_completion,
+                                 torch.tensor(PUSH_COMPLETION_BONUS, device=self.device),
+                                 torch.zeros_like(reward))
+        reward = reward + completion
         self._gave_completion[self._gave_completion | new_completion] = True
         self.at_goal = at_goal
+
+        self._last_pos_imp = pos_imp
+        self._last_rot_imp = rot_imp
+        self._last_penalty  = penalty
+        self._last_completion = completion
 
         self.push_count += 1
 

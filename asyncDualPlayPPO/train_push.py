@@ -440,10 +440,14 @@ def main():
 
             # Per-push compact summary (every 4 pushes to avoid spam)
             if push_step % 4 == 0:
+                pi = env._last_pos_imp.mean().item()
+                ri = env._last_rot_imp.mean().item()
+                dp = env._last_penalty.mean().item()
+                cb = env._last_completion.mean().item()
                 _pr(
                     f"  [Push {push_step:3d}] "
-                    f"rew={reward.mean().item():+.3f}  pos_err={env._last_pos_err.mean().item():.3f}  "
-                    f"rot_err={env._last_rot_err.mean().item():.3f}  "
+                    f"rew={reward.mean().item():+.3f}  (pos={pi:+.3f} rot={ri:+.3f} dist={dp:+.3f} bonus={cb:+.3f})  "
+                    f"pos_err={env._last_pos_err.mean().item():.3f}  rot_err={env._last_rot_err.mean().item():.3f}  "
                     f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}"
                 )
 
@@ -472,14 +476,16 @@ def main():
                         gi = min(i, len(done_ids) - 1)
                         g_pos = goal_pos_done[gi]
                         g_rot = goal_euler_done[gi]
-                        o = obj_pos_done[gi]
+                        o_pos = obj_pos_done[gi]
+                        o_rot = obj_euler_done[gi]
                         pe = pos_err_done[gi]
                         re = float(rot_err_done[gi])
                         _pr(
                             f"  [Episode] pushes={p}  {status}  "
                             f"goal=({g_pos[0]:+.3f},{g_pos[1]:+.3f},{g_pos[2]:+.3f}) "
                             f"orient=({g_rot[0]:+.3f},{g_rot[1]:+.3f},{g_rot[2]:+.3f})  "
-                            f"final=({o[0]:+.3f},{o[1]:+.3f},{o[2]:+.3f})  "
+                            f"final=({o_pos[0]:+.3f},{o_pos[1]:+.3f},{o_pos[2]:+.3f}) "
+                            f"rot=({o_rot[0]:+.3f},{o_rot[1]:+.3f},{o_rot[2]:+.3f})  "
                             f"err_pos={pe:.3f}m  err_rot={re:.3f}rad"
                         )
                 if hidden_state is not None:
