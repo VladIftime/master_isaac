@@ -72,6 +72,13 @@ _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
 _WS_Z = ( 0.00, 0.55)
 
+# EE home-position offset applied after every sync (reset / phase boundary).
+# The arm resets to its default joint configuration; these offsets steer the
+# IK target to the preferred resting pose so the arm settles there on the
+# first few steps of each phase.
+_EE_HOME_X_OFFSET = 0.02   # metres forward on X
+_EE_HOME_Z        = 0.05   # metres above table (env-local Z)
+
 
 class SuppressAllOutput:
     """Context manager that silences both C-level (stdout/stderr fd) and Python-level output."""
@@ -720,6 +727,8 @@ def main():
     _rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
     _tcp_w = (_lf_w + _rf_w) / 2.0
     ee_target_local = (_tcp_w - env.env.scene.env_origins).clone()
+    ee_target_local[:, 0] += _EE_HOME_X_OFFSET
+    ee_target_local[:, 2]  = _EE_HOME_Z
     # Orientation tracker: start at tool-down for all envs
     ee_target_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
 
@@ -1036,8 +1045,10 @@ def main():
                 ee_target_local[_sync_ids] = (
                     _tcp_w_sync - env.env.scene.env_origins[_sync_ids]
                 )
+                ee_target_local[_sync_ids, 0] += _EE_HOME_X_OFFSET
+                ee_target_local[_sync_ids, 2]  = _EE_HOME_Z
                 _prev_joint_cmd[_sync_ids] = _robot_scene.data.joint_pos[_sync_ids][:, _arm_jids]
-                
+
                 # Snap orientation back to base tool-down for the new episode/phase
                 ee_target_quat_w[_sync_ids] = _QUAT_TOOL_DOWN.to(env.device).expand(len(_sync_ids), -1).clone()
 

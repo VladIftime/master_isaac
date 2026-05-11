@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-10
+**Last updated**: 2026-05-10 (Fix 17: EE home offset)
 
 ---
 
@@ -76,6 +76,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-07 | Removed ABC warmup gate (Fix 9); all diagnostics pass with cuRobo |
 | 2026-05-08 | SR-coupled controllers reverted (Fixes 1 & 2); cuRobo install docs; all tests green |
 | 2026-05-10 | Push-PPO baseline fixes: `--headless` conflict, `num_envs` setter, env-reset correctness, goal ghost placement |
+| 2026-05-10 | Fix 17: EE home offset (X+2 cm, Z=5 cm) applied after every IK sync — arm settles to low-hover resting pose at phase start |
 
 ---
 
@@ -142,6 +143,7 @@ Policy output (6D MultiCategorical, 11 bins)
   - IK failure recovery: reverts EE accumulator, holds current joint positions
   - Phase sync: re-anchors accumulators to physics TCP state after phase transition or episode done
   - Workspace clamp: X ∈ [−0.50, 0.50], Y ∈ [0.25, 0.70], Z ∈ [0.00, 0.55] metres (env-local)
+  - EE home offset applied after every sync (reset / phase boundary): X += 0.02 m, Z = 0.05 m — arm resets to its default joint configuration then IK drives it to the preferred low-hover resting pose in the first few steps
   - cuRobo CUDA graph warm-up before training loop (~3 ms → ~0.5 ms per step)
   - IK fail rate logged to TensorBoard (`Metrics/IKFailRate`) each iteration
 
@@ -302,6 +304,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix 14 | GoalEncoder `detach=True→False` during ABC | Low | ✅ Fixed | `algorithms/rl/ppo/ppo_abc.py:99` |
 | Fix 15 | `ppo.py log()` crash on MultiCategorical | Low | ✅ Fixed | `algorithms/rl/ppo/ppo.py:232-235` |
 | Fix 16 | KL adaptive LR dead code in MC mode | Low | ✅ Fixed | `algorithms/rl/ppo/ppo_abc.py:176` |
+| Fix 17 | EE home offset after every sync | Low | ✅ Fixed | `train_curobo.py:75-80,730-731,1048-1049` |
 | 4.9 | Charlie hierarchical controller | — | Future research | — |
 | 4.10 | Physical sim-to-real interface | — | Future hardware | — |
 
@@ -339,6 +342,8 @@ directly simulates camera measurement noise on the physical tracking system.
 | `lstm_hidden_size` | 256 | LSTM hidden state size |
 | `alice_timesteps` | 100 | Steps per Alice phase |
 | `bob_timesteps` | 200 | Steps per Bob phase |
+| `_EE_HOME_X_OFFSET` | 0.02 m | X offset added to IK target after every sync (home pose) |
+| `_EE_HOME_Z` | 0.05 m | Fixed Z of IK target after every sync (5 cm above table) |
 
 ---
 
