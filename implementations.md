@@ -710,24 +710,23 @@ MultiCategorical: **6D × 11 bins**
 Dense shaping computed **after each push macro-action**:
 
 ```
-R = α·max(0, d_prev − d_now)  +  γ·max(0, r_prev − r_now)  +  completion_bonus
+R = α·(d_prev−d_now)  +  γ·(r_prev−r_now)  −  β·d_now  +  completion_bonus
 ```
 
 where:
 - `d_prev` / `d_now` = L2 position error before / after the push (metres)
 - `r_prev` / `r_now` = max absolute Euler-angle difference before / after (radians, wraparound-aware)
-- `α = 10.0` (position improvement gain)
-- `γ = 2.0` (rotation improvement gain — lower weight because 1 rad ≈ 57° is harder to change than 1 cm via planar pushing)
+- `α = 10.0` — position improvement gain (symmetric: rewards getting closer, penalizes moving away)
+- `γ = 2.0` — rotation improvement gain (lower weight because 1 rad ≈ 57° is harder to change than 1 m via planar pushing)
+- `β = 0.5` — distance penalty per step (keeps episodes short, prevents passive exploration)
 - `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 0.035 rad ≈ 2°)
 
-**Key insight** (Akella & Mason 1998, "Posing Polygonal Objects in the Plane by Pushing", IJRR):
+**Design rationale** (Akella & Mason 1998, "Posing Polygonal Objects in the Plane by Pushing", IJRR):
 off-center pushes induce torque — the `(offset_x, offset_y)` parameters create a moment arm
 relative to the object's center of mass. The agent can learn to chain pushes (e.g. push right
-side to spin CCW, then centered push to translate) to achieve any target pose. The rotation
-improvement term rewards exactly this behavior.
-
-Unlike the old reward (`10 × improvement − 0.5 × d_now`), there is **no distance penalty** —
-agents are only rewarded for getting closer, never penalized for staying still or moving away.
+side to spin CCW, then centered push to translate) to achieve any target pose. The symmetric
+improvement terms (no `max(0,·)` clipping) prevent reward hacking by penalizing regression
+equally. The `−β·d_now` penalty provides continuous pressure to finish episodes efficiently.
 
 ### 6.7 Network Architecture
 

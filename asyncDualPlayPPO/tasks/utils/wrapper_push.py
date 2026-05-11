@@ -23,6 +23,7 @@ PUSH_SUCCESS_THRESHOLD_ROT = 0.035  # radians (~2°)
 PUSH_COMPLETION_BONUS = 5.0
 PUSH_DENSE_ALPHA = 10.0      # position improvement gain (metres → reward)
 PUSH_DENSE_ROT_ALPHA = 2.0   # rotation improvement gain (radians → reward)
+PUSH_DENSE_BETA = 0.5        # distance penalty (urgency)
 
 # Workspace bounds for goal sampling (local frame, relative to env origin)
 _GOAL_X_RANGE = (-0.40, 0.40)
@@ -148,11 +149,11 @@ class PushEnvWrapper:
         """
         Dense reward after a complete push macro-action.
 
-        R = α·max(0, d_prev−d_now) + γ·max(0, r_prev−r_now) + completion_bonus
+        R = α·(d_prev−d_now) + γ·(r_prev−r_now) − β·d_now + completion_bonus
 
-        Off-center pushes induce torque (Akella & Mason 1998).  The rotation
-        improvement term rewards the agent for chaining pushes that reorient
-        the object toward the goal yaw.
+        Symmetric formulation — rewards improvement, penalizes regression,
+        applies continuous distance penalty for urgency.
+        Off-center pushes induce torque (Akella & Mason 1998).
         """
         cur_obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
         cur_obj_euler = obs[:, _OBS_ROBOT_DIM + 3: _OBS_ROBOT_DIM + 6]
@@ -166,13 +167,15 @@ class PushEnvWrapper:
 
         pos_err = d_now
         rot_err = r_now
-        self._last_pos_err = pos_err  # exposed for training-log metrics
+        self._last_pos_err = pos_err
         self._last_rot_err = rot_err
         at_goal = (pos_err < PUSH_SUCCESS_THRESHOLD_POS) & (rot_err < PUSH_SUCCESS_THRESHOLD_ROT)
 
-        pos_imp = (d_prev - d_now).clamp(min=0)
-        rot_imp = (r_prev - r_now).clamp(min=0)
-        reward = PUSH_DENSE_ALPHA * pos_imp + PUSH_DENSE_ROT_ALPHA * rot_imp
+        reward = (
+            PUSH_DENSE_ALPHA * (d_prev - d_now)
+            + PUSH_DENSE_ROT_ALPHA * (r_prev - r_now)
+            - PUSH_DENSE_BETA * d_now
+        )
 
         new_completion = at_goal & ~self._gave_completion
         reward = torch.where(new_completion, reward + PUSH_COMPLETION_BONUS, reward)
