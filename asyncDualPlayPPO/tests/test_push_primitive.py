@@ -47,7 +47,7 @@ _N_SPIN = 8     # substeps for the spin phase
 # Workspace clamp limits (local / env-origin-relative frame, metres)
 _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
-_WS_Z = ( 0.085, 0.55)
+_WS_Z = ( 0.055, 0.55)
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
 # Each push: {offset_x, offset_y, push_dx, push_dy, yaw, spin_yaw}
@@ -55,8 +55,8 @@ _WS_Z = ( 0.085, 0.55)
 SCENARIOS = [
     # S0: Push1=Fwd + Push2=Left + Spin CW
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": math.pi / 2},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": 0.0, "spin_yaw": math.pi /3},
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": 0.0, "spin_yaw": math.pi / 4},
     ],
     # S1: Push1=Fwd + Push2=Right + Spin CCW
