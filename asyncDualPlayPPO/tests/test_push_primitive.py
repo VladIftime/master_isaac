@@ -47,7 +47,7 @@ _N_SPIN = 8     # substeps for the spin phase
 # Workspace clamp limits (local / env-origin-relative frame, metres)
 _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
-_WS_Z = ( 0.00, 0.55)
+_WS_Z = ( 0.085, 0.55)
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
 # Each push: {offset_x, offset_y, push_dx, push_dy, yaw, spin_yaw}
@@ -55,9 +55,9 @@ _WS_Z = ( 0.00, 0.55)
 SCENARIOS = [
     # S0: Push1=Fwd + Push2=Left + Spin CW
     [
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": -0.10, "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": 0.0},
-        {"offset_x": 0.0, "offset_y": 0.0, "push_dx": 0.0,   "push_dy": 0.0,  "yaw": 0.0, "spin_yaw": math.pi / 4},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10, "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10,  "yaw": 0.0, "spin_yaw": 0.0},
+        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2,  "yaw": 0.0, "spin_yaw": math.pi / 4},
     ],
     # S1: Push1=Fwd + Push2=Right + Spin CCW
     [
@@ -309,6 +309,7 @@ def main():
                         print(
                             f"    wp {wp_i}: "
                             f"ee=({float(ee_pos[0,0]):+.3f},{float(ee_pos[0,1]):+.3f},{float(ee_pos[0,2]):+.3f})  "
+                            f"tgt=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
                             f"obj=({float(obj_pos_obs[0,0]):+.3f},{float(obj_pos_obs[0,1]):+.3f},{float(obj_pos_obs[0,2]):+.3f})  "
                             f"euler=({float(math.degrees(obj_euler[0])):+.0f},{float(math.degrees(obj_euler[1])):+.0f},{float(math.degrees(obj_euler[2])):+.0f})\u00b0",
                             flush=True,
