@@ -89,23 +89,19 @@ def main():
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
 
-    # ── Log file tee (after AppLauncher so stdout is the real fd) ─────────────
-    # Must support .fileno() because SuppressAllOutput uses fd-level dup2.
+    # ── Log file: opened once, written to alongside every print() ────────────
     _log_fh = None
     if args.log_file:
         _log_fh = open(args.log_file, "a", buffering=1)
-        _orig_stdout = sys.stdout
-        class _Tee:
-            def write(self, s):
-                _orig_stdout.write(s)
-                _log_fh.write(s)
-            def flush(self):
-                _orig_stdout.flush()
-                _log_fh.flush()
-            def fileno(self):
-                return _orig_stdout.fileno()
-        sys.stdout = _Tee()
         print(f"[Init] Logging to {args.log_file}", flush=True)
+
+    def _pr(msg: str = "", end: str = "\n"):
+        """Print to stdout AND log file (if active)."""
+        sys.stdout.write(msg + end)
+        sys.stdout.flush()
+        if _log_fh:
+            _log_fh.write(msg + end)
+            _log_fh.flush()
 
     import torch
     import numpy as np
@@ -504,7 +500,7 @@ def main():
         # Single compact iteration line — machine-parseable
         avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"
         trend = "↓" if loss_delta < -0.01 else ("↑" if loss_delta > 0.01 else "→")
-        line = (
+        _pr(
             f"[Iter {iteration:5d}] "
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
             f"Rew={mean_rew:+.4f} (EMA {ema_rew:+.4f}) | "
@@ -513,7 +509,6 @@ def main():
             f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
             f"BestSR={best_success_rate:.4f}"
         )
-        print(line, flush=True)
         sys.stdout.flush()
 
         if sr > best_success_rate:
