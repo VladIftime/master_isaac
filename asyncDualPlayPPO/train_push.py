@@ -124,7 +124,7 @@ def main():
     ppo_cfg = load_cfg(ppo_cfg_path)
 
     # ── Push hyperparameters ─────────────────────────────────────────────────
-    max_pushes_per_episode = 20
+    max_pushes_per_episode = 3
     push_nsteps = 32          # pushes per PPO rollout (per env)
     noptepochs = 3
     nminibatches = 4
@@ -449,8 +449,11 @@ def main():
             # ── Handle done envs ──────────────────────────────────────────────
             if done.any():
                 done_ids = torch.where(done)[0]
-                # Snapshot per-episode stats before reset clears them
-                n_done = len(done_ids)
+                # Snapshot goal/object positions before reset clears them
+                obj_pos_done  = obs[done_ids, env.robot_dim:env.robot_dim + 3]
+                goal_pos_done = obs[done_ids, env.robot_dim + env.obj_state_dim:
+                                     env.robot_dim + env.obj_state_dim + 3]
+                pos_err_done  = (obj_pos_done - goal_pos_done).norm(dim=-1)
                 ep_pushes_pre = len(env.episode_push_counts)
                 env.reset_done_envs(done)
                 ep_pushes_post = len(env.episode_push_counts)
@@ -458,9 +461,18 @@ def main():
                 if n_new > 0:
                     new_pushes = env.episode_push_counts[-n_new:]
                     new_successes = env.episode_successes[-n_new:]
-                    for p, s in zip(new_pushes, new_successes):
+                    for i, (p, s) in enumerate(zip(new_pushes, new_successes)):
                         status = "SUCCESS" if s else "fail"
-                        _pr(f"  [Episode] pushes={p}  {status}")
+                        gi = min(i, len(done_ids) - 1)
+                        g = goal_pos_done[gi]
+                        o = obj_pos_done[gi]
+                        e = pos_err_done[gi]
+                        _pr(
+                            f"  [Episode] pushes={p}  {status}  "
+                            f"goal=({g[0]:+.3f},{g[1]:+.3f},{g[2]:+.3f})  "
+                            f"final=({o[0]:+.3f},{o[1]:+.3f},{o[2]:+.3f})  "
+                            f"err={e:.3f}m"
+                        )
                 if hidden_state is not None:
                     hidden_state[0][done] = 0.0
                     hidden_state[1][done] = 0.0
