@@ -24,7 +24,9 @@ import torch.optim     # noqa: F401
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-# cuRobo must be imported before AppLauncher
+# cuRobo MUST be imported before AppLauncher — importing after causes a native
+# crash in librtx.scenedb.plugin.so because CuRobo's CUDA context init races
+# with the RTX rendering background thread (carbOnPluginStartup).
 try:
     from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
     from curobo.types.math import Pose as CuroboPose
@@ -105,6 +107,16 @@ def main():
     args = parser.parse_args()
 
     headless = getattr(args, "headless", False)
+
+    # Force synchronous RTX rendering so SceneDB is fully initialized before
+    # SetLightingMenuModeCommand fires — avoids a race-condition crash on
+    # slower GPUs (RTX 3060 Ti + IOMMU enabled).
+    for _flag in (
+        "--/app/asyncRendering=false",
+        "--/app/asyncRenderingLowLatency=false",
+    ):
+        if _flag not in sys.argv:
+            sys.argv.append(_flag)
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
