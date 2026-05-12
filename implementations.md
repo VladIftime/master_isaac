@@ -767,6 +767,98 @@ python -m asyncDualPlayPPO.train_push \
 
 ### 6.10 Known Issues & Fixes
 
+#### RTX SceneDB Segfault — IOMMU + NVIDIA 595 + Kernel 6.8.0-111 — 2026-05-11
+
+**Symptom**: Isaac Sim crashes at app startup (~20s) with a segfault in
+`librtx.scenedb.plugin.so!carbOnPluginStartup`. The crash occurs during RTX scene database
+shader enumeration exactly when the first viewport frame renders (just after `app ready`).
+
+```
+001: librtx.scenedb.plugin.so!_M_realloc_insert<std::tuple<char const*, float, float, unsigned int, unsigned int, unsigned int>>
+004: librtx.scenedb.plugin.so!carbOnPluginStartup+0x3b4de
+008: libcarb.scenerenderer-rtx.plugin.so!carbOnPluginShutdown+0xe4b
+```
+
+The crash is a C++ `std::vector` `_M_realloc_insert` corruption — a stale/mangled pointer read
+from a GPU-mapped DMA buffer during shader parameter enumeration.
+
+**Root cause — conflicting NVIDIA driver versions**: The `nvidia-driver-595-open 595.58.03` and
+`nvidia-driver-580-open 580.142` packages are **both installed simultaneously**. The kernel
+module loaded is 595.58.03 (`/proc/driver/nvidia/version` confirms `NVRM version: 595.58.03`),
+but all userspace libraries (`libnvidia-compute-*`, `libnvidia-gl-*`, `nvidia-utils-*`) are
+at version **580.142**. This kernel/userspace ABI mismatch is confirmed by:
+
+```
+$ nvidia-smi
+Failed to initialize NVML: Driver/library version mismatch
+NVML library version: 580.142
+```
+
+The mismatch causes the NVIDIA Resource Manager (RM) to serve incompatible DMA buffer
+mappings to the RTX rendering pipeline — Vulkan memory objects allocated by the 595 kernel
+module are interpreted using 580 userspace library semantics, producing stale/corrupted
+pointers during `std::vector` reallocation in `librtx.scenedb.plugin.so`.
+
+**Python-level workarounds tested and failed**:
+
+| Flag | Effect |
+|---|---|
+| `--/app/asyncRendering=false` (both variants) | Forces synchronous RTX rendering — prevents race condition but crash still occurs at first frame shader compilation |
+| `--/persistent/exts/omni.kit.viewport.menubar.lighting/autoLightRig/enabled=false` | Prevents `SetLightingMenuModeCommand` from triggering stage traversal — crash still occurs during viewport init |
+
+None of these prevent the crash because the Vulkan shader compilation pipeline itself triggers
+the RTX scene DB enumeration unconditionally on the first render frame.
+
+**Verified workaround — headless mode**:
+```bash
+python tests/test_push_primitive.py --headless
+```
+Headless mode skips RTX viewport rendering entirely — no scene DB enumeration → no crash.
+
+**System-level fix** (requires sudo — ask your sysadmin):
+
+```bash
+# Confirm the conflict:
+dpkg -l | grep nvidia-driver-  # shows both 580-open and 595-open installed
+
+# Fix A — purge 595, keep proven 580 (what was working):
+sudo apt purge nvidia-driver-595-open nvidia-firmware-595-*
+sudo apt install --reinstall nvidia-driver-580-open
+sudo reboot
+
+# Fix B — fully upgrade to 595 (remove all 580 packages):
+sudo apt purge '.*nvidia.*580.*' && sudo apt autoremove
+sudo apt install nvidia-driver-595-open
+sudo reboot
+```
+
+After either fix, verify:
+```bash
+nvidia-smi  # should show driver version matching across kernel + userspace
+```
+
+**Which tests are affected**:
+
+| Test | Status | Workaround |
+|---|---|---|
+| `test_push_primitive.py` | ❌ segfaults without `--headless` | Add `--headless` or apply system fix |
+| `test_curobo_follow_target.py` | ❌ same crash pattern | Add `--headless` or apply system fix |
+| `train_push.py` | ⚠️ affected if run without `--headless` | `--headless` already default for training |
+| `train_curobo.py` (HPC) | ✅ unaffected (HPC runs headless in Apptainer) | — |
+
+**Task-local code mitigation**: Both `test_push_primitive.py` and `test_curobo_follow_target.py`
+include the async rendering flags + cuRobo-before-AppLauncher import guard. These are necessary
+for older driver/kernel combos but insufficient against the 595 + 6.8.0-111 + IOMMU breakage.
+
+**References**:
+- Kernel module version: `/proc/driver/nvidia/version` → `NVRM version: 595.58.03`
+- Userspace library version: `nvidia-smi` → `NVML library version: 580.142`
+- Conflicting packages: `dpkg -l | grep nvidia-driver-` shows both `580-open` and `595-open`
+- Diagnostics from `nvidia-bug-report.sh` or equivalent show `RM version mismatch` in NVML init
+- The feature flag comments in `tests/test_curobo_follow_target.py:65-70` document the IOMMU + async rendering race condition on RTX 3060 Ti, which is a separate pre-existing issue made worse (not caused) by the driver version conflict
+
+---
+
 #### `--headless` ArgParser conflict — 2026-05-10
 
 `AppLauncher.add_app_launcher_args()` adds `--headless` itself. The original `train_push.py`
