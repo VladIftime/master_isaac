@@ -13,14 +13,14 @@ import torch
 
 
 # ── Default steps-per-phase ────────────────────────────────────────────────────
-PUSH_NSTEPS_APPROACH = 18
-PUSH_NSTEPS_ENGAGE   = 5
-PUSH_NSTEPS_DESCEND  = 27
-PUSH_NSTEPS_PUSH     = 30
-PUSH_NSTEPS_RETRACT  = 10
+PUSH_NSTEPS_APPROACH = 16
+PUSH_NSTEPS_ENGAGE   = 4
+PUSH_NSTEPS_DESCEND  = 23
+PUSH_NSTEPS_PUSH     = 26
+PUSH_NSTEPS_RETRACT  = 9
 PUSH_NSTEPS_RELEASE  = 2
-PUSH_NSTEPS_RETURN   = 12
-# Total: 18 + 5 + 20 + 30 + 10 + 5 + 12 = 100 substeps per push
+PUSH_NSTEPS_RETURN   = 10
+# Total: 16 + 4 + 23 + 26 + 9 + 2 + 10 = 90 substeps per push
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
 PUSH_APPROACH_HEIGHT = 0.35   # Z height for approach / retract (above table)

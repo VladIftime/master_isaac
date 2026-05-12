@@ -89,19 +89,10 @@ def create_t_shape_usda():
         root.CreateAttribute("physics:diagonalInertia", Sdf.ValueTypeNames.Float3)
     root.GetAttribute("physics:diagonalInertia").Set(Gf.Vec3f(1.0, 1.0, 1.0))
 
-    # Collision group
-    coll_group_path = "/t_shape/colliders/<collision_group>"
-    coll_group = UsdPhysics.CollisionGroup.Define(stage, coll_group_path)
-    coll_group.GetFilteredGroupsAttr().Set([])
-    coll_group.GetCollisionEnabledAttr().Set(True)
-
-    # Apply collision API and collision group to both collision cubes
+    # Apply collision API to both collision cubes
     for prim_name in ["top_bar", "stem"]:
         prim = stage.GetPrimAtPath(f"/t_shape/colliders/{prim_name}")
         UsdPhysics.CollisionAPI.Apply(prim)
-        # Add to collision group
-        rel = prim.CreateRelationship("physics:collisionGroup")
-        rel.AddTarget(coll_group.GetPath())
 
     # ---- Material (bright red for T-block) ----
     mat = UsdShade.Material.Define(stage, "/t_shape/Looks/TBlockMat")

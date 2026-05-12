@@ -18,9 +18,10 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 from isaaclab.sensors import ContactSensorCfg, patterns
-from isaaclab.sim.spawners.shapes import CuboidCfg
 from isaaclab.assets import RigidObjectCfg
 import isaaclab.sim as sim_utils
+
+from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 
 from .utils.reach_dual_arm_diffik_env_cfg import (
     ReachDualArmDiffIKEnvCfg,
@@ -28,6 +29,7 @@ from .utils.reach_dual_arm_diffik_env_cfg import (
     ActionsCfg,
     EventCfg,
     TerminationsCfg,
+    ISAACLAB_DUAL_ARM_EXT_DIR,
 )
 from .utils import observations
 
@@ -102,14 +104,55 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
 
     @configclass
     class PushTaskSceneCfg(ReachDualArmSceneCfg):
-        """Scene with randomly-shaped object (per-env) for push task."""
-        cube = None
-        cylinder = None
-        rect = None
-        triangle = None
+        """Scene with all block shapes; each scenario activates one, others hidden."""
         camera = None
         contact_forces = None
         goal_ghost = None
+
+        cube = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/Cube",
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
+                scale=(2.25, 2.25, 2.25),
+                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.9, 0.5, 0.1)),
+            ),
+        )
+        cylinder = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/Cylinder",
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
+                scale=(2.25, 2.25, 2.25),
+                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.5, 1.0)),
+            ),
+        )
+        rect = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/Rect",
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
+                scale=(2.25, 2.25, 2.25),
+                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
+            ),
+        )
+        triangle = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/Triangle",
+            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
+                scale=(2.25, 2.25, 2.25),
+                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.2, 0.8)),
+            ),
+        )
 
         target_object = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/TargetObject",
@@ -117,9 +160,9 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                 pos=[0.0, 0.5, 0.05],
                 rot=[0.0, 0.0, 0.0, 1.0],
             ),
-            spawn=CuboidCfg(
-                size=(0.30, 0.045, 0.099),
-                collision_props=sim_utils.CollisionPropertiesCfg(),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usd",
+                scale=(1.0, 1.0, 1.0),  # geometry already in metres (0.08×0.08×0.05 footprint)
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
                     solver_position_iteration_count=16,
@@ -128,12 +171,6 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                     max_angular_velocity=1000.0,
                     max_depenetration_velocity=10000.0,
                 ),
-                physics_material=sim_utils.RigidBodyMaterialCfg(
-                    static_friction=0.3,
-                    dynamic_friction=0.3,
-                    restitution=0.0,
-                ),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
             ),
         )
 

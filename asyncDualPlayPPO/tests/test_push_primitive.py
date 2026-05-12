@@ -52,41 +52,53 @@ _WS_Z = ( 0.232, 0.55)  # floor = 0.093 TCP + ~0.139 tool0-to-TCP offset
 SCENARIOS = [
     # S0 works to spin dont change
     [
-        {"offset_x": -0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10},
+        {"offset_x": -0.08, "offset_y": 0.08, "push_dx": 0.0,   "push_dy": -0.10},
         {"offset_x": 0.1, "offset_y": 0.00, "push_dx": -0.15, "push_dy": 0.0},
-        {"offset_x": 0.05, "offset_y": -0.05, "push_dx": -0.1,   "push_dy": 0.1},
+        {"offset_x": 0.08, "offset_y": -0.08, "push_dx": -0.1,   "push_dy": 0.1},
     ],
+
     # S1: Push1=Fwd + Push2=Right2
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0},
+        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
+        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
+        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
     ],
     # S2: Push1=Fwd + Push2=Bwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0},
+        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
+        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
+        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
     ],
     # S3: Push1=Fwd + Push2=Fwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0},
+        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
+        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
+        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
     ],
     # S4: Push1=Fwd + Push2=LeftFwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.07, "push_dy": 0.07},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.0},
+        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
+        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
+        {"offset_x": 0.1, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
     ],
     # S5: Push1=Fwd + Push2=RightFwd
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.07, "push_dy": 0.07},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.0},
+        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
+        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
+        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
     ],
 ]
+
+# Object used per scenario (cycles through all shapes)
+SCENARIO_OBJECTS = [
+    "target_object",  # S0 — long green cuboid (spin test)
+    "cube",           # S1
+    "cylinder",       # S2
+    "rect",           # S3
+    "triangle",       # S4
+    "target_object",  # S5
+]
+_ALL_OBJECT_NAMES = ["target_object", "cube", "cylinder", "rect", "triangle"]
 
 _PAUSE_STEPS = 60  # ~1.2 s between pushes inside a scenario
 
@@ -108,6 +120,7 @@ def main():
 
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
+    from isaaclab.utils.math import euler_xyz_from_quat
     from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
     from asyncDualPlayPPO.tasks.utils.action_push import compute_push_waypoints
@@ -185,6 +198,33 @@ def main():
             _viewer_step()
             time.sleep(0.02)
 
+    _identity_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device)
+    _TABLE_POS_LOCAL = torch.tensor([[0.0, 0.5, 0.10]], device=device)
+    _HIDDEN_POS_LOCAL = torch.tensor([[0.0, 0.0, -2.0]], device=device)
+
+    def _swap_object(active_name: str):
+        """Teleport active object onto the table, hide all others below ground."""
+        origins = env.env.scene.env_origins
+        for name in _ALL_OBJECT_NAMES:
+            obj = env.env.scene[name]
+            state = obj.data.root_state_w.clone()
+            local_pos = _TABLE_POS_LOCAL if name == active_name else _HIDDEN_POS_LOCAL
+            state[:, :3] = local_pos + origins
+            state[:, 3:7] = _identity_quat
+            state[:, 7:] = 0.0
+            obj.write_root_state_to_sim(state)
+
+    def _obj_state_local(name: str):
+        """Return (pos, euler_xyz, linvel, angvel) tensors in local frame."""
+        obj = env.env.scene[name]
+        origins = env.env.scene.env_origins
+        pos = obj.data.root_pos_w - origins        # (1, 3)
+        roll, pitch, yaw = euler_xyz_from_quat(obj.data.root_quat_w)
+        euler = torch.stack([roll, pitch, yaw], dim=-1)  # (1, 3)
+        linvel = obj.data.root_lin_vel_w            # (1, 3)
+        angvel = obj.data.root_ang_vel_w            # (1, 3)
+        return pos, euler, linvel, angvel
+
     # ── Initial reset ──────────────────────────────────────────────────────────
     print("[Setup] Resetting environment...")
     env.reset()
@@ -219,39 +259,22 @@ def main():
     if not headless:
         _pause(20)
 
-    # ── Spin sanity check: directly kick object with wz to verify physics allows Z-spin ──
-    print("\n[SpinTest] Setting wz=6 rad/s on object — verifying Z-axis spin is physically possible...")
-    _tgt_obj = env.env.scene["target_object"]
-    _spin_state = _tgt_obj.data.root_state_w.clone()  # (N_env, 13)
-    _spin_state[:, 12] = 6.0                           # wz = 6 rad/s in world frame
-    _tgt_obj.write_root_state_to_sim(_spin_state)
-    _spin_hold = torch.zeros(1, env.action_space.shape[0], device=device)
-    _spin_hold[0, :6] = _robot_scene.data.joint_pos[0, _arm_jids]
-    for _si in range(200):
-        if not simulation_app.is_running():
-            break
-        _spin_obs, *_ = env.step(_spin_hold)
-        _viewer_step()
-        if _si % 25 == 0:
-            _e = _spin_obs[0, env.robot_dim + 3:env.robot_dim + 6]
-            _p = _spin_obs[0, env.robot_dim:env.robot_dim + 3]
-            print(f"  t={_si*0.02:.2f}s  pos=({float(_p[0]):+.3f},{float(_p[1]):+.3f},{float(_p[2]):+.3f})"
-                  f"  Z-angle={math.degrees(float(_e[2])):+.1f}°")
-    print("[SpinTest] If Z-angle above changed → physics Z-spin OK ✓\n")
-    env.reset()
-    _pause(40)
-
     # ── Main loop ─────────────────────────────────────────────────────────────
     scenario_idx = 0
     print("\n[Loop] Starting — close the viewport window to exit.\n")
 
     try:
         while simulation_app.is_running():
-            scenario = SCENARIOS[scenario_idx % len(SCENARIOS)]
+            s_mod = scenario_idx % len(SCENARIOS)
+            scenario = SCENARIOS[s_mod]
+            active_obj_name = SCENARIO_OBJECTS[s_mod % len(SCENARIO_OBJECTS)]
             scenario_idx += 1
 
+            _swap_object(active_obj_name)
+            _pause(40)  # let object settle on table
+
             print(f"{'='*64}")
-            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}")
+            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}  object={active_obj_name}")
             print(f"{'='*64}")
 
             for push_i, cfg in enumerate(scenario):
@@ -263,10 +286,8 @@ def main():
                 push_dx  = cfg["push_dx"]
                 push_dy  = cfg["push_dy"]
 
-                # ── Get current object position from observation ──────────────
-                obs_dict    = env.env.observation_manager.compute()
-                obs         = env._build_obs(obs_dict)
-                obj_pos_obs = obs[:, env.robot_dim:env.robot_dim + 3].clone()
+                # ── Get current object position from active scene object ──────
+                obj_pos_obs, _obj_euler_pre, _, _ = _obj_state_local(active_obj_name)
 
 
 
@@ -338,14 +359,13 @@ def main():
 
                     if wp_i % 3 == 0:
                         ee_pos = _tcp_local()
-                        wrist_pos = _robot_scene.data.body_pos_w[:, _w3_ids[0]] - env.env.scene.env_origins
-                        obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6] if 'obs' in dir() else torch.zeros(3)
+                        _cur_pos, _cur_euler, _, _ = _obj_state_local(active_obj_name)
                         print(
                             f"    wp {wp_i}: "
                             f"ee=({float(ee_pos[0,0]):+.3f},{float(ee_pos[0,1]):+.3f},{float(ee_pos[0,2]):+.3f})  "
                             f"tgt=({float(wp_pos[0,0]):+.3f},{float(wp_pos[0,1]):+.3f},{float(wp_pos[0,2]):+.3f})  "
-                            f"obj=({float(obj_pos_obs[0,0]):+.3f},{float(obj_pos_obs[0,1]):+.3f},{float(obj_pos_obs[0,2]):+.3f})  "
-                            f"euler=({float(math.degrees(obj_euler[0])):+.0f},{float(math.degrees(obj_euler[1])):+.0f},{float(math.degrees(obj_euler[2])):+.0f})\u00b0",
+                            f"obj=({float(_cur_pos[0,0]):+.3f},{float(_cur_pos[0,1]):+.3f},{float(_cur_pos[0,2]):+.3f})  "
+                            f"euler=({float(math.degrees(_cur_euler[0,0])):+.0f},{float(math.degrees(_cur_euler[0,1])):+.0f},{float(math.degrees(_cur_euler[0,2])):+.0f})\u00b0",
                             flush=True,
                         )
                     prev_jcmd = raw_cmd.detach().clone()
@@ -361,19 +381,14 @@ def main():
 
                 # ── Result ────────────────────────────────────────────────────
                 n_wp = len(waypoints)
-                obj_after = obs[0, env.robot_dim:env.robot_dim + 3]
-                disp = obj_after - obj_pos_obs[0]
-                obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6]
-                obj_linvel = obs[0, env.robot_dim + 6:env.robot_dim + 9]
-                obj_angvel = obs[0, env.robot_dim + 9:env.robot_dim + 12]
-                obj_contact = obs[0, env.robot_dim + 13]
+                obj_after, obj_euler_after, obj_linvel_after, obj_angvel_after = _obj_state_local(active_obj_name)
+                disp = obj_after[0] - obj_pos_obs[0]
                 print(
                     f"         IK {ik_ok}/{n_wp}  "
                     f"disp=({float(disp[0]):+.3f},{float(disp[1]):+.3f})m  "
-                    f"obj=({float(obj_after[0]):+.3f},{float(obj_after[1]):+.3f},{float(obj_after[2]):+.3f})  "
-                    f"euler=({float(math.degrees(obj_euler[0])):+.0f},{float(math.degrees(obj_euler[1])):+.0f},{float(math.degrees(obj_euler[2])):+.0f})°  "
-                    f"vel=({float(obj_linvel[0]):+.3f},{float(obj_linvel[1]):+.3f},{float(obj_linvel[2]):+.3f})m/s  "
-                    f"contact={float(obj_contact):.0f}",
+                    f"obj=({float(obj_after[0,0]):+.3f},{float(obj_after[0,1]):+.3f},{float(obj_after[0,2]):+.3f})  "
+                    f"euler=({math.degrees(float(obj_euler_after[0,0])):+.0f},{math.degrees(float(obj_euler_after[0,1])):+.0f},{math.degrees(float(obj_euler_after[0,2])):+.0f})°  "
+                    f"vel=({float(obj_linvel_after[0,0]):+.3f},{float(obj_linvel_after[0,1]):+.3f},{float(obj_linvel_after[0,2]):+.3f})m/s",
                     flush=True,
                 )
 

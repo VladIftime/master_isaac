@@ -413,7 +413,8 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         spawn=UsdFileCfg(
             func=spawn_random_block, # Use custom randomizer
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-            scale=(1.5, 1.5, 1.5),
+            scale=(2.25, 2.25, 2.25),
+            mass_props=sim_utils.MassPropertiesCfg(density=1200.0),  # ABS plastic
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
         ),
@@ -428,7 +429,7 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         spawn=UsdFileCfg(
             func=spawn_ghost_block,  # walks subtree to disable ALL collision prims
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-            scale=(1.52, 1.52, 1.52),
+            scale=(2.28, 2.28, 2.28),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
@@ -448,7 +449,8 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         spawn=UsdFileCfg(
             func=spawn_random_block, # Use custom randomizer
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
-            scale=(1.5, 1.5, 1.5),
+            scale=(2.25, 2.25, 2.25),
+            mass_props=sim_utils.MassPropertiesCfg(density=1200.0),  # ABS plastic
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
         ),
@@ -461,7 +463,8 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-            scale=(1.5, 1.5, 1.5),
+            scale=(2.25, 2.25, 2.25),
+            mass_props=sim_utils.MassPropertiesCfg(density=1200.0),  # ABS plastic
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 1.0, 0.4)),
         ),
@@ -474,7 +477,8 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
-            scale=(1.5, 1.5, 1.5),
+            scale=(2.25, 2.25, 2.25),
+            mass_props=sim_utils.MassPropertiesCfg(density=1200.0),  # ABS plastic
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
         ),
@@ -487,7 +491,8 @@ class ReachDualArmSceneCfg(InteractiveSceneCfg):
         ),
         spawn=UsdFileCfg(
             usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
-            scale=(1.5, 1.5, 1.5),
+            scale=(2.25, 2.25, 2.25),
+            mass_props=sim_utils.MassPropertiesCfg(density=1200.0),  # ABS plastic
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.8)),
         ),
