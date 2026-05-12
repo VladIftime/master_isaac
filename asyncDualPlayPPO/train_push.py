@@ -463,7 +463,8 @@ def main():
                                        env.robot_dim + env.obj_state_dim + 6]
                 pos_err_done   = (obj_pos_done - goal_pos_done).norm(dim=-1)
                 rot_diff = (obj_euler_done - goal_euler_done).abs()
-                rot_err_done  = torch.min(rot_diff, 2 * torch.pi - rot_diff).max(dim=-1)[0]
+                rot_diff = torch.where(rot_diff > torch.pi, 2 * torch.pi - rot_diff, rot_diff)
+                rot_err_done  = rot_diff.max(dim=-1)[0]
                 ep_pushes_pre = len(env.episode_push_counts)
                 env.reset_done_envs(done)
                 ep_pushes_post = len(env.episode_push_counts)

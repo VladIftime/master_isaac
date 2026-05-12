@@ -42,7 +42,7 @@ _OBS_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  
 def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:
     """Maximum absolute Euler-angle difference with wraparound (range [0, π])."""
     diff = (euler_a - euler_b).abs()
-    diff = torch.min(diff, 2.0 * torch.pi - diff)
+    diff = torch.where(diff > torch.pi, 2.0 * torch.pi - diff, diff)
     return diff.max(dim=-1)[0]
 
 

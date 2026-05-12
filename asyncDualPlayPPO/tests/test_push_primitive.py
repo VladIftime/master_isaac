@@ -188,11 +188,12 @@ def main():
     env.reset()
     _viewer_step()
 
-    # Calibrate the fixed TCP→wrist_3 offset in tool-down orientation.
-    # The live _tcp_offset() drifts during approach/orient because the arm
-    # isn't yet at tool-down.  Using a frozen offset measured after PD settle
-    # ensures ik_target = wp_pos - _FIXED_OFFSET maps TCP→wrist3 correctly.
-    print("[Setup] Calibrating TCP→wrist3 offset...")
+    # Calibrate the total IK→physics error: cuRobo targets tool0
+    # but the physics model has the Robotiq gripper merged into wrist_3.
+    # Instead of trying to measure the offset between mismatched frames,
+    # we measure where the fingers actually end up vs where we asked
+    # cuRobo to put tool0, and apply that correction directly.
+    print("[Setup] Calibrating IK→physics error...")
     _calib_pos = torch.tensor([[0.0, 0.50, 0.25]], device=device)
     _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
     _calib_res = ik_solver.solve_batch(
@@ -207,10 +208,11 @@ def main():
     for _ in range(30):
         env.step(_calib_act)
         _viewer_step()
-    _FIXED_TCP_OFFSET = _tcp_offset().clone()
+    _finger_after = _tcp_local()
+    _TOTAL_IK_ERROR = (_finger_after - _calib_pos).clone()
     print(
-        f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
-        f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
+        f"[Setup] IK error = ({float(_TOTAL_IK_ERROR[0,0]):+.3f}, "
+        f"{float(_TOTAL_IK_ERROR[0,1]):+.3f}, {float(_TOTAL_IK_ERROR[0,2]):+.3f})"
     )
 
     # Warm-up hold so the viewer initialises before the first push
@@ -289,7 +291,7 @@ def main():
                         _viewer_step()
                         prev_grip = wp_grip.clone()
 
-                    ik_target = wp_pos - _FIXED_TCP_OFFSET
+                    ik_target = wp_pos - _TOTAL_IK_ERROR
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])

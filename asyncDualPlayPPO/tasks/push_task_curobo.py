@@ -1,7 +1,8 @@
 """
 Environment configuration for single-agent push task — cuRobo variant.
 
-Minimal scene: one UR5e robot, one table, one object (random from pool).
+Minimal scene: one UR5e robot, one table, one object (random shape from pool,
+assigned per environment index — same pattern as train_curobo.py).
 Observations: single 29D vector (robot + object state + goal).
 Actions: JointPositionActionCfg (cuRobo computes joint positions externally).
 """
@@ -29,8 +30,14 @@ from .utils.reach_dual_arm_diffik_env_cfg import (
     ActionsCfg,
     EventCfg,
     TerminationsCfg,
+    spawn_random_block,
+    BLOCK_FILES,
 )
 from .utils import observations
+
+# Add T-shape to the shared block pool for push task variety
+if "t_shape.usda" not in BLOCK_FILES:
+    BLOCK_FILES.append("t_shape.usda")
 
 
 @configclass
@@ -103,7 +110,7 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
 
     @configclass
     class PushTaskSceneCfg(ReachDualArmSceneCfg):
-        """Scene with T-shaped object for push task."""
+        """Scene with randomly-shaped object (per-env) for push task."""
         cube = None
         cylinder = None
         rect = None
@@ -119,8 +126,8 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                 rot=[0.0, 0.0, 0.0, 1.0],
             ),
             spawn=UsdFileCfg(
-                func=spawn_from_usd,
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usda",
+                func=spawn_random_block,
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
                 scale=(1.5, 1.5, 1.5),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
