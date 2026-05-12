@@ -198,16 +198,15 @@ def main():
     # ── Robot body/joint indices ──────────────────────────────────────────────
     _robot_scene = env.env.scene["robot"]
     _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
-    _wrist3_ids, _ = _robot_scene.find_bodies("wrist_3_link")
     _lf_ids, _ = _robot_scene.find_bodies("left_inner_finger")
     _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
 
-    # Fixed TCP→wrist3 offset in tool-down orientation.
-    # Drive all envs to a neutral tool-down pose, settle 30 PD steps, then
-    # freeze the offset measured from env 0 (identical geometry across envs).
-    print("[Setup] Calibrating TCP→wrist3 offset...")
+    # Calibrate total IK→physics error: cuRobo targets tool0 but physics
+    # model has Robotiq gripper merged into wrist_3.  Measure where the
+    # fingers actually end up vs where we asked cuRobo to put tool0.
+    print("[Setup] Calibrating IK→physics error...")
     _calib_pos = torch.zeros(env.num_envs, 3, device=env.device)
-    _calib_pos[:, 1] = 0.50
+    _calib_pos[:, 1] = 0.60
     _calib_pos[:, 2] = 0.25
     _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
     _calib_res = ik_solver.solve_batch(
@@ -221,13 +220,11 @@ def main():
     _calib_act[:, 6] = 1.0
     for _ in range(30):
         env.step(_calib_act)
-    _lf_w = _robot_scene.data.body_pos_w[0, _lf_ids[0]]
-    _rf_w = _robot_scene.data.body_pos_w[0, _rf_ids[0]]
-    _w3_w = _robot_scene.data.body_pos_w[0, _wrist3_ids[0]]
-    _FIXED_TCP_OFFSET = ((_lf_w + _rf_w) / 2.0 - _w3_w).unsqueeze(0).clone()
+    _finger_after = _tcp_pos_local()
+    _TOTAL_IK_ERROR = (_finger_after - _calib_pos).clone()
     print(
-        f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
-        f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
+        f"[Setup] IK error = ({float(_TOTAL_IK_ERROR[0,0]):+.3f}, "
+        f"{float(_TOTAL_IK_ERROR[0,1]):+.3f}, {float(_TOTAL_IK_ERROR[0,2]):+.3f})"
     )
 
     # ── PPO agent ─────────────────────────────────────────────────────────────
@@ -383,7 +380,7 @@ def main():
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
             prev_grip = torch.ones(env.num_envs, device=env.device)
             for wp_idx, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
-                ik_target = wp_pos - _FIXED_TCP_OFFSET
+                ik_target = wp_pos - _TOTAL_IK_ERROR
                 ik_target[:, 0].clamp_(_WS_X[0], _WS_X[1])
                 ik_target[:, 1].clamp_(_WS_Y[0], _WS_Y[1])
                 ik_target[:, 2].clamp_(_WS_Z[0], _WS_Z[1])

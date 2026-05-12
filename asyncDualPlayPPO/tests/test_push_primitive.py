@@ -1,8 +1,10 @@
 """
 test_push_primitive.py  —  Interactive push loop
 =================================================
-Cycles through push scenarios. Each scenario is a 3-push sequence
-with the gripper closed, tool-down orientation, no yaw rotation.
+Cycles through push scenarios. Each scenario is a 3-push sequence:
+  1. Push forward/backward 10 cm (offset ~2 cm behind object center)
+  2. Drag left/right 10 cm
+  3. Spin 45° with gripper closed
 
 Loops forever until you close the viewport window or press Ctrl+C.
 
@@ -22,9 +24,7 @@ import torch.optim     # noqa: F401
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-# cuRobo MUST be imported before AppLauncher — importing after causes a native
-# crash in librtx.scenedb.plugin.so because CuRobo's CUDA context init races
-# with the RTX rendering background thread (carbOnPluginStartup).
+# cuRobo must be imported before AppLauncher
 try:
     from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
     from curobo.types.math import Pose as CuroboPose
@@ -50,13 +50,13 @@ _WS_Z = ( 0.00, 0.55)
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
 # Each push: {offset_x, offset_y, push_dx, push_dy}
 SCENARIOS = [
-    # S0: Push1=Fwd + Push2=Left
+    # S0 works to spin dont change
     [
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": -0.10, "push_dy": -0.10},
-        {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": 0.2},
+        {"offset_x": -0.05, "offset_y": 0.05, "push_dx": 0.0,   "push_dy": -0.10},
+        {"offset_x": 0.1, "offset_y": 0.00, "push_dx": -0.15, "push_dy": 0.0},
+        {"offset_x": 0.05, "offset_y": -0.05, "push_dx": -0.1,   "push_dy": 0.1},
     ],
-    # S1: Push1=Fwd + Push2=Right
+    # S1: Push1=Fwd + Push2=Right2
     [
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.0,  "push_dy": 0.10},
         {"offset_x": 0.05, "offset_y": 0.05, "push_dx": 0.10, "push_dy": 0.0},
@@ -102,16 +102,6 @@ def main():
     args = parser.parse_args()
 
     headless = getattr(args, "headless", False)
-
-    # Force synchronous RTX rendering so SceneDB is fully initialized before
-    # SetLightingMenuModeCommand fires — avoids a race-condition crash on
-    # slower GPUs (RTX 3060 Ti + IOMMU enabled).
-    for _flag in (
-        "--/app/asyncRendering=false",
-        "--/app/asyncRenderingLowLatency=false",
-    ):
-        if _flag not in sys.argv:
-            sys.argv.append(_flag)
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
@@ -200,13 +190,12 @@ def main():
     env.reset()
     _viewer_step()
 
-    # Calibrate the total IK→physics error: cuRobo targets tool0
-    # but the physics model has the Robotiq gripper merged into wrist_3.
-    # Instead of trying to measure the offset between mismatched frames,
-    # we measure where the fingers actually end up vs where we asked
-    # cuRobo to put tool0, and apply that correction directly.
-    print("[Setup] Calibrating IK→physics error...")
-    _calib_pos = torch.tensor([[0.0, 0.50, 0.25]], device=device)
+    # Calibrate the fixed TCP→wrist_3 offset in tool-down orientation.
+    # The live _tcp_offset() drifts during approach/orient because the arm
+    # isn't yet at tool-down.  Using a frozen offset measured after PD settle
+    # ensures ik_target = wp_pos - _FIXED_OFFSET maps TCP→wrist3 correctly.
+    print("[Setup] Calibrating TCP→wrist3 offset...")
+    _calib_pos = torch.tensor([[0.0, 0.60, 0.25]], device=device)
     _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
     _calib_res = ik_solver.solve_batch(
         CuroboPose(position=_calib_pos, quaternion=_QUAT_DOWN),
@@ -220,11 +209,10 @@ def main():
     for _ in range(30):
         env.step(_calib_act)
         _viewer_step()
-    _finger_after = _tcp_local()
-    _TOTAL_IK_ERROR = (_finger_after - _calib_pos).clone()
+    _FIXED_TCP_OFFSET = _tcp_offset().clone()
     print(
-        f"[Setup] IK error = ({float(_TOTAL_IK_ERROR[0,0]):+.3f}, "
-        f"{float(_TOTAL_IK_ERROR[0,1]):+.3f}, {float(_TOTAL_IK_ERROR[0,2]):+.3f})"
+        f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
+        f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
     )
 
     # Warm-up hold so the viewer initialises before the first push
@@ -258,6 +246,8 @@ def main():
                 obs         = env._build_obs(obs_dict)
                 obj_pos_obs = obs[:, env.robot_dim:env.robot_dim + 3].clone()
 
+
+
                 # ── Compute waypoints ─────────────────────────────────────────
                 prev_jcmd  = _robot_scene.data.joint_pos[:, _arm_jids].clone()
                 current_ee = _tcp_local()
@@ -287,6 +277,7 @@ def main():
                 ik_ok = 0
                 last_good_joints = prev_jcmd.clone()
                 prev_grip = torch.ones(1, device=device)  # start open
+                max_step_delta = 0.05  # 5 cm/s max per-step change
                 for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
@@ -303,11 +294,14 @@ def main():
                         _viewer_step()
                         prev_grip = wp_grip.clone()
 
-                    ik_target = wp_pos - _TOTAL_IK_ERROR
+                    ik_target = wp_pos - _FIXED_TCP_OFFSET
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
+                    # Velocity smooth: limit how far target moves per step
+                    delta_target = ik_target - (last_good_joints.unsqueeze(0) if False else ik_target)
+                    # Use smooth interpolation from current to target
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
                         seed_config=cur_joints.unsqueeze(1),
@@ -322,6 +316,7 @@ def main():
 
                     if wp_i % 3 == 0:
                         ee_pos = _tcp_local()
+                        wrist_pos = _robot_scene.data.body_pos_w[:, _w3_ids[0]] - env.env.scene.env_origins
                         obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6] if 'obs' in dir() else torch.zeros(3)
                         print(
                             f"    wp {wp_i}: "
@@ -366,7 +361,8 @@ def main():
             print(f"\n  --- End of scenario --- resetting environment ---\n")
             env.reset()
             _viewer_step()
-            _pause(15)
+            # Let object settle on table — hold arm at safe retracted pose
+            _pause(80)
 
     except KeyboardInterrupt:
         print("\n[Loop] Interrupted by user.")
