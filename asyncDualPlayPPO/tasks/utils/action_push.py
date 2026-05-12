@@ -23,7 +23,7 @@ PUSH_NSTEPS_RETURN   = 12
 # Total: 18 + 5 + 20 + 30 + 10 + 5 + 12 = 100 substeps per push
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
-PUSH_APPROACH_HEIGHT = 0.15   # Z height for approach / retract (above table)
+PUSH_APPROACH_HEIGHT = 0.35   # Z height for approach / retract (above table)
 PUSH_TABLE_SURFACE = 0.00     # table surface Z in local frame (object sits on this)
 
 
@@ -83,7 +83,7 @@ def compute_push_waypoints(
     contact_pos = torch.stack([
         obj_pos[:, 0] + offset_x,
         obj_pos[:, 1] + offset_y,
-        torch.full((N,), table_z + 0.015, device=device),  # slightly above table
+        torch.full((N,), table_z + 0.110, device=device),  # contact height: +0.110 cmd → ~0.095 actual TCP after ~0.015 undershoot
     ], dim=-1)
 
     push_target = torch.stack([
@@ -206,7 +206,7 @@ class PushConfig:
     num_bins: int = 11
 
 
-def total_push_substeps(cfg: PushConfig = None) -> int:
+def total_push_substeps(cfg: "PushConfig | None" = None) -> int:
     """Return total number of substeps per push macro-action."""
     if cfg is None:
         cfg = PushConfig()

@@ -45,7 +45,7 @@ _ARM_JOINT_NAMES = [
 # Workspace clamp limits
 _WS_X = (-0.50, 0.50)
 _WS_Y = (0.25,  0.70)
-_WS_Z = ( 0.00, 0.55)
+_WS_Z = ( 0.232, 0.55)  # floor = 0.093 TCP + ~0.139 tool0-to-TCP offset
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
 # Each push: {offset_x, offset_y, push_dx, push_dy}
@@ -190,11 +190,11 @@ def main():
     env.reset()
     _viewer_step()
 
-    # Calibrate the fixed TCP→wrist_3 offset in tool-down orientation.
-    # The live _tcp_offset() drifts during approach/orient because the arm
-    # isn't yet at tool-down.  Using a frozen offset measured after PD settle
-    # ensures ik_target = wp_pos - _FIXED_OFFSET maps TCP→wrist3 correctly.
-    print("[Setup] Calibrating TCP→wrist3 offset...")
+    # Calibrate the IK→TCP error: cuRobo targets tool0 (its ee_link), but
+    # the physics gripper is mounted below tool0 by ~16 cm.  Measuring
+    # (actual_TCP − cuRobo_target) gives the constant offset needed to
+    # correct every waypoint: ik_target = wp_pos − _FIXED_TCP_OFFSET.
+    print("[Setup] Calibrating IK→TCP error (tool0 vs finger midpoint)...")
     _calib_pos = torch.tensor([[0.0, 0.60, 0.25]], device=device)
     _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
     _calib_res = ik_solver.solve_batch(
@@ -209,15 +209,37 @@ def main():
     for _ in range(30):
         env.step(_calib_act)
         _viewer_step()
-    _FIXED_TCP_OFFSET = _tcp_offset().clone()
+    _FIXED_TCP_OFFSET = (_tcp_local() - _calib_pos).clone()   # actual_TCP - tool0_target
     print(
-        f"[Setup] Fixed offset = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
+        f"[Setup] IK→TCP error = ({float(_FIXED_TCP_OFFSET[0,0]):+.3f}, "
         f"{float(_FIXED_TCP_OFFSET[0,1]):+.3f}, {float(_FIXED_TCP_OFFSET[0,2]):+.3f})"
     )
 
     # Warm-up hold so the viewer initialises before the first push
     if not headless:
         _pause(20)
+
+    # ── Spin sanity check: directly kick object with wz to verify physics allows Z-spin ──
+    print("\n[SpinTest] Setting wz=6 rad/s on object — verifying Z-axis spin is physically possible...")
+    _tgt_obj = env.env.scene["target_object"]
+    _spin_state = _tgt_obj.data.root_state_w.clone()  # (N_env, 13)
+    _spin_state[:, 12] = 6.0                           # wz = 6 rad/s in world frame
+    _tgt_obj.write_root_state_to_sim(_spin_state)
+    _spin_hold = torch.zeros(1, env.action_space.shape[0], device=device)
+    _spin_hold[0, :6] = _robot_scene.data.joint_pos[0, _arm_jids]
+    for _si in range(200):
+        if not simulation_app.is_running():
+            break
+        _spin_obs, *_ = env.step(_spin_hold)
+        _viewer_step()
+        if _si % 25 == 0:
+            _e = _spin_obs[0, env.robot_dim + 3:env.robot_dim + 6]
+            _p = _spin_obs[0, env.robot_dim:env.robot_dim + 3]
+            print(f"  t={_si*0.02:.2f}s  pos=({float(_p[0]):+.3f},{float(_p[1]):+.3f},{float(_p[2]):+.3f})"
+                  f"  Z-angle={math.degrees(float(_e[2])):+.1f}°")
+    print("[SpinTest] If Z-angle above changed → physics Z-spin OK ✓\n")
+    env.reset()
+    _pause(40)
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     scenario_idx = 0

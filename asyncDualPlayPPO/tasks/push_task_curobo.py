@@ -18,26 +18,18 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 from isaaclab.sensors import ContactSensorCfg, patterns
-from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
-from isaaclab.sim.spawners.from_files import spawn_from_usd
+from isaaclab.sim.spawners.shapes import CuboidCfg
 from isaaclab.assets import RigidObjectCfg
 import isaaclab.sim as sim_utils
 
 from .utils.reach_dual_arm_diffik_env_cfg import (
-    ISAACLAB_DUAL_ARM_EXT_DIR,
     ReachDualArmDiffIKEnvCfg,
     ReachDualArmSceneCfg,
     ActionsCfg,
     EventCfg,
     TerminationsCfg,
-    spawn_random_block,
-    BLOCK_FILES,
 )
 from .utils import observations
-
-# Add T-shape to the shared block pool for push task variety
-if "t_shape.usda" not in BLOCK_FILES:
-    BLOCK_FILES.append("t_shape.usda")
 
 
 @configclass
@@ -122,13 +114,12 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
         target_object = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/TargetObject",
             init_state=RigidObjectCfg.InitialStateCfg(
-                pos=[0.0, 0.5, 0.02],
+                pos=[0.0, 0.5, 0.05],
                 rot=[0.0, 0.0, 0.0, 1.0],
             ),
-            spawn=UsdFileCfg(
-                func=spawn_random_block,
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-                scale=(1.5, 1.5, 1.5),
+            spawn=CuboidCfg(
+                size=(0.30, 0.045, 0.099),
+                collision_props=sim_utils.CollisionPropertiesCfg(),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
                     solver_position_iteration_count=16,
@@ -136,6 +127,11 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                     max_linear_velocity=1000.0,
                     max_angular_velocity=1000.0,
                     max_depenetration_velocity=10000.0,
+                ),
+                physics_material=sim_utils.RigidBodyMaterialCfg(
+                    static_friction=0.3,
+                    dynamic_friction=0.3,
+                    restitution=0.0,
                 ),
                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
             ),
