@@ -80,14 +80,7 @@ def create_t_shape_usda():
     UsdPhysics.RigidBodyAPI.Apply(root)
     PhysxSchema.PhysxRigidBodyAPI.Apply(root)
     UsdPhysics.MassAPI.Apply(root)
-
-    mass_attr = root.GetAttribute("physics:mass")
-    mass_attr.Set(0.1)
-
-    inertia_attr = root.GetAttribute("physics:diagonalInertia")
-    if not inertia_attr.IsValid():
-        root.CreateAttribute("physics:diagonalInertia", Sdf.ValueTypeNames.Float3)
-    root.GetAttribute("physics:diagonalInertia").Set(Gf.Vec3f(1.0, 1.0, 1.0))
+    # Mass and inertia left unset — let density-based computation handle it
 
     # Apply collision API to both collision cubes
     for prim_name in ["top_bar", "stem"]:

@@ -38,8 +38,8 @@ root.SetKind("component")
 # ---- Rigid body on the ROOT prim so Isaac Lab's spawner finds it ----
 UsdPhysics.RigidBodyAPI.Apply(root)
 UsdPhysics.MassAPI.Apply(root)
-root.CreateAttribute("physics:mass", Sdf.ValueTypeNames.Float).Set(0.1)
-root.CreateAttribute("physics:diagonalInertia", Sdf.ValueTypeNames.Float3).Set(Gf.Vec3f(1, 1, 1))
+# Mass and inertia are left unset — the spawner's MassPropertiesCfg(density=300.0)
+# handles both, and PhysX computes correct inertia from collision geometry.
 
 # ---- baseLink ----
 base_link = UsdGeom.Xform.Define(stage, "/t_shape_urdf/baseLink")

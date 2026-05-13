@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-11 (Push primitive refactor: no yaw/grip/spin, fixed offset calibration)
+**Last updated**: 2026-05-13 (robot lag fix: removed 4 free-falling objects from push test scene; only T-block remains)
 
 ---
 
@@ -78,6 +78,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-08 | SR-coupled controllers reverted (Fixes 1 & 2); cuRobo install docs; all tests green |
 | 2026-05-11 | Push primitive refactor (no yaw/grip/spin, fixed TCP offset), rotation reward function, goal yaw randomization |
 | 2026-05-11 | Reward function: position+rotation improvement (Akella & Mason 1998), no distance penalty |
+| 2026-05-13 | T-block set as first scenario object; placeholder inertia removed from all objects (objects now spin) |
+| 2026-05-13 | Robot lag fix: cube/cylinder/rect/triangle removed from push test scene; T-block only; approach height reverted to 0.20 m |
 
 ---
 
@@ -969,10 +971,13 @@ press Ctrl+C or close the viewport to exit.
 | cuRobo config | `ur5e.yml` (ee_link: tool0) |
 | Orientation | Fixed tool-down `[0,1,0,0]` |
 | Gripper | Always closed during push |
-| Steps per push | 100: 18+5+20+30+10+5+12 |
+| Steps per push | 85: 18+5+10+30+8+2+12 |
+| Approach height | 0.20 m above table |
+| Contact height | 0.110 m (cmd) → ~0.095 m actual TCP |
 | TCP offset | Calibrated fixed offset at startup (30-step PD settle) |
-| Workspace | X=[-0.5,0.5], Y=[0.25,0.70], Z=[0.00,0.55] |
+| Workspace | X=[-0.5,0.5], Y=[0.25,0.70], Z=[0.232,0.55] (tool0 frame) |
 | Pause between pushes | 60 steps (~1.2 s) |
+| Object | T-block only (cube/cylinder/rect/triangle removed from scene) |
 
 ### 7.4 Scenarios
 
@@ -993,3 +998,88 @@ All scenarios use `offset_x=0.05, offset_y=0.05` (5 cm safety margin from object
 python -m asyncDualPlayPPO.tests.test_push_primitive
 python -m asyncDualPlayPPO.tests.test_push_primitive --step-delay 0.05
 ```
+
+### 7.6 T-Block Object & Inertia Fix — 2026-05-13
+
+#### Problem
+
+Off-center pushes induced no object rotation (e.g. T-block pushed from the back-right
+corner translated without spinning). Root cause: every object had `physics:diagonalInertia = (1, 1, 1)`
+baked into its USD/URDF — a placeholder ~10 000× too high for small tabletop blocks (0.04–0.1 kg).
+
+#### Root Cause in USD Physics
+
+USD Physics precedence for rigid body properties:
+1. If `physics:diagonalInertia` is explicitly authored → PhysX uses it as-is (ignores density/geometry)
+2. If not authored → PhysX computes inertia from collision geometry × mass/density
+
+Because all objects had `(1,1,1)` authored, density/geometry were ignored and objects behaved like
+flywheels — enormous torque needed for any angular acceleration.
+
+#### Fix
+
+**a) T-block asset (`t_shape.usda`):**
+- Removed `physics:diagonalInertia = (1, 1, 1)` — lets PhysX compute from collision geometry
+- Kept explicit `physics:mass = 0.1` — light, responsive; density override removed from config
+- Scale `(2.0, 2.0, 1.5)` applied at spawn for better EE contact surface
+- Fixed file reference `t_shape.usd` → `t_shape.usda` (binary `.usd` removed in prior commit)
+
+**b) URDF objects (`cube/cylinder/rect/triangle/concave.urdf`):**
+- Removed `<inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>` from all URDF files
+- Existing binary USD files retain old inertia until regenerated; URDF fixes are for future conversions
+- URDF objects keep their explicit mass (0.04–0.10 kg) via `<mass>`, and `MassPropertiesCfg(density=300.0)` for density
+
+**c) Generator scripts (`gen_t_shape.py`, `generate_t_shape_block.py`):**
+- Removed hardcoded `physics:diagonalInertia` and `physics:mass` attribute creation
+- Comment added: mass/inertia left unset — density-based computation handles it
+
+**d) Test flow (`test_push_primitive.py`):**
+- Changed `target_object` comment from "long green cuboid" to "T-block"
+- Loop exits after `len(SCENARIOS)` scenarios (was infinite `while simulation_app.is_running()`)
+
+**e) Isaac Sim cache cleanup:**
+- Cleared `/isaac-sim-5.1.0/kit/cache/`, `/kit/logs/`, shader caches (`extscache/omni.*.shadercache.*`)
+- Cleared project `.isaac_cache/` and `logs/`
+
+#### Result
+
+Objects now rotate smoothly when pushed off-center:
+- T-block (S1 Push 1): 0° → +37° with `offset_x=-0.08, offset_y=0.08`
+- T-block (S6 Push 2): 0° → −33° with `offset_x=-0.10, offset_y=0.00`
+- No flyaway or drift (final velocities ~0 m/s after each push)
+- Object movement is smooth (explicit `mass=0.1` prevents sluggish density-based mass)
+
+#### Files Changed
+
+| File | Change |
+|------|--------|
+| `tasks/push_task_curobo.py:164-166` | Fixed USD reference `.usd`→`.usda`, scale `(2.0,2.0,1.5)`, removed `mass_props` |
+| `assets/blocks/t_shape.usda` | Removed `diagonalInertia` and `mass` lines; readded `mass=0.1` only |
+| `assets/blocks/gen_t_shape.py` | Removed mass and inertia attribute creation |
+| `assets/blocks/generate_t_shape_block.py` | Removed mass and inertia attribute creation |
+| `assets/blocks/{cube,cylinder,rect,triangle,concave}.urdf` | Removed `<inertia>` blocks |
+| `tests/test_push_primitive.py` | Updated comment; loop exits after all 6 scenarios |
+
+---
+
+### 7.7 Robot Lag Fix — 2026-05-13
+
+#### Problem
+
+After the T-block / inertia fix, the robot arm moved sluggishly (visible lag in joint tracking) while the rest of the scene was unaffected. `nvtop` showed clean GPU utilization.
+
+#### Root Cause — Free-falling physics objects
+
+`push_task_curobo.py` was extended to pre-load all 5 block shapes into the scene simultaneously (`cube`, `cylinder`, `rect`, `triangle`, `target_object`), with the 4 inactive ones placed at `Z=-2.0` and `disable_gravity=False`. Because there is no collision surface below `Z=0` in the scene, the 4 hidden objects were in **permanent free-fall** — accelerating indefinitely, never reaching a resting state, so PhysX could never put them to sleep. Every physics step had to integrate 4 continuously moving rigid bodies, adding articulation-solver overhead that manifested as robot joint lag.
+
+This is distinct from the earlier approach-height issue (which was a waypoint-spacing problem). The lag persisted even after correcting the step counts because the physics overhead remained.
+
+#### Fix
+
+Removed cube, cylinder, rect, and triangle from the `PushTaskSceneCfg` entirely (`= None`). All 6 scenarios now use `target_object` (T-block). The `_swap_object` helper and the `SCENARIO_OBJECTS` / `_ALL_OBJECT_NAMES` lists were removed from `test_push_primitive.py`.
+
+| File | Change |
+|------|--------|
+| `tasks/push_task_curobo.py` | `cube = cylinder = rect = triangle = None` (removed 4 free-falling rigid bodies) |
+| `tests/test_push_primitive.py` | Removed `_swap_object`, `SCENARIO_OBJECTS`, `_ALL_OBJECT_NAMES`; `active_obj_name` hardcoded to `"target_object"` |
+| `tasks/utils/action_push.py` | `PUSH_APPROACH_HEIGHT` reverted to `0.20 m`; step counts restored (85 substeps total) |

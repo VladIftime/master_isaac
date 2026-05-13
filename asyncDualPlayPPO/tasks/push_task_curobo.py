@@ -109,50 +109,10 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
         contact_forces = None
         goal_ghost = None
 
-        cube = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Cube",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
-                scale=(2.25, 2.25, 2.25),
-                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.9, 0.5, 0.1)),
-            ),
-        )
-        cylinder = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Cylinder",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cylinder.usd",
-                scale=(2.25, 2.25, 2.25),
-                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.5, 1.0)),
-            ),
-        )
-        rect = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Rect",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/rect.usd",
-                scale=(2.25, 2.25, 2.25),
-                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.8, 0.2)),
-            ),
-        )
-        triangle = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/Triangle",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.0, 0.0, -2.0]),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/triangle.usd",
-                scale=(2.25, 2.25, 2.25),
-                mass_props=sim_utils.MassPropertiesCfg(density=300.0),  # low density — USD objects lack friction override, compensate here
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=False),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.8, 0.2, 0.8)),
-            ),
-        )
+        cube = None
+        cylinder = None
+        rect = None
+        triangle = None
 
         target_object = RigidObjectCfg(
             prim_path="{ENV_REGEX_NS}/TargetObject",
@@ -161,8 +121,8 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
                 rot=[0.0, 0.0, 0.0, 1.0],
             ),
             spawn=UsdFileCfg(
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usd",
-                scale=(1.0, 1.0, 1.0),  # geometry already in metres (0.08×0.08×0.05 footprint)
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usda",
+                scale=(2.0, 2.0, 1.5),
                 rigid_props=sim_utils.RigidBodyPropertiesCfg(
                     disable_gravity=False,
                     solver_position_iteration_count=16,

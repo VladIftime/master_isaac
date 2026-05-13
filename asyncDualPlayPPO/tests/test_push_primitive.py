@@ -89,17 +89,6 @@ SCENARIOS = [
     ],
 ]
 
-# Object used per scenario (cycles through all shapes)
-SCENARIO_OBJECTS = [
-    "target_object",  # S0 — long green cuboid (spin test)
-    "cube",           # S1
-    "cylinder",       # S2
-    "rect",           # S3
-    "triangle",       # S4
-    "target_object",  # S5
-]
-_ALL_OBJECT_NAMES = ["target_object", "cube", "cylinder", "rect", "triangle"]
-
 _PAUSE_STEPS = 60  # ~1.2 s between pushes inside a scenario
 
 
@@ -198,22 +187,6 @@ def main():
             _viewer_step()
             time.sleep(0.02)
 
-    _identity_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device)
-    _TABLE_POS_LOCAL = torch.tensor([[0.0, 0.5, 0.10]], device=device)
-    _HIDDEN_POS_LOCAL = torch.tensor([[0.0, 0.0, -2.0]], device=device)
-
-    def _swap_object(active_name: str):
-        """Teleport active object onto the table, hide all others below ground."""
-        origins = env.env.scene.env_origins
-        for name in _ALL_OBJECT_NAMES:
-            obj = env.env.scene[name]
-            state = obj.data.root_state_w.clone()
-            local_pos = _TABLE_POS_LOCAL if name == active_name else _HIDDEN_POS_LOCAL
-            state[:, :3] = local_pos + origins
-            state[:, 3:7] = _identity_quat
-            state[:, 7:] = 0.0
-            obj.write_root_state_to_sim(state)
-
     def _obj_state_local(name: str):
         """Return (pos, euler_xyz, linvel, angvel) tensors in local frame."""
         obj = env.env.scene[name]
@@ -261,20 +234,19 @@ def main():
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     scenario_idx = 0
-    print("\n[Loop] Starting — close the viewport window to exit.\n")
+    print("\n[Loop] Starting — runs all 6 scenarios once.\n")
 
     try:
-        while simulation_app.is_running():
+        while simulation_app.is_running() and scenario_idx < len(SCENARIOS):
             s_mod = scenario_idx % len(SCENARIOS)
             scenario = SCENARIOS[s_mod]
-            active_obj_name = SCENARIO_OBJECTS[s_mod % len(SCENARIO_OBJECTS)]
+            active_obj_name = "target_object"
             scenario_idx += 1
 
-            _swap_object(active_obj_name)
             _pause(40)  # let object settle on table
 
             print(f"{'='*64}")
-            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}  object={active_obj_name}")
+            print(f"  Scenario {scenario_idx}/{len(SCENARIOS)}")
             print(f"{'='*64}")
 
             for push_i, cfg in enumerate(scenario):
@@ -288,8 +260,6 @@ def main():
 
                 # ── Get current object position from active scene object ──────
                 obj_pos_obs, _obj_euler_pre, _, _ = _obj_state_local(active_obj_name)
-
-
 
                 # ── Compute waypoints ─────────────────────────────────────────
                 prev_jcmd  = _robot_scene.data.joint_pos[:, _arm_jids].clone()
@@ -320,7 +290,6 @@ def main():
                 ik_ok = 0
                 last_good_joints = prev_jcmd.clone()
                 prev_grip = torch.ones(1, device=device)  # start open
-                max_step_delta = 0.05  # 5 cm/s max per-step change
                 for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
@@ -342,9 +311,6 @@ def main():
                     ik_target[0, 1].clamp_(_WS_Y[0], _WS_Y[1])
                     ik_target[0, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
-                    # Velocity smooth: limit how far target moves per step
-                    delta_target = ik_target - (last_good_joints.unsqueeze(0) if False else ik_target)
-                    # Use smooth interpolation from current to target
                     result    = ik_solver.solve_batch(
                         CuroboPose(position=ik_target, quaternion=wp_quat),
                         seed_config=cur_joints.unsqueeze(1),

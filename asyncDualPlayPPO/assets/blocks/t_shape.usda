@@ -11,7 +11,6 @@ def Xform "t_shape_urdf" (
 )
 {
     rel material:binding = </t_shape_urdf/Looks/TBlockMat>
-    float3 physics:diagonalInertia = (1, 1, 1)
     float physics:mass = 0.1
 
     def Xform "baseLink"
