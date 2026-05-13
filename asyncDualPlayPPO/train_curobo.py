@@ -77,6 +77,7 @@ _WS_Z = ( 0.00, 0.55)
 # IK target to the preferred resting pose so the arm settles there on the
 # first few steps of each phase.
 _EE_HOME_X_OFFSET = 0.02   # metres forward on X
+_EE_HOME_Y        = 0.50   # metres — hover directly over T-block spawn
 _EE_HOME_Z        = 0.05   # metres above table (env-local Z)
 
 
@@ -270,7 +271,7 @@ def main():
     use_mc         = True
     num_cat_dims   = 6
     num_bins       = _pol_cfg.get("num_bins", 11)
-    _max_delta_m   = _pol_cfg.get("max_delta_m", 0.04)
+    _max_delta_m   = _pol_cfg.get("max_delta_m", 0.02)
     _max_delta_rot = _pol_cfg.get("max_delta_rot", 0.05)   # rad/step EE tilt
     print(
         f"[Config] cuRobo action space: {num_cat_dims}D × {num_bins} bins "
@@ -294,7 +295,7 @@ def main():
         xyz  = normalized[:, :3] * _max_delta_m                       # (N, 3)
         rxry = normalized[:, 3:5] * _max_delta_rot                    # (N, 2)
         # Clamp per-step delta so a single bin can't cause a violent orientation jump
-        rxry = rxry.clamp(-0.1, 0.1)
+        rxry = rxry.clamp(-0.05, 0.05)
         g_bin   = bin_indices[:, 5].float()
         new_gs  = gripper_state.clone()
         new_gs[g_bin < center - threshold + 1] = -1.0                 # bins 0-2  → close
@@ -728,6 +729,7 @@ def main():
     _tcp_w = (_lf_w + _rf_w) / 2.0
     ee_target_local = (_tcp_w - env.env.scene.env_origins).clone()
     ee_target_local[:, 0] += _EE_HOME_X_OFFSET
+    ee_target_local[:, 1]  = _EE_HOME_Y
     ee_target_local[:, 2]  = _EE_HOME_Z
     # Orientation tracker: start at tool-down for all envs
     ee_target_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
@@ -791,7 +793,8 @@ def main():
         # Debug accumulators (only used when args.debug_rewards)
         if args.debug_rewards:
             _dbg_rew_acc  = torch.zeros(env.num_envs, device=env.device)  # dense reward sum per env
-            _dbg_ik_fails = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)  # IK fail count
+            _dbg_ik_fails = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)  # Alice IK fail count
+            _dbg_ik_bob   = torch.zeros(env.num_envs, dtype=torch.long, device=env.device)  # Bob IK fail count
             _dbg_printed  = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)  # already printed
 
         for t in range(rollout_length):
@@ -1015,15 +1018,39 @@ def main():
             if len(bob_indices) > 0:
                 env_full[bob_indices,   6] = bob_gripper_state[bob_indices].squeeze(-1)
 
+            # ── Alice IK fail: lock arm in place (no dangerous move) ──────────────
+            _alice_ik_fail_ids = torch.tensor([], dtype=torch.long, device=env.device)
+            if len(alice_indices) > 0:
+                _a_ikf = _ik_fail[alice_indices]
+                if _a_ikf.any():
+                    _alice_ik_fail_ids = alice_indices[_a_ikf]
+                    env_full[_alice_ik_fail_ids, :6] = cur_joints[_alice_ik_fail_ids]
+                    env_full[_alice_ik_fail_ids, 6]  = 1.0  # gripper open
+
 
             # Capture phase BEFORE env.step so we can detect transitions afterwards
             # and log the correct step count before the wrapper resets it to 0.
-            _prev_phase = env.episode_manager.current_phase.clone()
-            _prev_steps = env.episode_manager.phase_step.clone()
+            _prev_phase   = env.episode_manager.current_phase.clone()
+            _prev_steps   = env.episode_manager.phase_step.clone()
+            _prev_initial = env.episode_manager.initial_states.clone()  # snapshot before transitions
 
             # ── STEP ──────────────────────────────────────────────────────────────
             with profiler.section("env_step"):
                 obs_full, rewards, dones, truncated, extras = env.step(env_full)
+
+            # ── Alice IK fail: terminate episode with -1 penalty ─────────────────
+            if len(_alice_ik_fail_ids) > 0:
+                rewards[_alice_ik_fail_ids] += -1.0
+                dones[_alice_ik_fail_ids] = True
+                if "alice_total_reward" in extras:
+                    extras["alice_total_reward"][_alice_ik_fail_ids] = -1.0
+                if "alice_failed_this_step" in extras:
+                    extras["alice_failed_this_step"][_alice_ik_fail_ids] = True
+                env.delayed_alice_reward[_alice_ik_fail_ids] = -1.0
+                env.episode_manager.reset_episode(_alice_ik_fail_ids, reason="Alice IK Failure")
+                env.hide_goal_ghost(_alice_ik_fail_ids)
+                if args.debug_rewards:
+                    _dbg_rew_acc[_alice_ik_fail_ids] += -1.0
 
             # Centralized sync for IK targets and commands to prevent death loops.
             # We MUST sync after env.step() so PhysX readbacks are fresh.
@@ -1046,6 +1073,7 @@ def main():
                     _tcp_w_sync - env.env.scene.env_origins[_sync_ids]
                 )
                 ee_target_local[_sync_ids, 0] += _EE_HOME_X_OFFSET
+                ee_target_local[_sync_ids, 1]  = _EE_HOME_Y
                 ee_target_local[_sync_ids, 2]  = _EE_HOME_Z
                 _prev_joint_cmd[_sync_ids] = _robot_scene.data.joint_pos[_sync_ids][:, _arm_jids]
 
@@ -1060,6 +1088,8 @@ def main():
                 if len(alice_indices) > 0:
                     _dbg_rew_acc[alice_indices]  += rewards[alice_indices]
                     _dbg_ik_fails[alice_indices] += _ik_fail[alice_indices].long()
+                if len(bob_indices) > 0:
+                    _dbg_ik_bob[bob_indices] += _ik_fail[bob_indices].long()
 
             ep_info = extras.get("episode_manager", {})
             if ep_info:
@@ -1148,6 +1178,10 @@ def main():
 
                 # ── PHASE-END SUMMARY (debug_rewards mode) ────────────────────────
                 if args.debug_rewards:
+                    _bob_pos_err = ep_info.get("bob_pos_err", torch.zeros(env.num_envs, device=env.device))
+                    _bob_rot_err = ep_info.get("bob_rot_err", torch.zeros(env.num_envs, device=env.device))
+                    _gstates     = ep_info.get("goal_states")
+
                     # Alice phase end — fire on phase transition OR failure
                     _alice_log_trigger = _alice_just_ended | extras.get("alice_failed_this_step", torch.zeros_like(_alice_just_ended))
                     for _gi in torch.where(_alice_log_trigger)[0].tolist():
@@ -1156,9 +1190,17 @@ def main():
                         _dense = _dbg_rew_acc[_gi].item()
                         _ik_f  = _dbg_ik_fails[_gi].item()
                         _step  = _prev_steps[_gi].item()
+                        _start_pos = _prev_initial[_gi, 0:3].tolist()
+                        _goal_pos  = (_gstates[_gi, 0:3].tolist() if _gstates is not None else [0,0,0])
+                        _start_ori = _prev_initial[_gi, 3:6].tolist()
+                        _goal_ori  = (_gstates[_gi, 3:6].tolist() if _gstates is not None else [0,0,0])
                         print(
                             f"  [ALICE END | iter={bob_updates} env={_gi}]"
                             f"  goal={_valid}"
+                            f"  start=({_start_pos[0]:.3f},{_start_pos[1]:.3f},{_start_pos[2]:.3f})"
+                            f"  ori_start=({_start_ori[0]:.3f},{_start_ori[1]:.3f},{_start_ori[2]:.3f})"
+                            f"  →  final=({_goal_pos[0]:.3f},{_goal_pos[1]:.3f},{_goal_pos[2]:.3f})"
+                            f"  ori_final=({_goal_ori[0]:.3f},{_goal_ori[1]:.3f},{_goal_ori[2]:.3f})"
                             f"  phase_rew={_rew:+.3f}  dense_acc={_dense:+.3f}  total={_rew+_dense:+.3f}"
                             f"  ik_fails={_ik_f}  steps={_step}",
                             flush=True,
@@ -1171,18 +1213,28 @@ def main():
                     for _gi in torch.where(_bob_just_ended)[0].tolist():
                         _succ = "SUCCESS" if bob_success[_gi].item() else "fail"
                         _gv   = "valid_goal" if goal_valid[_gi].item() else "no_goal"
-                        _pos  = ep_info.get("bob_pos_err", torch.zeros(env.num_envs, device=env.device))[_gi].item()
-                        _rot  = ep_info.get("bob_rot_err", torch.zeros(env.num_envs, device=env.device))[_gi].item()
+                        _pos  = _bob_pos_err[_gi].item()
+                        _rot  = _bob_rot_err[_gi].item()
                         _step = _prev_steps[_gi].item()
                         _alice_rew_at_bob_end = alice_rewards_now[_gi].item()
+                        _start_pos = _prev_initial[_gi, 0:3].tolist()
+                        _start_ori = _prev_initial[_gi, 3:6].tolist()
+                        _goal_pos  = (_gstates[_gi, 0:3].tolist() if _gstates is not None else [0,0,0])
+                        _goal_ori  = (_gstates[_gi, 3:6].tolist() if _gstates is not None else [0,0,0])
+                        _ik_b      = _dbg_ik_bob[_gi].item()
                         print(
                             f"  [BOB END   | iter={bob_updates} env={_gi}]"
                             f"  {_succ}  ({_gv})"
+                            f"  start=({_start_pos[0]:.3f},{_start_pos[1]:.3f},{_start_pos[2]:.3f})"
+                            f"  ori_start=({_start_ori[0]:.3f},{_start_ori[1]:.3f},{_start_ori[2]:.3f})"
+                            f"  →  goal=({_goal_pos[0]:.3f},{_goal_pos[1]:.3f},{_goal_pos[2]:.3f})"
+                            f"  ori_goal=({_goal_ori[0]:.3f},{_goal_ori[1]:.3f},{_goal_ori[2]:.3f})"
                             f"  pos_err={_pos:.4f}m  rot_err={_rot:.4f}rad"
-                            f"  steps={_step}"
+                            f"  steps={_step}  ik_fails={_ik_b}"
                             f"  alice_payout={_alice_rew_at_bob_end:+.3f}",
                             flush=True,
                         )
+                        _dbg_ik_bob[_gi] = 0
 
                 profiler.mark_start("reward_backfill")
                 if bob_dones_now.any() or alice_dones_now.any() or (alice_rewards_now != 0).any():
@@ -1204,35 +1256,17 @@ def main():
                 just_failed_bob = bob_dones_now & (~bob_success) & goal_valid
                 valid_ids = torch.where(just_failed_bob)[0]
                 min_demo_steps = max(10, env.episode_manager.alice_timesteps // 2)
-                _abc_dbg_bob_done   = int(bob_dones_now.sum())
-                _abc_dbg_failed     = int((bob_dones_now & ~bob_success).sum())
-                _abc_dbg_goal_valid = int((bob_dones_now & goal_valid).sum())
-                _abc_dbg_gate       = int(just_failed_bob.sum())
-                _abc_dbg_too_short  = 0
-                print(
-                    f"  [ABC dbg] bob_done={_abc_dbg_bob_done} "
-                    f"failed={_abc_dbg_failed} goal_valid={_abc_dbg_goal_valid} "
-                    f"gate={_abc_dbg_gate} min_steps={min_demo_steps}",
-                    flush=True,
-                )
                 valid_trajs = []
                 for env_id in valid_ids:
                     eid   = env_id.item()
                     t_len = alice_traj_len[eid].item()
                     if t_len < min_demo_steps:
-                        _abc_dbg_too_short += 1
                         continue
                     traj_o = alice_traj_obs[eid, :t_len]
                     traj_a = alice_traj_act[eid, :t_len]
                     g = ep_info["goal_states"][eid].unsqueeze(0).expand(t_len, -1)
                     bc_obs = env.construct_bob_observation(traj_o, g)
                     valid_trajs.append((bc_obs, traj_a))
-                if _abc_dbg_too_short > 0 or _abc_dbg_gate > 0:
-                    print(
-                        f"  [ABC dbg] too_short={_abc_dbg_too_short} "
-                        f"accepted={len(valid_trajs)} buf_size={bob_ppo.abc_buffer.size}",
-                        flush=True,
-                    )
                 if valid_trajs:
                     all_obs  = torch.cat([t[0] for t in valid_trajs], dim=0)
                     all_acts = torch.cat([t[1] for t in valid_trajs], dim=0)

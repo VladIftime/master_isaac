@@ -193,13 +193,18 @@ def main():
     # Workspace clamp limits (local / env-origin-relative frame, metres)
     _WS_X = (-0.50, 0.50)
     _WS_Y = (0.25,  0.70)
-    _WS_Z = ( 0.00, 0.55)
+    _WS_Z = ( 0.232, 0.55)  # floor = tool0 min reachable Z (TCP ~0.093 + offset ~0.139)
 
     # ── Robot body/joint indices ──────────────────────────────────────────────
     _robot_scene = env.env.scene["robot"]
     _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
     _lf_ids, _ = _robot_scene.find_bodies("left_inner_finger")
     _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
+
+    def _tcp_pos_local():
+        lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
+        rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
+        return ((lf_w + rf_w) / 2.0 - env.env.scene.env_origins).clone()
 
     # Calibrate total IK→physics error: cuRobo targets tool0 but physics
     # model has Robotiq gripper merged into wrist_3.  Measure where the
@@ -312,11 +317,6 @@ def main():
     sys.stdout.flush()
 
     # Per-env state accumulators
-    def _tcp_pos_local():
-        lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
-        rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
-        return ((lf_w + rf_w) / 2.0 - env.env.scene.env_origins).clone()
-
     ee_pos_local = _tcp_pos_local()
     ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
     prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
@@ -459,8 +459,8 @@ def main():
                 goal_euler_done = obs[done_ids, env.robot_dim + env.obj_state_dim + 3:
                                        env.robot_dim + env.obj_state_dim + 6]
                 pos_err_done   = (obj_pos_done - goal_pos_done).norm(dim=-1)
-                rot_diff = (obj_euler_done - goal_euler_done).abs()
-                rot_diff = torch.where(rot_diff > torch.pi, 2 * torch.pi - rot_diff, rot_diff)
+                rot_diff = (obj_euler_done - goal_euler_done) % (2.0 * torch.pi)
+                rot_diff = torch.where(rot_diff > torch.pi, 2.0 * torch.pi - rot_diff, rot_diff)
                 rot_err_done  = rot_diff.max(dim=-1)[0]
                 ep_pushes_pre = len(env.episode_push_counts)
                 env.reset_done_envs(done)

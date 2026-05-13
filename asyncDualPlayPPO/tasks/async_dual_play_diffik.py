@@ -16,7 +16,10 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
+from isaaclab.assets import RigidObjectCfg
 from isaaclab.sensors import ContactSensorCfg, patterns
+import isaaclab.sim as sim_utils
+from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 
 from .utils.reach_dual_arm_diffik_env_cfg import (
     ReachDualArmDiffIKEnvCfg,
@@ -24,6 +27,7 @@ from .utils.reach_dual_arm_diffik_env_cfg import (
     ActionsCfg,
     EventCfg,
     TerminationsCfg,
+    ISAACLAB_DUAL_ARM_EXT_DIR,
 )
 from .utils import observations, rewards
 
@@ -163,13 +167,50 @@ class AsyncDualPlayDiffIKEnvCfg(ManagerBasedRLEnvCfg):
 
     @configclass
     class AsyncDualPlaySceneCfg(ReachDualArmSceneCfg):
-        """Scene restricted to two objects."""
+        """Scene with T-block only (matches push_task_curobo task space)."""
 
         cylinder = None
         rect = None
         triangle = None
         camera = None
         contact_forces = None
+
+        target_object = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/TargetObject",
+            init_state=RigidObjectCfg.InitialStateCfg(
+                pos=[0.0, 0.5, 0.05],
+                rot=[0.0, 0.0, 0.0, 1.0],
+            ),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usda",
+                scale=(2.0, 2.0, 1.5),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    disable_gravity=False,
+                    solver_position_iteration_count=16,
+                    solver_velocity_iteration_count=4,
+                    max_linear_velocity=1000.0,
+                    max_angular_velocity=1000.0,
+                    max_depenetration_velocity=10000.0,
+                ),
+            ),
+        )
+
+        goal_ghost = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/GoalGhost",
+            init_state=RigidObjectCfg.InitialStateCfg(
+                pos=[0.0, 0.0, -1.0],
+                rot=[0.0, 0.0, 0.0, 1.0],
+            ),
+            spawn=UsdFileCfg(
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usda",
+                scale=(2.03, 2.03, 1.53),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                    kinematic_enabled=True,
+                    disable_gravity=True,
+                ),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.7)),
+            ),
+        )
 
     scene: AsyncDualPlaySceneCfg = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
     observations: AsyncDualPlayObservationsCfg = AsyncDualPlayObservationsCfg()

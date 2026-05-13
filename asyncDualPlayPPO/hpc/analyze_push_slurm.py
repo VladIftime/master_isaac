@@ -32,14 +32,16 @@ ITER_RE = re.compile(
 
 EPISODE_RE = re.compile(
     r"\[Episode\]\s+pushes=(\d+)\s+(SUCCESS|fail)\s+"
-    r"goal=\(([-\d.]+),([-\d.]+),([-\d.]+)\)\s+orient=\(([-\d.]+),([-\d.]+),([-\d.]+)\)\s+"
-    r"final=\(([-\d.]+),([-\d.]+),([-\d.]+)\)\s+"
+    r"goal=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+orient=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
+    r"final=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
+    r"rot=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
     r"err_pos=([-\d.]+)m\s+err_rot=([-\d.]+)rad"
 )
 
 PUSH_RE = re.compile(
     r"\[Push\s+(\d+)\]\s+"
-    r"rew=([-+\d.]+)\s+pos_err=([-\d.]+)\s+"
+    r"rew=([-+\d.]+)\s+\([^)]+\)\s+"
+    r"pos_err=([-\d.]+)\s+"
     r"rot_err=([-\d.]+)\s+"
     r"at_goal=(\d+)/(\d+)"
 )
@@ -83,8 +85,8 @@ def parse_slurm(path: Path) -> dict:
             "final_x": float(m.group(9)),
             "final_y": float(m.group(10)),
             "final_z": float(m.group(11)),
-            "err_pos": float(m.group(12)),
-            "err_rot": float(m.group(13)),
+            "err_pos": float(m.group(15)),
+            "err_rot": float(m.group(16)),
         })
 
     pushes = []

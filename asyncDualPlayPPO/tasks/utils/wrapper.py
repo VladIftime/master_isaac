@@ -74,7 +74,7 @@ class AsyncDualPlayEnvWrapper:
         _id_euler = torch.tensor(
             [0.0, 0.0, 0.0], device=device
         )  # identity rotation (ZYX Euler)
-        _t_pos = torch.tensor([-0.15, 0.7, 0.023], device=device)
+        _t_pos = torch.tensor([0.0, 0.5, 0.023], device=device)
         _c_pos = torch.tensor([-0.25, 0.7, 0.023], device=device)
         # Shape (6,) for 1 object, (12,) for 2 objects.
         # Layout: [t_pos(3), t_euler(3)] or [t_pos(3), t_euler(3), c_pos(3), c_euler(3)]
@@ -157,6 +157,7 @@ class AsyncDualPlayEnvWrapper:
             "x_range": (-1.0, 1.0),
             "y_range": (-0.5, 1.5),
             "z_min": -0.2,
+            "z_max": 0.15,
         }
         self.placement_bounds = {
             "x_range": (-0.75, 0.75),
@@ -390,8 +391,23 @@ class AsyncDualPlayEnvWrapper:
                 self.delayed_alice_reward[alice_term_ids] = -3.0
                 self._alice_phase_initialized[alice_term_ids] = False
 
+            # Handle Bob early terminations (e.g. pushes object off table):
+            # pay Alice +5 for Bob failure, hide ghost, reset objects, update initial_states.
+            bob_term_ids = reset_ids[is_term_vec & ~is_alice[reset_ids]]
+            if len(bob_term_ids) > 0:
+                self.delayed_alice_reward[bob_term_ids] += reward_utils.ALICE_BOB_FAIL_REWARD
+                self.hide_goal_ghost(bob_term_ids)
+                _sp = reset_objects_to_random_safe_pose(self.env, bob_term_ids)
+                reset_robot_joints(self.env, bob_term_ids)
+                self.env.scene.write_data_to_sim()
+                self.episode_manager.initial_states[bob_term_ids] = (
+                    self._initial_states_from_spawn(_sp, len(bob_term_ids))
+                )
+                self._alice_phase_initialized[bob_term_ids] = False
+
             # Batch reset — one call for all done envs
             self.episode_manager.reset_episode(reset_ids)
+            self.hide_goal_ghost(reset_ids)
         if not _null:
             _prof.mark_stop("wrapper_reset")
 
@@ -547,6 +563,7 @@ class AsyncDualPlayEnvWrapper:
                     (self.num_envs, self.num_objects * 6), device=self.device
                 )
             ),
+            "initial_states": self.episode_manager.initial_states.clone(),
             "max_contact_force": self.episode_manager.max_contact_force,
         }
         self.previous_actions = action.clone()
@@ -633,6 +650,35 @@ class AsyncDualPlayEnvWrapper:
                 torch.cat([pos1_global, t_quat], dim=-1),
                 env_ids=valid_env_ids,
             )
+
+            # Check for trivially easy goals: after reset, Bob starts within the
+            # success threshold of the goal.  Reject these so Alice must produce
+            # goals that actually require movement to reach.
+            _goal_pos   = active_goal[successful_goal, 0:3]
+            _goal_euler = active_goal[successful_goal, 3:6]
+            _start_pos  = start_states[:, 0:3]
+            _start_euler = start_states[:, 3:6]
+            _pos_dist = (_start_pos - _goal_pos).norm(dim=-1)
+            _rot_diff = ((_goal_euler - _start_euler + torch.pi) % (2 * torch.pi)) - torch.pi
+            _rot_dist = _rot_diff.abs().max(dim=-1)[0]
+            _too_easy = (_pos_dist < self.goal_tolerance) & (_rot_dist < 0.2)
+            too_easy_ids = valid_env_ids[_too_easy]
+            valid_env_ids = valid_env_ids[~_too_easy]
+
+            if len(too_easy_ids) > 0:
+                self.episode_manager.reset_episode(too_easy_ids, reason="Alice Too-Easy Goal")
+                self.hide_goal_ghost(too_easy_ids)
+                _sp = reset_objects_to_random_safe_pose(self.env, too_easy_ids)
+                reset_robot_joints(self.env, too_easy_ids)
+                self.env.scene.write_data_to_sim()
+                self.episode_manager.initial_states[too_easy_ids] = (
+                    self._initial_states_from_spawn(_sp, len(too_easy_ids))
+                )
+                self._alice_phase_initialized[too_easy_ids] = False
+                self.delayed_alice_reward[too_easy_ids] = -3.0
+                # Update iter stats: move from valid to invalid
+                self._iter_stats["valid_goals"] -= len(too_easy_ids)
+                self._iter_stats["invalid_goals"] += len(too_easy_ids)
 
             # Reset Cube (Local -> World) — only when cube is present (num_objects==2)
             if self.num_objects == 2:

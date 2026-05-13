@@ -82,6 +82,11 @@ def validate_goal(
     z_on_table = goal_pos[:, :, 2] >= table_bounds["z_min"]
     all_on_table = torch.all(x_on_table & y_on_table & z_on_table, dim=1)  # (batch,)
 
+    # --- Optional z_max: reject goals where objects are above the table surface ---
+    if "z_max" in table_bounds:
+        z_below_max = goal_pos[:, :, 2] <= table_bounds["z_max"]
+        all_on_table = all_on_table & torch.all(z_below_max, dim=1)
+
     # --- STEP 2: Check if objects moved ---
     pos_movements = torch.norm(goal_pos - initial_pos, dim=-1)
     # rot_movements already computed above in the Euler/quat if/else block
@@ -137,7 +142,7 @@ def validate_goal(
         ),
     )
 
-    valid = is_valid | out_of_zone
+    valid = is_valid  # only truly valid goals accepted; out_of_zone → invalid
 
     reasons = ["Unknown"] * batch_size
     for i in range(batch_size):

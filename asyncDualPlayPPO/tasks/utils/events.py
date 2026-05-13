@@ -101,7 +101,7 @@ def reset_objects_to_fixed_safe_pose(
     zero_vel = torch.zeros(num_resets, 6, device=env.device)
 
     placements = {
-        "target_object": torch.tensor([-0.15, 0.7, 0.05], device=env.device),
+        "target_object": torch.tensor([0.0, 0.5, 0.05], device=env.device),
         "cube": torch.tensor([-0.25, 0.7, 0.05], device=env.device),
     }
 

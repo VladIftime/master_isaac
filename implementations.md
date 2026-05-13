@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-13 (robot lag fix: removed 4 free-falling objects from push test scene; only T-block remains)
+**Last updated**: 2026-05-13 (T-block task space, goal validation fixes, Bob off-table/IK-fail termination, too-easy goal filter, per-episode logging)
 
 ---
 
@@ -79,7 +79,14 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-11 | Push primitive refactor (no yaw/grip/spin, fixed TCP offset), rotation reward function, goal yaw randomization |
 | 2026-05-11 | Reward function: position+rotation improvement (Akella & Mason 1998), no distance penalty |
 | 2026-05-13 | T-block set as first scenario object; placeholder inertia removed from all objects (objects now spin) |
-| 2026-05-13 | Robot lag fix: cube/cylinder/rect/triangle removed from push test scene; T-block only; approach height reverted to 0.20 m |
+| 2026-05-13 | Robot lag fix: cube/cylinder/rect/triangle removed from push test scene; T-block only; approach height raised to 0.40 m, 115 substeps total |
+| 2026-05-13 | T-block switched to sole ASP task object; target_object→t_shape.usda, spawn (0.0,0.5,0.05); goal_ghost→T-block shape; EE home Y=0.50 added |
+| 2026-05-13 | Goal validation: z_max=0.05 rejects airborne T-block goals; out_of_zone goals now fully invalid (was accepted with penalty); Bob off-table handler pays Alice +5, hides ghost, random-safe resets objects |
+| 2026-05-13 | ABC debug per-step prints removed; per-episode [ALICE END] and [BOB END] logging with start/final positions, orientations, errors |
+| 2026-05-13 | Training log analyzer (analyze_training.py): --log-dir required; cuRobo compatibility confirmed |
+| 2026-05-13 | Alice IK fail → immediate episode end with -1 penalty; arm locked in place on fail; overrides wrapper's -3 |
+| 2026-05-13 | Too-easy goal filter: after resetting objects for Bob, if Bob starts within success threshold (pos<0.05m AND rot<0.2rad), goal rejected with -3 penalty |
+| 2026-05-13 | All documentation (implementations.md, net.md, README.md) updated for T-block scene, 1-object obs dims, goal validation, IK fail handling |
 
 ---
 
@@ -143,10 +150,10 @@ Policy output (6D MultiCategorical, 11 bins)
   - Per-env EE orientation accumulator `ee_target_quat_w` via quaternion composition
   - TCP offset correction from finger-midpoint vs wrist_3_link each step
   - `ik_solver.solve_batch(N)` seeded from `_prev_joint_cmd` for smooth trajectories
-  - IK failure recovery: reverts EE accumulator, holds current joint positions
+  - IK failure recovery: reverts EE accumulator, holds current joint positions.  Alice IK failures trigger immediate episode termination with -1 penalty (arm locked in place); Bob IK failures are non-terminal.
   - Phase sync: re-anchors accumulators to physics TCP state after phase transition or episode done
   - Workspace clamp: X ∈ [−0.50, 0.50], Y ∈ [0.25, 0.70], Z ∈ [0.00, 0.55] metres (env-local)
-  - EE home offset applied after every sync (reset / phase boundary): X += 0.02 m, Z = 0.05 m — arm resets to its default joint configuration then IK drives it to the preferred low-hover resting pose in the first few steps
+  - EE home offset applied after every sync (reset / phase boundary): X += 0.02 m, Y = 0.50 m, Z = 0.05 m — arm resets to its default joint configuration then IK drives it to the preferred low-hover resting pose directly above the T-block spawn position
   - cuRobo CUDA graph warm-up before training loop (~3 ms → ~0.5 ms per step)
   - IK fail rate logged to TensorBoard (`Metrics/IKFailRate`) each iteration
 
@@ -205,6 +212,10 @@ Policy output (6D MultiCategorical, 11 bins)
 - `AsyncDualPlayEnvWrapper` (`tasks/utils/wrapper.py`): phase management, goal validation, reward, ABC buffer
 - `AsyncDualPlayCuRoboEnvCfg` (`tasks/async_dual_play_curobo.py`): scene with `JointPositionActionCfg`
 - Alice per-step rewards unconditionally 0.0 (Fixes 3 & 11)
+- T-block (`t_shape.usda`) as sole task object, scale (2.0, 2.0, 1.5), spawn position (0.0, 0.5, 0.05)
+- Goal ghost matches T-block shape (no random spawn function)
+- Goal validation: z_max=0.05 rejects airborne goals; out_of_zone goals fully invalid
+- Bob early termination: Alice paid +5, ghost hidden, objects random-safe reset
 - Bob reward: sparse `{+1/−1/+5}` only, no potential shaping (Fix 4)
 - 7 cm XY displacement filter removed from Alice's goal validity check (Fix 10)
 
@@ -310,6 +321,13 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix 17 | EE home offset after every sync | Low | ✅ Fixed | `train_curobo.py:75-80,730-731,1048-1049` |
 | 4.9 | Charlie hierarchical controller | — | Future research | — |
 | 4.10 | Physical sim-to-real interface | — | Future hardware | — |
+| Fix 18 | out_of_zone goals accepted as valid | Medium | ✅ Fixed | `utils/goal_validator.py:140` |
+| Fix 19 | No z_max check — airborne T-block goals accepted | High | ✅ Fixed | `utils/goal_validator.py:85-88`, `tasks/utils/wrapper.py:158-163` |
+| Fix 20 | Bob off-table termination: ghost not hidden, Alice unpaid, objects not random-reset | High | ✅ Fixed | `tasks/utils/wrapper.py:393-406` |
+| Fix 21 | ABC debug per-step prints spamming logs | Low | ✅ Fixed | `train_curobo.py:1210-1238` |
+| Fix 22 | T-block task space: single T-block object, EE home Y=0.50 | Medium | ✅ Fixed | `tasks/async_dual_play_diffik.py:165-207`, `train_curobo.py:79,730-731,1048-1049` |
+| Fix 23 | Alice IK fail: no penalty or termination — arm gets stuck in fail-loop | High | ✅ Fixed | `train_curobo.py:1015-1043` |
+| Fix 24 | Trivially-easy goals: Bob starts within success threshold → instant win | High | ✅ Fixed | `tasks/utils/wrapper.py:652-678` |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -346,6 +364,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | `alice_timesteps` | 100 | Steps per Alice phase |
 | `bob_timesteps` | 200 | Steps per Bob phase |
 | `_EE_HOME_X_OFFSET` | 0.02 m | X offset added to IK target after every sync (home pose) |
+| `_EE_HOME_Y` | 0.50 m | Fixed Y of IK target after every sync — directly over T-block spawn |
 | `_EE_HOME_Z` | 0.05 m | Fixed Z of IK target after every sync (5 cm above table) |
 
 ---
@@ -388,7 +407,7 @@ joint_cmd[:, :6] = torch.where(
 ### 4.4 Cons and Drawbacks
 
 - **Must be imported before AppLauncher** — hard constraint; handled via the cuRobo import block at the top of `train_curobo.py`
-- **IK failure during early training** — mitigation: episode reset on IK failure, dense EE-to-object reward teaches workspace awareness
+- **IK failure during early training** — Alice IK failures result in immediate episode termination with -1 penalty (arm locked in place). Bob IK failures are non-terminal (hold position). This provides a hard workspace-bounds signal that the policy learns to avoid.
 - **Orientation fixed to "tool pointing down"** — Option B chosen; reduces IK failures for tabletop manipulation
 - **CUDA graph warm-up adds ~30s to startup** — use warm-up call before training loop:
   ```python
@@ -677,13 +696,13 @@ environment executes a multi-step push trajectory using cuRobo IK.
 ```
 Phase 1: Approach   (18 steps)  EE → above object, tool-down, gripper open
 Phase 2: Engage     ( 5 steps)  Close gripper at approach height
-Phase 3: Descend    (20 steps)  EE down to contact height (table + 0.015 m)
+Phase 3: Descend    (24 steps)  EE down to contact height (table + 0.110 m)
 Phase 4: Push       (30 steps)  EE moves: contact_xy → contact_xy + (push_dx, push_dy)
-Phase 5: Retract    (10 steps)  EE up to approach height, gripper closed
-Phase 6: Release    ( 5 steps)  Open gripper at approach height
+Phase 5: Retract    (24 steps)  EE up to approach height, gripper closed
+Phase 6: Release    ( 2 steps)  Open gripper at approach height
 Phase 7: Return     (12 steps)  EE back to current TCP position at approach height
 
-Total: 100 substeps per push macro-action (2.0 s at 50 Hz)
+Total: 115 substeps per push macro-action (2.3 s at 50 Hz)
 ```
 
 ### 6.4 Action Space
@@ -953,7 +972,7 @@ press Ctrl+C or close the viewport to exit.
 │  Each push: {offset_x, offset_y, push_dx, push_dy}  │
 │                                                     │
 │  ① Get object position from observation             │
-│  ② compute_push_waypoints() → 100 waypoints         │
+│  ② compute_push_waypoints() → 115 waypoints         │
 │  ③ Per waypoint:                                    │
 │     ik_target = wp_pos − _FIXED_TCP_OFFSET           │
 │     cuRobo solve_batch → joint positions            │
@@ -971,8 +990,8 @@ press Ctrl+C or close the viewport to exit.
 | cuRobo config | `ur5e.yml` (ee_link: tool0) |
 | Orientation | Fixed tool-down `[0,1,0,0]` |
 | Gripper | Always closed during push |
-| Steps per push | 85: 18+5+10+30+8+2+12 |
-| Approach height | 0.20 m above table |
+| Steps per push | 115: 18+5+24+30+24+2+12 |
+| Approach height | 0.40 m above table |
 | Contact height | 0.110 m (cmd) → ~0.095 m actual TCP |
 | TCP offset | Calibrated fixed offset at startup (30-step PD settle) |
 | Workspace | X=[-0.5,0.5], Y=[0.25,0.70], Z=[0.232,0.55] (tool0 frame) |
@@ -1082,4 +1101,4 @@ Removed cube, cylinder, rect, and triangle from the `PushTaskSceneCfg` entirely 
 |------|--------|
 | `tasks/push_task_curobo.py` | `cube = cylinder = rect = triangle = None` (removed 4 free-falling rigid bodies) |
 | `tests/test_push_primitive.py` | Removed `_swap_object`, `SCENARIO_OBJECTS`, `_ALL_OBJECT_NAMES`; `active_obj_name` hardcoded to `"target_object"` |
-| `tasks/utils/action_push.py` | `PUSH_APPROACH_HEIGHT` reverted to `0.20 m`; step counts restored (85 substeps total) |
+| `tasks/utils/action_push.py` | `PUSH_APPROACH_HEIGHT = 0.40 m`; descend/retract = 24 steps each; release = 2 steps; total 115 substeps |

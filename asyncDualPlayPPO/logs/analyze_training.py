@@ -4,13 +4,15 @@ Parses slurm log files across one or more training-run directories,
 traces job chains, stitches them together, deduplicates overlapping
 iterations at run boundaries, writes clean CSVs/TXTs, and plots metrics.
 
+Compatible with cuRobo (train_curobo.py) and legacy (train.py / train_diffik.py) logs.
+
 Usage (single dir):
-    python analyze_training.py --log-dir logs/train_140426
+    python analyze_training.py --log-dir logs/curobo_hpc
 
 Usage (stitch prior run + current):
     python analyze_training.py \
-        --log-dir logs/train_140426 \
-        --prior-dirs logs/train_130426 \
+        --log-dir logs/curobo_hpc \
+        --prior-dirs logs/prev_run \
         --out-dir logs/combined
 """
 
@@ -881,8 +883,8 @@ def main():
     parser.add_argument(
         "--log-dir",
         type=str,
-        default=str(Path(__file__).parent / "train_140426"),
-        help="Primary directory containing slurm log files.",
+        default=None,
+        help="Directory containing slurm log files (slurm-*-*.out).",
     )
     parser.add_argument(
         "--prior-dirs",
@@ -915,9 +917,15 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.log_dir is None:
+        parser.error("--log-dir is required. Point it to the directory containing slurm-*.out files.")
+
     log_dir = Path(args.log_dir)
     prior_dirs = [Path(d) for d in args.prior_dirs]
     out_dir = Path(args.out_dir) if args.out_dir else log_dir
+
+    if not log_dir.exists():
+        parser.error(f"--log-dir does not exist: {log_dir}")
 
     # Parse all directories — prior dirs first so chain-next links work
     all_dirs = prior_dirs + [log_dir]

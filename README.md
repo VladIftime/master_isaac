@@ -82,12 +82,12 @@ The dual-arm extension adds a second manipulator, doubling the number of objects
 
 ```
 Alice (PPO, ent_coef=0.05 fixed):
-    Obs: EE pose(6 Euler) + gripper(1) + [obj_state(14 Euler)] × 2  = 35D
+    Obs: EE pose(6 Euler) + gripper(1) + [obj_state(14 Euler)] = 21D (T-block only)
     Acts: MultiCategorical 6D × 11 bins → cuRobo IK → joint positions
     Role: explore and construct interesting goal configurations
 
 Bob (PPOABC + GoalEncoder, abc_coef=0.5 fixed):
-    Obs (interleaved per-object): Robot(7) + [obj_state(14) + goal(6) + dist(2)] × 2 = 51D
+    Obs (interleaved per-object): Robot(7) + obj_state(14) + goal(6) + dist(2) = 29D (T-block only)
     Goal encoder: E(goal_pose, current_pose) → g ∈ R^K  (K=8, difference variant, max-pool)
     Acts: same action space as Alice
     Role: reproduce the goal Alice left behind
@@ -99,7 +99,7 @@ Push-PPO Baseline (single-agent PPO, no ASP):
     Reward: dense improvement reward (d_prev − d_now) + completion bonus
 
 Episode Manager:
-    Stores Alice's final state as the goal for Bob (12D LOCAL Euler per episode)
+    Stores Alice's final state as the goal for Bob (6D LOCAL Euler for T-block)
     Validates that Alice moved at least one object (position or rotation threshold)
     Manages phase transitions, ABC buffer writes, and reward backfill
 ```
@@ -127,8 +127,10 @@ Policy output (6D MultiCategorical, 11 bins)
 | Decision | Rationale |
 |---|---|
 | ZYX Euler angles | Matches OpenAI paper Appendix A.2; avoids quaternion discontinuities in policy input |
-| 12D goal state (pos+euler × 2 objects) | Compact; no velocities needed for goal definition |
-| 51D Bob obs (interleaved) | Object state + goal + distance interleaved per-object; easier for encoder to associate |
+| 6D goal state (pos+euler × 1 object) | Compact T-block pose; no velocities needed for goal definition |
+| 29D Bob obs | Object state + goal + distance; 1-object T-block scene matches push baseline |
+| z_max goal validation | Rejects airborne goals (Z > 0.05 m); out_of_zone goals fully invalid |
+| Too-easy goal filter | Rejects goals where Bob starts within success threshold (pos<0.05m AND rot<0.2rad); Alice gets -3 |
 | cuRobo IK controller | Batch GPU IK (solve_batch), singularity-aware, seed-conditioned for smooth trajectories |
 | JointPositionActionCfg | cuRobo computes joint positions externally; env accepts 7D [joints(6), gripper(1)] |
 | Max-pool (PI encoder + GoalEncoder) | DeepSets standard; robust to varying object counts (Fix 7) |
@@ -142,7 +144,7 @@ Policy output (6D MultiCategorical, 11 bins)
 | GoalEncoder difference variant | φ(goal) − φ(current); additive injection after actor layer 1 |
 | GoalEncoder aux loss kept | Provides geometric inductive bias without separate training phase (Fix 13, intentional) |
 | detach_goal_encoder=False in ABC | GoalEncoder receives ABC gradients (Fix 14) |
-| IK failure: hold last valid pose | No episode reset; Alice learns to move away from unreachable targets |
+| Alice IK failure | Episode terminated with -1 penalty, arm locked; Bob IK fail non-terminal |
 
 ---
 
@@ -624,9 +626,9 @@ when Alice explores configurations at the edges of the workspace.
 | GoalEncoder φ-MLP (separate from PI encoder) | Charlie paper architecture; enables hierarchical control (Fix 6) |
 | Aux loss on GoalEncoder (pos_dist + rot_dist prediction) | Geometric inductive bias without separate phase (Fix 13) |
 | curobo IK instead of DiffIK/RMPFlow | Batch GPU IK, singularity-aware, seed-conditioned |
-| No IK failure episode reset | Robot holds last valid pose; Alice learns workspace boundaries |
+| Alice IK failure | Episode terminated with -1 penalty (arm locked); Bob IK fail holds position |
 
 ### Environment & Visual
-- Object pool at startup: randomly selects from [concave, cube, cylinder, rect, triangle]
-- Objects scaled (1.5, 1.5, 1.5), colored green
+- Single T-block object (`t_shape.usda`), scale (2.0, 2.0, 1.5), spawn (0.0, 0.5, 0.05), mass 0.1 kg
+- Goal ghost matches T-block shape (kinematic, no collision)
 - Table color: red (Alice phase), blue (Bob phase) in non-headless mode

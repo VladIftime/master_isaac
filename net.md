@@ -85,6 +85,7 @@ Bob obs   = [robot_state(7) | obj1_state(14) | obj1_goal(6) | obj1_dist(2)
 ```
 *(Interleaved per-object layout: each 22D chunk = state+goal+dist for one object.
  This matches the `view(batch, num_objects, 22)` reshape in `_encode_obs`.)*
+*(num_objects=1 mode: Alice=21D, Bob=29D — single T-block scene matching push baseline)*
 
 ### Forward Pass (Alice)
 
@@ -106,14 +107,14 @@ object_state (14D × 2 objects) →  PI Embedding (PermInvEncoder):           �
               ┌────────────────────────────────┐
               ▼                                ▼
        Actor head                       Value head
-       Linear(256→6×11=66)              Linear(35→512) → ReLU
+       Linear(256→6×11=66)              Linear(21→512) → ReLU
        MultiCategorical                 → Linear(512→256) → ReLU
        (6 action dims × 11 bins)        → Linear(256→128) → ReLU → Linear(128→1)
 ```
 
 **Action bins:**
 ```
-dims 0-2: XYZ Cartesian delta   → (bin − 5) / 5 × max_delta_m        [max_delta_m = 0.04 m]
+dims 0-2: XYZ Cartesian delta   → (bin − 5) / 5 × max_delta_m        [max_delta_m = 0.02 m]
 dims 3-4: Rx, Ry rotation delta → (bin − 5) / 5 × max_delta_rot       [max_delta_rot = 0.05 rad, clamped ±0.1 rad]
 dim  5:   Gripper               → sticky: bins 0-2 → close (−1), bins 8-10 → open (+1), center → hold
 ```
@@ -148,10 +149,10 @@ PI Embedding (PermInvEncoder):                                              │
               ┌────────────────────────────────┐
               ▼                                ▼
        Actor head                       Value head
-       Linear(256→6×11=66)              Linear(51→512) → ReLU
-       MultiCategorical                 → Linear(512→256) → ReLU
-                                        → Linear(256→128) → ReLU → Linear(128→1)
-                                        (full raw obs, no goal encoder bottleneck)
+        Linear(256→6×11=66)              Linear(29→512) → ReLU
+        MultiCategorical                 → Linear(512→256) → ReLU
+                                         → Linear(256→128) → ReLU → Linear(128→1)
+                                         (dimensions shown for num_objects=1; multiply by 22D per extra object)
 ```
 
 ---
@@ -178,6 +179,7 @@ PI Embedding (PermInvEncoder):                                              │
 | **Bob obs dim** | — | **51D** |
 | **Actor trunk** | MLP → LSTM | **Linear(519→512)→ReLU→(256)→(128) → LSTMCell(128→256)** |
 | **Action space** | Continuous Gaussian | **MultiCategorical: 6 dims × 11 bins** |
+| **IK failure** | Operational-space control (always valid) | Alice: terminate -1; Bob: hold position |
 
 ---
 
@@ -279,6 +281,7 @@ ee_target_local[envs] += xyz           # integrate delta onto running target
 ee_target_local.clamp_(WS_X, WS_Y, WS_Z)  # clamp to workspace
 ```
 Workspace limits (env-local frame): X ∈ [−0.50, 0.50], Y ∈ [0.25, 0.70], Z ∈ [0.00, 0.55].
+EE home position applied at every phase sync: (X+0.02, Y=0.50, Z=0.05) — centres the arm over the T-block spawn at (0.0, 0.5).
 
 **Step 3 — Accumulate EE orientation target**
 
@@ -312,8 +315,8 @@ Seeding from `_prev_joint_cmd` (not physics joint positions) keeps cuRobo findin
 **Step 6 — IK failure handling**
 
 If `result.success[i]` is False for env `i`:
-- Revert `ee_target_local[i]` and `ee_target_quat_w[i]` to their pre-step snapshot (prevents drift compounding).
-- Fall back to `raw_cmd[i] = cur_joints[i]` (hold current physics state).
+- **Alice**: arm locked to current joint position with gripper open; episode terminated immediately with -1 penalty (prevents the EE accumulator from drifting into unrecoverable workspace). Episode manager reset, ghost hidden.
+- **Bob**: revert `ee_target_local[i]` and `ee_target_quat_w[i]` to their pre-step snapshot; fall back to `raw_cmd[i] = cur_joints[i]` (hold current physics state). No termination — Bob continues trying.
 
 IK fail rate is logged to TensorBoard each iteration as `Metrics/IKFailRate`.
 
@@ -335,7 +338,7 @@ After each `env.step()`, Isaac Lab's PhysX state is fresh. Any environment where
 needs_sync = phase_changed | dones
 if needs_sync.any():
     tcp_sync = (lf_w[sync_ids] + rf_w[sync_ids]) / 2
-    ee_target_local[sync_ids]  = tcp_sync − env_origins[sync_ids]  # re-anchor position
+    ee_target_local[sync_ids]  = tcp_sync − env_origins[sync_ids]  # re-anchor position, then apply home offset (X+0.02, Y=0.50, Z=0.05)
     prev_joint_cmd[sync_ids]   = physics_joint_pos[sync_ids]        # re-anchor joints
     ee_target_quat_w[sync_ids] = QUAT_TOOL_DOWN                     # reset orientation
 ```
@@ -480,9 +483,9 @@ L_total = L_PPO + abc_coef × L_BC + aux_coef × L_aux
 
 ### Alice obs (flat, `alice_obs_dim`)
 ```
-[robot_state(7) | obj1_state(14) | obj2_state(14)]
-= 35D (2 objects)
+[robot_state(7) | obj1_state(14)] = 21D (1 object — T-block)
 ```
+`num_objects=1` is the default for cuRobo training.
 No goal info. `robot_state` = `[ee_pose(6), gripper(1)]` (ZYX Euler, env-local frame).
 
 ### Bob obs (flat, `bob_obs_dim`)
