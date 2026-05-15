@@ -195,22 +195,9 @@ class AsyncDualPlayDiffIKEnvCfg(ManagerBasedRLEnvCfg):
             ),
         )
 
-        goal_ghost = RigidObjectCfg(
-            prim_path="{ENV_REGEX_NS}/GoalGhost",
-            init_state=RigidObjectCfg.InitialStateCfg(
-                pos=[0.0, 0.0, -1.0],
-                rot=[0.0, 0.0, 0.0, 1.0],
-            ),
-            spawn=UsdFileCfg(
-                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/t_shape.usda",
-                scale=(2.03, 2.03, 1.53),
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                    kinematic_enabled=True,
-                    disable_gravity=True,
-                ),
-                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.4, 0.7)),
-            ),
-        )
+        goal_ghost = None
+
+        goal_marker = None  # handled via VisualizationMarkers in train_curobo.py
 
     scene: AsyncDualPlaySceneCfg = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
     observations: AsyncDualPlayObservationsCfg = AsyncDualPlayObservationsCfg()

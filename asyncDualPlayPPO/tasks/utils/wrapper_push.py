@@ -19,7 +19,7 @@ import gymnasium as gym
 
 # ── Reward constants ───────────────────────────────────────────────────────────
 PUSH_SUCCESS_THRESHOLD_POS = 0.05   # metres
-PUSH_SUCCESS_THRESHOLD_ROT = 0.035  # radians (~2°)
+PUSH_SUCCESS_THRESHOLD_ROT = 0.2    # radians (~11°), matches ASP wrapper goal_tolerance
 PUSH_COMPLETION_BONUS = 5.0
 PUSH_DENSE_ALPHA = 10.0      # position improvement gain (metres → reward)
 PUSH_DENSE_ROT_ALPHA = 2.0   # rotation improvement gain (radians → reward)
@@ -247,16 +247,19 @@ class PushEnvWrapper:
         self.env.extras["goal_state"] = self.goal_pos_euler
 
     def _move_goal_ghost(self, env_ids: torch.Tensor):
-        """Teleport the visual goal_ghost marker to the sampled goal in world frame."""
-        if "goal_ghost" not in self.env.scene.rigid_objects:
+        """Teleport the flat goal marker to the sampled goal on the table surface."""
+        if "goal_marker" not in self.env.scene.rigid_objects:
             return
         origins = self.env.scene.env_origins[env_ids]          # (N, 3) world
-        goal_pos_local = self.goal_pos_euler[env_ids, :3]      # (N, 3) local
-        goal_euler = self.goal_pos_euler[env_ids, 3:6]         # (N, 3) euler
+        goal_pos_local = self.goal_pos_euler[env_ids, :3].clone()  # (N, 3) local
+        goal_pos_local[:, 2] = 0.001  # flat on table surface (no collision — handled by collision_props)
+        goal_euler = self.goal_pos_euler[env_ids, 3:6].clone()  # (N, 3) euler
+        goal_euler[:, 0] = 0.0  # zero roll — keep marker flat
+        goal_euler[:, 1] = 0.0  # zero pitch
         goal_pos_world = goal_pos_local + origins              # (N, 3) world
         goal_quat = _euler_to_quat(goal_euler)                 # (N, 4) wxyz
         pose_7d = torch.cat([goal_pos_world, goal_quat], dim=-1)
-        self.env.scene["goal_ghost"].write_root_pose_to_sim(pose_7d, env_ids=env_ids)
+        self.env.scene["goal_marker"].write_root_pose_to_sim(pose_7d, env_ids=env_ids)
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

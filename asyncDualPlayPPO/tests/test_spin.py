@@ -159,6 +159,7 @@ def main():
             push_dx=torch.tensor([sc["push_dx"]], device=device),
             push_dy=torch.tensor([sc["push_dy"]], device=device),
             push_dz=torch.tensor([0.0], device=device),
+            yaw    =torch.tensor([sc.get("yaw", 0.0)], device=device),
             obj_pos=obs[:, env.robot_dim:env.robot_dim + 3],
             current_ee_pos=current_ee,
             current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),

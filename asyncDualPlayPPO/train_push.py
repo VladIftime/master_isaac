@@ -111,6 +111,9 @@ def main():
 
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
+    import isaaclab.sim as sim_utils
+    from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
+    from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
     from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
     from asyncDualPlayPPO.tasks.utils.action_push import (
@@ -124,7 +127,7 @@ def main():
     ppo_cfg = load_cfg(ppo_cfg_path)
 
     # ── Push hyperparameters ─────────────────────────────────────────────────
-    max_pushes_per_episode = 3
+    max_pushes_per_episode = 5
     push_nsteps = 32          # pushes per PPO rollout (per env)
     noptepochs = 3
     nminibatches = 4
@@ -137,7 +140,7 @@ def main():
     _policy_cfg = ppo_cfg["params"]["policy"]
 
     num_cat_dims = 6
-    num_bins = _policy_cfg.get("num_bins", 11)
+    num_bins = 21
     use_lstm = _policy_cfg.get("use_lstm", True)
 
     print(f"[Push-PPO] Config: {push_nsteps} pushes/rollout, {num_cat_dims}D×{num_bins} bins, LSTM={use_lstm}")
@@ -190,10 +193,41 @@ def main():
 
     _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
 
+    # ── Goal marker visualizer (VisualizationMarkers — no physics, no collision) ──
+    _goal_viz = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/GoalMarkers",
+            markers={
+                "tblock": UsdFileCfg(
+                    usd_path=os.path.join(os.path.dirname(__file__), "assets/blocks/t_shape.usda"),
+                    scale=(2.0, 2.0, 0.01),
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
+                ),
+            },
+        )
+    )
+
+    def _update_goal_markers():
+        """Sync VisualizationMarkers with env.goal_pos_euler (no-op if no goals)."""
+        goals = env.goal_pos_euler  # (N, 6) local [x,y,z,roll,pitch,yaw]
+        N = env.num_envs
+        origins = env.env.scene.env_origins
+        pos = goals[:, :3].clone()
+        pos[:, 2] = 0.001  # flat on table
+        euler = goals[:, 3:6].clone()
+        euler[:, 0] = 0.0  # zero roll
+        euler[:, 1] = 0.0  # zero pitch
+        quat = _euler_to_quat(euler)
+        _goal_viz.visualize(translations=pos + origins, orientations=quat)
+
+    # Import _euler_to_quat from wrapper_push for the helper
+    from asyncDualPlayPPO.tasks.utils.wrapper_push import _euler_to_quat
+    env._euler_to_quat_imported = True
+
     # Workspace clamp limits (local / env-origin-relative frame, metres)
     _WS_X = (-0.50, 0.50)
     _WS_Y = (0.25,  0.70)
-    _WS_Z = ( 0.232, 0.55)  # floor = tool0 min reachable Z (TCP ~0.093 + offset ~0.139)
+    _WS_Z = ( 0.25, 0.55)  # floor = tool0 min reachable Z (TCP ~0.093 + offset ~0.139)
 
     # ── Robot body/joint indices ──────────────────────────────────────────────
     _robot_scene = env.env.scene["robot"]
@@ -246,6 +280,7 @@ def main():
     agent_cfg["learn"]["gamma"] = gamma
     agent_cfg["learn"]["lam"] = lam
     agent_cfg["learn"]["optim_stepsize"] = learning_rate
+    agent_cfg["policy"]["num_bins"] = num_bins
 
     agent = PPO(
         vec_env=env,
@@ -303,8 +338,9 @@ def main():
     best_success_rate = -1.0
     iteration = 0
     rew_buf     = deque(maxlen=push_nsteps * env.num_envs)
-    sr_buf      = deque(maxlen=200)
+    sr_buf      = deque(maxlen=push_nsteps * env.num_envs)
     pos_err_buf = deque(maxlen=push_nsteps * env.num_envs)
+    rot_err_buf = deque(maxlen=push_nsteps * env.num_envs)
     ema_rew     = 0.0
 
     print(f"\n{'='*80}\nPUSH-PPO BASELINE: {args.exp_name}\nLOG DIR: {run_dir}\n{'='*80}\n")
@@ -313,10 +349,12 @@ def main():
     print("Initialising environment...")
     with SuppressAllOutput():
         obs = env.reset()
+    _update_goal_markers()
     print("Training loop starting...")
     sys.stdout.flush()
 
     # Per-env state accumulators
+    episode_reward = torch.zeros(env.num_envs, device=env.device)
     ee_pos_local = _tcp_pos_local()
     ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
     prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
@@ -346,11 +384,10 @@ def main():
         for push_step in range(push_nsteps):
             # ── Agent predicts push action ────────────────────────────────────
             with torch.no_grad():
-                # Zero LSTM hidden before each push so evaluate() (which uses
-                # zero context) matches collection — avoids GAE ratio corruption.
-                if hidden_state is not None:
-                    hidden_state[0].zero_()
-                    hidden_state[1].zero_()
+                # Hidden state propagates across pushes within an episode.
+                # evaluate() uses zero-init per obs (known GAE mismatch for
+                # pushes after the first, accepted as a tradeoff for sequential
+                # push planning). State is zeroed at episode boundaries below.
                 h_in = (hidden_state[0], hidden_state[1]) if hidden_state else None
                 actions, log_prob, value, mu, sigma, new_h = agent.actor_critic.act_with_hidden(
                     obs, None, h_in,
@@ -370,6 +407,7 @@ def main():
                 push_dx=push_params[:, 2],
                 push_dy=push_params[:, 3],
                 push_dz=push_params[:, 5],
+                yaw=push_params[:, 4],
                 obj_pos=obj_pos,
                 current_ee_pos=ee_pos_local,
                 current_ee_quat=ee_quat_w,
@@ -421,6 +459,12 @@ def main():
 
             # ── After push: compute reward & done ────────────────────────────
             reward = env.compute_push_reward(obs)
+            # Envs that terminated mid-trajectory were auto-reset inside env.step().
+            # obs for those envs is post-reset, so compute_push_reward returns garbage
+            # (distance from spawn to goal, not where the block landed).  Zero it out
+            # so corrupted values don't enter GAE.
+            reward[terminated] = 0.0
+            episode_reward += reward
             done = env.check_done(obs, terminated)
 
             # ── Record transition ────────────────────────────────────────────
@@ -434,6 +478,7 @@ def main():
             cur_at_goal = env.at_goal.float()
             sr_buf.extend(cur_at_goal.cpu().tolist())
             pos_err_buf.extend(env._last_pos_err.cpu().tolist())
+            rot_err_buf.extend(env._last_rot_err.cpu().tolist())
 
             # Per-push compact summary (every 4 pushes to avoid spam)
             if push_step % 4 == 0:
@@ -462,8 +507,11 @@ def main():
                 rot_diff = (obj_euler_done - goal_euler_done) % (2.0 * torch.pi)
                 rot_diff = torch.where(rot_diff > torch.pi, 2.0 * torch.pi - rot_diff, rot_diff)
                 rot_err_done  = rot_diff.max(dim=-1)[0]
+                ep_rews_done = episode_reward[done_ids].clone()
+                episode_reward[done_ids] = 0.0
                 ep_pushes_pre = len(env.episode_push_counts)
                 env.reset_done_envs(done)
+                _update_goal_markers()
                 ep_pushes_post = len(env.episode_push_counts)
                 n_new = ep_pushes_post - ep_pushes_pre
                 if n_new > 0:
@@ -478,8 +526,9 @@ def main():
                         o_rot = obj_euler_done[gi]
                         pe = pos_err_done[gi]
                         re = float(rot_err_done[gi])
+                        er = float(ep_rews_done[gi])
                         _pr(
-                            f"  [Episode] pushes={p}  {status}  "
+                            f"  [Episode] pushes={p}  {status}  rew={er:+.3f}  "
                             f"goal=({g_pos[0]:+.3f},{g_pos[1]:+.3f},{g_pos[2]:+.3f}) "
                             f"orient=({g_rot[0]:+.3f},{g_rot[1]:+.3f},{g_rot[2]:+.3f})  "
                             f"final=({o_pos[0]:+.3f},{o_pos[1]:+.3f},{o_pos[2]:+.3f}) "
@@ -497,6 +546,7 @@ def main():
                     obs_dict_r, _ = env.env.reset(env_ids=reset_ids)
                     obs_new = env._build_obs(obs_dict_r)
                     obs[needs_reset] = obs_new[needs_reset]
+                    _update_goal_markers()
                 ee_pos_local[done] = _tcp_pos_local()[done]
                 ee_quat_w[done] = _QUAT_TOOL_DOWN.expand(done.sum().item(), 4).to(env.device)
                 prev_joint_cmd[done] = _robot_scene.data.joint_pos[:, _arm_jids][done]
@@ -517,6 +567,7 @@ def main():
 
         mean_rew    = np.mean(rew_buf) if rew_buf else 0.0
         mean_pos_err = np.mean(pos_err_buf) if pos_err_buf else 0.0
+        mean_rot_err = np.mean(rot_err_buf) if rot_err_buf else 0.0
         sr = np.mean(sr_buf) if sr_buf else 0.0
         ik_fail_rate = total_ik_fails / max(1, total_ik_steps)
 
@@ -537,6 +588,7 @@ def main():
         writer.add_scalar("Reward/EMA",              ema_rew,       iteration)
         writer.add_scalar("Metrics/SuccessRate",     sr,            iteration)
         writer.add_scalar("Metrics/PosError",        mean_pos_err,  iteration)
+        writer.add_scalar("Metrics/RotError",        mean_rot_err,  iteration)
         writer.add_scalar("Metrics/IKFailRate",      ik_fail_rate,  iteration)
         writer.add_scalar("Metrics/EpisodicSR",      ep_sr if not np.isnan(ep_sr) else 0.0, iteration)
         writer.add_scalar("Metrics/AvgPushesPerEpisode", avg_pushes if not np.isnan(avg_pushes) else 0.0, iteration)
@@ -549,7 +601,7 @@ def main():
             f"[Iter {iteration:5d}] "
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
             f"Rew={mean_rew:+.4f} (EMA {ema_rew:+.4f}) | "
-            f"PosErr={mean_pos_err:.4f} | SR={sr:.4f} | "
+            f"PosErr={mean_pos_err:.4f} | RotErr={mean_rot_err:.4f} | SR={sr:.4f} | "
             f"IK_fail={ik_fail_rate:.3f} | "
             f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
             f"BestSR={best_success_rate:.4f}"
@@ -568,6 +620,7 @@ def main():
         rew_buf.clear()
         sr_buf.clear()
         pos_err_buf.clear()
+        rot_err_buf.clear()
         iteration += 1
 
         if _shutdown_requested:

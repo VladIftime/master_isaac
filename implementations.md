@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-13 (T-block task space, goal validation fixes, Bob off-table/IK-fail termination, too-easy goal filter, per-episode logging)
+**Last updated**: 2026-05-14 (Push-PPO action-space overhaul: 21 bins, yaw→Z-rotation, 5 pushes/episode)
 
 ---
 
@@ -87,6 +87,14 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-13 | Alice IK fail → immediate episode end with -1 penalty; arm locked in place on fail; overrides wrapper's -3 |
 | 2026-05-13 | Too-easy goal filter: after resetting objects for Bob, if Bob starts within success threshold (pos<0.05m AND rot<0.2rad), goal rejected with -3 penalty |
 | 2026-05-13 | All documentation (implementations.md, net.md, README.md) updated for T-block scene, 1-object obs dims, goal validation, IK fail handling |
+| 2026-05-13 | Push-PPO Fix P1: module_push.py trunk init gain 0.01→sqrt(2), actor_head only keeps 0.01 |
+| 2026-05-13 | Push-PPO Fix P2: PUSH_SUCCESS_THRESHOLD_ROT 0.035→0.2 rad (1.1%→6.4% of rotation space) |
+| 2026-05-13 | Push-PPO Fix P3: removed per-push LSTM zeroing in train_push.py; hidden state propagates within episode, zeroed only at done boundaries |
+| 2026-05-13 | Push-PPO Fix P4: mid-trajectory terminated envs produced garbage rewards (post-reset obs in compute_push_reward); zeroed for those envs |
+| 2026-05-13 | Push-PPO Fix P5: sr_buf maxlen 200→push_nsteps×num_envs; was dropping first 80% of each rollout's successes from the SR metric |
+| 2026-05-14 | Push-PPO Fix P6: num_bins 11→21 — bin resolution 0.06m→0.03m, now below the 0.05m position success threshold. Actor output 66→126 dims |
+| 2026-05-14 | Push-PPO Fix P7: dim 4 (yaw, previously decoded but silently dropped) now drives EE Z-rotation during push phase. Phase 4 quat interpolates tool-down→yaw-rotated; Phase 5 retract keeps final yaw. `compute_push_waypoints` signature gains `yaw` parameter |
+| 2026-05-14 | Push-PPO Fix P8: max_pushes_per_episode 3→5 — gives policy room to recover from bad pushes and commit to precision approach |
 
 ---
 
@@ -328,6 +336,14 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix 22 | T-block task space: single T-block object, EE home Y=0.50 | Medium | ✅ Fixed | `tasks/async_dual_play_diffik.py:165-207`, `train_curobo.py:79,730-731,1048-1049` |
 | Fix 23 | Alice IK fail: no penalty or termination — arm gets stuck in fail-loop | High | ✅ Fixed | `train_curobo.py:1015-1043` |
 | Fix 24 | Trivially-easy goals: Bob starts within success threshold → instant win | High | ✅ Fixed | `tasks/utils/wrapper.py:652-678` |
+| Fix P1 | Push-PPO: trunk Linear layers inited with gain=0.01 — activations ~100× too small, policy gradient dead | Critical (Push) | ✅ Fixed | `algorithms/rl/ppo/module_push.py:79-86` |
+| Fix P2 | Push-PPO: rotation success threshold 0.035 rad (2°) with uniform [0,2π] goal yaw — 1.1% success window, completion bonus unreachable | High (Push) | ✅ Fixed | `tasks/utils/wrapper_push.py:22` |
+| Fix P3 | Push-PPO: LSTM hidden zeroed before every push — LSTM stateless within episode, cannot learn multi-push sequences | Medium (Push) | ✅ Fixed | `train_push.py:383-389` |
+| Fix P4 | Push-PPO: mid-trajectory physics termination auto-resets env; compute_push_reward then sees post-reset obs → garbage reward enters GAE | High (Push) | ✅ Fixed | `train_push.py:460-462` |
+| Fix P5 | Push-PPO: sr_buf maxlen=200 vs 1024 pushes/iter — only last ~6 push_steps sampled, SR metric systematically undercounts | Low (Push) | ✅ Fixed | `train_push.py:340` |
+| Fix P6 | Push-PPO: 11-bin action space → 0.06m minimum push_delta, coarser than 0.05m success threshold — precision literally impossible | Critical (Push) | ✅ Fixed | `train_push.py:143,283`, `action_push.py:decode_push_action` (num_bins=21) |
+| Fix P7 | Push-PPO: dim 4 (yaw) decoded to [-π,π] but silently dropped by waypoint generator — 1/6 of policy capacity wasted; no direct rotation control | Critical (Push) | ✅ Fixed | `action_push.py:41,125-143` (Phase 4 yaw quat interp), `train_push.py:409` (pass yaw) |
+| Fix P8 | Push-PPO: max_pushes_per_episode=3 → no room to recover from bad push or commit to precision approach; "make progress" the only rational strategy | Medium (Push) | ✅ Fixed | `train_push.py:130` |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -358,7 +374,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | `abc_n_trajs` | 16 | Trajectories sampled per Bob update |
 | `aux_coef` | 0.1 | GoalEncoder auxiliary distance loss |
 | `goal_embed_dim` | 8 | GoalEncoder latent K |
-| `num_bins` | 11 | Bins per MultiCategorical dimension |
+| `num_bins` | 11 | Bins per MultiCategorical dimension (ASP; Push baseline uses 21 — Fix P6) |
 | `num_cat_dims` | 6 | Action dims: X, Y, Z, Rx, Ry, Gripper |
 | `lstm_hidden_size` | 256 | LSTM hidden state size |
 | `alice_timesteps` | 100 | Steps per Alice phase |
@@ -686,28 +702,29 @@ environment executes a multi-step push trajectory using cuRobo IK.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Orientation | Fixed tool-down `[0,1,0,0]` | No yaw rotation — simplifies IK, all pushes face forward |
+| Orientation | Tool-down `[0,1,0,0]` for approach/descend; yaw-rotated during push phase (Fix P7) | Approach is tool-down for clean contact; push phase applies Z-rotation for direct torque control |
 | Gripper | Always closed during push | Simplest possible baseline |
 | Action space | Relative offsets from object | Generalizes across object positions |
 | Action frequency | Macro-action | Agent predicts push params once; env executes multi-step trajectory |
+| Pushes per episode | 5 (was 3, Fix P8) | Room to recover from bad pushes and commit to precision finish |
 
 ### 6.3 Push Primitive Architecture
 
 ```
 Phase 1: Approach   (18 steps)  EE → above object, tool-down, gripper open
 Phase 2: Engage     ( 5 steps)  Close gripper at approach height
-Phase 3: Descend    (24 steps)  EE down to contact height (table + 0.110 m)
-Phase 4: Push       (30 steps)  EE moves: contact_xy → contact_xy + (push_dx, push_dy)
-Phase 5: Retract    (24 steps)  EE up to approach height, gripper closed
+Phase 3: Descend    (24 steps)  EE down to contact height (table + 0.110 m), tool-down
+Phase 4: Push       (30 steps)  EE moves: contact_xy → contact_xy + (push_dx, push_dy), quat interpolates tool-down → tool-down ⊗ RotZ(yaw)  (Fix P7)
+Phase 5: Retract    (24 steps)  EE up to approach height, gripper closed, keeps final yaw quat
 Phase 6: Release    ( 2 steps)  Open gripper at approach height
-Phase 7: Return     (12 steps)  EE back to current TCP position at approach height
+Phase 7: Return     (12 steps)  EE back to current TCP position at approach height, tool-down
 
 Total: 115 substeps per push macro-action (2.3 s at 50 Hz)
 ```
 
 ### 6.4 Action Space
 
-MultiCategorical: **6D × 11 bins**
+MultiCategorical: **6D × 21 bins**  (Fix P6: was 11 bins → 0.03m/bin resolution, below 0.05m success threshold)
 
 | Dim | Parameter | Range |
 |-----|-----------|-------|
@@ -715,7 +732,7 @@ MultiCategorical: **6D × 11 bins**
 | 1 | `approach_offset_y` | [-0.15, 0.15] m |
 | 2 | `push_dx` | [-0.30, 0.30] m |
 | 3 | `push_dy` | [-0.30, 0.30] m |
-| 4 | `yaw` | [-π, π] rad (predicted but NOT used by waypoint generator) |
+| 4 | `yaw` | [-π, π] rad — **EE Z-rotation during push phase** (Fix P7: was dead, now drives torque) |
 | 5 | `push_dz` | [-0.03, 0.03] m |
 
 ### 6.5 Observation Space (29D)
@@ -740,7 +757,7 @@ where:
 - `α = 10.0` — position improvement gain (symmetric: rewards getting closer, penalizes moving away)
 - `γ = 2.0` — rotation improvement gain (lower weight because 1 rad ≈ 57° is harder to change than 1 m via planar pushing)
 - `β = 0.5` — distance penalty per step (keeps episodes short, prevents passive exploration)
-- `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 0.035 rad ≈ 2°)
+- `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 0.2 rad ≈ 11°) — threshold relaxed from 0.035 rad (Fix P2)
 
 **Design rationale** (Akella & Mason 1998, "Posing Polygonal Objects in the Plane by Pushing", IJRR):
 off-center pushes induce torque — the `(offset_x, offset_y)` parameters create a moment arm
@@ -754,13 +771,18 @@ equally. The `−β·d_now` penalty provides continuous pressure to finish episo
 ```
 obs (29D)
   │
-  ├─ Linear(29 → 512) → ReLU
-  ├─ Linear(512 → 256) → ReLU
-  ├─ LSTM(256 → 256)
+  ├─ Linear(29 → 512) → ReLU     ← orthogonal init gain=sqrt(2) (Fix P1)
+  ├─ Linear(512 → 256) → ReLU    ← orthogonal init gain=sqrt(2) (Fix P1)
+  ├─ Linear(256 → 128) → ReLU    ← orthogonal init gain=sqrt(2) (Fix P1)
+  ├─ LSTM(128 → 256)             ← hidden propagates across pushes within episode (Fix P3)
   │
-  ├─ Actor head:  Linear(256 → 66) → (6, 11) → MultiCategorical
-  └─ Critic head: Linear(256 → 128) → ReLU → Linear(128 → 1)
+  ├─ Actor head:  Linear(256 → 126) → (6, 21) → MultiCategorical  ← gain=0.01 (Fix P6)
+  └─ Critic head: Linear(29 → 512) → ReLU → Linear(512 → 256) → ReLU → Linear(256 → 128) → ReLU → Linear(128 → 1)
 ```
+
+**Weight init**: trunk layers use `orthogonal_(gain=sqrt(2))` for ReLU activations; actor head uses `gain=0.01` only (Fix P1). Previously gain=0.01 was applied to all layers, making activations ~100× too small and killing gradient signal.
+
+**LSTM sequencing**: hidden state propagates push-to-push within an episode; zeroed only at episode done boundaries. `evaluate()` uses zero-init per observation (known GAE inconsistency for pushes after the first, accepted tradeoff for sequential planning — Fix P3).
 
 ### 6.8 Files
 
@@ -773,6 +795,20 @@ obs (29D)
 | `train_push.py` | Training script |
 | `tests/validate_push.py` | Validation script |
 | `tests/test_push_primitive.py` | Interactive scenario-loop test |
+| `tests/test_spin.py` | Yaw-rotation spin test |
+
+### 6.11 Yaw Rotation Quaternion (Fix P7)
+
+The push phase quaternion interpolates from tool-down to a Z-rotated variant.
+Tool-down quaternion `q_td = (0, 1, 0, 0)` (wxyz) composed with Z-rotation by angle `a`
+produces `q = (0, cos(a/2), sin(a/2), 0)`. This is computed directly per waypoint
+in `action_push.py:125-137` without explicit quaternion multiplication:
+```python
+half = (alpha * yaw) * 0.5
+quat = (0, cos(half), sin(half), 0)  # tool-down ⊗ RotZ(alpha × yaw)
+```
+Phase 5 (retract) keeps the final yaw quat to avoid snap-back while near the object.
+Approach, descend, release, and return phases stay tool-down throughout.
 
 ### 6.9 Running
 

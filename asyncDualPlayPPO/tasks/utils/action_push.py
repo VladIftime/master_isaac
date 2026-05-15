@@ -24,7 +24,7 @@ PUSH_NSTEPS_RETURN   = 12
 # Descend/retract: 0.30→0.11 = 0.19 m in 24 steps ≈ 0.008 m/step
 
 # ── Fixed heights (relative to env origin, local frame) ────────────────────────
-PUSH_APPROACH_HEIGHT = 0.40  # Z height for approach / retract (above table)
+PUSH_APPROACH_HEIGHT = 0.50  # Z height for approach / retract (above table)
 PUSH_TABLE_SURFACE = 0.00     # table surface Z in local frame (object sits on this)
 
 
@@ -38,6 +38,7 @@ def compute_push_waypoints(
     push_dx: torch.Tensor,    # (N,)  push delta X
     push_dy: torch.Tensor,    # (N,)  push delta Y
     push_dz: torch.Tensor,    # (N,)  push delta Z
+    yaw: torch.Tensor,        # (N,)  EE Z-rotation angle during push (radians)
     obj_pos: torch.Tensor,    # (N,3) object position (local frame)
     current_ee_pos: torch.Tensor,  # (N,3) current EE position (local frame, TCP)
     current_ee_quat: torch.Tensor, # (N,4) current EE orientation (wxyz)
@@ -63,11 +64,11 @@ def compute_push_waypoints(
     Phases:
       1. Approach: EE→above object (tool-down, gripper open)
       2. Engage:   close gripper at approach height
-      3. Descend:  move down to surface contact (gripper closed)
-      4. Push:     move in push direction (gripper closed)
-      5. Retract:  move up above push target (gripper closed)
-      6. Release:  open gripper at approach height
-      7. Return:   move back above pre-push start position
+      3. Descend:  move down to surface contact (gripper closed, tool-down)
+      4. Push:     move in push direction while rotating EE by yaw (gripper closed)
+      5. Retract:  move up above push target (gripper closed, final yaw)
+      6. Release:  open gripper at approach height (tool-down)
+      7. Return:   move back above pre-push start position (tool-down)
     """
     N = offset_x.shape[0]
 
@@ -121,17 +122,32 @@ def compute_push_waypoints(
         pos = approach_pos * (1.0 - alpha) + contact_pos * alpha
         waypoints.append((pos, target_quat.clone(), close_g.clone()))
 
-    # ── Phase 4: Push (contact → push target) ─────────────────────────────
+    # ── Phase 4: Push (contact → push target, with yaw rotation) ─────────
     for i in range(1, n_push + 1):
         alpha = i / n_push
         pos = contact_pos * (1.0 - alpha) + push_target * alpha
-        waypoints.append((pos, target_quat.clone(), close_g.clone()))
+        interp_yaw = alpha * yaw
+        half = interp_yaw * 0.5
+        quat = torch.stack([
+            torch.zeros(N, device=device),
+            torch.cos(half),
+            torch.sin(half),
+            torch.zeros(N, device=device),
+        ], dim=-1)
+        waypoints.append((pos, quat, close_g.clone()))
+    final_yaw_half = yaw * 0.5
+    final_yaw_quat = torch.stack([
+        torch.zeros(N, device=device),
+        torch.cos(final_yaw_half),
+        torch.sin(final_yaw_half),
+        torch.zeros(N, device=device),
+    ], dim=-1)
 
-    # ── Phase 5: Retract (push target → up) ──────────────────────────────
+    # ── Phase 5: Retract (push target → up, keep final yaw) ──────────────
     for i in range(1, n_retract + 1):
         alpha = i / n_retract
         pos = push_target * (1.0 - alpha) + retract_pos * alpha
-        waypoints.append((pos, target_quat.clone(), close_g.clone()))
+        waypoints.append((pos, final_yaw_quat.clone(), close_g.clone()))
 
     # ── Phase 6: Release (open gripper at approach height) ────────────────
     for i in range(1, n_release + 1):
@@ -153,10 +169,10 @@ def compute_push_waypoints(
 
 def decode_push_action(
     bin_indices: torch.Tensor,   # (N, 6) integer bin indices
-    num_bins: int = 11,
+    num_bins: int = 21,
     max_offset_xy: float = 0.15,  # max approach offset in XY (meters)
     max_push_delta: float = 0.30, # max push delta in XY (meters)
-    max_yaw: float = 3.14159,     # max yaw (radians)
+    max_yaw: float = 1.0,         # max yaw (radians) — ±57°, keeps IK in elbow-up branch
     max_push_dz: float = 0.03,    # max push delta in Z (meters)
 ) -> torch.Tensor:
     """
@@ -192,7 +208,7 @@ class PushConfig:
     """Configuration for push trajectory generation."""
     max_offset_xy: float = 0.15
     max_push_delta: float = 0.30
-    max_yaw: float = 3.14159
+    max_yaw: float = 1.0
     max_push_dz: float = 0.03
     approach_height: float = PUSH_APPROACH_HEIGHT
     table_z: float = PUSH_TABLE_SURFACE
@@ -203,8 +219,7 @@ class PushConfig:
     n_retract: int = PUSH_NSTEPS_RETRACT
     n_release: int = PUSH_NSTEPS_RELEASE
     n_return: int = PUSH_NSTEPS_RETURN
-    num_bins: int = 11
-    num_bins: int = 11
+    num_bins: int = 21
 
 
 def total_push_substeps(cfg: "PushConfig | None" = None) -> int:

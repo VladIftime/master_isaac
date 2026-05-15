@@ -271,6 +271,7 @@ def main():
                     push_dx =torch.tensor([push_dx],  device=device),
                     push_dy =torch.tensor([push_dy],  device=device),
                     push_dz =torch.tensor([0.0],       device=device),
+                    yaw     =torch.tensor([0.0],       device=device),
                     obj_pos =obj_pos_obs,
                     current_ee_pos =current_ee,
                     current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),

@@ -690,14 +690,20 @@ class AsyncDualPlayEnvWrapper:
                     env_ids=valid_env_ids,
                 )
 
-            # Move Ghost to Alice's final pose (Marker for Bob)
-            goal_pos_local = goal_state[valid_env_ids, 0:3]
-            goal_quat = _euler_xyz_to_quat(goal_state[valid_env_ids, 3:6])
-            ghost_pos_global = goal_pos_local + origins
-            self.env.scene["goal_ghost"].write_root_pose_to_sim(
-                torch.cat([ghost_pos_global, goal_quat], dim=-1),
-                env_ids=valid_env_ids,
-            )
+            # Move marker to Alice's final pose on the table surface (shows goal for Bob)
+            if "goal_marker" in self.env.scene.rigid_objects:
+                goal_pos_local = goal_state[valid_env_ids, 0:3].clone()
+                goal_pos_local[:, 2] = -0.001  # below table surface — no collision with objects
+                # Only yaw rotation — keep marker flat on table
+                goal_euler = goal_state[valid_env_ids, 3:6].clone()
+                goal_euler[:, 0] = 0.0  # zero roll
+                goal_euler[:, 1] = 0.0  # zero pitch
+                goal_quat = _euler_xyz_to_quat(goal_euler)
+                marker_pos_global = goal_pos_local + origins
+                self.env.scene["goal_marker"].write_root_pose_to_sim(
+                    torch.cat([marker_pos_global, goal_quat], dim=-1),
+                    env_ids=valid_env_ids,
+                )
 
             reset_robot_joints(self.env, valid_env_ids)
             
@@ -812,6 +818,7 @@ class AsyncDualPlayEnvWrapper:
         continue_ids = env_ids[can_continue]
         if len(continue_ids) > 0:
             self.episode_manager.transition_to_alice(continue_ids)
+            self.hide_goal_ghost(continue_ids)
             _sp = reset_objects_to_random_safe_pose(self.env, continue_ids)
             reset_robot_joints(self.env, continue_ids)
             self.episode_manager.initial_states[continue_ids] = (
@@ -828,6 +835,7 @@ class AsyncDualPlayEnvWrapper:
         reset_ids = env_ids[~can_continue]
         if len(reset_ids) > 0:
             self.episode_manager.reset_episode(reset_ids, reason="Episode Complete")
+            self.hide_goal_ghost(reset_ids)
 
             _sp = reset_objects_to_random_safe_pose(self.env, reset_ids)
             reset_robot_joints(self.env, reset_ids)
@@ -1192,12 +1200,14 @@ class AsyncDualPlayEnvWrapper:
         return rewards, should_give_completion
 
     def hide_goal_ghost(self, env_ids: torch.Tensor):
-        """Move the visual goal marker under the table to hide it."""
-        if "goal_ghost" in self.env.scene.rigid_objects:
-            hide_pos = torch.zeros((len(env_ids), 7), device=self.device)
-            hide_pos[:, 2] = -1.0  # Under table
-            hide_pos[:, 3] = 1.0  # Identity orientation (w=1)
-            self.env.scene["goal_ghost"].write_root_pose_to_sim(hide_pos, env_ids=env_ids)
+        """Hide the goal marker by moving it under the table."""
+        if "goal_marker" in self.env.scene.rigid_objects:
+            N = len(env_ids)
+            hide_pos = torch.cat([
+                self.env.scene.env_origins[env_ids] + torch.tensor([0.0, 0.0, -1.0], device=self.device),
+                torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).expand(N, -1),
+            ], dim=-1)
+            self.env.scene["goal_marker"].write_root_pose_to_sim(hide_pos, env_ids=env_ids)
 
     def close(self):
         """Close wrapped environment"""

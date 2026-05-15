@@ -205,7 +205,11 @@ def main():
 
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
+    import isaaclab.sim as sim_utils
+    from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
+    from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
     from asyncDualPlayPPO.tasks.utils.events import reset_objects_to_random_safe_pose as _rand_reset_objs
+    from asyncDualPlayPPO.tasks.utils import terminations
     from asyncDualPlayPPO.tasks.async_dual_play_curobo import AsyncDualPlayCuRoboEnvCfg as AsyncDualPlayEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper import AsyncDualPlayEnvWrapper
     from asyncDualPlayPPO.tasks.utils.dummy_alice_wrapper import (
@@ -276,7 +280,8 @@ def main():
     print(
         f"[Config] cuRobo action space: {num_cat_dims}D × {num_bins} bins "
         f"(XYZ + Rx/Ry + gripper)  max_delta={_max_delta_m*100:.1f} cm  "
-        f"max_rot={math.degrees(_max_delta_rot):.1f} deg/step"
+        f"max_rot={math.degrees(_max_delta_rot):.1f} deg/step  "
+        f"rot_clamp=±{math.degrees(0.05):.0f} deg/step"
     )
 
     # ── Helper: decode bins → XYZ delta + Rx/Ry delta + updated sticky gripper ────
@@ -315,6 +320,14 @@ def main():
         scale=1.0,
         use_default_offset=False,
     )
+
+    # Tighten object termination bounds to match placement area + table surface
+    env_cfg.terminations.objects_off_table.func = terminations.objects_out_of_bounds
+    env_cfg.terminations.objects_off_table.params = {
+        "x_range": (-0.75, 0.75),  # placement_bounds X
+        "y_range": (0.2, 1.0),     # placement_bounds Y
+        "z_min": -0.2,              # below table
+    }
 
     if args.num_objects == 1:
         print("[Config] num_objects=1: removing cube from scene and observations.")
@@ -397,6 +410,53 @@ def main():
         retract_config=torch.zeros(env.num_envs, 6, device=env.device),
     )
     print("[cuRobo] CUDA graph warm-up done.")
+
+    # ── Goal marker visualizer (VisualizationMarkers — no physics, no collision) ──
+    _blk_dir = os.path.join(os.path.dirname(__file__), "assets/blocks")
+    _goal_viz = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/GoalMarkers",
+            markers={
+                "tblock": UsdFileCfg(
+                    usd_path=os.path.join(_blk_dir, "t_shape.usda"),
+                    scale=(2.0, 2.0, 0.01),
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
+                ),
+            },
+        )
+    )
+
+    def _euler_xyz_to_quat_local(euler: torch.Tensor) -> torch.Tensor:
+        """ZYX Euler (roll, pitch, yaw) → unit quaternion (w, x, y, z)."""
+        roll, pitch, yaw = euler[..., 0], euler[..., 1], euler[..., 2]
+        cr, sr = torch.cos(roll * 0.5), torch.sin(roll * 0.5)
+        cp, sp = torch.cos(pitch * 0.5), torch.sin(pitch * 0.5)
+        cy, sy = torch.cos(yaw * 0.5), torch.sin(yaw * 0.5)
+        w = cr * cp * cy + sr * sp * sy
+        x = sr * cp * cy - cr * sp * sy
+        y = cr * sp * cy + sr * cp * sy
+        z = cr * cp * sy - sr * sp * cy
+        return torch.stack([w, x, y, z], dim=-1)
+
+    def _update_goal_markers():
+        """Show flat T-block marker at goal position for Bob envs, hide for Alice."""
+        gs = env.episode_manager.goal_states  # (N, 6) or None
+        N = env.num_envs
+        origins = env.env.scene.env_origins
+        pos = torch.zeros(N, 3, device=env.device)
+        pos[:, 2] = -1.0  # hidden underground by default
+        quat = _QUAT_TOOL_DOWN.expand(N, 4).clone()
+        if gs is not None:
+            is_bob = env.episode_manager.is_bob_phase()
+            bob_ids = torch.where(is_bob)[0]
+            if len(bob_ids) > 0:
+                pos[bob_ids, :2] = gs[bob_ids, :2]
+                pos[bob_ids, 2] = 0.001  # flat on table surface
+                euler = gs[bob_ids, 3:6].clone()
+                euler[:, 0] = 0.0  # zero roll
+                euler[:, 1] = 0.0  # zero pitch
+                quat[bob_ids] = _euler_xyz_to_quat_local(euler)
+        _goal_viz.visualize(translations=pos + origins, orientations=quat)
 
     # Tool-pointing-down base quaternion (wxyz). Used to initialise and reset
     # ee_target_quat_w so the arm defaults to a vertical gripper orientation.
@@ -803,6 +863,8 @@ def main():
             alice_indices = torch.where(is_alice)[0]
             bob_indices   = torch.where(is_bob)[0]
 
+            _update_goal_markers()
+
             alice_local_idx = torch.empty(env.num_envs, dtype=torch.long, device=env.device)
             if len(alice_indices) > 0:
                 alice_local_idx[alice_indices] = torch.arange(len(alice_indices), device=env.device)
@@ -1048,7 +1110,6 @@ def main():
                     extras["alice_failed_this_step"][_alice_ik_fail_ids] = True
                 env.delayed_alice_reward[_alice_ik_fail_ids] = -1.0
                 env.episode_manager.reset_episode(_alice_ik_fail_ids, reason="Alice IK Failure")
-                env.hide_goal_ghost(_alice_ik_fail_ids)
                 if args.debug_rewards:
                     _dbg_rew_acc[_alice_ik_fail_ids] += -1.0
 

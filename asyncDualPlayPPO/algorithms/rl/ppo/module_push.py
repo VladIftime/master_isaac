@@ -5,8 +5,8 @@ No permutation-invariant encoder, no goal encoder — just a flat MLP trunk
 with optional LSTM.  Outputs 6D MultiCategorical action logits.
 
 Architecture:
-  obs (29D) → Linear(29→512)→ReLU → Linear(512→256)→ReLU
-    → LSTM(256→256) → actor_head(256→66) + critic_head(256→128→1)
+  obs (29D) → Linear(29→512)→ReLU → Linear(512→256)→ReLU → Linear(256→128)→ReLU
+    → LSTMCell(128→256) → actor_head(256→66) + critic_head(29→512→256→128→1)
 """
 
 import torch
@@ -76,10 +76,13 @@ class ActorCriticPush(nn.Module):
         critic_layers.append(nn.Linear(c_in, 1))
         self.critic = nn.Sequential(*critic_layers)
 
-        # Init
+        # Init: trunk → sqrt(2) (ReLU), actor head → 0.01, critic output → 1.0
+        _critic_out = list(self.critic.children())[-1]  # Linear(128→1)
+        _gain_map = {self.actor_head: 0.01, _critic_out: 1.0}
         for m in self.modules():
             if isinstance(m, nn.Linear):
-                nn.init.orthogonal_(m.weight, gain=0.01)
+                gain = _gain_map.get(m, np.sqrt(2))
+                nn.init.orthogonal_(m.weight, gain=gain)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0.0)
 

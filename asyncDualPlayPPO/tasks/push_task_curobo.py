@@ -109,6 +109,8 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
         contact_forces = None
         goal_ghost = None
 
+        goal_marker = None  # handled via VisualizationMarkers in train_push.py
+
         cube = None
         cylinder = None
         rect = None
