@@ -126,6 +126,7 @@ class ActorCriticPush(nn.Module):
 
     @torch.no_grad()
     def act_with_hidden(self, observations, states, hidden_state):
+        """Returns (actions, log_prob, value, mu, sigma, hidden_in, new_hidden)."""
         raw, new_hidden = self._actor_forward(observations, hidden_state)
         dist = self._make_distribution(raw)
         actions = dist.sample()
@@ -133,12 +134,16 @@ class ActorCriticPush(nn.Module):
         value = self.critic(observations)
         mu = torch.zeros_like(actions)
         sigma = torch.zeros_like(actions)
-        return actions, log_prob, value, mu, sigma, new_hidden
+        return actions, log_prob, value, mu, sigma, hidden_state, new_hidden
 
-    def evaluate(self, observations, states, actions):
+    def evaluate(self, observations, states, actions, hidden_state=None):
         B = observations.shape[0]
-        zero_h = torch.zeros(B, self.lstm_hidden_size, device=observations.device)
-        raw, _ = self._actor_forward(observations, (zero_h, zero_h))
+        if hidden_state is not None:
+            h_in = (hidden_state[0], hidden_state[1])
+        else:
+            h_in = (torch.zeros(B, self.lstm_hidden_size, device=observations.device),
+                    torch.zeros(B, self.lstm_hidden_size, device=observations.device))
+        raw, _ = self._actor_forward(observations, h_in)
         dist = self._make_distribution(raw)
         log_prob = dist.log_prob(actions.long())
         entropy = dist.entropy()

@@ -81,6 +81,10 @@ def main():
     parser.add_argument("--save_interval", type=int, default=50)
     parser.add_argument("--chkpt", type=str, default=None,
                         help="Resume from checkpoint path")
+    parser.add_argument("--resume_iteration", type=int, default=0,
+                        help="Iteration to start from when resuming")
+    parser.add_argument("--resume_best_sr", type=float, default=-1.0,
+                        help="Best success rate to restore on resume")
     parser.add_argument("--log-file", type=str, default=None,
                         help="Write terminal output to this file as well")
     AppLauncher.add_app_launcher_args(parser)
@@ -132,8 +136,8 @@ def main():
     noptepochs = 3
     nminibatches = 4
     cliprange = 0.2
-    ent_coef = 0.01
-    gamma = 0.998
+    ent_coef = 0.002
+    gamma = 0.95
     lam = 0.95
     learning_rate = 3e-4
 
@@ -336,9 +340,10 @@ def main():
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     best_success_rate = -1.0
-    iteration = 0
+    iteration = args.resume_iteration if args.chkpt else 0
     rew_buf     = deque(maxlen=push_nsteps * env.num_envs)
     sr_buf      = deque(maxlen=push_nsteps * env.num_envs)
+    rot_sr_buf  = deque(maxlen=push_nsteps * env.num_envs)
     pos_err_buf = deque(maxlen=push_nsteps * env.num_envs)
     rot_err_buf = deque(maxlen=push_nsteps * env.num_envs)
     ema_rew     = 0.0
@@ -389,7 +394,7 @@ def main():
                 # pushes after the first, accepted as a tradeoff for sequential
                 # push planning). State is zeroed at episode boundaries below.
                 h_in = (hidden_state[0], hidden_state[1]) if hidden_state else None
-                actions, log_prob, value, mu, sigma, new_h = agent.actor_critic.act_with_hidden(
+                actions, log_prob, value, mu, sigma, stored_h_in, new_h = agent.actor_critic.act_with_hidden(
                     obs, None, h_in,
                 )
                 if hidden_state is not None and new_h is not None:
@@ -472,11 +477,13 @@ def main():
                 obs_pre_push, obs_pre_push, actions, reward, done,
                 value, log_prob, mu, sigma,
                 masks=(~done).float(),
+                hidden_state=stored_h_in,
             )
 
             rew_buf.extend(reward.cpu().tolist())
             cur_at_goal = env.at_goal.float()
             sr_buf.extend(cur_at_goal.cpu().tolist())
+            rot_sr_buf.extend((env._last_rot_err < 0.2).float().cpu().tolist())
             pos_err_buf.extend(env._last_pos_err.cpu().tolist())
             rot_err_buf.extend(env._last_rot_err.cpu().tolist())
 
@@ -569,6 +576,7 @@ def main():
         mean_pos_err = np.mean(pos_err_buf) if pos_err_buf else 0.0
         mean_rot_err = np.mean(rot_err_buf) if rot_err_buf else 0.0
         sr = np.mean(sr_buf) if sr_buf else 0.0
+        rot_sr = np.mean(rot_sr_buf) if rot_sr_buf else 0.0
         ik_fail_rate = total_ik_fails / max(1, total_ik_steps)
 
         ema_rew = 0.9 * ema_rew + 0.1 * mean_rew
@@ -587,6 +595,7 @@ def main():
         writer.add_scalar("Reward/Mean",             mean_rew,      iteration)
         writer.add_scalar("Reward/EMA",              ema_rew,       iteration)
         writer.add_scalar("Metrics/SuccessRate",     sr,            iteration)
+        writer.add_scalar("Metrics/RotationSR",       rot_sr,        iteration)
         writer.add_scalar("Metrics/PosError",        mean_pos_err,  iteration)
         writer.add_scalar("Metrics/RotError",        mean_rot_err,  iteration)
         writer.add_scalar("Metrics/IKFailRate",      ik_fail_rate,  iteration)
@@ -601,7 +610,7 @@ def main():
             f"[Iter {iteration:5d}] "
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
             f"Rew={mean_rew:+.4f} (EMA {ema_rew:+.4f}) | "
-            f"PosErr={mean_pos_err:.4f} | RotErr={mean_rot_err:.4f} | SR={sr:.4f} | "
+            f"PosErr={mean_pos_err:.4f} | RotErr={mean_rot_err:.4f} | SR={sr:.4f} | RotSR={rot_sr:.4f} | "
             f"IK_fail={ik_fail_rate:.3f} | "
             f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
             f"BestSR={best_success_rate:.4f}"
@@ -619,6 +628,7 @@ def main():
 
         rew_buf.clear()
         sr_buf.clear()
+        rot_sr_buf.clear()
         pos_err_buf.clear()
         rot_err_buf.clear()
         iteration += 1

@@ -172,7 +172,7 @@ def decode_push_action(
     num_bins: int = 21,
     max_offset_xy: float = 0.15,  # max approach offset in XY (meters)
     max_push_delta: float = 0.30, # max push delta in XY (meters)
-    max_yaw: float = 1.0,         # max yaw (radians) — ±57°, keeps IK in elbow-up branch
+    max_yaw: float = 1.0,         # max yaw (radians) — ±57°, keeps IK in elbow-up branch; >1.0 risks elbow flips
     max_push_dz: float = 0.03,    # max push delta in Z (meters)
 ) -> torch.Tensor:
     """

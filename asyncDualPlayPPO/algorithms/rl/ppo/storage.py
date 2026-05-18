@@ -67,6 +67,9 @@ class RolloutStorage:
         self.sigma = torch.zeros(
             num_transitions_per_env, num_envs, *actions_shape, device=device
         )
+        self.hidden_h = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
+        self.hidden_c = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
+        self._has_hidden = False
 
         self.num_transitions_per_env = num_transitions_per_env
         self.num_envs = num_envs
@@ -84,6 +87,7 @@ class RolloutStorage:
         mu,
         sigma,
         masks=None,
+        hidden_state=None,
     ):
         if self.step >= self.num_transitions_per_env:
             raise AssertionError("Rollout buffer overflow")
@@ -98,6 +102,20 @@ class RolloutStorage:
         self.actions_log_prob[self.step].copy_(actions_log_prob.view(-1, 1))
         self.mu[self.step].copy_(mu)
         self.sigma[self.step].copy_(sigma)
+
+        if hidden_state is not None:
+            if not self._has_hidden:
+                self._has_hidden = True
+                self.hidden_h = torch.zeros(
+                    self.num_transitions_per_env, self.num_envs,
+                    hidden_state[0].shape[-1], device=self.device,
+                )
+                self.hidden_c = torch.zeros(
+                    self.num_transitions_per_env, self.num_envs,
+                    hidden_state[1].shape[-1], device=self.device,
+                )
+            self.hidden_h[self.step].copy_(hidden_state[0])
+            self.hidden_c[self.step].copy_(hidden_state[1])
         self.masks[self.step].copy_(
             masks.view(-1, 1)
             if masks is not None
@@ -108,6 +126,15 @@ class RolloutStorage:
 
     def clear(self):
         self.step = 0
+
+    def get_hidden_states(self):
+        """Return flattened (h,c) views for the filled portion, or None if unused."""
+        if not self._has_hidden:
+            return None
+        filled = self.step
+        h = self.hidden_h[:filled]
+        c = self.hidden_c[:filled]
+        return (h.view(-1, h.shape[-1]), c.view(-1, c.shape[-1]))
 
     def compute_returns(self, last_values, gamma, lam):
         """

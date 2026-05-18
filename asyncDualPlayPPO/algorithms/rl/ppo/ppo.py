@@ -107,12 +107,21 @@ class PPO:
         self.actor_critic.eval()
 
     def load(self, path):
-        self.actor_critic.load_state_dict(torch.load(path), strict=False)
+        checkpoint = torch.load(path)
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            self.actor_critic.load_state_dict(checkpoint["model_state_dict"], strict=False)
+            if self.optimizer is not None and "optimizer_state_dict" in checkpoint:
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        else:
+            self.actor_critic.load_state_dict(checkpoint, strict=False)
         self.current_learning_iteration = int(path.split("_")[-1].split(".")[0])
         self.actor_critic.train()
 
     def save(self, path):
-        torch.save(self.actor_critic.state_dict(), path)
+        state = {"model_state_dict": self.actor_critic.state_dict()}
+        if self.optimizer is not None:
+            state["optimizer_state_dict"] = self.optimizer.state_dict()
+        torch.save(state, path)
 
     def run(self, num_learning_iterations, log_interval=1):
         current_obs = self.vec_env.reset()
@@ -340,13 +349,23 @@ class PPO:
                 )[indices]
                 masks_batch = self.storage.masks.view(-1, 1)[indices]
 
+                # Retrieve stored hidden states if available (recurrent PPO fix)
+                hidden_full = self.storage.get_hidden_states()
+                if hidden_full is not None:
+                    hidden_batch = (hidden_full[0][indices], hidden_full[1][indices])
+                else:
+                    hidden_batch = None
+
                 (
                     actions_log_prob_batch,
                     entropy_batch,
                     value_batch,
                     mu_batch,
                     sigma_batch,
-                ) = self.actor_critic.evaluate(obs_batch, states_batch, actions_batch)
+                ) = self.actor_critic.evaluate(
+                    obs_batch, states_batch, actions_batch,
+                    hidden_state=hidden_batch,
+                )
 
                 if self.desired_kl is not None and self.schedule == "adaptive":
                     kl = torch.sum(

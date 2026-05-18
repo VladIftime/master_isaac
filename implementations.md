@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-14 (Push-PPO action-space overhaul: 21 bins, yaw→Z-rotation, 5 pushes/episode)
+**Last updated**: 2026-05-17 (Push-PPO Fix P18: reward scale α 10→12, γ 2→5 — fresh-run-safe)
 
 ---
 
@@ -95,6 +95,16 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-14 | Push-PPO Fix P6: num_bins 11→21 — bin resolution 0.06m→0.03m, now below the 0.05m position success threshold. Actor output 66→126 dims |
 | 2026-05-14 | Push-PPO Fix P7: dim 4 (yaw, previously decoded but silently dropped) now drives EE Z-rotation during push phase. Phase 4 quat interpolates tool-down→yaw-rotated; Phase 5 retract keeps final yaw. `compute_push_waypoints` signature gains `yaw` parameter |
 | 2026-05-14 | Push-PPO Fix P8: max_pushes_per_episode 3→5 — gives policy room to recover from bad pushes and commit to precision approach |
+| 2026-05-15 | Push-PPO Fix P9: max_yaw π→1.0 rad — at π, yaw forced IK into elbow-forward branch at extreme angles; ±1.0 rad (±57°) keeps IK in elbow-up branch and gives 0.1 rad/bin precision (below 0.2 rad success threshold) |
+| 2026-05-15 | Push-PPO Fix P10: decode_push_action default num_bins 11→21 (mismatch with train_push.py override); PushConfig duplicate `num_bins` line removed |
+| 2026-05-15 | Push-PPO Fix P11: checkpoint resume support — `--resume_iteration` and `--resume_best_sr` args; `ppo.py` save/load now includes optimizer state dict for proper momentum resumption; backward-compatible with old plain-state-dict checkpoints |
+| 2026-05-15 | Push-PPO Fix P12: ent_coef 0.01→0.002 — `ent_coef=0.01 × ~18 nats entropy = −0.18` dominated surrogate loss (~0.02), killing gradient signal. γ 0.998→0.95 — at 0.998 all 32 rollout steps got ~94% weight (GAE horizon ~19 steps), making every push look equally (un)important. +RotationSR metric for rotation-only success rate (rot_err<0.2 rad, independent of position gate) |
+| 2026-05-15 | Push-PPO Fix P13 (LSTM hidden-state propagation): `evaluate()` previously used zero-init LSTM, creating spurious `π_new/π_old` ratio for pushes 2–5. Now `act_with_hidden` returns `h_in`, stored in `RolloutStorage`, yielded during mini-batch update and passed to `evaluate()` — PPO ratio now reflects genuine weight changes, not LSTM amnesia. Files: `module_push.py`, `storage.py`, `ppo.py`, `train_push.py` |
+| 2026-05-15 | Push-PPO Fix P14 (rotation sub-bonus): `+2` bonus when `pos_err < 0.05 AND rot_err < 0.2`. Keeps the `+5` position-only gate (5.7% SR floor) and layers a priority-driven curriculum: primary spatial objective → secondary rotation polishing. `wrapper_push.py:24,224-232` |
+| 2026-05-15 | Push-PPO Fix P15 (yaw-isolated rotation reward): replaced `max(|roll|,|pitch|,|yaw|)` with `_yaw_distance_rad()` for the dense improvement term. Planar pushing should track only Z-axis rotation; roll/pitch wobble during translation was a noisy contaminant. Full max-Euler is kept for `rot_err` metric and tip-over detection. `wrapper_push.py:62-75,197-198,212` |
+| 2026-05-15 | Push-PPO Fix P16 (tip-over termination): if `abs(roll) > 0.3` or `abs(pitch) > 0.3` (object unrecoverably tipped), episode terminates with −5 penalty. Prunes garbage transitions from the PPO buffer and teaches safe `push_dz` constraints. `wrapper_push.py:30,241-243,286-288` |
+| 2026-05-15 | Push-PPO Fix P17 (continuous rotation penalty): added `−PUSH_DENSE_ROT_BETA × yaw_err` (β_rot=0.25) to the dense reward, mirroring the positional penalty `−β·d_now`. Provides per-push urgency to fix orientation, preventing the agent from loitering after achieving position. `wrapper_push.py:28,214` |
+| 2026-05-17 | Push-PPO Fix P18 (reward coefficient scaling, final): α 10→12 (1.2×), γ 2→5 (2.5×). Initial attempt at α=30,γ=10 caused catastrophic value function instability on fresh training (Val loss 52→5760→11105 — GAE chain reactions from noisy value predictions amplified by 5–16× larger return variance). α=12,γ=5 provides 2.4× wider reward gap vs original while keeping returns within the critic's initial fit range (expected Val loss ~12 at iter 0). Fresh training stable. `wrapper_push.py:25-26` |
 
 ---
 
@@ -344,6 +354,16 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix P6 | Push-PPO: 11-bin action space → 0.06m minimum push_delta, coarser than 0.05m success threshold — precision literally impossible | Critical (Push) | ✅ Fixed | `train_push.py:143,283`, `action_push.py:decode_push_action` (num_bins=21) |
 | Fix P7 | Push-PPO: dim 4 (yaw) decoded to [-π,π] but silently dropped by waypoint generator — 1/6 of policy capacity wasted; no direct rotation control | Critical (Push) | ✅ Fixed | `action_push.py:41,125-143` (Phase 4 yaw quat interp), `train_push.py:409` (pass yaw) |
 | Fix P8 | Push-PPO: max_pushes_per_episode=3 → no room to recover from bad push or commit to precision approach; "make progress" the only rational strategy | Medium (Push) | ✅ Fixed | `train_push.py:130` |
+| Fix P9 | Push-PPO: max_yaw=π in decode_push_action → 0.314 rad/bin (coarser than 0.2 rad threshold) AND IK forced into elbow-forward branch >~0.8 rad; reduced to 1.0 rad for 0.1 rad/bin precision and elbow-up branch stability | High (Push) | ✅ Fixed | `action_push.py:175,211` |
+| Fix P10 | Push-PPO: decode_push_action default num_bins=11 mismatched train_push.py override (21); PushConfig had duplicate `num_bins` line | Low (Push) | ✅ Fixed | `action_push.py:172,222-223` |
+| Fix P11 | Push-PPO: no checkpoint resume — iteration always restarted at 0; optimizer state (momentum) lost on load | Medium (Push) | ✅ Fixed | `train_push.py:84-87,341`, `ppo.py:109-123` |
+| Fix P12 | Push-PPO: ent_coef=0.01 too high vs reward scale — entropy bonus (−0.18) dominates surrogate loss (~±0.02), no gradient signal to drive policy toward rewards. γ=0.998 gives GAE horizon ~19 steps → all 32 rollout pushes look equally important, no credit assignment. | Critical (Push) | ✅ Fixed | `train_push.py:139-140` (ent_coef=0.002, γ=0.95), `train_push.py:345,483,575,594,604` (+RotationSR metric) |
+| Fix P13 | Push-PPO: LSTM amnesia in `evaluate()` — zero-init hidden state for pushes 2–5 creates spurious `π_new/π_old` ratio driven by memory state mismatch, not weight change. PPO clip fires on 80% of transitions regardless of update quality → gradient collapse. | Critical (Push) | ✅ Fixed | `module_push.py:128,139-153` (return h_in, accept hidden_state), `storage.py:73-75,92-101,120-126` (store/yield hidden), `ppo.py:352-357` (slice+pass), `train_push.py:395,476` (capture+store) |
+| Fix P14 | Push-PPO: position-only completion bonus teaches policy rotation doesn't matter — agent gets +5 for matching position and ignores rotation entirely. | Critical (Push) | ✅ Fixed | `wrapper_push.py:24,224-232` (+2 rotation sub-bonus gated on pos AND rot), `wrapper_push.py:109,131,292,305` (_gave_rot_bonus buffer) |
+| Fix P15 | Push-PPO: `max(|roll|,|pitch|,|yaw|)` for rotation reward tracks wobble instead of yaw during translation — tipped block's roll/pitch contaminates the dense improvement signal. | High (Push) | ✅ Fixed | `wrapper_push.py:62-75` (_yaw_distance_rad), `wrapper_push.py:197-198,212` (y_prev/y_now used for rot_imp) |
+| Fix P16 | Push-PPO: tipped blocks are unrecoverable but no termination — subsequent pushes waste episode budget, polluted transitions enter PPO buffer. | High (Push) | ✅ Fixed | `wrapper_push.py:30` (TIP_OVER_THRESHOLD), `wrapper_push.py:241-243` (−5 penalty), `wrapper_push.py:286-288` (check_done tip-over) |
+| Fix P17 | Push-PPO: positional penalty exists (−0.5 × d_now) but no rotational urgency — agent has no continuous pressure to fix yaw, can loiter after achieving position. | Medium (Push) | ✅ Fixed | `wrapper_push.py:28,214` (PUSH_DENSE_ROT_BETA=0.25, −β_rot × yaw_err) |
+| Fix P18 | Push-PPO: reward coefficients too small → GAE advantage signal near zero → PosErr frozen at 0.25m for 500 iterations despite rotation learning (RotSR 12%→36%). Scaling α (10→12, 1.2×) and γ (2→5, 2.5×) widens reward gap 2.4× with penalties held constant. Fresh-run-safe: initial value loss ~12 vs 52+ at α=30. | Critical (Push) | ✅ Fixed | `wrapper_push.py:25-26` (PUSH_DENSE_ALPHA=12, PUSH_DENSE_ROT_ALPHA=5) |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -732,7 +752,7 @@ MultiCategorical: **6D × 21 bins**  (Fix P6: was 11 bins → 0.03m/bin resoluti
 | 1 | `approach_offset_y` | [-0.15, 0.15] m |
 | 2 | `push_dx` | [-0.30, 0.30] m |
 | 3 | `push_dy` | [-0.30, 0.30] m |
-| 4 | `yaw` | [-π, π] rad — **EE Z-rotation during push phase** (Fix P7: was dead, now drives torque) |
+| 4 | `yaw` | [-1.0, 1.0] rad — **EE Z-rotation during push phase** (Fix P7: was dead dim; Fix P9: was ±π, reduced to ±1.0 rad for 0.1 rad/bin precision and elbow-up IK branch) |
 | 5 | `push_dz` | [-0.03, 0.03] m |
 
 ### 6.5 Observation Space (29D)
@@ -748,23 +768,31 @@ MultiCategorical: **6D × 21 bins**  (Fix P6: was 11 bins → 0.03m/bin resoluti
 Dense shaping computed **after each push macro-action**:
 
 ```
-R = α·(d_prev−d_now)  +  γ·(r_prev−r_now)  −  β·d_now  +  completion_bonus
+R = α·(d_prev−d_now)                                                            position improvement
+  + γ·(y_prev−y_now)                                                            yaw-only rotation improvement (Fix P15)
+  − β·d_now                                                                     distance penalty
+  − β_rot·y_now                                                                 continuous yaw penalty (Fix P17)
+  + completion_bonus           +5  for pos < 0.05                               position gate (keeps SR floor)
+  + rotation_sub_bonus          +2  for pos < 0.05 AND rot < 0.2                rotation polish (Fix P14)
+  − tip_penalty                 −5  if abs(roll) > 0.3 or abs(pitch) > 0.3      tip-over gate (Fix P16)
 ```
 
 where:
 - `d_prev` / `d_now` = L2 position error before / after the push (metres)
-- `r_prev` / `r_now` = max absolute Euler-angle difference before / after (radians, wraparound-aware)
-- `α = 10.0` — position improvement gain (symmetric: rewards getting closer, penalizes moving away)
-- `γ = 2.0` — rotation improvement gain (lower weight because 1 rad ≈ 57° is harder to change than 1 m via planar pushing)
-- `β = 0.5` — distance penalty per step (keeps episodes short, prevents passive exploration)
-- `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m, rot < 0.2 rad ≈ 11°) — threshold relaxed from 0.035 rad (Fix P2)
+- `y_prev` / `y_now` = yaw-only Euler difference before / after (radians, wraparound-aware) — isolates Z-axis rotation from roll/pitch wobble (Fix P15)
+- `α = 12.0` — position improvement gain (symmetric: rewards getting closer, penalizes moving away) — 1.2× scaled (Fix P18)
+- `γ = 5.0` — rotation improvement gain — 2.5× scaled (Fix P18)
+- `β = 0.5` — distance penalty per step
+- `β_rot = 0.25` — continuous yaw penalty per step (Fix P17)
+- `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m) — position-only gate preserves 5.7% SR floor
+- `rotation_sub_bonus = +2.0` when position AND rotation both match (pos < 0.05 m AND rot < 0.2 rad) — priority-driven curriculum: primary spatial → secondary rotation (Fix P14)
+- `tip_penalty = −5.0` when object is tipped (|roll| > 0.3 or |pitch| > 0.3 rad) — episode also terminates early (Fix P16)
 
-**Design rationale** (Akella & Mason 1998, "Posing Polygonal Objects in the Plane by Pushing", IJRR):
-off-center pushes induce torque — the `(offset_x, offset_y)` parameters create a moment arm
-relative to the object's center of mass. The agent can learn to chain pushes (e.g. push right
-side to spin CCW, then centered push to translate) to achieve any target pose. The symmetric
-improvement terms (no `max(0,·)` clipping) prevent reward hacking by penalizing regression
-equally. The `−β·d_now` penalty provides continuous pressure to finish episodes efficiently.
+**Design rationale**: off-center pushes induce torque via the `(offset_x, offset_y, yaw)` parameters.
+The symmetric improvement terms prevent reward hacking. The position gate keeps the bonus accessible
+at 5–6% event rate so GAE can propagate it. The rotation sub‑bonus creates a curriculum: once the
+agent reliably reaches the zone, the +2 teaches it to also match orientation. The tip‑over penalty
+prunes unrecoverable states from the PPO buffer, preventing batch pollution.
 
 ### 6.7 Network Architecture
 
@@ -782,7 +810,7 @@ obs (29D)
 
 **Weight init**: trunk layers use `orthogonal_(gain=sqrt(2))` for ReLU activations; actor head uses `gain=0.01` only (Fix P1). Previously gain=0.01 was applied to all layers, making activations ~100× too small and killing gradient signal.
 
-**LSTM sequencing**: hidden state propagates push-to-push within an episode; zeroed only at episode done boundaries. `evaluate()` uses zero-init per observation (known GAE inconsistency for pushes after the first, accepted tradeoff for sequential planning — Fix P3).
+**LSTM sequencing**: hidden state propagates push-to-push within an episode; zeroed only at episode done boundaries. Hidden states are stored at rollout time and yielded during PPO mini‑batch updates so `evaluate()` recomputes action log‑probs with the correct temporal context — the ratio `π_new/π_old` reflects genuine weight changes, not LSTM amnesia (Fix P13).
 
 ### 6.8 Files
 
@@ -820,6 +848,12 @@ python -m asyncDualPlayPPO.train_push \
 # Headless
 python -m asyncDualPlayPPO.train_push \
     --num_envs 64 --max_iterations 500 --exp_name push_baseline --headless
+
+# Resume from checkpoint (Fix P11)
+python -m asyncDualPlayPPO.train_push \
+    --num_envs 32 --max_iterations 1000 --exp_name push_baseline_v2 \
+    --chkpt runs/push_baseline/agent/model_250.pt \
+    --resume_iteration 250 --headless
 ```
 
 ### 6.10 Known Issues & Fixes

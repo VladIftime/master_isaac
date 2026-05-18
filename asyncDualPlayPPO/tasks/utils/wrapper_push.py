@@ -21,9 +21,13 @@ import gymnasium as gym
 PUSH_SUCCESS_THRESHOLD_POS = 0.05   # metres
 PUSH_SUCCESS_THRESHOLD_ROT = 0.2    # radians (~11°), matches ASP wrapper goal_tolerance
 PUSH_COMPLETION_BONUS = 5.0
-PUSH_DENSE_ALPHA = 10.0      # position improvement gain (metres → reward)
-PUSH_DENSE_ROT_ALPHA = 2.0   # rotation improvement gain (radians → reward)
+PUSH_ROTATION_SUB_BONUS = 2.0   # layered on top of position bonus when rotation also matched (Fix P14)
+PUSH_DENSE_ALPHA = 12.0      # position improvement gain (metres → reward)  — 1.2× scaled from original 10 (Fix P18)
+PUSH_DENSE_ROT_ALPHA = 5.0   # rotation improvement gain (radians → reward) — 2.5× scaled from original 2  (Fix P18)
 PUSH_DENSE_BETA = 0.5        # distance penalty (urgency)
+PUSH_DENSE_ROT_BETA = 0.25   # continuous rotation penalty — mirror of positional urgency (Fix P17)
+
+TIP_OVER_THRESHOLD = 0.3     # rad — if abs(roll) or abs(pitch) > this, object is unrecoverable (Fix P16)
 
 # Workspace bounds for goal sampling (local frame, relative to env origin)
 _GOAL_X_RANGE = (-0.40, 0.40)
@@ -46,6 +50,20 @@ def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Ten
     diff = (euler_a - euler_b) % (2.0 * torch.pi)
     diff = torch.where(diff > torch.pi, 2.0 * torch.pi - diff, diff)
     return diff.max(dim=-1)[0]
+
+
+def _yaw_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:
+    """Yaw-only Euler-angle difference with wraparound (range [0, π]).
+    
+    Isolates the Z-axis (yaw) component, ignoring roll/pitch wobble.
+    This is the correct metric for planar pushing: a tipped block's roll/pitch
+    error would otherwise contaminate the rotation reward with noise (Fix P15).
+    """
+    yaw_a = euler_a[..., 2]
+    yaw_b = euler_b[..., 2]
+    diff = (yaw_a - yaw_b) % (2.0 * torch.pi)
+    diff = torch.where(diff > torch.pi, 2.0 * torch.pi - diff, diff)
+    return diff
 
 
 def _euler_to_quat(euler: torch.Tensor) -> torch.Tensor:
@@ -107,6 +125,7 @@ class PushEnvWrapper:
         self.at_goal = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
         self.goal_pos_euler = torch.zeros(self.num_envs, 6, device=device)
         self._gave_completion = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
+        self._gave_rot_bonus = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
         self._last_pos_err = torch.zeros(self.num_envs, device=device)
         self._last_rot_err = torch.zeros(self.num_envs, device=device)
         self._last_pos_imp = torch.zeros(self.num_envs, device=device)
@@ -123,6 +142,7 @@ class PushEnvWrapper:
         self.push_count.zero_()
         self.at_goal.zero_()
         self._gave_completion.zero_()
+        self._gave_rot_bonus.zero_()
 
         obs_dict = self.env.reset()[0]
         all_ids = torch.arange(self.num_envs, device=self.device)
@@ -155,10 +175,14 @@ class PushEnvWrapper:
         """
         Dense reward after a complete push macro-action.
 
-        R = α·(d_prev−d_now) + γ·(r_prev−r_now) − β·d_now + completion_bonus
+        R = α·(d_prev−d_now)                           position improvement
+          + γ·(y_prev−y_now)                           yaw-only rotation improvement (Fix P15)
+          − β·d_now                                    distance penalty
+          − β_rot·y_now                                continuous yaw penalty (Fix P17)
+          + completion_bonus                            +5 for pos<0.05 (position gate)
+          + rotation_sub_bonus                          +2 for pos<0.05 AND yaw<0.2 (Fix P14)
+          − tip_penalty                                −5 for tipped block (Fix P16)
 
-        Symmetric formulation — rewards improvement, penalizes regression,
-        applies continuous distance penalty for urgency.
         Off-center pushes induce torque (Akella & Mason 1998).
         """
         cur_obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
@@ -168,47 +192,73 @@ class PushEnvWrapper:
 
         d_prev = (self.prev_obj_pos - goal_pos).norm(dim=-1)
         d_now = (cur_obj_pos - goal_pos).norm(dim=-1)
-        r_prev = _rot_distance_rad(self.prev_obj_euler, goal_euler)
-        r_now  = _rot_distance_rad(cur_obj_euler, goal_euler)
+
+        # Yaw-only improvement — isolates planar rotation from roll/pitch wobble (Fix P15)
+        y_prev = _yaw_distance_rad(self.prev_obj_euler, goal_euler)
+        y_now  = _yaw_distance_rad(cur_obj_euler, goal_euler)
+
+        # Full Euler diff for logging / tip-over detection only
+        r_now = _rot_distance_rad(cur_obj_euler, goal_euler)
 
         pos_err = d_now
         rot_err = r_now
         self._last_pos_err = pos_err
         self._last_rot_err = rot_err
-        self._last_d_prev = d_prev
-        self._last_d_now  = d_now
-        self._last_r_prev = r_prev
-        self._last_r_now  = r_now
-        at_goal = (pos_err < PUSH_SUCCESS_THRESHOLD_POS) & (rot_err < PUSH_SUCCESS_THRESHOLD_ROT)
+
+        at_goal = pos_err < PUSH_SUCCESS_THRESHOLD_POS
+        rot_at_goal = rot_err < PUSH_SUCCESS_THRESHOLD_ROT
 
         pos_imp  = PUSH_DENSE_ALPHA * (d_prev - d_now)
-        rot_imp  = PUSH_DENSE_ROT_ALPHA * (r_prev - r_now)
+        rot_imp  = PUSH_DENSE_ROT_ALPHA * (y_prev - y_now)          # yaw-only (Fix P15)
         penalty  = -PUSH_DENSE_BETA * d_now
-        reward = pos_imp + rot_imp + penalty
+        rot_penalty = -PUSH_DENSE_ROT_BETA * y_now                   # continuous yaw urgency (Fix P17)
+        reward = pos_imp + rot_imp + penalty + rot_penalty
 
+        # Completion bonus (position gate — keeps 5.7% SR floor)
         new_completion = at_goal & ~self._gave_completion
         completion = torch.where(new_completion,
-                                 torch.tensor(PUSH_COMPLETION_BONUS, device=self.device),
-                                 torch.zeros_like(reward))
+                                  torch.tensor(PUSH_COMPLETION_BONUS, device=self.device),
+                                  torch.zeros_like(reward))
         reward = reward + completion
+
+        # Rotation sub-bonus: +2 only when BOTH position AND rotation match (Fix P14)
+        new_rot_bonus = at_goal & rot_at_goal & (~self._gave_completion | ~self._gave_rot_bonus)
+        rot_bonus = torch.where(new_rot_bonus,
+                                torch.tensor(PUSH_ROTATION_SUB_BONUS, device=self.device),
+                                torch.zeros_like(reward))
+        reward = reward + rot_bonus
+
+        # Tip-over penalty: object is unrecoverable if tipped (Fix P16)
+        tipped = (cur_obj_euler[:, 0].abs() > TIP_OVER_THRESHOLD) | \
+                 (cur_obj_euler[:, 1].abs() > TIP_OVER_THRESHOLD)
+        tip_penalty = torch.where(tipped,
+                                  torch.tensor(-5.0, device=self.device),
+                                  torch.zeros_like(reward))
+        reward = reward + tip_penalty
+
         self._gave_completion[self._gave_completion | new_completion] = True
+        self._gave_rot_bonus[self._gave_rot_bonus | new_rot_bonus] = True
         self.at_goal = at_goal
 
         self._last_pos_imp = pos_imp
         self._last_rot_imp = rot_imp
         self._last_penalty  = penalty
-        self._last_completion = completion
+        self._last_completion = completion + rot_bonus + tip_penalty
 
         self.push_count += 1
 
         return reward
 
     def check_done(self, _obs: torch.Tensor, terminated: torch.Tensor) -> torch.Tensor:
-        """Episode ends: base termination, at-goal success, max pushes, or object launched."""
+        """Episode ends: base termination, max pushes, object launched, or tipped.
+        Position success does NOT terminate — episode runs to max_pushes
+        so rotation refinement can continue earning rot_imp reward."""
         max_pushes = self.push_count >= self.max_pushes_per_episode
-        obj_z = _obs[:, _OBS_ROBOT_DIM + 2]  # object Z (index 2 of position)
+        obj_z = _obs[:, _OBS_ROBOT_DIM + 2]
         launched = obj_z > 0.05
-        return terminated | self.at_goal | max_pushes | launched
+        tipped = (_obs[:, _OBS_ROBOT_DIM + 3].abs() > TIP_OVER_THRESHOLD) | \
+                 (_obs[:, _OBS_ROBOT_DIM + 4].abs() > TIP_OVER_THRESHOLD)
+        return terminated | max_pushes | launched | tipped
 
     def reset_done_envs(self, dones: torch.Tensor):
         """Reset per-env state and resample goals for envs that finished an episode."""
@@ -220,6 +270,7 @@ class PushEnvWrapper:
         self.push_count[done_ids] = 0
         self.at_goal[done_ids] = False
         self._gave_completion[done_ids] = False
+        self._gave_rot_bonus[done_ids] = False
         # Give each done env a fresh goal for the next episode
         self._sample_goals(done_ids)
         self._update_goal_in_extras()
