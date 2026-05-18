@@ -599,7 +599,7 @@ class ActorCritic(nn.Module):
             return logits.argmax(dim=-1).float()
         return raw  # action means for Gaussian
 
-    def evaluate(self, observations, states, actions, detach_goal_encoder=False):
+    def evaluate(self, observations, states, actions, detach_goal_encoder=False, hidden_state=None):
         """
         Evaluate log-probabilities and entropy for the given actions.
 
@@ -613,9 +613,14 @@ class ActorCritic(nn.Module):
             actions: actions to evaluate
             detach_goal_encoder: if True, detach goal encoder gradients
                                  (used during ABC updates)
+            hidden_state: optional (h, c) LSTM hidden state to seed the forward
+                          pass with the same state that was used when the action
+                          was collected.  Without this the PPO ratio π_new/π_old
+                          is contaminated by LSTM amnesia (zero-init mismatch).
         """
         raw, _ = self._actor_forward(
-            observations, detach_goal_encoder=detach_goal_encoder
+            observations, hidden_state=hidden_state,
+            detach_goal_encoder=detach_goal_encoder,
         )
         dist = self._make_distribution(raw)
         value = self.critic(states if self.asymmetric else observations)

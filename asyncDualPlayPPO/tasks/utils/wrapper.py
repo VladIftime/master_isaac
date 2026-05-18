@@ -19,8 +19,12 @@ See ASP_IMPLEMENTATION.md for detailed documentation.
 
 import torch
 import numpy as np
+import math
 from typing import Optional, Dict, Any, Tuple
 import gymnasium as gym
+
+
+
 
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import SceneEntityCfg
@@ -176,6 +180,8 @@ class AsyncDualPlayEnvWrapper:
         self._alice_phase_initialized = torch.zeros(
             env.num_envs, dtype=torch.bool, device=self.device
         )
+
+
 
         # Per-iteration aggregate stats (reset each iteration via reset_iter_stats())
         self._iter_stats = self._make_iter_stats()
@@ -595,6 +601,7 @@ class AsyncDualPlayEnvWrapper:
             self.placement_bounds,
             pos_threshold=alice_pos_req,
             rot_threshold=alice_rot_req,
+            min_meaningful_disp=0.10,
         )
 
         # Fix 10: removed 7cm min-XY filter — paper accepts rotation-only and short-range goals
@@ -1049,6 +1056,8 @@ class AsyncDualPlayEnvWrapper:
             )
             rewards[is_bob] = bob_rewards[is_bob]
             bob_achieved_completion[is_bob] = achieved_completion[is_bob]
+
+
 
         return rewards, bob_achieved_completion
 

@@ -18,6 +18,7 @@ def validate_goal(
     placement_bounds: dict,
     pos_threshold: float = 0.05,
     rot_threshold: float = 0.2,
+    min_meaningful_disp: float = 0.10,
 ) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
     """
     Validate goals set by Alice.
@@ -25,6 +26,9 @@ def validate_goal(
     Current Configuration:
     - Alice must move at least one object > pos_threshold (0.04m) OR > rot_threshold (0.2rad)
     - All objects must remain on the table.
+    - Goals with displacement below min_meaningful_disp get a shallow penalty (-1)
+      so Alice cannot farm tiny valid goals for +1 reward.  The goal remains valid
+      for Bob (he still gets to practice).
 
     Args:
         initial_state: Object states at episode start (batch, num_objects * state_dim)
@@ -33,10 +37,12 @@ def validate_goal(
         placement_bounds: Dictionary with x_range, y_range for valid placement area
         pos_threshold: Minimum position distance for considering an object "moved"
         rot_threshold: Minimum rotation distance for considering an object "moved"
+        min_meaningful_disp: Distance below which a valid goal is considered "shallow"
+                            (Alice gets -1 instead of +1)
 
     Returns:
         valid: Boolean tensor (batch,) - True if goal is valid
-        rewards: Float tensor (batch,) - Alice's validation reward (+1, -3, or 0)
+        rewards: Float tensor (batch,) - Alice's validation reward (+1, 0, -1, -3)
         reasons: List of strings (batch,) - Human-readable reason for the result
     """
     batch_size = initial_state.shape[0]
@@ -117,11 +123,16 @@ def validate_goal(
     )  # (batch,)
 
     # --- ASSIGN REWARDS AND REASONS (vectorised) ---
-    # Priority: Off Table > Not Moved > Unstable > Out of Zone > Valid
+    # Priority: Off Table > Not Moved > Shallow > Unstable > Out of Zone > Valid
     off_table = ~all_on_table
     not_moved = all_on_table & ~any_moved
     unstable = all_on_table & any_moved & ~all_stable
     out_of_zone = all_on_table & any_moved & all_stable & any_outside_placement
+
+    # Compute max displacement per env so we can penalise shallow-but-valid goals
+    max_displacement = pos_movements.max(dim=1)[0]  # (batch,)  max 3D pos change across objects
+    shallow = (all_on_table & any_moved & all_stable & ~any_outside_placement
+               & (max_displacement < min_meaningful_disp))
     is_valid = all_on_table & any_moved & all_stable & ~any_outside_placement
 
     rewards = torch.where(
@@ -136,13 +147,17 @@ def validate_goal(
                 torch.where(
                     out_of_zone,
                     torch.full((batch_size,), -3.0, device=initial_state.device),
-                    torch.ones(batch_size, device=initial_state.device),
+                    torch.where(
+                        shallow,
+                        torch.full((batch_size,), -1.0, device=initial_state.device),
+                        torch.ones(batch_size, device=initial_state.device),
+                    ),
                 ),
             ),
         ),
     )
 
-    valid = is_valid  # only truly valid goals accepted; out_of_zone → invalid
+    valid = is_valid  # shallow goals still valid for Bob — only Alice's reward is penalised
 
     reasons = ["Unknown"] * batch_size
     for i in range(batch_size):
@@ -154,6 +169,8 @@ def validate_goal(
             reasons[i] = "Unstable (0.0)"
         elif out_of_zone[i]:
             reasons[i] = "Out of Zone (-3.0)"
+        elif shallow[i]:
+            reasons[i] = f"Shallow (−1.0) max_disp={max_displacement[i]:.3f}m < {min_meaningful_disp:.2f}m"
         else:
             reasons[i] = "Valid Goal (+1.0)"
 

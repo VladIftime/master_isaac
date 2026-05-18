@@ -276,12 +276,12 @@ def main():
     num_cat_dims   = 6
     num_bins       = _pol_cfg.get("num_bins", 11)
     _max_delta_m   = _pol_cfg.get("max_delta_m", 0.02)
-    _max_delta_rot = _pol_cfg.get("max_delta_rot", 0.05)   # rad/step EE tilt
+    _max_delta_rot = _pol_cfg.get("max_delta_rot", 0.10)   # rad/step EE tilt (increased from 0.05 — Fix P26)
     print(
         f"[Config] cuRobo action space: {num_cat_dims}D × {num_bins} bins "
         f"(XYZ + Rx/Ry + gripper)  max_delta={_max_delta_m*100:.1f} cm  "
         f"max_rot={math.degrees(_max_delta_rot):.1f} deg/step  "
-        f"rot_clamp=±{math.degrees(0.05):.0f} deg/step"
+        f"rot_clamp=±{math.degrees(0.10):.0f} deg/step"
     )
 
     # ── Helper: decode bins → XYZ delta + Rx/Ry delta + updated sticky gripper ────
@@ -300,7 +300,7 @@ def main():
         xyz  = normalized[:, :3] * _max_delta_m                       # (N, 3)
         rxry = normalized[:, 3:5] * _max_delta_rot                    # (N, 2)
         # Clamp per-step delta so a single bin can't cause a violent orientation jump
-        rxry = rxry.clamp(-0.05, 0.05)
+        rxry = rxry.clamp(-0.10, 0.10)
         g_bin   = bin_indices[:, 5].float()
         new_gs  = gripper_state.clone()
         new_gs[g_bin < center - threshold + 1] = -1.0                 # bins 0-2  → close
@@ -469,6 +469,25 @@ def main():
         y = a[:,0]*b[:,2] - a[:,1]*b[:,3] + a[:,2]*b[:,0] + a[:,3]*b[:,1]
         z = a[:,0]*b[:,3] + a[:,1]*b[:,2] - a[:,2]*b[:,1] + a[:,3]*b[:,0]
         return torch.stack([w, x, y, z], dim=1)
+
+    def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:
+        """Full Euler-angle difference with wraparound (range [0, π]), max across axes.
+        
+        Matches _check_bob_success in wrapper.py and _rot_distance_rad in wrapper_push.py.
+        """
+        diff = (euler_a - euler_b) % (2.0 * torch.pi)
+        diff = torch.where(diff > torch.pi, 2.0 * torch.pi - diff, diff)
+        return diff.max(dim=-1)[0]
+
+    def _euler_diff_per_axis(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:
+        """Per-axis Euler difference with wraparound → (N, 3): [droll, dpitch, dyaw].
+        
+        Each axis wrapped independently to [0, π].  No max — keeps all three axes
+        separate for tracking orientation change on roll, pitch, and yaw.
+        """
+        diff = (euler_a - euler_b) % (2.0 * torch.pi)
+        diff = torch.where(diff > torch.pi, 2.0 * torch.pi - diff, diff)
+        return diff
 
     # Robot body/joint indices needed each rollout step (found once, reused)
     _robot_scene  = env.env.scene["robot"]
@@ -661,6 +680,11 @@ def main():
     bob_rew_buf     = deque(maxlen=rollout_length)
     bob_pos_err_buf = deque(maxlen=rollout_length)
     bob_rot_err_buf = deque(maxlen=rollout_length)
+    bob_pos_sr_buf  = deque(maxlen=rollout_length)
+    bob_rot_sr_buf  = deque(maxlen=rollout_length)
+    alice_rot_chg_roll_buf  = deque(maxlen=rollout_length)
+    alice_rot_chg_pitch_buf = deque(maxlen=rollout_length)
+    alice_rot_chg_yaw_buf   = deque(maxlen=rollout_length)
 
     best_bob_success_rate = -1.0
     last_alice_mean_rew   = 0.0
@@ -731,6 +755,11 @@ def main():
         bob_success_rate = np.mean(bob_success_buf) if bob_success_buf else 0.0
         mean_pos_err   = np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0
         mean_rot_err   = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0
+        bob_pos_sr     = np.mean(bob_pos_sr_buf) if bob_pos_sr_buf else 0.0
+        bob_rot_sr     = np.mean(bob_rot_sr_buf) if bob_rot_sr_buf else 0.0
+        alice_rot_chg_roll  = np.mean(alice_rot_chg_roll_buf) if alice_rot_chg_roll_buf else 0.0
+        alice_rot_chg_pitch = np.mean(alice_rot_chg_pitch_buf) if alice_rot_chg_pitch_buf else 0.0
+        alice_rot_chg_yaw   = np.mean(alice_rot_chg_yaw_buf) if alice_rot_chg_yaw_buf else 0.0
 
         writer.add_scalar("Loss/Bob/Value",      loss_val,        bob_updates)
         writer.add_scalar("Loss/Bob/Surrogate",  loss_surr,       bob_updates)
@@ -739,6 +768,11 @@ def main():
         writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
         writer.add_scalar("Metrics/Bob/PosError",    mean_pos_err, bob_updates)
         writer.add_scalar("Metrics/Bob/RotError",    mean_rot_err, bob_updates)
+        writer.add_scalar("Metrics/Bob/PositionSR",  bob_pos_sr,   bob_updates)
+        writer.add_scalar("Metrics/Bob/RotationSR",  bob_rot_sr,   bob_updates)
+        writer.add_scalar("Metrics/Alice/RotChgRoll",  alice_rot_chg_roll,  bob_updates)
+        writer.add_scalar("Metrics/Alice/RotChgPitch", alice_rot_chg_pitch, bob_updates)
+        writer.add_scalar("Metrics/Alice/RotChgYaw",   alice_rot_chg_yaw,   bob_updates)
         print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | ABC: {loss_abc:.4f} | SR: {bob_success_rate:.4f} | ABCCoef: {bob_ppo.abc_coef:.4f}", flush=True)
 
         if bob_success_rate > best_bob_success_rate:
@@ -751,8 +785,6 @@ def main():
                        os.path.join(bob_ppo.log_dir, "train_state_best.pt"))
 
         bob_rew_buf.clear()
-        bob_pos_err_buf.clear()
-        bob_rot_err_buf.clear()
         bob_updates += 1
 
     # ── SIGTERM handler ────────────────────────────────────────────────────────────
@@ -873,6 +905,10 @@ def main():
                 bob_local_idx[bob_indices] = torch.arange(len(bob_indices), device=env.device)
 
             # ── ALICE ACTIONS ─────────────────────────────────────────────────────
+            _alice_hidden_pre = (
+                (alice_hidden[0].clone(), alice_hidden[1].clone())
+                if alice_hidden is not None else None
+            )
             profiler.mark_start("alice_act")
             a_acts_active   = torch.zeros((len(alice_indices), _a_pdim), device=env.device)
             a_logprob_active = torch.zeros(len(alice_indices), device=env.device)
@@ -911,9 +947,21 @@ def main():
                     a_mu_active[hist_local]      = a_mu_hist
                     a_sigma_active[hist_local]   = a_sigma_hist
 
+                if _alice_hidden_pre is not None and len(hist_ids) > 0:
+                    _alice_hidden_pre[0][hist_ids] = 0.0
+                    _alice_hidden_pre[1][hist_ids] = 0.0
+
             profiler.mark_stop("alice_act")
 
+            if _alice_hidden_pre is not None:
+                _alice_hidden_pre[0][~is_alice] = 0.0
+                _alice_hidden_pre[1][~is_alice] = 0.0
+
             # ── BOB ACTIONS ───────────────────────────────────────────────────────
+            _bob_hidden_pre = (
+                (bob_hidden[0].clone(), bob_hidden[1].clone())
+                if bob_hidden is not None else None
+            )
             profiler.mark_start("bob_act")
             b_acts_active    = torch.zeros((len(bob_indices), _b_pdim), device=env.device)
             b_logprob_active = torch.zeros(len(bob_indices), device=env.device)
@@ -962,7 +1010,15 @@ def main():
                     b_mu_active[hist_bloc]      = b_mu_hist
                     b_sigma_active[hist_bloc]   = b_sig_hist
 
+                if _bob_hidden_pre is not None and len(hist_bids) > 0:
+                    _bob_hidden_pre[0][hist_bids] = 0.0
+                    _bob_hidden_pre[1][hist_bids] = 0.0
+
             profiler.mark_stop("bob_act")
+
+            if _bob_hidden_pre is not None:
+                _bob_hidden_pre[0][~is_bob] = 0.0
+                _bob_hidden_pre[1][~is_bob] = 0.0
 
             # ── POLICY TENSORS (for storage) ──────────────────────────────────────
             a_policy = torch.zeros((env.num_envs, _a_pdim), device=env.device)
@@ -1158,6 +1214,16 @@ def main():
                 if len(finished_bob) > 0:
                     iter_sr_counts[0] += len(finished_bob)
                     iter_sr_counts[1] += int(ep_info["bob_success_this_step"][finished_bob].sum().item())
+                # Bob position/rotation error + SR tracking (always, not debug-only)
+                _bob_pos = ep_info.get("bob_pos_err")
+                _bob_rot = ep_info.get("bob_rot_err")
+                if _bob_pos is not None and _bob_rot is not None and len(finished_bob) > 0:
+                    bob_pos_err_buf.extend(_bob_pos[finished_bob].cpu().tolist())
+                    bob_rot_err_buf.extend(_bob_rot[finished_bob].cpu().tolist())
+                    _pth = env.episode_manager.pos_threshold
+                    _rth = env.episode_manager.rot_threshold
+                    bob_pos_sr_buf.extend((_bob_pos[finished_bob] < _pth).cpu().tolist())
+                    bob_rot_sr_buf.extend((_bob_rot[finished_bob] < _rth).cpu().tolist())
 
             # ── ALICE STORAGE ──────────────────────────────────────────────────────
             a_lp_full    = torch.zeros(env.num_envs, device=env.device)
@@ -1189,6 +1255,7 @@ def main():
                 alice_ppo.storage.add_transitions(
                     current_alice_obs, next_alice_obs, a_policy,
                     rewards, dones, a_val_full, a_lp_full, a_mu_full, a_sigma_full, a_masks,
+                    hidden_state=_alice_hidden_pre,
                 )
             current_alice_obs = next_alice_obs
 
@@ -1226,6 +1293,7 @@ def main():
                 bob_ppo.storage.add_transitions(
                     current_bob_obs, next_bob_obs, b_policy,
                     rewards, dones, b_val_full, b_lp_full, b_mu_full, b_sigma_full, b_masks,
+                    hidden_state=_bob_hidden_pre if not args.alice_sandbox else None,
                 )
             current_bob_obs = next_bob_obs
 
@@ -1236,6 +1304,17 @@ def main():
                 alice_rewards_now = extras.get("alice_total_reward", torch.zeros(env.num_envs, device=env.device))
                 goal_valid       = ep_info.get("goal_valid", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
                 bob_success      = ep_info.get("bob_success", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
+
+                # ── Alice rotation change tracking (per-axis) ───────────────────────
+                _gstates = ep_info.get("goal_states")
+                _alice_end_ids = torch.where(_alice_just_ended | alice_dones_now)[0]
+                if len(_alice_end_ids) > 0 and _gstates is not None:
+                    _start_ori = _prev_initial[_alice_end_ids, 3:6]
+                    _goal_ori  = _gstates[_alice_end_ids, 3:6]
+                    _per_axis  = _euler_diff_per_axis(_start_ori, _goal_ori)  # (N, 3)
+                    alice_rot_chg_roll_buf.extend(_per_axis[:, 0].cpu().tolist())
+                    alice_rot_chg_pitch_buf.extend(_per_axis[:, 1].cpu().tolist())
+                    alice_rot_chg_yaw_buf.extend(_per_axis[:, 2].cpu().tolist())
 
                 # ── PHASE-END SUMMARY (debug_rewards mode) ────────────────────────
                 if args.debug_rewards:
@@ -1455,6 +1534,32 @@ def main():
                 f"not-moved(≤{_pos_req:.2f}m): {_not_mv}/{_alice_total}",
                 flush=True,
             )
+        # ── Alice rotation change summary (per-axis, always printed) ──────────────
+        _arc_roll  = np.mean(alice_rot_chg_roll_buf) if alice_rot_chg_roll_buf else 0.0
+        _arc_pitch = np.mean(alice_rot_chg_pitch_buf) if alice_rot_chg_pitch_buf else 0.0
+        _arc_yaw   = np.mean(alice_rot_chg_yaw_buf) if alice_rot_chg_yaw_buf else 0.0
+        print(
+            f"  [AliceRot] roll={_arc_roll:.4f}rad  pitch={_arc_pitch:.4f}rad  yaw={_arc_yaw:.4f}rad  "
+            f"(n={len(alice_rot_chg_roll_buf)})",
+            flush=True,
+        )
+        # ── Bob position/rotation SR summary ────────────────────────────────────
+        _bpsr = np.mean(bob_pos_sr_buf) if bob_pos_sr_buf else 0.0
+        _brsr = np.mean(bob_rot_sr_buf) if bob_rot_sr_buf else 0.0
+        print(
+            f"  [BobSR] PosSR={_bpsr:.4f}  RotSR={_brsr:.4f}  "
+            f"PosErr={np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0:.4f}m  "
+            f"RotErr={np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0:.4f}rad  "
+            f"(n={len(bob_pos_sr_buf)})",
+            flush=True,
+        )
+        bob_pos_sr_buf.clear()
+        bob_rot_sr_buf.clear()
+        bob_pos_err_buf.clear()
+        bob_rot_err_buf.clear()
+        alice_rot_chg_roll_buf.clear()
+        alice_rot_chg_pitch_buf.clear()
+        alice_rot_chg_yaw_buf.clear()
         profiler.end_iteration(bob_updates)
 
     # ── End of training ────────────────────────────────────────────────────────────

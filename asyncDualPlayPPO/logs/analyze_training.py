@@ -60,6 +60,12 @@ ALICE_DISP_RE = re.compile(
     r"(?:\s+avg Z=([-\d.]+)m)?"
     r"(?:.*?not-moved[^:]+:\s*(\d+)/\d+)?"
 )
+ALICE_ROT_RE = re.compile(
+    r"\[AliceRot\]\s+roll=([-\d.]+)rad\s+pitch=([-\d.]+)rad\s+yaw=([-\d.]+)rad\s+\(n=(\d+)\)"
+)
+BOB_SR_RE = re.compile(
+    r"\[BobSR\]\s+PosSR=([-\d.]+)\s+RotSR=([-\d.]+)\s+PosErr=([-\d.]+)m\s+RotErr=([-\d.]+)rad\s+\(n=(\d+)\)"
+)
 
 
 def parse_logs(log_dir: Path) -> dict:
@@ -110,6 +116,13 @@ def parse_logs(log_dir: Path) -> dict:
                 "max_xy": None,
                 "avg_z": None,
                 "not_moved_frac": None,
+                "alice_rot_roll": None,
+                "alice_rot_pitch": None,
+                "alice_rot_yaw": None,
+                "bob_pos_sr": None,
+                "bob_rot_sr": None,
+                "bob_pos_err": None,
+                "bob_rot_err": None,
             }
 
         # Attach [AliceDisp] displacement data to the preceding [Iter N]
@@ -131,6 +144,35 @@ def parse_logs(log_dir: Path) -> dict:
                     total = int(dm.group(2))
                     not_moved = int(dm.group(6))
                     iter_stats[n]["not_moved_frac"] = not_moved / total if total > 0 else None
+
+        # Attach [AliceRot] rotation-change data to the preceding [Iter N]
+        for rm in ALICE_ROT_RE.finditer(text):
+            rp = rm.start()
+            n = None
+            for ip, in_ in iter_positions:
+                if ip < rp:
+                    n = in_
+                else:
+                    break
+            if n is not None and iter_stats[n]["alice_rot_roll"] is None:
+                iter_stats[n]["alice_rot_roll"]  = float(rm.group(1))
+                iter_stats[n]["alice_rot_pitch"] = float(rm.group(2))
+                iter_stats[n]["alice_rot_yaw"]   = float(rm.group(3))
+
+        # Attach [BobSR] position/rotation SR data to the preceding [Iter N]
+        for bm in BOB_SR_RE.finditer(text):
+            bp = bm.start()
+            n = None
+            for ip, in_ in iter_positions:
+                if ip < bp:
+                    n = in_
+                else:
+                    break
+            if n is not None and iter_stats[n]["bob_pos_sr"] is None:
+                iter_stats[n]["bob_pos_sr"] = float(bm.group(1))
+                iter_stats[n]["bob_rot_sr"] = float(bm.group(2))
+                iter_stats[n]["bob_pos_err"] = float(bm.group(3))
+                iter_stats[n]["bob_rot_err"] = float(bm.group(4))
 
         # Old-format fallback: per-event [AliceEnd] lines
         valid_pos = []
@@ -166,6 +208,13 @@ def parse_logs(log_dir: Path) -> dict:
                 avg_z = ist.get("avg_z")
                 ik_fail_rate = ist.get("ik_fail_rate")
                 not_moved_frac = ist.get("not_moved_frac")
+                alice_rot_roll = ist.get("alice_rot_roll")
+                alice_rot_pitch = ist.get("alice_rot_pitch")
+                alice_rot_yaw = ist.get("alice_rot_yaw")
+                bob_pos_sr = ist.get("bob_pos_sr")
+                bob_rot_sr = ist.get("bob_rot_sr")
+                bob_pos_err = ist.get("bob_pos_err")
+                bob_rot_err = ist.get("bob_rot_err")
             else:
                 v_count = bisect.bisect_left(valid_pos, end) - bisect.bisect_left(valid_pos, prev_update_end)
                 inv_count = bisect.bisect_left(invalid_pos, end) - bisect.bisect_left(invalid_pos, prev_update_end)
@@ -190,6 +239,9 @@ def parse_logs(log_dir: Path) -> dict:
                         "avg_z": avg_z,
                         "ik_fail_rate": ik_fail_rate,
                         "not_moved_frac": not_moved_frac,
+                        "alice_rot_roll": alice_rot_roll,
+                        "alice_rot_pitch": alice_rot_pitch,
+                        "alice_rot_yaw": alice_rot_yaw,
                     }
                 )
             else:
@@ -207,6 +259,9 @@ def parse_logs(log_dir: Path) -> dict:
                         "avg_z": avg_z,
                         "ik_fail_rate": ik_fail_rate,
                         "not_moved_frac": not_moved_frac,
+                        "alice_rot_roll": alice_rot_roll,
+                        "alice_rot_pitch": alice_rot_pitch,
+                        "alice_rot_yaw": alice_rot_yaw,
                     }
                 )
             prev_update_end = end
@@ -215,15 +270,21 @@ def parse_logs(log_dir: Path) -> dict:
 
         bob_updates = []
         for bm in BOB_RE.finditer(text):
+            it = int(bm.group(1))
+            ist = iter_stats.get(it + 1, {}) if iter_stats else {}
             bob_updates.append(
                 {
-                    "local_iter": int(bm.group(1)),
+                    "local_iter": it,
                     "loss": float(bm.group(2)),
                     "val": float(bm.group(3)),
                     "rew": float(bm.group(4)),
                     "abc": float(bm.group(5)),
                     "sr": float(bm.group(6)),
                     "abc_coef": float(bm.group(7)) if bm.group(7) is not None else None,
+                    "pos_sr": ist.get("bob_pos_sr"),
+                    "rot_sr": ist.get("bob_rot_sr"),
+                    "pos_err": ist.get("bob_pos_err"),
+                    "rot_err": ist.get("bob_rot_err"),
                 }
             )
             
@@ -465,18 +526,27 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "avg_z",
         "ik_fail_rate",
         "not_moved_frac",
+        "alice_rot_roll",
+        "alice_rot_pitch",
+        "alice_rot_yaw",
+        "pos_sr",
+        "rot_sr",
+        "pos_err",
+        "rot_err",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in alice_records:
-            writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "", **r})
+            writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "",
+                             "pos_sr": "", "rot_sr": "", "pos_err": "", "rot_err": "", **r})
         for r in bob_records:
             writer.writerow({
                 "agent": "bob",
                 "entropy_coef": "", "valid_goals": "", "invalid_goals": "",
                 "avg_xy": "", "max_xy": "", "avg_z": "",
                 "ik_fail_rate": "", "not_moved_frac": "",
+                "alice_rot_roll": "", "alice_rot_pitch": "", "alice_rot_yaw": "",
                 **r,
             })
     print(f"[INFO] Wrote {out_path}")
@@ -519,6 +589,13 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "avg_z",
         "ik_fail_rate",
         "not_moved_frac",
+        "alice_rot_roll",
+        "alice_rot_pitch",
+        "alice_rot_yaw",
+        "pos_sr",
+        "rot_sr",
+        "pos_err",
+        "rot_err",
     ]
 
     def _v(d, k):
@@ -550,6 +627,13 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "avg_z": _v(upd, "avg_z"),
                     "ik_fail_rate": _v(upd, "ik_fail_rate"),
                     "not_moved_frac": _v(upd, "not_moved_frac"),
+                    "alice_rot_roll": _v(upd, "alice_rot_roll"),
+                    "alice_rot_pitch": _v(upd, "alice_rot_pitch"),
+                    "alice_rot_yaw": _v(upd, "alice_rot_yaw"),
+                    "pos_sr": "",
+                    "rot_sr": "",
+                    "pos_err": "",
+                    "rot_err": "",
                 })
             for upd in job["bob"]:
                 writer.writerow({
@@ -571,6 +655,13 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "avg_z": "",
                     "ik_fail_rate": "",
                     "not_moved_frac": "",
+                    "alice_rot_roll": "",
+                    "alice_rot_pitch": "",
+                    "alice_rot_yaw": "",
+                    "pos_sr": _v(upd, "pos_sr"),
+                    "rot_sr": _v(upd, "rot_sr"),
+                    "pos_err": _v(upd, "pos_err"),
+                    "rot_err": _v(upd, "rot_err"),
                 })
     print(f"[INFO] Wrote {out_path}")
 
@@ -620,7 +711,13 @@ def plot_metrics(
     a_z_by_chain        = [[r for r in recs if r.get("avg_z")          is not None] for recs in a_by_chain]
     a_ik_by_chain       = [[r for r in recs if r.get("ik_fail_rate")   is not None] for recs in a_by_chain]
     a_notmov_by_chain   = [[r for r in recs if r.get("not_moved_frac") is not None] for recs in a_by_chain]
+    a_roll_by_chain     = [[r for r in recs if r.get("alice_rot_roll")  is not None] for recs in a_by_chain]
+    a_pitch_by_chain    = [[r for r in recs if r.get("alice_rot_pitch") is not None] for recs in a_by_chain]
+    a_yaw_by_chain      = [[r for r in recs if r.get("alice_rot_yaw")   is not None] for recs in a_by_chain]
+    b_pos_sr_by_chain   = [[r for r in recs if r.get("pos_sr")          is not None] for recs in b_by_chain]
+    b_rot_sr_by_chain   = [[r for r in recs if r.get("rot_sr")          is not None] for recs in b_by_chain]
     has_ik_data         = any(a_ik_by_chain)
+    has_alice_rot_data  = any(a_roll_by_chain)
 
     # ------------------------------------------------------------------ helpers
     def _draw(ax, records_list, labels, colors, key):
@@ -753,8 +850,26 @@ def plot_metrics(
                                label="5% threshold")
             axes_ik[0].legend(fontsize=8)
             _draw(axes_ik[1], a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
-            _fmt(axes_ik[1], "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction (≤0.05 m)")
+            _fmt(axes_ik[1], "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
             plt.tight_layout(); _save(fig, "plot_curobo.png")
+
+        if has_alice_rot_data:
+            fig, axes_rot = plt.subplots(1, 3, figsize=(21, 5))
+            _draw(axes_rot[0], a_roll_by_chain, a_labels, alice_colors, "alice_rot_roll")
+            _fmt(axes_rot[0], "Roll (rad)", "Alice — Goal Rotation Change (Roll)")
+            _draw(axes_rot[1], a_pitch_by_chain, a_labels, alice_colors, "alice_rot_pitch")
+            _fmt(axes_rot[1], "Pitch (rad)", "Alice — Goal Rotation Change (Pitch)")
+            _draw(axes_rot[2], a_yaw_by_chain, a_labels, alice_colors, "alice_rot_yaw")
+            _fmt(axes_rot[2], "Yaw (rad)", "Alice — Goal Rotation Change (Yaw)")
+            plt.tight_layout(); _save(fig, "plot_alice_rotation.png")
+
+        if any(b_pos_sr_by_chain) or any(b_rot_sr_by_chain):
+            fig, axes_sr = plt.subplots(1, 2, figsize=(14, 5))
+            _draw(axes_sr[0], b_pos_sr_by_chain, b_labels, bob_colors, "pos_sr")
+            _fmt(axes_sr[0], "Position SR", "Bob — Position-Only Success Rate")
+            _draw(axes_sr[1], b_rot_sr_by_chain, b_labels, bob_colors, "rot_sr")
+            _fmt(axes_sr[1], "Rotation SR", "Bob — Rotation-Only Success Rate")
+            plt.tight_layout(); _save(fig, "plot_bob_sr_split.png")
 
         fig, ax = plt.subplots(figsize=(14, 5))
         _tension(ax)
@@ -765,20 +880,31 @@ def plot_metrics(
     # ============================================================ combined mode
     from matplotlib.gridspec import GridSpec
 
-    n_rows = 5 if has_ik_data else 4
-    fig_h  = 30 if has_ik_data else 24
+    n_rows = 5
+    extra_rows = 0
+    if has_ik_data:
+        extra_rows += 1  # IK fail + notmov
+    if has_alice_rot_data:
+        extra_rows += 1  # Alice rotation change (roll/pitch/yaw)
+    if any(b_pos_sr_by_chain) or any(b_rot_sr_by_chain):
+        extra_rows += 1  # Bob PosSR / RotSR
+    n_rows += extra_rows
+    fig_h = 6 * n_rows
     fig = plt.figure(figsize=(18, fig_h))
     gs  = GridSpec(n_rows, 3, figure=fig, hspace=0.45, wspace=0.32)
+    _row = 0
 
-    ax_loss    = fig.add_subplot(gs[0, 0])
-    ax_val     = fig.add_subplot(gs[0, 1])
-    ax_rew     = fig.add_subplot(gs[0, 2])
-    ax_sr      = fig.add_subplot(gs[1, 0])
-    ax_ent     = fig.add_subplot(gs[1, 1])
-    ax_abc_l   = fig.add_subplot(gs[1, 2])
-    ax_valid   = fig.add_subplot(gs[2, 0])
-    ax_invalid = fig.add_subplot(gs[2, 1])
-    ax_disp    = fig.add_subplot(gs[2, 2])
+    ax_loss    = fig.add_subplot(gs[_row, 0])
+    ax_val     = fig.add_subplot(gs[_row, 1])
+    ax_rew     = fig.add_subplot(gs[_row, 2]); _row += 1
+
+    ax_sr      = fig.add_subplot(gs[_row, 0])
+    ax_ent     = fig.add_subplot(gs[_row, 1])
+    ax_abc_l   = fig.add_subplot(gs[_row, 2]); _row += 1
+
+    ax_valid   = fig.add_subplot(gs[_row, 0])
+    ax_invalid = fig.add_subplot(gs[_row, 1])
+    ax_disp    = fig.add_subplot(gs[_row, 2]); _row += 1
     tension_row = n_rows - 1
     ax_tension = fig.add_subplot(gs[tension_row, :])
 
@@ -816,16 +942,41 @@ def plot_metrics(
     _fmt(ax_disp, "Displacement (m)", "Alice — Goal Displacement XY / Z")
 
     if has_ik_data:
-        ax_ik       = fig.add_subplot(gs[3, 0])
-        ax_notmov   = fig.add_subplot(gs[3, 1])
-        ax_ik_spare = fig.add_subplot(gs[3, 2])
+        ax_ik       = fig.add_subplot(gs[_row, 0])
+        ax_notmov   = fig.add_subplot(gs[_row, 1])
+        ax_ik_spare = fig.add_subplot(gs[_row, 2]); _row += 1
         _draw(ax_ik, a_ik_by_chain, a_labels, alice_colors, "ik_fail_rate")
         ax_ik.axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
                       label="5% threshold")
         _fmt(ax_ik, "IK Fail Rate", "cuRobo — IK Fail Rate")
         _draw(ax_notmov, a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
         _fmt(ax_notmov, "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
-        ax_ik_spare.axis("off")
+        if _row > 0:
+            ax_ik_spare.axis("off")
+
+    if has_alice_rot_data:
+        ax_rot_roll  = fig.add_subplot(gs[_row, 0])
+        ax_rot_pitch = fig.add_subplot(gs[_row, 1])
+        ax_rot_yaw   = fig.add_subplot(gs[_row, 2]); _row += 1
+        _draw(ax_rot_roll,  a_roll_by_chain,  a_labels, alice_colors, "alice_rot_roll")
+        _fmt(ax_rot_roll, "Roll (rad)", "Alice — Rot Change (Roll)")
+        _draw(ax_rot_pitch, a_pitch_by_chain, a_labels, alice_colors, "alice_rot_pitch")
+        _fmt(ax_rot_pitch, "Pitch (rad)", "Alice — Rot Change (Pitch)")
+        _draw(ax_rot_yaw,   a_yaw_by_chain,   a_labels, alice_colors, "alice_rot_yaw")
+        _fmt(ax_rot_yaw, "Yaw (rad)", "Alice — Rot Change (Yaw)")
+
+    if any(b_pos_sr_by_chain) or any(b_rot_sr_by_chain):
+        ax_pos_sr = fig.add_subplot(gs[_row, 0])
+        ax_rot_sr2 = fig.add_subplot(gs[_row, 1])
+        ax_spare_sr = fig.add_subplot(gs[_row, 2]); _row += 1
+        _draw(ax_pos_sr, b_pos_sr_by_chain, b_labels, bob_colors, "pos_sr")
+        _fmt(ax_pos_sr, "Position SR", "Bob — Position-Only Success Rate")
+        _draw(ax_rot_sr2, b_rot_sr_by_chain, b_labels, bob_colors, "rot_sr")
+        _fmt(ax_rot_sr2, "Rotation SR", "Bob — Rotation-Only Success Rate")
+        ax_spare_sr.axis("off")
+
+    tension_row = _row
+    ax_tension = fig.add_subplot(gs[tension_row, :])
 
     _tension(ax_tension)
 

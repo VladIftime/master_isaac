@@ -161,13 +161,19 @@ class PPOABC(PPO):
                 )[indices]
                 masks_batch = self.storage.masks.view(-1, 1)[indices]
 
+                hidden_full = self.storage.get_hidden_states()
+                if hidden_full is not None:
+                    hidden_batch = (hidden_full[0][indices], hidden_full[1][indices])
+                else:
+                    hidden_batch = None
+
                 (
                     actions_log_prob_batch,
                     entropy_batch,
                     value_batch,
                     mu_batch,
                     sigma_batch,
-                ) = self.actor_critic.evaluate(obs_batch, states_batch, actions_batch)
+                ) = self.actor_critic.evaluate(obs_batch, states_batch, actions_batch, hidden_state=hidden_batch)
 
                 # Fix 16: KL adaptive LR is dead in MC mode (sigma=zeros → KL=0 always).
                 # Guard with use_multicategorical to avoid misleading code path.

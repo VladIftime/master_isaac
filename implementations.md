@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-17 (Push-PPO Fix P18: reward scale α 10→12, γ 2→5 — fresh-run-safe)
+**Last updated**: 2026-05-19 (removed Bob dense reward — spurious signal killed Alice curriculum)
 
 ---
 
@@ -105,6 +105,13 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-15 | Push-PPO Fix P16 (tip-over termination): if `abs(roll) > 0.3` or `abs(pitch) > 0.3` (object unrecoverably tipped), episode terminates with −5 penalty. Prunes garbage transitions from the PPO buffer and teaches safe `push_dz` constraints. `wrapper_push.py:30,241-243,286-288` |
 | 2026-05-15 | Push-PPO Fix P17 (continuous rotation penalty): added `−PUSH_DENSE_ROT_BETA × yaw_err` (β_rot=0.25) to the dense reward, mirroring the positional penalty `−β·d_now`. Provides per-push urgency to fix orientation, preventing the agent from loitering after achieving position. `wrapper_push.py:28,214` |
 | 2026-05-17 | Push-PPO Fix P18 (reward coefficient scaling, final): α 10→12 (1.2×), γ 2→5 (2.5×). Initial attempt at α=30,γ=10 caused catastrophic value function instability on fresh training (Val loss 52→5760→11105 — GAE chain reactions from noisy value predictions amplified by 5–16× larger return variance). α=12,γ=5 provides 2.4× wider reward gap vs original while keeping returns within the critic's initial fit range (expected Val loss ~12 at iter 0). Fresh training stable. `wrapper_push.py:25-26` |
+| 2026-05-18 | ASP LSTM hidden-state propagation fix (same as Push-PPO Fix P13): `module.py.evaluate()` now accepts `hidden_state` parameter; Alice and Bob pre-action hidden states captured, zeroed for hist/non-active envs, stored via `storage.add_transitions()`, yielded during PPO mini-batch update, and passed to `evaluate()` — PPO ratio for ASP reflects genuine weight changes. Files: `module.py`, `ppo_abc.py`, `train_curobo.py` |
+| 2026-05-18 | New ASP rotation metrics: `Metrics/Alice/RotChgRoll`, `Metrics/Alice/RotChgPitch`, `Metrics/Alice/RotChgYaw` track per-axis orientation change Alice introduces in goals. `Metrics/Bob/PositionSR`, `Metrics/Bob/RotationSR` provide position-only and rotation-only SR independent of combined success — matches Push-PPO baseline pattern. Buffer population fix: `bob_pos_err_buf`/`bob_rot_err_buf` were dead (never pop'd). Iteration summary prints `[AliceRot]` and `[BobSR]` lines. Files: `train_curobo.py` |
+| 2026-05-18 | Log analyzer updated: `analyze_training.py` parses new `[AliceRot]` and `[BobSR]` log lines; CSV output gains `alice_rot_roll/pitch/yaw`, `pos_sr`, `rot_sr`, `pos_err`, `rot_err` fields; combined and separate plots include Alice rotation change (3-panel roll/pitch/yaw) and Bob PosSR/RotSR panels. |
+| 2026-05-18 | **ASP reward rules fixed**: `ent_coef` 0.05→0.005 (YAML) — entropy bonus was 35× surrogate loss at 0.05 × 14 nats max ≈ 0.7, now 3.5× at 0.005 × 14 ≈ 0.07. Both Alice and Bob inherit the lower value since they share `ppo_continuous.yaml`. Minimum-displacement penalty added to `validate_goal()`: goals with max displacement 0.05–0.10 m get −1 "shallow" penalty instead of +1. Goals remain valid for Bob (he still practices). Alice is pushed to create goals with meaningful displacement (>0.10 m for +1). `goal_validator.py`, `wrapper.py` |
+| 2026-05-19 | **Bob dense delta reward reverted (Fix P27)** — v5 (dense) killed Alice's emergent curriculum compared to v1 (sparse). `wrapper.py` |
+| 2026-05-19 | **Why the dense reward was reverted** — v1 (sparse-only, `asp_curobo_v1.log`) showed Alice's avg 3D displacement growing from 0.037m to 0.120m over 90 iterations, with not-moved dropping 84%→37% — Alice was learning. Bob SR stagnated at 4–5% but the adversarial curriculum was emerging. v5 (dense delta, `asp_curobo_v5.log`) showed Alice stuck at 0.047m with 80–90% not-moved for all 13 iterations. Root cause: the per-step `Φ(s')−Φ(s)` delta was zero-mean noise (±0.02 with 50% of steps producing exactly 0.0); sparse rewards (+1/−1/+5) fired on only ~10% of episodes; the combined reward stream produced GAE advantages indistinguishable from noise, starving both Bob's PPO and Alice's delayed outcome rewards of any learnable gradient. Sparse-only `{+1/−1/+5}` restored. |
+| 2026-05-18 | **Bob rotation control improved**: `max_delta_rot` 0.05→0.10 rad/step (2.9°→5.7°) and Rx/Ry clamp 0.05→0.10 rad — doubled EE tilt range per step so Bob can apply more torque to rotate objects through contact. `train_curobo.py:279,301-303` |
 
 ---
 
@@ -180,6 +187,7 @@ Policy output (6D MultiCategorical, 11 bins)
   - Bob phase (200 steps): reproduces goal, receives sparse reward
   - Phase stagger at startup: random offset across envs prevents simultaneous resets
   - LSTM hidden states zeroed on phase transitions and episode done events
+  - LSTM hidden-state propagation across PPO updates (Fix P19): pre-action hidden states captured, stored in RolloutStorage, yielded during mini-batch updates, passed to `evaluate()` — PPO ratio π_new/π_old reflects genuine weight changes, not LSTM amnesia
 
 - **Alice Behavioral Cloning (ABC)**:
   - Alice trajectory buffer: `(alice_traj_obs, alice_traj_act, alice_traj_len)` per env per rollout
@@ -192,7 +200,7 @@ Policy output (6D MultiCategorical, 11 bins)
   - Pool holds last 5 snapshots; saved every 50 iterations
 
 - **Fixed controllers** (SR-coupled controllers removed — Fixes 1 & 2):
-  - Alice entropy coef: `ent_coef = 0.05` (fixed from YAML)
+  - Alice entropy coef: `ent_coef = 0.005` (fixed from YAML; reduced from 0.05 per Fix P23)
   - Alice LR: cosine decay `lr_max=3e-4 → lr_min=5e-5` over `max_iterations`
   - Bob `abc_coef`: fixed at 0.5 (paper Table 2)
 
@@ -200,7 +208,7 @@ Policy output (6D MultiCategorical, 11 bins)
 
 - **Checkpoint system**: periodic, best-model, SIGTERM emergency; resume via `--chkpt_alice/bob`
 
-- **TensorBoard logging**: Loss, Reward, Metrics, GoalEncoder, ABC, IK overhead — full set
+- **TensorBoard logging**: Loss, Reward, Metrics, GoalEncoder, ABC, IK overhead — Alice rotation change (per-axis roll/pitch/yaw), Bob PosSR/RotSR (position-only and rotation-only success rates independent of combined success), Bob PosError/RotError (now actually populated, were dead)
 
 #### GoalEncoder (`algorithms/goal_encoder.py`)
 
@@ -232,9 +240,9 @@ Policy output (6D MultiCategorical, 11 bins)
 - Alice per-step rewards unconditionally 0.0 (Fixes 3 & 11)
 - T-block (`t_shape.usda`) as sole task object, scale (2.0, 2.0, 1.5), spawn position (0.0, 0.5, 0.05)
 - Goal ghost matches T-block shape (no random spawn function)
-- Goal validation: z_max=0.05 rejects airborne goals; out_of_zone goals fully invalid
+- Goal validation: z_max=0.05 rejects airborne goals; out_of_zone goals fully invalid; shallow goals (displacement 0.05–0.10m) valid for Bob but Alice gets −1 penalty instead of +1 (Fix P23)
 - Bob early termination: Alice paid +5, ghost hidden, objects random-safe reset
-- Bob reward: sparse `{+1/−1/+5}` only, no potential shaping (Fix 4)
+- Bob reward: sparse `{+1/−1/+5}` only. Bob receives zero per-step reward — all feedback comes from sparse outcomes at step boundaries and episode end. (Dense delta reward was tested v2–v5 and reverted per Fix P27 — it diluted GAE with zero-mean noise and killed Alice's emergent curriculum.)
 - 7 cm XY displacement filter removed from Alice's goal validity check (Fix 10)
 
 #### Diagnostic Test Suite (`diagnostics/`)
@@ -364,6 +372,15 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix P16 | Push-PPO: tipped blocks are unrecoverable but no termination — subsequent pushes waste episode budget, polluted transitions enter PPO buffer. | High (Push) | ✅ Fixed | `wrapper_push.py:30` (TIP_OVER_THRESHOLD), `wrapper_push.py:241-243` (−5 penalty), `wrapper_push.py:286-288` (check_done tip-over) |
 | Fix P17 | Push-PPO: positional penalty exists (−0.5 × d_now) but no rotational urgency — agent has no continuous pressure to fix yaw, can loiter after achieving position. | Medium (Push) | ✅ Fixed | `wrapper_push.py:28,214` (PUSH_DENSE_ROT_BETA=0.25, −β_rot × yaw_err) |
 | Fix P18 | Push-PPO: reward coefficients too small → GAE advantage signal near zero → PosErr frozen at 0.25m for 500 iterations despite rotation learning (RotSR 12%→36%). Scaling α (10→12, 1.2×) and γ (2→5, 2.5×) widens reward gap 2.4× with penalties held constant. Fresh-run-safe: initial value loss ~12 vs 52+ at α=30. | Critical (Push) | ✅ Fixed | `wrapper_push.py:25-26` (PUSH_DENSE_ALPHA=12, PUSH_DENSE_ROT_ALPHA=5) |
+| Fix P19 | ASP: `evaluate()` missing `hidden_state` → `TypeError` crash — `ppo.py` was updated to pass it (Fix P13 pattern) but `module.py` never accepted the kwarg. Same LSTM amnesia bug as Push-PPO Fix P13 applied to ASP. Pre-action hidden states now captured, zeroed for hist/non-active envs, stored in RolloutStorage, yielded during PPO mini-batches, passed to `evaluate()`. `ppo_abc.py.update()` also updated to retrieve hidden states. | Critical (ASP) | ✅ Fixed | `module.py:602-623`, `ppo_abc.py:164-176`, `train_curobo.py:876-879,924-932,1216,1254,1277` |
+| Fix P20 | ASP: `bob_pos_err_buf` / `bob_rot_err_buf` defined but never populated → PosError/RotError TensorBoard metrics always 0. Now filled from `ep_info["bob_pos_err"]`/`ep_info["bob_rot_err"]` for finished-Bob envs. New `bob_pos_sr_buf` / `bob_rot_sr_buf` track position-only and rotation-only SR independently (matches push baseline). | Medium (ASP) | ✅ Fixed | `train_curobo.py:1207-1216` |
+| Fix P21 | ASP: No Alice orientation-change tracking — impossible to know if curriculum shifts from pure translation to rotation manipulation. Per-axis `[AliceRot] roll/pitch/yaw` tracking added, computed as `_euler_diff_per_axis(start_ori, goal_ori)` on each Alice phase end. Logged to TensorBoard and iteration summary. | Medium (ASP) | ✅ Fixed | `train_curobo.py:482-490,1308-1316` |
+| Fix P22 | Log analyzer missing new ASP metrics — `analyze_training.py` now parses `[AliceRot]` and `[BobSR]` lines, writes to CSV, and plots in both combined-overview and separate-plot modes. | Low | ✅ Fixed | `logs/analyze_training.py` |
+| Fix P23 | ASP: `ent_coef=0.05` entropy bonus (~0.7) dominated Alice's surrogate loss (~0.02), keeping her random and unable to break out of 70–87% not-moved rate. Reduced to 0.005 — entropy contribution now ~0.07 (3.5× surrogate instead of 35×). Both Alice and Bob benefit since they share `ppo_continuous.yaml`. | Critical (ASP) | ✅ Fixed | `cfg/ppo/ppo_continuous.yaml:25` |
+| Fix P24 | ASP: Alice rewarded +1 for valid goals with minimal displacement (0.06m) and +5 when Bob fails — could farm +6 from micro-nudges. Added minimum-displacement penalty: goals with max displacement 0.05–0.10m get −1 "shallow" penalty (still valid for Bob's practice). Alice must move objects >0.10m to earn +1. Reward ladder: off-table −3 / not-moved 0 / shallow −1 / out-of-zone −3 / valid +1. | Critical (ASP) | ✅ Fixed | `utils/goal_validator.py:125-175`, `tasks/utils/wrapper.py:598` |
+| Fix P25 | ASP: Bob received only sparse {+1/−1/+5} rewards with zero per-step feedback — impossible to learn at 35 env scale. Added per-step potential-based delta reward `R = Φ(s') − Φ(s)` with `Φ(s) = −(pos_err + 3.0·yaw_err)`, scaled by 5.0. Strict delta-only — no constant per-step penalty. If Bob doesn't move, reward = 0. Iterated through v2 (value explosion), v3 (scaled down), v4 (penalty drain), v5 (too small). Final v5 form: meaningful gradient (~±0.06–0.28 per step), no explosion, no stationary drain. | Critical (ASP) | ❌ **REVERTED 2026-05-19** — see Fix P27 | |
+| Fix P26 | ASP: Bob couldn't control object rotation because EE tilt range was limited to ±0.05 rad/step (2.9°). `max_delta_rot` 0.05→0.10 rad/step (5.7°) and Rx/Ry clamp 0.05→0.10 rad. Bob now has 2× the per-step torque authority to rotate objects through contact. `BOB_DENSE_ROT_WEIGHT` set to 3.0 (vs position 5.0) so rotation carries meaningful weight in Φ(s). | High (ASP) | ✅ Fixed | `train_curobo.py:279,301-303`, `tasks/utils/wrapper.py:45` |
+| **Fix P27** | **Bob dense delta reward reverted** — the per-step `Φ(s') − Φ(s)` signal was zero-mean noise at 35-env scale, diluting GAE advantages and killing gradient flow for both agents. Sparse-only `{+1/−1/+5}` restored. | **Critical (ASP)** | ✅ Fixed | `tasks/utils/wrapper.py` (removed ~150 lines: `BOB_DENSE_POS_SCALE`, `BOB_DENSE_ROT_WEIGHT`, `_compute_bob_dense_reward()`, state tracking, step logging) |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -386,7 +403,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | `cliprange` | 0.2 | PPO ε-clip (paper Table 2) |
 | `noptepochs` | 3 | PPO mini-epochs |
 | `nminibatches` | 4 | PPO minibatches per epoch |
-| `ent_coef` | **0.05** | Alice entropy coef (fixed, Fix 2) |
+| `ent_coef` | **0.005** | Alice/Bob entropy coef (fixed; was 0.05 — Fix P23) |
 | `gamma` | 0.998 | Discount factor |
 | `lam` | 0.95 | GAE lambda |
 | `abc_coef` | **0.5** | Bob BC loss weight (fixed, Fix 1) |
