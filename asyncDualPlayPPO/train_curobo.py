@@ -162,7 +162,10 @@ def main():
         default="default",
         choices=["default", "rotated"],
     )
-    parser.add_argument("--num_objects", type=int, default=1, choices=[1, 2])
+    parser.add_argument("--num_objects", type=int, default=1, choices=[1, 2],
+                        help="Number of T-block task objects (each with own goal)")
+    parser.add_argument("--with_distractor", action="store_true",
+                        help="Spawn a random cube as physics clutter (no goal)")
     parser.add_argument("--dummy_alice", action="store_true")
     parser.add_argument("--diag_alice_exploration", action="store_true")
     parser.add_argument("--test_bob_reward", action="store_true")
@@ -329,13 +332,42 @@ def main():
         "z_min": -0.2,              # below table
     }
 
+    # ── Object / distractor mode ──────────────────────────────────────────────────
+    # num_objects=1, no distractor  → cube=Null, cube_obs=Null          (21D/29D)
+    # num_objects=2, no distractor  → cube=2nd T-block, cube_obs=active  (35D/51D)
+    # num_objects=1, with distractor → cube=random clutter, cube_goal_obs=Null (21D/29D)
     if args.num_objects == 1:
-        print("[Config] num_objects=1: removing cube from scene and observations.")
-        env_cfg.scene.cube = None
-        env_cfg.observations.alice_policy.cube_state     = None
-        env_cfg.observations.bob_policy.cube_state       = None
-        env_cfg.observations.bob_policy.cube_goal_state  = None
-        env_cfg.observations.bob_policy.cube_goal_distance = None
+        if args.with_distractor:
+            env_cfg.observations.alice_policy.cube_state     = None
+            env_cfg.observations.bob_policy.cube_state       = None
+            env_cfg.observations.bob_policy.cube_goal_state  = None
+            env_cfg.observations.bob_policy.cube_goal_distance = None
+            print("[Config] num_objects=1 + distractor: random cube as physics clutter (no obs, no goal).")
+        else:
+            env_cfg.scene.cube = None
+            env_cfg.observations.alice_policy.cube_state     = None
+            env_cfg.observations.bob_policy.cube_state       = None
+            env_cfg.observations.bob_policy.cube_goal_state  = None
+            env_cfg.observations.bob_policy.cube_goal_distance = None
+            print("[Config] num_objects=1: T-block only (21D/29D).")
+    else:  # num_objects == 2
+        if args.with_distractor:
+            print("[WARNING] --with_distractor ignored: cube already a task object in 2-object mode.")
+        # Override cube to be a second T-block (parent defaults to random cube shape)
+        env_cfg.scene.cube.spawn = UsdFileCfg(
+            usd_path=os.path.join(os.path.dirname(__file__), "assets/blocks/t_shape.usda"),
+            scale=(2.0, 2.0, 1.5),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=False,
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=4,
+                max_linear_velocity=1000.0,
+                max_angular_velocity=1000.0,
+                max_depenetration_velocity=10000.0,
+            ),
+        )
+        env_cfg.scene.cube.init_state.pos = (-0.25, 0.7, 0.05)
+        print("[Config] num_objects=2: two T-block task objects (35D/51D).")
 
     if args.arm_config == "rotated":
         print("[Config] Rotated arm configuration: shoulder −90°")
@@ -411,16 +443,28 @@ def main():
     )
     print("[cuRobo] CUDA graph warm-up done.")
 
-    # ── Goal marker visualizer (VisualizationMarkers — no physics, no collision) ──
+    # ── Goal marker visualizers — one per T-block (no physics, no collision) ──
     _blk_dir = os.path.join(os.path.dirname(__file__), "assets/blocks")
-    _goal_viz = VisualizationMarkers(
+    _goal_viz_1 = VisualizationMarkers(
         VisualizationMarkersCfg(
-            prim_path="/Visuals/GoalMarkers",
+            prim_path="/Visuals/GoalMarker1",
             markers={
                 "tblock": UsdFileCfg(
                     usd_path=os.path.join(_blk_dir, "t_shape.usda"),
                     scale=(2.0, 2.0, 0.01),
                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
+                ),
+            },
+        )
+    )
+    _goal_viz_2 = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/GoalMarker2",
+            markers={
+                "tblock2": UsdFileCfg(
+                    usd_path=os.path.join(_blk_dir, "t_shape.usda"),
+                    scale=(2.0, 2.0, 0.01),
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.6, 1.0)),
                 ),
             },
         )
@@ -439,24 +483,45 @@ def main():
         return torch.stack([w, x, y, z], dim=-1)
 
     def _update_goal_markers():
-        """Show flat T-block marker at goal position for Bob envs, hide for Alice."""
-        gs = env.episode_manager.goal_states  # (N, 6) or None
+        """Show flat T-block marker(s) at goal position(s) for Bob envs, hide for Alice."""
+        gs = env.episode_manager.goal_states  # (N, 6) or (N, 12)
         N = env.num_envs
         origins = env.env.scene.env_origins
-        pos = torch.zeros(N, 3, device=env.device)
-        pos[:, 2] = -1.0  # hidden underground by default
-        quat = _QUAT_TOOL_DOWN.expand(N, 4).clone()
+        n_obj = args.num_objects  # 1 or 2
+
+        # Marker 1 (target_object) — always present, orange
+        pos1 = torch.zeros(N, 3, device=env.device)
+        pos1[:, 2] = -1.0
+        quat1 = _QUAT_TOOL_DOWN.expand(N, 4).clone()
+
+        # Marker 2 (cube / second T-block) — only when n_obj >= 2, blue
+        pos2 = torch.zeros(N, 3, device=env.device)
+        pos2[:, 2] = -1.0
+        quat2 = _QUAT_TOOL_DOWN.expand(N, 4).clone()
+
         if gs is not None:
             is_bob = env.episode_manager.is_bob_phase()
             bob_ids = torch.where(is_bob)[0]
             if len(bob_ids) > 0:
-                pos[bob_ids, :2] = gs[bob_ids, :2]
-                pos[bob_ids, 2] = 0.001  # flat on table surface
-                euler = gs[bob_ids, 3:6].clone()
-                euler[:, 0] = 0.0  # zero roll
-                euler[:, 1] = 0.0  # zero pitch
-                quat[bob_ids] = _euler_xyz_to_quat_local(euler)
-        _goal_viz.visualize(translations=pos + origins, orientations=quat)
+                # Marker 1: first object goal
+                pos1[bob_ids, :2] = gs[bob_ids, :2]
+                pos1[bob_ids, 2] = 0.001
+                euler1 = gs[bob_ids, 3:6].clone()
+                euler1[:, 0] = 0.0
+                euler1[:, 1] = 0.0
+                quat1[bob_ids] = _euler_xyz_to_quat_local(euler1)
+
+                if n_obj >= 2:
+                    pos2[bob_ids, :2] = gs[bob_ids, 6:8]
+                    pos2[bob_ids, 2] = 0.001
+                    euler2 = gs[bob_ids, 9:12].clone()
+                    euler2[:, 0] = 0.0
+                    euler2[:, 1] = 0.0
+                    quat2[bob_ids] = _euler_xyz_to_quat_local(euler2)
+
+        _goal_viz_1.visualize(translations=pos1 + origins, orientations=quat1)
+        if n_obj >= 2:
+            _goal_viz_2.visualize(translations=pos2 + origins, orientations=quat2)
 
     # Tool-pointing-down base quaternion (wxyz). Used to initialise and reset
     # ee_target_quat_w so the arm defaults to a vertical gripper orientation.
@@ -682,6 +747,11 @@ def main():
     bob_rot_err_buf = deque(maxlen=rollout_length)
     bob_pos_sr_buf  = deque(maxlen=rollout_length)
     bob_rot_sr_buf  = deque(maxlen=rollout_length)
+    # Per-object error buffers for multi-object logging
+    bob_pos_obj0_buf = deque(maxlen=rollout_length)
+    bob_pos_obj1_buf = deque(maxlen=rollout_length)
+    bob_rot_obj0_buf = deque(maxlen=rollout_length)
+    bob_rot_obj1_buf = deque(maxlen=rollout_length)
     alice_rot_chg_roll_buf  = deque(maxlen=rollout_length)
     alice_rot_chg_pitch_buf = deque(maxlen=rollout_length)
     alice_rot_chg_yaw_buf   = deque(maxlen=rollout_length)
@@ -1224,6 +1294,15 @@ def main():
                     _rth = env.episode_manager.rot_threshold
                     bob_pos_sr_buf.extend((_bob_pos[finished_bob] < _pth).cpu().tolist())
                     bob_rot_sr_buf.extend((_bob_rot[finished_bob] < _rth).cpu().tolist())
+                # Per-object error logging for multi-object mode
+                _bob_pos_po = ep_info.get("bob_pos_per_obj")
+                _bob_rot_po = ep_info.get("bob_rot_per_obj")
+                if _bob_pos_po is not None and args.num_objects >= 2 and len(finished_bob) > 0:
+                    # _bob_pos_po is (num_objects, num_envs); extract finished envs
+                    bob_pos_obj0_buf.extend(_bob_pos_po[0, finished_bob].cpu().tolist())
+                    bob_rot_obj0_buf.extend(_bob_rot_po[0, finished_bob].cpu().tolist())
+                    bob_pos_obj1_buf.extend(_bob_pos_po[1, finished_bob].cpu().tolist())
+                    bob_rot_obj1_buf.extend(_bob_rot_po[1, finished_bob].cpu().tolist())
 
             # ── ALICE STORAGE ──────────────────────────────────────────────────────
             a_lp_full    = torch.zeros(env.num_envs, device=env.device)
@@ -1546,10 +1625,18 @@ def main():
         # ── Bob position/rotation SR summary ────────────────────────────────────
         _bpsr = np.mean(bob_pos_sr_buf) if bob_pos_sr_buf else 0.0
         _brsr = np.mean(bob_rot_sr_buf) if bob_rot_sr_buf else 0.0
+        _per_obj = ""
+        if args.num_objects >= 2:
+            _p0 = np.mean(bob_pos_obj0_buf) if bob_pos_obj0_buf else 0.0
+            _p1 = np.mean(bob_pos_obj1_buf) if bob_pos_obj1_buf else 0.0
+            _r0 = np.mean(bob_rot_obj0_buf) if bob_rot_obj0_buf else 0.0
+            _r1 = np.mean(bob_rot_obj1_buf) if bob_rot_obj1_buf else 0.0
+            _per_obj = f"Obj0_pos={_p0:.4f} Obj0_rot={_r0:.4f}  Obj1_pos={_p1:.4f} Obj1_rot={_r1:.4f}  "
         print(
             f"  [BobSR] PosSR={_bpsr:.4f}  RotSR={_brsr:.4f}  "
             f"PosErr={np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0:.4f}m  "
             f"RotErr={np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0:.4f}rad  "
+            f"{_per_obj}"
             f"(n={len(bob_pos_sr_buf)})",
             flush=True,
         )
@@ -1557,6 +1644,10 @@ def main():
         bob_rot_sr_buf.clear()
         bob_pos_err_buf.clear()
         bob_rot_err_buf.clear()
+        bob_pos_obj0_buf.clear()
+        bob_pos_obj1_buf.clear()
+        bob_rot_obj0_buf.clear()
+        bob_rot_obj1_buf.clear()
         alice_rot_chg_roll_buf.clear()
         alice_rot_chg_pitch_buf.clear()
         alice_rot_chg_yaw_buf.clear()

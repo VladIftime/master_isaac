@@ -354,7 +354,7 @@ def main():
     env_cfg.scene.num_envs = args.num_envs
 
     if args.num_objects == 1:
-        print("[Config] num_objects=1: removing cube from scene and observations.")
+        print("[Config] num_objects=1: removing second T-block from scene and observations.")
         env_cfg.scene.cube = None
         env_cfg.observations.alice_policy.cube_state = None
         env_cfg.observations.bob_policy.cube_state = None

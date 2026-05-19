@@ -156,9 +156,11 @@ def reset_objects_to_random_safe_pose(
         pass
 
     try:
-        # Place cube 10 cm to the left of the target so they don't overlap
-        cx_local = (x_local - 0.10).clamp(x_range[0], x_range[1])
-        cy_local = y_local
+        # Place second object offset from target so they don't collide.
+        # T-block at scale 2.0 is ~0.10×0.16 m; 20 cm X + small Y jitter ensures
+        # clearance even at worst-case random orientations.
+        cx_local = (x_local - 0.20).clamp(x_range[0], x_range[1])
+        cy_local = (y_local + 0.10).clamp(y_range[0], y_range[1])
         c_spawn = torch.stack([cx_local, cy_local, spawn_z], dim=1)
         c_world = c_spawn + env_origins
         quat = identity_quat.unsqueeze(0).expand(num_resets, -1)

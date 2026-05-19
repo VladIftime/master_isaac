@@ -37,8 +37,12 @@ class AsyncDualPlayObservationsCfg:
     """
     Asymmetric observations for Alice and Bob.
 
-    Alice sees robot state and object state.
-    Bob sees the same, plus the goal state and per-object distances to the goal.
+    Alice sees robot state and object state(s).
+    Bob sees the same, plus goal state and per-object distances.
+
+    cube_state / cube_goal_state / cube_goal_distance are defined for the
+    2-object task mode.  In 1-object mode train_curobo.py sets them to None.
+    In distractor mode only cube_goal_state / cube_goal_distance are nulled.
     """
 
     @configclass
@@ -47,15 +51,11 @@ class AsyncDualPlayObservationsCfg:
 
         ee_pose = ObsTerm(
             func=observations.ee_poses,
-            params={
-                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-            },
+            params={"ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link")},
         )
         gripper_pos = ObsTerm(
             func=observations.gripper_positions,
-            params={
-                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
-            },
+            params={"arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"])},
         )
         object_state = ObsTerm(
             func=observations.object_states,
@@ -80,24 +80,16 @@ class AsyncDualPlayObservationsCfg:
 
     @configclass
     class BobPolicyCfg(ObsGroup):
-        """Bob's observations — extends Alice's with goal state and distance to goal."""
+        """Bob's observations — extends Alice's with goal state and distance."""
 
         ee_pose = ObsTerm(
             func=observations.ee_poses,
-            params={
-                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-            },
+            params={"ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link")},
         )
         gripper_pos = ObsTerm(
             func=observations.gripper_positions,
-            params={
-                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
-            },
+            params={"arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"])},
         )
-        # Interleaved per-object layout: [s1(14)|g1(6)|d1(2)|s2(14)|g2(6)|d2(2)]
-        # This matches the reshape in _encode_obs (module.py) which does
-        # obj_section.view(batch, num_objects, 22) expecting contiguous per-object chunks.
-        # construct_bob_observation (wrapper.py) also produces this layout for the ABC buffer.
         object_state = ObsTerm(
             func=observations.object_states,
             params={
@@ -141,33 +133,17 @@ class AsyncDualPlayObservationsCfg:
 
 @configclass
 class AsyncDualPlayRewardsCfg:
-    """
-    Reward specifications for asymmetric dual-play.
-
-    Alice's rewards are applied manually in train_diffik.py (outcome reward) and
-    wrapper.py (goal-validity bonus) to guarantee one-time triggering.
-
-    Bob's sparse rewards (+1 per object placed, +5 completion bonus) are
-    computed in AsyncDualPlayEnvWrapper._compute_bob_sparse_rewards() to
-    avoid IsaacLab's dt-scaling, which would produce fractional values.
-    """
-
+    """Reward specifications — handled manually in wrapper.py."""
     pass
 
 
 @configclass
 class AsyncDualPlayDiffIKEnvCfg(ManagerBasedRLEnvCfg):
-    """
-    Full environment configuration for asymmetric dual-play — DifferentialIK variant.
-
-    Inherits scene, actions, terminations, and events from ReachDualArmDiffIKEnvCfg.
-    Overrides observations and rewards for the two-agent Alice/Bob structure,
-    and narrows the scene to two objects (target + cube).
-    """
+    """Full environment configuration — DifferentialIK variant."""
 
     @configclass
     class AsyncDualPlaySceneCfg(ReachDualArmSceneCfg):
-        """Scene with T-block only (matches push_task_curobo task space)."""
+        """Scene: target_object (T-block) + cube (second task or distractor)."""
 
         cylinder = None
         rect = None
@@ -196,8 +172,7 @@ class AsyncDualPlayDiffIKEnvCfg(ManagerBasedRLEnvCfg):
         )
 
         goal_ghost = None
-
-        goal_marker = None  # handled via VisualizationMarkers in train_curobo.py
+        goal_marker = None  # handled via VisualizationMarkers
 
     scene: AsyncDualPlaySceneCfg = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
     observations: AsyncDualPlayObservationsCfg = AsyncDualPlayObservationsCfg()
@@ -208,13 +183,9 @@ class AsyncDualPlayDiffIKEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation = 1
-        self.episode_length_s = (
-            10000.0  # Extremely high value to prevent internal IsaacLab forced timeouts
-        )
+        self.episode_length_s = 10000.0
         self.sim.dt = 0.02
         self.sim.render_interval = self.decimation
-        # PhysX GPU buffer capacities — required at large num_envs (≥1024).
-        # Without these, PhysX silently drops contacts and the robot falls through the table.
         self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
         self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
         self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4

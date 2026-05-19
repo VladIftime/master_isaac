@@ -87,6 +87,8 @@ def main():
                         help="Best success rate to restore on resume")
     parser.add_argument("--log-file", type=str, default=None,
                         help="Write terminal output to this file as well")
+    parser.add_argument("--with_distractor", action="store_true",
+                        help="Spawn a random cube/cylinder as clutter (no goal)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -117,6 +119,8 @@ def main():
     import isaaclab.envs.mdp as mdp
     import isaaclab.sim as sim_utils
     from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
+    from isaaclab.assets import RigidObjectCfg
+    from asyncDualPlayPPO.tasks.utils.reach_dual_arm_diffik_env_cfg import ISAACLAB_DUAL_ARM_EXT_DIR, spawn_random_block
     from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
     from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
@@ -159,6 +163,28 @@ def main():
         scale=1.0,
         use_default_offset=False,
     )
+
+    # Distractor: random cube as physics clutter (no goal, not in observations)
+    from asyncDualPlayPPO.tasks.utils.reach_dual_arm_diffik_env_cfg import spawn_random_block
+    if args.with_distractor:
+        env_cfg.scene.cube = RigidObjectCfg(
+            prim_path="{ENV_REGEX_NS}/Cube",
+            init_state=RigidObjectCfg.InitialStateCfg(
+                pos=[-0.25, 0.7, 0.05],
+                rot=[0.0, 0.0, 0.0, 1.0],
+            ),
+            spawn=UsdFileCfg(
+                func=spawn_random_block,
+                usd_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/assets/blocks/cube.usd",
+                scale=(2.25, 2.25, 2.25),
+                mass_props=sim_utils.MassPropertiesCfg(density=1200.0),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+                visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.1, 0.8, 0.1)),
+            ),
+        )
+        print("[Config] Distractor ENABLED — random cube as clutter.")
+    else:
+        env_cfg.scene.cube = None
 
     print("Creating environment...")
     with SuppressAllOutput():

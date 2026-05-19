@@ -79,13 +79,13 @@ class AsyncDualPlayEnvWrapper:
             [0.0, 0.0, 0.0], device=device
         )  # identity rotation (ZYX Euler)
         _t_pos = torch.tensor([0.0, 0.5, 0.023], device=device)
-        _c_pos = torch.tensor([-0.25, 0.7, 0.023], device=device)
+        _t2_pos = torch.tensor([-0.25, 0.7, 0.023], device=device)
         # Shape (6,) for 1 object, (12,) for 2 objects.
-        # Layout: [t_pos(3), t_euler(3)] or [t_pos(3), t_euler(3), c_pos(3), c_euler(3)]
+        # Layout: [t_pos(3), t_euler(3)] or [t_pos(3), t_euler(3), t2_pos(3), t2_euler(3)]
         if num_objects == 1:
             self._safe_reset_state = torch.cat([_t_pos, _id_euler])
         else:
-            self._safe_reset_state = torch.cat([_t_pos, _id_euler, _c_pos, _id_euler])
+            self._safe_reset_state = torch.cat([_t_pos, _id_euler, _t2_pos, _id_euler])
 
         # Bob's success threshold (5cm)
         self.goal_tolerance = 0.05
@@ -289,11 +289,11 @@ class AsyncDualPlayEnvWrapper:
         t_local = spawn_info.get("target_local", torch.zeros(n, 3, device=self.device))
         if self.num_objects == 1:
             return torch.cat([t_local, _id_euler], dim=-1)
-        c_local = spawn_info.get("cube_local")
-        if c_local is None:
-            c_local = t_local.clone()
-            c_local[:, 0] -= 0.10
-        return torch.cat([t_local, _id_euler, c_local, _id_euler], dim=-1)
+        t2_local = spawn_info.get("cube_local")
+        if t2_local is None:
+            t2_local = t_local.clone()
+            t2_local[:, 0] -= 0.10
+        return torch.cat([t_local, _id_euler, t2_local, _id_euler], dim=-1)
 
     @property
     def num_envs(self):
@@ -475,18 +475,24 @@ class AsyncDualPlayEnvWrapper:
         step_bob_done = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         step_pos_err = torch.zeros(self.num_envs, device=self.device)
         step_rot_err = torch.zeros(self.num_envs, device=self.device)
+        # Per-object errors for multi-object logging: (num_objects, num_envs)
+        step_pos_per_obj = torch.zeros(self.num_objects, self.num_envs, device=self.device)
+        step_rot_per_obj = torch.zeros(self.num_objects, self.num_envs, device=self.device)
 
         # Handle Bob phase completion
         bob_progress_reward = None
         if phase_info["bob_done"].any():
             bob_done_ids = torch.where(phase_info["bob_done"])[0]
-            success, pos_err, rot_err, prog_rew = self._handle_bob_completion(
+            success, pos_err, rot_err, pos_po, rot_po, prog_rew = self._handle_bob_completion(
                 obs_dict, bob_done_ids
             )
             step_bob_success[bob_done_ids] = success
             step_bob_done[bob_done_ids] = True
             step_pos_err[bob_done_ids] = pos_err
             step_rot_err[bob_done_ids] = rot_err
+            if self.num_objects >= 2:
+                step_pos_per_obj[:, bob_done_ids] = pos_po.T
+                step_rot_per_obj[:, bob_done_ids] = rot_po.T
             # Phase-end progress reward: add to the last step's reward for these Bob envs
             bob_progress_reward = prog_rew  # (num_envs,) non-zero only at bob_done_ids
 
@@ -521,11 +527,14 @@ class AsyncDualPlayEnvWrapper:
             step_bob_done[completion_ids] = True
             self.episode_manager.completion_given[completion_ids] = True
 
-            success, pos_err, rot_err = self._check_bob_success(
+            success, pos_err, rot_err, pos_per_obj, rot_per_obj = self._check_bob_success(
                 obs_dict, completion_ids
             )
             step_pos_err[completion_ids] = pos_err
             step_rot_err[completion_ids] = rot_err
+            if self.num_objects >= 2:
+                step_pos_per_obj[:, completion_ids] = pos_per_obj.T
+                step_rot_per_obj[:, completion_ids] = rot_per_obj.T
 
             # Phase-end progress reward for early success
             w_pos, w_rot = 0.6, 0.4
@@ -593,6 +602,8 @@ class AsyncDualPlayEnvWrapper:
             "bob_done_this_step": step_bob_done,
             "bob_pos_err": step_pos_err,
             "bob_rot_err": step_rot_err,
+            "bob_pos_per_obj": step_pos_per_obj,
+            "bob_rot_per_obj": step_rot_per_obj,
             "goal_valid": self.episode_manager.goal_valid,
             "goal_states": (
                 self.episode_manager.goal_states
@@ -634,6 +645,7 @@ class AsyncDualPlayEnvWrapper:
             pos_threshold=alice_pos_req,
             rot_threshold=alice_rot_req,
             min_meaningful_disp=0.10,
+            require_all_moved=(self.num_objects >= 2),
         )
 
         # Fix 10: removed 7cm min-XY filter — paper accepts rotation-only and short-range goals
@@ -678,7 +690,7 @@ class AsyncDualPlayEnvWrapper:
             start_states = self.episode_manager.initial_states[valid_env_ids]
             origins = self.env.scene.env_origins[valid_env_ids]
 
-            # Reset Target (Local -> World) — 12D Euler layout: [t_pos(3)|t_euler(3)|c_pos(3)|c_euler(3)]
+            # Reset Target (Local -> World) — 12D Euler layout: [t_pos(3)|t_euler(3)|t2_pos(3)|t2_euler(3)]
             # write_root_pose_to_sim expects 7D (pos3 + quat4), so convert euler→quat first.
             from .observations import _euler_xyz_to_quat
 
@@ -721,11 +733,11 @@ class AsyncDualPlayEnvWrapper:
 
             # Reset Cube (Local -> World) — only when cube is present (num_objects==2)
             if self.num_objects == 2:
-                c_pos_local = start_states[:, 6:9]
-                c_quat = _euler_xyz_to_quat(start_states[:, 9:12])
-                pos2_global = c_pos_local + origins
+                t2_t2_pos_local = start_states[:, 6:9]
+                t2_quat = _euler_xyz_to_quat(start_states[:, 9:12])
+                pos2_global = t2_t2_pos_local + origins
                 self.env.scene["cube"].write_root_pose_to_sim(
-                    torch.cat([pos2_global, c_quat], dim=-1),
+                    torch.cat([pos2_global, t2_quat], dim=-1),
                     env_ids=valid_env_ids,
                 )
 
@@ -800,7 +812,7 @@ class AsyncDualPlayEnvWrapper:
         zero elsewhere.
         """
         # --- 1. Success check ---
-        success, pos_err, rot_err = self._check_bob_success(obs_dict, env_ids)
+        success, pos_err, rot_err, pos_per_obj, rot_per_obj = self._check_bob_success(obs_dict, env_ids)
         self.episode_manager.mark_bob_success(env_ids, success)
 
         # --- 2. Phase-end progress reward ---
@@ -886,7 +898,7 @@ class AsyncDualPlayEnvWrapper:
             self.set_table_color(reset_ids, (0.8, 0.1, 0.1))
 
         # Commit all physics writes so the next observation read reflects the reset.
-        return success, pos_err, rot_err, prog_reward
+        return success, pos_err, rot_err, pos_per_obj, rot_per_obj, prog_reward
 
     def _handle_bob_success_transition(self, env_ids: torch.Tensor):
         """Handle transition when Bob achieves early success (completion bonus triggered).
@@ -973,15 +985,16 @@ class AsyncDualPlayEnvWrapper:
         obj_success = (pos_dist < pos_threshold) & (rot_dist < rot_threshold)
 
         # Episode success if ALL objects are successful
-        # We need to return Per-Env success boolean
         success = torch.all(obj_success, dim=-1)
 
-        # Return metrics for debugging
-        # Max error across objects
+        # Per-object and max-across-objects errors
         max_pos_err, _ = torch.max(pos_dist, dim=-1)
         max_rot_err, _ = torch.max(rot_dist, dim=-1)
+        # Per-object errors: (N, num_objects) — used for multi-object logging
+        pos_dist_per_obj = pos_dist
+        rot_dist_per_obj = rot_dist
 
-        return success, max_pos_err, max_rot_err
+        return success, max_pos_err, max_rot_err, pos_dist_per_obj, rot_dist_per_obj
 
     def _extract_object_states(self, obs_dict: Dict) -> torch.Tensor:
         """Extract object states in the LOCAL frame as Euler poses.
@@ -1001,11 +1014,11 @@ class AsyncDualPlayEnvWrapper:
         if self.num_objects == 1:
             return torch.cat([t_pos_l, t_euler], dim=-1)  # 6D
 
-        c_pos_w = self.env.scene["cube"].data.root_pos_w
-        c_quat_w = self.env.scene["cube"].data.root_quat_w
-        c_pos_l = c_pos_w - env_origins
-        c_euler = _quat_to_euler_xyz(c_quat_w)  # (N, 3)
-        return torch.cat([t_pos_l, t_euler, c_pos_l, c_euler], dim=-1)  # 12D
+        t2_pos_w = self.env.scene["cube"].data.root_pos_w
+        t2_quat_w = self.env.scene["cube"].data.root_quat_w
+        t2_pos_l = t2_pos_w - env_origins
+        t2_euler = _quat_to_euler_xyz(t2_quat_w)  # (N, 3)
+        return torch.cat([t_pos_l, t_euler, t2_pos_l, t2_euler], dim=-1)  # 12D
 
     def _get_alice_observations(self, obs_dict: Dict) -> torch.Tensor:
         """Get Alice's observations from policy group"""
@@ -1238,7 +1251,7 @@ class AsyncDualPlayEnvWrapper:
             )
 
         # Prevent spurious rewards on the very first step of Bob's phase.
-        # If an object (like the secondary cube) is untouched by Alice, its start position is its goal position.
+        # If an object (like the secondary T-block) is untouched by Alice, its start position is its goal position.
         # It will be evaluated as "True" on step 1, but we don't want to give Bob a free +1 reward for it.
         # Restrict to Bob-phase envs only (Alice-phase envs at step 1 must not interfere).
         # NOTE: bob_phase_steps, is_bob_phase, is_first_step already computed above in the shaping block.

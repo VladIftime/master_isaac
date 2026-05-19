@@ -39,7 +39,7 @@ class GoalEncoder(nn.Module):
     (goal_pose, current_pose) pairs, pooled across objects.
 
     Args:
-        num_objects:  Number of objects (2 for target_object + cube).
+        num_objects:  Number of objects (2 for target_object + tblock2).
         K_per_obj:    Output embedding dimension per object (pooled to this).
         hidden_dim:   Hidden layer width for the phi MLP.
         variant:      "difference" (phi(g) - phi(s)) or "absolute" (phi(g)).

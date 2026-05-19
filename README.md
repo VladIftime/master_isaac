@@ -99,7 +99,8 @@ Policy bins → XYZ/RxRy delta → accumulated ee_target ± TCP offset → solve
 | `alice_timesteps` | 100 | Steps per Alice phase |
 | `bob_timesteps` | 100 | Steps per Bob phase (was 200 — Fix P28) |
 | `max_goals_per_episode` | 5 | |
-| `num_bins` | 11 | Per MultiCategorical dim |
+| `num_objects` | 1 or 2 | Two T-blocks at non-overlapping spawns: (0, 0.5) and (−0.25, 0.7) |
+| `num_bins` | 11 | Per MultiCategorical dim (ASP) |
 | `lstm_hidden_size` | 256 | |
 | Success threshold | 0.05 m / 0.2 rad | |
 

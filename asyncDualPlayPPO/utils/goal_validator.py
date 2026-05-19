@@ -19,16 +19,10 @@ def validate_goal(
     pos_threshold: float = 0.05,
     rot_threshold: float = 0.2,
     min_meaningful_disp: float = 0.10,
+    require_all_moved: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
     """
     Validate goals set by Alice.
-
-    Current Configuration:
-    - Alice must move at least one object > pos_threshold (0.04m) OR > rot_threshold (0.2rad)
-    - All objects must remain on the table.
-    - Goals with displacement below min_meaningful_disp get a shallow penalty (-1)
-      so Alice cannot farm tiny valid goals for +1 reward.  The goal remains valid
-      for Bob (he still gets to practice).
 
     Args:
         initial_state: Object states at episode start (batch, num_objects * state_dim)
@@ -38,12 +32,13 @@ def validate_goal(
         pos_threshold: Minimum position distance for considering an object "moved"
         rot_threshold: Minimum rotation distance for considering an object "moved"
         min_meaningful_disp: Distance below which a valid goal is considered "shallow"
-                            (Alice gets -1 instead of +1)
+        require_all_moved: If True, ALL objects must individually move past thresholds
+                          (used for multi-object mode — Alice must manipulate every block)
 
     Returns:
         valid: Boolean tensor (batch,) - True if goal is valid
-        rewards: Float tensor (batch,) - Alice's validation reward (+1, 0, -1, -3)
-        reasons: List of strings (batch,) - Human-readable reason for the result
+        rewards: Float tensor (batch,) - Alice's validation reward
+        reasons: List of strings (batch,) - Human-readable reason
     """
     batch_size = initial_state.shape[0]
     total_dims = initial_state.shape[1]
@@ -98,7 +93,10 @@ def validate_goal(
     # rot_movements already computed above in the Euler/quat if/else block
 
     obj_moved = (pos_movements > pos_threshold) | (rot_movements > rot_threshold)
-    any_moved = torch.any(obj_moved, dim=1)  # (batch,)
+    if require_all_moved:
+        any_moved = torch.all(obj_moved, dim=1)
+    else:
+        any_moved = torch.any(obj_moved, dim=1)  # at least one object moved
 
     # --- STEP 3: Check stability ---
     if state_dim >= 13:
