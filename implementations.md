@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-19 (removed Bob dense reward — spurious signal killed Alice curriculum)
+**Last updated**: 2026-05-19 (phase-end progress reward for Bob + bob_timesteps 200→100)
 
 ---
 
@@ -111,6 +111,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-18 | **ASP reward rules fixed**: `ent_coef` 0.05→0.005 (YAML) — entropy bonus was 35× surrogate loss at 0.05 × 14 nats max ≈ 0.7, now 3.5× at 0.005 × 14 ≈ 0.07. Both Alice and Bob inherit the lower value since they share `ppo_continuous.yaml`. Minimum-displacement penalty added to `validate_goal()`: goals with max displacement 0.05–0.10 m get −1 "shallow" penalty instead of +1. Goals remain valid for Bob (he still practices). Alice is pushed to create goals with meaningful displacement (>0.10 m for +1). `goal_validator.py`, `wrapper.py` |
 | 2026-05-19 | **Bob dense delta reward reverted (Fix P27)** — v5 (dense) killed Alice's emergent curriculum compared to v1 (sparse). `wrapper.py` |
 | 2026-05-19 | **Why the dense reward was reverted** — v1 (sparse-only, `asp_curobo_v1.log`) showed Alice's avg 3D displacement growing from 0.037m to 0.120m over 90 iterations, with not-moved dropping 84%→37% — Alice was learning. Bob SR stagnated at 4–5% but the adversarial curriculum was emerging. v5 (dense delta, `asp_curobo_v5.log`) showed Alice stuck at 0.047m with 80–90% not-moved for all 13 iterations. Root cause: the per-step `Φ(s')−Φ(s)` delta was zero-mean noise (±0.02 with 50% of steps producing exactly 0.0); sparse rewards (+1/−1/+5) fired on only ~10% of episodes; the combined reward stream produced GAE advantages indistinguishable from noise, starving both Bob's PPO and Alice's delayed outcome rewards of any learnable gradient. Sparse-only `{+1/−1/+5}` restored. |
+| 2026-05-19 | **Phase-end progress reward for Bob (Fix P28)** — episodic feedback mirrors Alice's structure. `r_progress = clamp(w_pos·(init−final)/init + w_rot·(init−final)/init, −1, +1)` paid once at Bob termination. `bob_timesteps` 200→100 halves credit-assignment horizon. |
 | 2026-05-18 | **Bob rotation control improved**: `max_delta_rot` 0.05→0.10 rad/step (2.9°→5.7°) and Rx/Ry clamp 0.05→0.10 rad — doubled EE tilt range per step so Bob can apply more torque to rotate objects through contact. `train_curobo.py:279,301-303` |
 
 ---
@@ -135,10 +136,11 @@ Alice (PPO, 35D obs, 100 steps)
   → leaves workspace in non-trivial state
   → that state becomes the goal
 
-Bob (PPOABC + GoalEncoder, 51D obs, 200 steps)
+Bob (PPOABC + GoalEncoder, 51D obs, 100 steps)
   → must reproduce Alice's configuration from scratch
   → goal enters via GoalEncoder latent (8D) injected into actor trunk
   → reward: +1 per object at goal, −1 if object leaves goal, +5 completion
+  → phase-end progress: r = clamp(0.6·Δpos/init + 0.4·Δrot/init, −1, +1)
 
 When Bob fails → Alice's trajectory → ABC buffer → imitation loss β=0.5
 ```
@@ -242,7 +244,7 @@ Policy output (6D MultiCategorical, 11 bins)
 - Goal ghost matches T-block shape (no random spawn function)
 - Goal validation: z_max=0.05 rejects airborne goals; out_of_zone goals fully invalid; shallow goals (displacement 0.05–0.10m) valid for Bob but Alice gets −1 penalty instead of +1 (Fix P23)
 - Bob early termination: Alice paid +5, ghost hidden, objects random-safe reset
-- Bob reward: sparse `{+1/−1/+5}` only. Bob receives zero per-step reward — all feedback comes from sparse outcomes at step boundaries and episode end. (Dense delta reward was tested v2–v5 and reverted per Fix P27 — it diluted GAE with zero-mean noise and killed Alice's emergent curriculum.)
+- Bob reward: sparse `{+1/−1/+5}` + phase-end progress reward `r = clamp(0.6·Δpos/init_pos + 0.4·Δrot/init_rot, −1, +1)` paid once at Bob termination. Init errors captured on first Bob step. Gives 100% episode coverage — every Bob trial produces a grade. `bob_timesteps` reduced 200→100 to halve credit-assignment horizon for single-object push task. (Dense per-step delta was tested v2–v5 and reverted per Fix P27.)
 - 7 cm XY displacement filter removed from Alice's goal validity check (Fix 10)
 
 #### Diagnostic Test Suite (`diagnostics/`)
@@ -381,6 +383,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix P25 | ASP: Bob received only sparse {+1/−1/+5} rewards with zero per-step feedback — impossible to learn at 35 env scale. Added per-step potential-based delta reward `R = Φ(s') − Φ(s)` with `Φ(s) = −(pos_err + 3.0·yaw_err)`, scaled by 5.0. Strict delta-only — no constant per-step penalty. If Bob doesn't move, reward = 0. Iterated through v2 (value explosion), v3 (scaled down), v4 (penalty drain), v5 (too small). Final v5 form: meaningful gradient (~±0.06–0.28 per step), no explosion, no stationary drain. | Critical (ASP) | ❌ **REVERTED 2026-05-19** — see Fix P27 | |
 | Fix P26 | ASP: Bob couldn't control object rotation because EE tilt range was limited to ±0.05 rad/step (2.9°). `max_delta_rot` 0.05→0.10 rad/step (5.7°) and Rx/Ry clamp 0.05→0.10 rad. Bob now has 2× the per-step torque authority to rotate objects through contact. `BOB_DENSE_ROT_WEIGHT` set to 3.0 (vs position 5.0) so rotation carries meaningful weight in Φ(s). | High (ASP) | ✅ Fixed | `train_curobo.py:279,301-303`, `tasks/utils/wrapper.py:45` |
 | **Fix P27** | **Bob dense delta reward reverted** — the per-step `Φ(s') − Φ(s)` signal was zero-mean noise at 35-env scale, diluting GAE advantages and killing gradient flow for both agents. Sparse-only `{+1/−1/+5}` restored. | **Critical (ASP)** | ✅ Fixed | `tasks/utils/wrapper.py` (removed ~150 lines: `BOB_DENSE_POS_SCALE`, `BOB_DENSE_ROT_WEIGHT`, `_compute_bob_dense_reward()`, state tracking, step logging) |
+| **Fix P28** | **Phase-end progress reward for Bob** — mirrors Alice's episodic feedback: `r_progress = clamp(w_pos·(init−final)/init + w_rot·(init−final)/init, −1, +1)`, paid once at Bob termination. Init errors captured on Bob's first step via `_compute_bob_sparse_rewards`. Progress computed in `_handle_bob_completion` and early-success path. `bob_timesteps` 200→100 halves credit-assignment horizon for single-object T-block task. | **Critical (ASP)** | ✅ Fixed | `tasks/utils/wrapper.py` (+40 lines: `bob_init_pos_err`, `bob_init_rot_err`, `_bob_progress_captured`, init capture, progress computation, reward injection); `cfg/task/AsyncDualPlay.yaml:15` |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -415,10 +418,12 @@ directly simulates camera measurement noise on the physical tracking system.
 | `num_cat_dims` | 6 | Action dims: X, Y, Z, Rx, Ry, Gripper |
 | `lstm_hidden_size` | 256 | LSTM hidden state size |
 | `alice_timesteps` | 100 | Steps per Alice phase |
-| `bob_timesteps` | 200 | Steps per Bob phase |
+| `bob_timesteps` | **100** | Steps per Bob phase (was 200; halved per Fix P28 — single-object push doesn't need multi-stage stacking budget) |
 | `_EE_HOME_X_OFFSET` | 0.02 m | X offset added to IK target after every sync (home pose) |
 | `_EE_HOME_Y` | 0.50 m | Fixed Y of IK target after every sync — directly over T-block spawn |
 | `_EE_HOME_Z` | 0.05 m | Fixed Z of IK target after every sync (5 cm above table) |
+| `BOB_PROGRESS_W_POS` | 0.6 | Phase-end progress weight for position (Fix P28) |
+| `BOB_PROGRESS_W_ROT` | 0.4 | Phase-end progress weight for rotation |
 
 ---
 

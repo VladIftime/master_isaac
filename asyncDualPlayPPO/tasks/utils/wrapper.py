@@ -181,6 +181,19 @@ class AsyncDualPlayEnvWrapper:
             env.num_envs, dtype=torch.bool, device=self.device
         )
 
+        # Phase-end progress reward for Bob (episodic, not per-step — no GAE noise).
+        # Captured on Bob's first step, paid on Bob's last step.
+        # r_progress = clamp(w_pos·Δpos/init_pos + w_rot·Δrot/init_rot, −1, +1)
+        self.bob_init_pos_err = torch.zeros(self.num_envs, device=self.device)
+        self.bob_init_rot_err = torch.zeros(self.num_envs, device=self.device)
+        self._bob_progress_captured = torch.zeros(
+            self.num_envs, dtype=torch.bool, device=self.device
+        )
+
+        # Phase-end progress reward logging (printed every _BOB_PROGRESS_LOG_INTERVAL completions)
+        self._bob_progress_log = []          # list of (progress, pos_progress, rot_progress) floats
+        self._BOB_PROGRESS_LOG_INTERVAL = 50  # print summary every N Bob completions
+
 
 
         # Per-iteration aggregate stats (reset each iteration via reset_iter_stats())
@@ -464,15 +477,18 @@ class AsyncDualPlayEnvWrapper:
         step_rot_err = torch.zeros(self.num_envs, device=self.device)
 
         # Handle Bob phase completion
+        bob_progress_reward = None
         if phase_info["bob_done"].any():
             bob_done_ids = torch.where(phase_info["bob_done"])[0]
-            success, pos_err, rot_err = self._handle_bob_completion(
+            success, pos_err, rot_err, prog_rew = self._handle_bob_completion(
                 obs_dict, bob_done_ids
             )
             step_bob_success[bob_done_ids] = success
             step_bob_done[bob_done_ids] = True
             step_pos_err[bob_done_ids] = pos_err
             step_rot_err[bob_done_ids] = rot_err
+            # Phase-end progress reward: add to the last step's reward for these Bob envs
+            bob_progress_reward = prog_rew  # (num_envs,) non-zero only at bob_done_ids
 
             extras["alice_total_reward"][bob_done_ids] = self.delayed_alice_reward[
                 bob_done_ids
@@ -490,6 +506,10 @@ class AsyncDualPlayEnvWrapper:
         current_rewards, bob_achieved_completion = self._get_current_rewards(
             obs_dict, rewards, is_alice_before, is_bob_before, action
         )
+        # Inject phase-end progress reward for Bob envs that just completed (normal path).
+        # bob_progress_reward is a (num_envs,) tensor set in the bob_done branch above.
+        if bob_progress_reward is not None:
+            current_rewards += bob_progress_reward
         if not _null:
             _prof.mark_stop("wrapper_rewards")
 
@@ -506,6 +526,18 @@ class AsyncDualPlayEnvWrapper:
             )
             step_pos_err[completion_ids] = pos_err
             step_rot_err[completion_ids] = rot_err
+
+            # Phase-end progress reward for early success
+            w_pos, w_rot = 0.6, 0.4
+            init_pos = self.bob_init_pos_err[completion_ids]
+            init_rot = self.bob_init_rot_err[completion_ids]
+            pos_prog = (init_pos - pos_err) / (init_pos + 1e-6)
+            rot_prog = (init_rot - rot_err) / (init_rot + 1e-6)
+            r_prog_early = (w_pos * pos_prog + w_rot * rot_prog).clamp(-1.0, 1.0)
+            current_rewards[completion_ids] += r_prog_early
+            self._bob_progress_captured[completion_ids] = False
+
+            self._log_bob_progress(pos_prog, rot_prog, r_prog_early)
 
             completion_steps = self.episode_manager.phase_step[completion_ids].clone()
             completion_goals = self.episode_manager.goal_count[completion_ids].clone()
@@ -736,15 +768,60 @@ class AsyncDualPlayEnvWrapper:
 
         return valid, invalid_env_ids
 
+    def _log_bob_progress(self, pos_progress, rot_progress, r_progress):
+        """Accumulate progress stats and print summary every N completions."""
+        for i in range(len(pos_progress)):
+            self._bob_progress_log.append((
+                r_progress[i].item(),
+                pos_progress[i].item(),
+                rot_progress[i].item(),
+            ))
+        if len(self._bob_progress_log) >= self._BOB_PROGRESS_LOG_INTERVAL:
+            n = len(self._bob_progress_log)
+            r_sum = [x[0] for x in self._bob_progress_log]
+            p_sum = [x[1] for x in self._bob_progress_log]
+            y_sum = [x[2] for x in self._bob_progress_log]
+            print(
+                f"  [BobProgress] progress={sum(r_sum)/n:+.3f}  "
+                f"pos={sum(p_sum)/n:+.3f}  rot={sum(y_sum)/n:+.3f}  "
+                f"pos_n={(sum(1 for v in r_sum if v>0))}  neg_n={(sum(1 for v in r_sum if v<0))}  "
+                f"(n={n})",
+                flush=True,
+            )
+            self._bob_progress_log.clear()
+
     def _handle_bob_completion(
         self, obs_dict: Dict, env_ids: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Handle completion of Bob's phase"""
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Handle completion of Bob's phase.
+        
+        Returns: (success, pos_err, rot_err, progress_reward) where progress_reward
+        is a (num_envs,) tensor with values clamped to [−1, +1] for env_ids,
+        zero elsewhere.
+        """
         # --- 1. Success check ---
         success, pos_err, rot_err = self._check_bob_success(obs_dict, env_ids)
         self.episode_manager.mark_bob_success(env_ids, success)
 
-        # --- 2. Alice Outcome Reward (+5 if Bob fails, 0 if he succeeds) ---
+        # --- 2. Phase-end progress reward ---
+        # r_progress = clamp(w_pos·(init_pos_err − final_pos_err)/init_pos_err
+        #                  + w_rot·(init_rot_err − final_rot_err)/init_rot_err, −1, +1)
+        w_pos = 0.6
+        w_rot = 0.4
+        prog_reward = torch.zeros(self.num_envs, device=self.device)
+        init_pos = self.bob_init_pos_err[env_ids]
+        init_rot = self.bob_init_rot_err[env_ids]
+        pos_progress = (init_pos - pos_err) / (init_pos + 1e-6)
+        rot_progress = (init_rot - rot_err) / (init_rot + 1e-6)
+        r_prog_raw = w_pos * pos_progress + w_rot * rot_progress
+        r_prog = r_prog_raw.clamp(-1.0, 1.0)
+        prog_reward[env_ids] = r_prog
+        # Clear captured flag so next Bob phase re-captures
+        self._bob_progress_captured[env_ids] = False
+
+        self._log_bob_progress(pos_progress, rot_progress, r_prog)
+
+        # --- 3. Alice Outcome Reward (+5 if Bob fails, 0 if he succeeds) ---
         outcome_rewards = torch.where(
             success,
             torch.tensor(reward_utils.ALICE_BOB_SUCCESS_REWARD, device=self.device),
@@ -752,7 +829,7 @@ class AsyncDualPlayEnvWrapper:
         )
         self.delayed_alice_reward[env_ids] += outcome_rewards
 
-        # --- 3. Aggregate success/failure counts ---
+        # --- 4. Aggregate success/failure counts ---
         n_success = int(success.sum().item())
         n_failure = len(env_ids) - n_success
         self._iter_stats["bob_successes"] += n_success
@@ -809,7 +886,7 @@ class AsyncDualPlayEnvWrapper:
             self.set_table_color(reset_ids, (0.8, 0.1, 0.1))
 
         # Commit all physics writes so the next observation read reflects the reset.
-        return success, pos_err, rot_err
+        return success, pos_err, rot_err, prog_reward
 
     def _handle_bob_success_transition(self, env_ids: torch.Tensor):
         """Handle transition when Bob achieves early success (completion bonus triggered).
@@ -1125,6 +1202,17 @@ class AsyncDualPlayEnvWrapper:
         bob_phase_steps = self.episode_manager.phase_step
         is_bob_phase = self.episode_manager.is_bob_phase()
         is_first_step = (bob_phase_steps == 1) & is_bob_phase
+
+        # Phase-end progress reward: capture initial errors on Bob's first step.
+        # These are stored and later used in _handle_bob_completion and the early-
+        # success path to compute r_progress = clamp(w_pos·Δpos/init_pos + w_rot·Δrot/init_rot, −1, +1).
+        if is_first_step.any():
+            f_ids = torch.where(is_first_step)[0]
+            _f_pos_dists = pos_dists[f_ids]  # (n, num_objects)
+            _f_rot_dists = rot_dists[f_ids]
+            self.bob_init_pos_err[f_ids] = _f_pos_dists.max(dim=1)[0]
+            self.bob_init_rot_err[f_ids] = _f_rot_dists.max(dim=1)[0]
+            self._bob_progress_captured[f_ids] = True
 
         # Success thresholds
         pos_threshold = self.episode_manager.pos_threshold
