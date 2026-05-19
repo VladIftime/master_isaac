@@ -3,6 +3,7 @@
 *.pt
 *.out
 runs/
+asyncDualPlayPPO/logs/
 *.pyc
 __pycache__/
 *.lock

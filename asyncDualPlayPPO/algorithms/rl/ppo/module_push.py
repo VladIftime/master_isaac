@@ -78,7 +78,7 @@ class ActorCriticPush(nn.Module):
 
         # Init: trunk → sqrt(2) (ReLU), actor head → 0.01, critic output → 1.0
         _critic_out = list(self.critic.children())[-1]  # Linear(128→1)
-        _gain_map = {self.actor_head: 0.01, _critic_out: 1.0}
+        _gain_map = {self.actor_head: 0.01, _critic_out: 0.01}
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 gain = _gain_map.get(m, np.sqrt(2))

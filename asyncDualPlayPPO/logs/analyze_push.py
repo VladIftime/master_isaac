@@ -22,9 +22,10 @@ import matplotlib.pyplot as plt
 # --- Patterns ---
 ITER_RE = re.compile(
     r"\[Iter\s+(\d+)\]\s+"
-    r"Loss=([-\d.]+).?\s*\|\s*Val=([-\d.]+)\s*\|\s*"
+    r"Loss=([-\d.]+)[^\|]*\|\s*Val=([-\d.]+)\s*\|\s*"
     r"Rew=([-+\d.]+)\s*\(EMA\s+([-+\d.]+)\)\s*\|\s*"
-    r"PosErr=([-\d.]+)\s*\|\s*SR=([-\d.]+)\s*\|\s*"
+    r"PosErr=([-\d.]+)\s*\|\s*RotErr=([-\d.]+)\s*\|\s*"
+    r"SR=([-\d.]+)\s*\|\s*RotSR=([-\d.]+)\s*\|\s*"
     r"IK_fail=([-\d.]+)\s*\|\s*"
     r"AvgPushes=(nan|[-\d.]+)\s*\|\s*Epi=(\d+)\s*\|\s*"
     r"BestSR=([-\d.]+)"
@@ -32,6 +33,7 @@ ITER_RE = re.compile(
 
 EPISODE_RE = re.compile(
     r"\[Episode\]\s+pushes=(\d+)\s+(SUCCESS|fail)\s+"
+    r"rew=[-+\d.]+\s+"
     r"goal=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+orient=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
     r"final=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
     r"rot=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
@@ -58,7 +60,7 @@ def parse_file(path: Path) -> dict:
         if n in seen:
             continue
         seen.add(n)
-        avg_p = float(m.group(9)) if m.group(9) != "nan" else None
+        avg_p = float(m.group(11)) if m.group(11) != "nan" else None
         iters.append({
             "iter":       n,
             "loss":       float(m.group(2)),
@@ -66,11 +68,13 @@ def parse_file(path: Path) -> dict:
             "rew":        float(m.group(4)),
             "rew_ema":    float(m.group(5)),
             "pos_err":    float(m.group(6)),
-            "sr":         float(m.group(7)),
-            "ik_fail":    float(m.group(8)),
+            "rot_err":    float(m.group(7)),
+            "sr":         float(m.group(8)),
+            "rot_sr":     float(m.group(9)),
+            "ik_fail":    float(m.group(10)),
             "avg_pushes": avg_p,
-            "episodes":   int(m.group(10)),
-            "best_sr":    float(m.group(11)),
+            "episodes":   int(m.group(12)),
+            "best_sr":    float(m.group(13)),
         })
 
     episodes = []
@@ -124,8 +128,8 @@ def merge_files(paths: list[Path]) -> dict:
 
 def write_csv(data: dict, out_dir: Path):
     i_path = out_dir / "push_iters.csv"
-    fields = ["iter", "loss", "val", "rew", "rew_ema", "pos_err", "sr",
-              "ik_fail", "avg_pushes", "episodes", "best_sr"]
+    fields = ["iter", "loss", "val", "rew", "rew_ema", "pos_err", "rot_err",
+              "sr", "rot_sr", "ik_fail", "avg_pushes", "episodes", "best_sr"]
     with open(i_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -170,12 +174,15 @@ def plot_metrics(data: dict, out_dir: Path):
 
     def _save(fig, name):
         p = out_dir / name
-        fig.savefig(p, dpi=150)
+        fig.savefig(p, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"[INFO] Saved {p}")
 
-    fig, axes = plt.subplots(3, 3, figsize=(18, 15))
+    from matplotlib.gridspec import GridSpec
+
+    fig = plt.figure(figsize=(18, 14))
     fig.suptitle("Push-PPO Training Overview", fontsize=14, fontweight="bold")
+    gs = GridSpec(3, 3, figure=fig, hspace=0.50, wspace=0.35)
 
     xs = [r["iter"] for r in iters]
 
@@ -183,48 +190,81 @@ def plot_metrics(data: dict, out_dir: Path):
         if not xs:
             ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
             return
-        ax.plot(xs, smooth(ys_raw), color=color, linewidth=1.5, label=label)
+        ax.plot(xs, smooth(list(ys_raw)), color=color, linewidth=1.5, label=label)
         if ref is not None:
             ax.axhline(ref, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
                        label=f"ref={ref}")
 
-    # Row 0: Loss, Value Loss, Reward
-    _plot(axes[0, 0], [r["loss"] for r in iters], "Policy Loss", "tab:blue")
-    _fmt(axes[0, 0], "Loss", "Policy Loss")
+    # Row 0 — Loss, Value Loss, Reward
+    ax_loss = fig.add_subplot(gs[0, 0])
+    _plot(ax_loss, [r["loss"] for r in iters], "Policy Loss", "tab:blue")
+    _fmt(ax_loss, "Loss", "Policy Loss")
 
-    _plot(axes[0, 1], [r["val"] for r in iters], "Value Loss", "tab:orange")
-    _fmt(axes[0, 1], "Loss", "Value Loss")
+    ax_val = fig.add_subplot(gs[0, 1])
+    _plot(ax_val, [r["val"] for r in iters], "Value Loss", "tab:orange")
+    _fmt(ax_val, "Loss", "Value Loss")
 
-    _plot(axes[0, 2], [r["rew_ema"] for r in iters], "Reward (EMA)", "tab:green")
-    axes[0, 2].plot(xs, smooth([r["rew"] for r in iters]), color="tab:green",
-                    linewidth=0.8, alpha=0.3, linestyle="--", label="Raw")
-    _fmt(axes[0, 2], "Reward", "Reward (EMA + Raw)")
+    ax_rew = fig.add_subplot(gs[0, 2])
+    _plot(ax_rew, [r["rew_ema"] for r in iters], "Reward (EMA)", "tab:green")
+    ax_rew.plot(xs, smooth([r["rew"] for r in iters]), color="tab:green",
+                linewidth=0.8, alpha=0.3, linestyle="--", label="Raw")
+    _fmt(ax_rew, "Reward", "Reward (EMA + Raw)")
 
-    # Row 1: SR, IK fail rate, Best SR
-    _plot(axes[1, 0], [r["sr"] for r in iters], "Step SR", "tab:blue")
-    _fmt(axes[1, 0], "Success Rate", "Step Success Rate")
+    # Row 1 — Combined SR (PosSR + RotSR), Best SR, Avg Pushes + Episodes
+    ax_sr = fig.add_subplot(gs[1, 0])
+    _plot(ax_sr, [r["sr"] for r in iters], "Position SR", "tab:blue")
+    _plot(ax_sr, [r["rot_sr"] for r in iters], "Rotation SR", "tab:purple")
+    ax_sr.set_ylim(0, 1)
+    _fmt(ax_sr, "Success Rate", "Success Rate (Position + Rotation)")
 
-    _plot(axes[1, 1], [r["ik_fail"] for r in iters], "IK Fail Rate", "tab:red", ref=0.05)
-    _fmt(axes[1, 1], "IK Fail Rate", "IK Fail Rate (5% threshold)")
+    ax_best = fig.add_subplot(gs[1, 1])
+    best_vals = [(r["iter"], r["best_sr"]) for r in iters if r["best_sr"] >= 0.0]
+    if best_vals:
+        bx, by = zip(*best_vals)
+        ax_best.plot(bx, by, color="gold", linewidth=1.5, label="Best SR")
+    ax_best.set_ylim(0, 1)
+    _fmt(ax_best, "Success Rate", "Best SR (cumulative)")
 
-    _plot(axes[1, 2], [r["best_sr"] for r in iters], "Best SR", "gold")
-    _fmt(axes[1, 2], "Success Rate", "Best SR (cumulative)")
-
-    # Row 2: Pos Error, Avg Pushes, Episodes
-    _plot(axes[2, 0], [r["pos_err"] for r in iters], "Mean Pos Error", "magenta")
-    _fmt(axes[2, 0], "Distance (m)", "Mean Position Error to Goal")
-
+    ax_pushes = fig.add_subplot(gs[1, 2])
     avg_p_xs = [r["iter"] for r in iters if r["avg_pushes"] is not None]
     avg_p_ys = [r["avg_pushes"] for r in iters if r["avg_pushes"] is not None]
-    _plot(axes[2, 1], avg_p_ys if avg_p_xs else [], "Avg Pushes / Episode", "tab:cyan")
     if avg_p_xs:
-        axes[2, 1].set_xticks(avg_p_xs)
-    _fmt(axes[2, 1], "Pushes", "Avg Pushes per Episode")
+        ax_pushes.plot(avg_p_xs, smooth(avg_p_ys), color="tab:cyan",
+                       linewidth=1.5, label="Avg Pushes / Epi")
+    ax2 = ax_pushes.twinx()
+    ax2.plot(xs, smooth([r["episodes"] for r in iters]), color="tab:brown",
+             linewidth=1.0, linestyle="--", label="Episodes")
+    ax_pushes.set_title("Avg Pushes & Episodes Completed")
+    ax_pushes.set_xlabel("Iteration")
+    ax_pushes.set_ylabel("Pushes", color="tab:cyan")
+    ax_pushes.tick_params(axis="y", labelcolor="tab:cyan")
+    ax2.set_ylabel("Count", color="tab:brown")
+    ax2.tick_params(axis="y", labelcolor="tab:brown")
+    lines1, lab1 = ax_pushes.get_legend_handles_labels()
+    lines2, lab2 = ax2.get_legend_handles_labels()
+    ax_pushes.legend(lines1 + lines2, lab1 + lab2, fontsize=8)
+    ax_pushes.grid(True, alpha=0.3)
 
-    _plot(axes[2, 2], [r["episodes"] for r in iters], "Episodes Completed", "tab:brown")
-    _fmt(axes[2, 2], "Count", "Episodes Completed per Iteration")
+    # Row 2 — Pos+Rot Error (dual y-axis), Episodes, (empty)
+    ax_err = fig.add_subplot(gs[2, 0:2])
+    ax_pos = ax_err
+    ax_rot = ax_err.twinx()
+    _plot(ax_pos, [r["pos_err"] for r in iters], "Position Error", "tab:red")
+    _plot(ax_rot, [r["rot_err"] for r in iters], "Rotation Error", "tab:blue")
+    ax_pos.set_title("Mean Error to Goal")
+    ax_pos.set_xlabel("Iteration")
+    ax_pos.set_ylabel("Position (m)", color="tab:red")
+    ax_pos.tick_params(axis="y", labelcolor="tab:red")
+    ax_rot.set_ylabel("Rotation (rad)", color="tab:blue")
+    ax_rot.tick_params(axis="y", labelcolor="tab:blue")
+    lines1, lab1 = ax_pos.get_legend_handles_labels()
+    lines2, lab2 = ax_rot.get_legend_handles_labels()
+    ax_pos.legend(lines1 + lines2, lab1 + lab2, fontsize=8)
+    ax_pos.grid(True, alpha=0.3)
 
-    plt.tight_layout()
+    ax_spare = fig.add_subplot(gs[2, 2])
+    ax_spare.axis("off")
+
     _save(fig, "plot_push_overview.png")
 
     # Rolling success rate over episodes
@@ -238,6 +278,7 @@ def plot_metrics(data: dict, out_dir: Path):
             sr_rolling.append(sum(1 for e in chunk if e["success"]) / len(chunk))
         ax2.plot(range(len(sr_rolling)), sr_rolling, color="tab:blue", linewidth=1.5,
                  label=f"Rolling SR (window={window})")
+        ax2.set_ylim(0, 1)
         ax2.set_title("Episode-Level Success Rate")
         ax2.set_xlabel("Episode")
         ax2.set_ylabel("Success Rate")

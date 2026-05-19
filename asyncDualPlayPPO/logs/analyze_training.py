@@ -44,7 +44,7 @@ CHAIN_RE = re.compile(r"chained next job:\s*(\d+)")
 RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
 # Explicit anchor emitted by train_high.slurm after the checkpoint detection block
 GLOBAL_START_RE = re.compile(r"Global iteration start:\s*(\d+)")
-JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-(.*?))?\.out")
+JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-(.*?))?\.(?:out|txt)")
 # Summary lines — IK_fail and ABC buf/warm are curobo-only optional fields
 ITER_RE = re.compile(
     r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)"
@@ -66,12 +66,22 @@ ALICE_ROT_RE = re.compile(
 BOB_SR_RE = re.compile(
     r"\[BobSR\]\s+PosSR=([-\d.]+)\s+RotSR=([-\d.]+)\s+PosErr=([-\d.]+)m\s+RotErr=([-\d.]+)rad\s+\(n=(\d+)\)"
 )
+# Push-PPO baseline log format — single-agent compact iteration line
+PUSH_ITER_RE = re.compile(
+    r"\[Iter\s+(\d+)\]\s+Loss=([-\d.]+)[^\|]*\|\s+Val=([-\d.]+)\s*\|\s+"
+    r"Rew=([-\d.]+)\s+\(EMA\s+([-\d.]+)\)\s*\|\s+"
+    r"PosErr=([-\d.]+)\s*\|\s+RotErr=([-\d.]+)\s*\|\s+"
+    r"SR=([-\d.]+)\s*\|\s+RotSR=([-\d.]+)\s*\|\s+"
+    r"IK_fail=([-\d.]+)\s*\|\s+"
+    r"AvgPushes=([^\s|]+)\s*\|\s+Epi=(\d+)\s*\|\s+"
+    r"BestSR=([-\d.]+)"
+)
 
 
 def parse_logs(log_dir: Path) -> dict:
     """Parse all slurm log files in log_dir (recursively) and return per-job data dict."""
     jobs = {}
-    for f in log_dir.rglob("slurm-*-*.out"):
+    for f in list(log_dir.rglob("slurm-*-*.out")) + list(log_dir.rglob("slurm-*-*.txt")):
         if "chain_" in str(f.parent):
             continue
         m = JOB_ID_RE.match(f.name)
@@ -296,13 +306,36 @@ def parse_logs(log_dir: Path) -> dict:
                 for u in bob_updates:
                     u["rew"] *= 200.0
 
+        # Push-PPO baseline detection: single-agent compact iteration line
+        push_updates = []
+        for pm in PUSH_ITER_RE.finditer(text):
+            push_updates.append({
+                "local_iter": int(pm.group(1)),
+                "loss": float(pm.group(2)),
+                "val": float(pm.group(3)),
+                "rew": float(pm.group(4)),
+                "rew_ema": float(pm.group(5)),
+                "pos_err": float(pm.group(6)),
+                "rot_err": float(pm.group(7)),
+                "sr": float(pm.group(8)),
+                "rot_sr": float(pm.group(9)),
+                "ik_fail_rate": float(pm.group(10)),
+                "avg_pushes": pm.group(11),  # may be "nan"
+                "episodes": int(pm.group(12)),
+                "best_sr": float(pm.group(13)),
+            })
+        push_updates.sort(key=lambda x: x["local_iter"])
+
+        is_push_log = len(push_updates) > 0
+
         jobs[job_id] = {
             "path": f,
             "resume_iter": resume_iter,
             "chain_next": chain_next,
             "suffix": suffix,
-            "alice": alice_updates,
-            "bob": bob_updates,
+            "alice": [] if is_push_log else alice_updates,
+            "bob": [] if is_push_log else bob_updates,
+            "push": push_updates,
         }
     return jobs
 
@@ -372,10 +405,9 @@ def trace_chains(jobs: dict) -> list[list[int]]:
                 # Find max iter in prev_c
                 c_max = -1
                 for jid in prev_c:
-                    if jobs[jid]["alice"]:
-                        c_max = max(c_max, jobs[jid]["alice"][-1]["local_iter"])
-                    if jobs[jid]["bob"]:
-                        c_max = max(c_max, jobs[jid]["bob"][-1]["local_iter"])
+                    for k in ("alice", "bob", "push"):
+                        if jobs[jid][k]:
+                            c_max = max(c_max, jobs[jid][k][-1]["local_iter"])
                 
                 # We simply pick the one with the highest max_iter so far.
                 if c_max > best_max_iter:
@@ -437,34 +469,37 @@ def cross_check_job(job_id: int, job: dict):
                 f"(delta={first_b - ri:+d})"
             )
 
+    if job["push"]:
+        first_p = job["push"][0]["local_iter"]
+        if first_p != ri:
+            issues.append(
+                f"Push first iter={first_p} but resume_iter={ri} "
+                f"(delta={first_p - ri:+d})"
+            )
+
     if issues:
         print(f"[WARN] Job {job_id} iteration mismatch:")
         for msg in issues:
             print(f"       {msg}")
     else:
-        if job["alice"] or job["bob"]:
+        if job["alice"] or job["bob"] or job["push"]:
             print(f"[OK]   Job {job_id} iteration anchor matches resume_iter={ri}")
 
 
 def assign_global_iters(
     chains: list[list[int]], jobs: dict
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Assign global iteration numbers.
-
-    Since train.py now keeps alice_updates and bob_updates both initialised to
-    resume_iteration, every update line already contains the *global* iteration
-    number.  We therefore use local_iter directly — no resume-offset arithmetic
-    needed.  Deduplication via seen-sets handles any overlap at job boundaries
-    (e.g. when a job is killed before checkpointing and its successor replays
-    some iterations from the last saved checkpoint).
     """
     alice_records = []
     bob_records = []
+    push_records = []
 
     for chain_idx, chain in enumerate(chains):
         seen_alice_iters: set[int] = set()
         seen_bob_iters: set[int] = set()
+        seen_push_iters: set[int] = set()
 
         for job_id in chain:
             job = jobs[job_id]
@@ -473,7 +508,7 @@ def assign_global_iters(
             cross_check_job(job_id, job)
 
             for upd in job["alice"]:
-                g = upd["local_iter"]   # already the global iteration number
+                g = upd["local_iter"]
                 if g in seen_alice_iters:
                     continue
                 seen_alice_iters.add(g)
@@ -487,7 +522,7 @@ def assign_global_iters(
                 )
 
             for upd in job["bob"]:
-                g = upd["local_iter"]   # already the global iteration number
+                g = upd["local_iter"]
                 if g in seen_bob_iters:
                     continue
                 seen_bob_iters.add(g)
@@ -500,12 +535,28 @@ def assign_global_iters(
                     }
                 )
 
+            for upd in job["push"]:
+                g = upd["local_iter"]
+                if g in seen_push_iters:
+                    continue
+                seen_push_iters.add(g)
+                push_records.append(
+                    {
+                        "chain": chain_idx,
+                        "job_id": job_id,
+                        "global_iter": g,
+                        **{k: v for k, v in upd.items() if k != "local_iter"},
+                    }
+                )
+
     alice_records.sort(key=lambda x: (x["chain"], x["global_iter"]))
     bob_records.sort(key=lambda x: (x["chain"], x["global_iter"]))
-    return alice_records, bob_records
+    push_records.sort(key=lambda x: (x["chain"], x["global_iter"]))
+    return alice_records, bob_records, push_records
 
 
-def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path):
+def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
+              push_records: list[dict] = None):
     out_path = out_dir / "training_updates.csv"
     fieldnames = [
         "agent",
@@ -515,6 +566,7 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "loss",
         "val",
         "rew",
+        "rew_ema",
         "entropy_coef",
         "abc",
         "abc_coef",
@@ -533,13 +585,17 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
         "rot_sr",
         "pos_err",
         "rot_err",
+        "avg_pushes",
+        "episodes",
+        "best_sr",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in alice_records:
             writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "",
-                             "pos_sr": "", "rot_sr": "", "pos_err": "", "rot_err": "", **r})
+                             "rew_ema": "", "pos_sr": "", "rot_sr": "", "pos_err": "", "rot_err": "",
+                             "avg_pushes": "", "episodes": "", "best_sr": "", **r})
         for r in bob_records:
             writer.writerow({
                 "agent": "bob",
@@ -547,8 +603,42 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path)
                 "avg_xy": "", "max_xy": "", "avg_z": "",
                 "ik_fail_rate": "", "not_moved_frac": "",
                 "alice_rot_roll": "", "alice_rot_pitch": "", "alice_rot_yaw": "",
+                "rew_ema": "", "avg_pushes": "", "episodes": "", "best_sr": "",
                 **r,
             })
+        if push_records:
+            for r in push_records:
+                writer.writerow({
+                    "agent": "push",
+                    "chain": r["chain"],
+                    "job_id": r["job_id"],
+                    "global_iter": r["global_iter"],
+                    "loss": r.get("loss"),
+                    "val": r.get("val"),
+                    "rew": r.get("rew"),
+                    "rew_ema": r.get("rew_ema"),
+                    "entropy_coef": "",
+                    "abc": "",
+                    "abc_coef": "",
+                    "sr": r.get("sr"),
+                    "valid_goals": "",
+                    "invalid_goals": "",
+                    "avg_xy": "",
+                    "max_xy": "",
+                    "avg_z": "",
+                    "ik_fail_rate": r.get("ik_fail_rate"),
+                    "not_moved_frac": "",
+                    "alice_rot_roll": "",
+                    "alice_rot_pitch": "",
+                    "alice_rot_yaw": "",
+                    "pos_sr": "",
+                    "rot_sr": r.get("rot_sr"),
+                    "pos_err": r.get("pos_err"),
+                    "rot_err": r.get("rot_err"),
+                    "avg_pushes": r.get("avg_pushes"),
+                    "episodes": r.get("episodes"),
+                    "best_sr": r.get("best_sr"),
+                })
     print(f"[INFO] Wrote {out_path}")
     return out_path
 
@@ -578,6 +668,7 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "loss",
         "val",
         "rew",
+        "rew_ema",
         "entropy_coef",
         "abc",
         "abc_coef",
@@ -596,6 +687,9 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "rot_sr",
         "pos_err",
         "rot_err",
+        "avg_pushes",
+        "episodes",
+        "best_sr",
     ]
 
     def _v(d, k):
@@ -662,6 +756,42 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "rot_sr": _v(upd, "rot_sr"),
                     "pos_err": _v(upd, "pos_err"),
                     "rot_err": _v(upd, "rot_err"),
+                    "rew_ema": "",
+                    "avg_pushes": "",
+                    "episodes": "",
+                    "best_sr": "",
+                })
+            for upd in job["push"]:
+                writer.writerow({
+                    "agent": "push",
+                    "chain": chain_idx,
+                    "job_id": job_id,
+                    "local_iter": upd["local_iter"],
+                    "loss": upd["loss"],
+                    "val": upd["val"],
+                    "rew": upd["rew"],
+                    "rew_ema": upd["rew_ema"],
+                    "entropy_coef": "",
+                    "abc": "",
+                    "abc_coef": "",
+                    "sr": upd["sr"],
+                    "valid_goals": "",
+                    "invalid_goals": "",
+                    "avg_xy": "",
+                    "max_xy": "",
+                    "avg_z": "",
+                    "ik_fail_rate": upd["ik_fail_rate"],
+                    "not_moved_frac": "",
+                    "alice_rot_roll": "",
+                    "alice_rot_pitch": "",
+                    "alice_rot_yaw": "",
+                    "pos_sr": "",
+                    "rot_sr": upd["rot_sr"],
+                    "pos_err": upd["pos_err"],
+                    "rot_err": upd["rot_err"],
+                    "avg_pushes": upd["avg_pushes"],
+                    "episodes": upd["episodes"],
+                    "best_sr": upd["best_sr"],
                 })
     print(f"[INFO] Wrote {out_path}")
 
@@ -677,19 +807,141 @@ def smooth(vals: list, window: int = 5) -> list:
     return result
 
 
+def _plot_push_metrics(
+    push_records: list[dict],
+    out_dir: Path,
+    title_suffix: str = "",
+    separate: bool = False,
+):
+    """Render Push-PPO baseline plots."""
+    push_colors = ["tab:green", "mediumseagreen", "darkgreen", "lightgreen"]
+
+    all_chain_indices = sorted(set(r["chain"] for r in push_records))
+    p_by_chain = [[r for r in push_records if r["chain"] == c] for c in all_chain_indices]
+    p_labels = [f"Push C{c}" for c in all_chain_indices]
+
+    def _draw_p(ax, key, ylabel, title):
+        for records, label, color in zip(p_by_chain, p_labels, push_colors):
+            pts = [(r["global_iter"], r[key]) for r in records if r.get(key) is not None]
+            if not pts:
+                continue
+            xs, ys = zip(*pts)
+            ax.plot(xs, smooth(list(ys)), color=color, label=label, linewidth=1.5)
+        ax.set_title(title + title_suffix)
+        ax.set_xlabel("Global Iteration")
+        ax.set_ylabel(ylabel)
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+    def _save(fig, name):
+        p = out_dir / name
+        fig.savefig(p, dpi=150)
+        plt.close(fig)
+        print(f"[INFO] Saved {p}")
+
+    if separate:
+        # Separate PNG per metric
+        for key, ylabel, title, fname in [
+            ("loss", "Surrogate Loss", "Push-PPO — Policy Loss", "plot_loss.png"),
+            ("val", "Value Loss", "Push-PPO — Value Loss", "plot_value_loss.png"),
+            ("rew", "Mean Reward", "Push-PPO — Mean Reward", "plot_reward.png"),
+            ("rew_ema", "EMA Reward", "Push-PPO — EMA Reward", "plot_reward_ema.png"),
+            ("sr", "Success Rate", "Push-PPO — Success Rate", "plot_bob_sr.png"),
+            ("rot_sr", "Rotation SR", "Push-PPO — Rotation SR", "plot_rot_sr.png"),
+            ("pos_err", "Position Error (m)", "Push-PPO — Position Error", "plot_pos_err.png"),
+            ("rot_err", "Rotation Error (rad)", "Push-PPO — Rotation Error", "plot_rot_err.png"),
+        ]:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            _draw_p(ax, key, ylabel, title)
+            plt.tight_layout()
+            _save(fig, fname)
+
+        # IK fail rate
+        has_ik = any(r.get("ik_fail_rate") is not None for r in push_records)
+        if has_ik:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            _draw_p(ax, "ik_fail_rate", "IK Fail Rate", "Push-PPO — IK Fail Rate")
+            ax.axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6, label="5% threshold")
+            ax.legend(fontsize=8)
+            plt.tight_layout()
+            _save(fig, "plot_ik_fail.png")
+
+        # Best SR
+        fig, ax = plt.subplots(figsize=(10, 5))
+        _draw_p(ax, "best_sr", "Best SR", "Push-PPO — Best Success Rate")
+        plt.tight_layout()
+        _save(fig, "plot_best_sr.png")
+        return
+
+    # Combined overview
+    from matplotlib.gridspec import GridSpec
+
+    n_rows = 4  # loss/val/rew row, sr/rotsr row, poserr/roterr row, best_sr row
+    has_ik = any(r.get("ik_fail_rate") is not None for r in push_records)
+    if has_ik:
+        n_rows += 1
+
+    fig = plt.figure(figsize=(18, 6 * n_rows))
+    gs = GridSpec(n_rows, 3, figure=fig, hspace=0.45, wspace=0.32)
+    _row = 0
+
+    ax_loss = fig.add_subplot(gs[_row, 0])
+    ax_val = fig.add_subplot(gs[_row, 1])
+    ax_rew = fig.add_subplot(gs[_row, 2]); _row += 1
+
+    ax_sr = fig.add_subplot(gs[_row, 0])
+    ax_rotsr = fig.add_subplot(gs[_row, 1])
+    ax_rew_ema = fig.add_subplot(gs[_row, 2]); _row += 1
+
+    ax_poserr = fig.add_subplot(gs[_row, 0])
+    ax_roterr = fig.add_subplot(gs[_row, 1])
+    ax_best = fig.add_subplot(gs[_row, 2]); _row += 1
+
+    _draw_p(ax_loss, "loss", "Surrogate Loss", "Push-PPO — Policy Loss")
+    _draw_p(ax_val, "val", "Value Loss", "Push-PPO — Value Loss")
+    _draw_p(ax_rew, "rew", "Mean Reward", "Push-PPO — Mean Reward")
+    _draw_p(ax_sr, "sr", "Success Rate", "Push-PPO — Success Rate")
+    _draw_p(ax_rotsr, "rot_sr", "Rotation SR", "Push-PPO — Rotation Success Rate")
+    _draw_p(ax_rew_ema, "rew_ema", "EMA Reward", "Push-PPO — EMA Reward")
+    _draw_p(ax_poserr, "pos_err", "Position Error (m)", "Push-PPO — Position Error")
+    _draw_p(ax_roterr, "rot_err", "Rotation Error (rad)", "Push-PPO — Rotation Error")
+    _draw_p(ax_best, "best_sr", "Best SR", "Push-PPO — Best Success Rate")
+
+    if has_ik:
+        ax_ik = fig.add_subplot(gs[_row, 0])
+        ax_spare1 = fig.add_subplot(gs[_row, 1])
+        ax_spare2 = fig.add_subplot(gs[_row, 2]); _row += 1
+        _draw_p(ax_ik, "ik_fail_rate", "IK Fail Rate", "Push-PPO — IK Fail Rate")
+        ax_ik.axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6, label="5% threshold")
+        ax_ik.legend(fontsize=8)
+        ax_spare1.axis("off")
+        ax_spare2.axis("off")
+
+    fig.suptitle(f"Push-PPO Training Overview{title_suffix}", fontsize=15, fontweight="bold", y=1.005)
+    plt.tight_layout()
+    _save(fig, "plot_overview.png")
+
+
 def plot_metrics(
     alice_records: list[dict],
     bob_records: list[dict],
     out_dir: Path,
     title_suffix: str = "",
     separate: bool = False,
+    push_records: list[dict] = None,
 ):
     """Render training plots.
 
     separate=False (default): one combined PNG (plot_overview.png) with all panels
                               plus the curriculum-tension panel.
     separate=True:            one PNG per metric, matching the old behaviour.
+    
+    When push_records is provided, renders Push-PPO baseline plots instead of ASP plots.
     """
+    if push_records:
+        _plot_push_metrics(push_records, out_dir, title_suffix, separate)
+        return
+
     if not alice_records and not bob_records:
         print("[WARN] No records to plot.")
         return
@@ -986,42 +1238,55 @@ def plot_metrics(
 
 
 
-def write_summary_txt(chain_idx: int, chain: list[int], a_c: list[dict], b_c: list[dict], out_dir: Path):
+def write_summary_txt(chain_idx: int, chain: list[int], a_c: list[dict], b_c: list[dict], out_dir: Path,
+                      push_c: list[dict] = None):
     """Write human-readable per-chain summary."""
     summary_path = out_dir / "training_updates.txt"
-    # Build a lookup: global_iter → bob record
     bob_by_iter = {r["global_iter"]: r for r in b_c}
     with open(summary_path, "w") as f:
         f.write(f"=== TRAINING UPDATES SUMMARY (Chain {chain_idx}) ===\n\n")
         f.write(f"Jobs in chain: {' → '.join(str(j) for j in chain)}\n\n")
-        for ar in a_c:
-            g = ar["global_iter"]
-            ent = ar.get("entropy_coef")
-            ent_str = f"  Ent={ent:.4f}" if ent is not None else ""
-            br = bob_by_iter.get(g)
-            if br:
-                bob_str = (
-                    f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  "
-                    f"Rew={br['rew']:.4f}  ABC={br['abc']:.4f}  SR={br['sr']:.4f}"
-                )
-            else:
-                bob_str = "[Bob]   —"
-            f.write(
-                f"  Iter {g:5d} | "
-                f"[Alice] Loss={ar['loss']:+.4f}  Val={ar['val']:.4f}  Rew={ar['rew']:.4f}  "
-                f"Valid={ar.get('valid_goals', 0)}  Invalid={ar.get('invalid_goals', 0)}{ent_str}  || "
-                f"{bob_str}\n"
-            )
-        # Any Bob-only iters (when Bob counter > Alice)
-        alice_iters = {r["global_iter"] for r in a_c}
-        for br in b_c:
-            if br["global_iter"] not in alice_iters:
-                g = br["global_iter"]
+
+        if push_c:
+            f.write("Push-PPO Baseline (single-agent):\n")
+            for pr in push_c:
                 f.write(
-                    f"  Iter {g:5d} | [Alice] —  || "
-                    f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  "
-                    f"Rew={br['rew']:.4f}  ABC={br['abc']:.4f}  SR={br['sr']:.4f}\n"
+                    f"  Iter {pr['global_iter']:5d} | "
+                    f"Loss={pr['loss']:+.4f}  Val={pr['val']:.4f}  "
+                    f"Rew={pr['rew']:+.4f} (EMA {pr['rew_ema']:+.4f})  "
+                    f"SR={pr['sr']:.4f}  RotSR={pr['rot_sr']:.4f}  "
+                    f"PosErr={pr['pos_err']:.4f}  RotErr={pr['rot_err']:.4f}  "
+                    f"BestSR={pr['best_sr']:.4f}\n"
                 )
+        else:
+            for ar in a_c:
+                g = ar["global_iter"]
+                ent = ar.get("entropy_coef")
+                ent_str = f"  Ent={ent:.4f}" if ent is not None else ""
+                br = bob_by_iter.get(g)
+                if br:
+                    bob_str = (
+                        f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  "
+                        f"Rew={br['rew']:.4f}  ABC={br['abc']:.4f}  SR={br['sr']:.4f}"
+                    )
+                else:
+                    bob_str = "[Bob]   —"
+                f.write(
+                    f"  Iter {g:5d} | "
+                    f"[Alice] Loss={ar['loss']:+.4f}  Val={ar['val']:.4f}  Rew={ar['rew']:.4f}  "
+                    f"Valid={ar.get('valid_goals', 0)}  Invalid={ar.get('invalid_goals', 0)}{ent_str}  || "
+                    f"{bob_str}\n"
+                )
+            # Any Bob-only iters (when Bob counter > Alice)
+            alice_iters = {r["global_iter"] for r in a_c}
+            for br in b_c:
+                if br["global_iter"] not in alice_iters:
+                    g = br["global_iter"]
+                    f.write(
+                        f"  Iter {g:5d} | [Alice] —  || "
+                        f"[Bob]   Loss={br['loss']:+.4f}  Val={br['val']:.4f}  "
+                        f"Rew={br['rew']:.4f}  ABC={br['abc']:.4f}  SR={br['sr']:.4f}\n"
+                    )
     print(f"[INFO] Wrote {summary_path}")
 
 
@@ -1098,9 +1363,10 @@ def main():
         for i, ch in enumerate(chains):
             print(f"       Chain {i}: {len(ch)} jobs  [{ch[0]} → ... → {ch[-1]}]")
 
-    alice_records, bob_records = assign_global_iters(chains, jobs)
+    alice_records, bob_records, push_records = assign_global_iters(chains, jobs)
     print(
-        f"[INFO] Alice updates: {len(alice_records)}, Bob updates: {len(bob_records)}"
+        f"[INFO] Alice updates: {len(alice_records)}, Bob updates: {len(bob_records)}, "
+        f"Push updates: {len(push_records)}"
     )
     if alice_records:
         print(
@@ -1111,6 +1377,11 @@ def main():
         print(
             f"[INFO] Bob   global iter range: {bob_records[0]['global_iter']} "
             f"→ {bob_records[-1]['global_iter']}"
+        )
+    if push_records:
+        print(
+            f"[INFO] Push  global iter range: {push_records[0]['global_iter']} "
+            f"→ {push_records[-1]['global_iter']}"
         )
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1130,13 +1401,15 @@ def main():
 
         a_c = [r for r in alice_records if r["chain"] == i]
         b_c = [r for r in bob_records if r["chain"] == i]
+        p_c = [r for r in push_records if r["chain"] == i]
 
         write_raw_csv(i, ch, jobs, chain_dir)
-        write_csv(a_c, b_c, chain_dir)
-        write_summary_txt(i, ch, a_c, b_c, chain_dir)
-        plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})", separate=args.separate_plots)
+        write_csv(a_c, b_c, chain_dir, push_records=p_c)
+        write_summary_txt(i, ch, a_c, b_c, chain_dir, push_c=p_c)
+        plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})",
+                     separate=args.separate_plots, push_records=p_c)
 
-    write_csv(alice_records, bob_records, out_dir)
+    write_csv(alice_records, bob_records, out_dir, push_records=push_records)
     print("[INFO] Done.")
 
 

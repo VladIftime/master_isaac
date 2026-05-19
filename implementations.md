@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-19 (phase-end progress reward for Bob + bob_timesteps 200→100)
+**Last updated**: 2026-05-19 (Push-PPO Fix P29–P30: critic output gain fix + reward clamp + out-of-bounds kill)
 
 ---
 
@@ -113,6 +113,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-19 | **Why the dense reward was reverted** — v1 (sparse-only, `asp_curobo_v1.log`) showed Alice's avg 3D displacement growing from 0.037m to 0.120m over 90 iterations, with not-moved dropping 84%→37% — Alice was learning. Bob SR stagnated at 4–5% but the adversarial curriculum was emerging. v5 (dense delta, `asp_curobo_v5.log`) showed Alice stuck at 0.047m with 80–90% not-moved for all 13 iterations. Root cause: the per-step `Φ(s')−Φ(s)` delta was zero-mean noise (±0.02 with 50% of steps producing exactly 0.0); sparse rewards (+1/−1/+5) fired on only ~10% of episodes; the combined reward stream produced GAE advantages indistinguishable from noise, starving both Bob's PPO and Alice's delayed outcome rewards of any learnable gradient. Sparse-only `{+1/−1/+5}` restored. |
 | 2026-05-19 | **Phase-end progress reward for Bob (Fix P28)** — episodic feedback mirrors Alice's structure. `r_progress = clamp(w_pos·(init−final)/init + w_rot·(init−final)/init, −1, +1)` paid once at Bob termination. `bob_timesteps` 200→100 halves credit-assignment horizon. |
 | 2026-05-18 | **Bob rotation control improved**: `max_delta_rot` 0.05→0.10 rad/step (2.9°→5.7°) and Rx/Ry clamp 0.05→0.10 rad — doubled EE tilt range per step so Bob can apply more torque to rotate objects through contact. `train_curobo.py:279,301-303` |
+| 2026-05-19 | Push-PPO Fix P29 (critic output gain): `module_push.py` critic output `Linear(128→1)` had gain=1.0, producing initial value predictions ~±5–10. At 512 envs × 32 pushes = 16,384 transitions, the GAE backward pass amplified this noise into returns of magnitude 1000+, causing Val loss explosions (356k+). Reduced to 0.01 — matches actor head, initial V ≈ 0.057. `module_push.py:83` |
+| 2026-05-19 | Push-PPO Fix P30 (reward clamp + out-of-bounds kill): PhysX collision glitches launched objects thousands of metres away (0.26% of episodes, max Z=1863m), producing single-step penalty −3400 and pos_imp −81600 that slaughtered the critic. Reward components now clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` gains `out_of_bounds` condition (`d_now > 0.5`m from goal) to terminate glitch-launched envs early. `wrapper_push.py:219-223,272-274` |
 
 ---
 
@@ -384,6 +386,8 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix P26 | ASP: Bob couldn't control object rotation because EE tilt range was limited to ±0.05 rad/step (2.9°). `max_delta_rot` 0.05→0.10 rad/step (5.7°) and Rx/Ry clamp 0.05→0.10 rad. Bob now has 2× the per-step torque authority to rotate objects through contact. `BOB_DENSE_ROT_WEIGHT` set to 3.0 (vs position 5.0) so rotation carries meaningful weight in Φ(s). | High (ASP) | ✅ Fixed | `train_curobo.py:279,301-303`, `tasks/utils/wrapper.py:45` |
 | **Fix P27** | **Bob dense delta reward reverted** — the per-step `Φ(s') − Φ(s)` signal was zero-mean noise at 35-env scale, diluting GAE advantages and killing gradient flow for both agents. Sparse-only `{+1/−1/+5}` restored. | **Critical (ASP)** | ✅ Fixed | `tasks/utils/wrapper.py` (removed ~150 lines: `BOB_DENSE_POS_SCALE`, `BOB_DENSE_ROT_WEIGHT`, `_compute_bob_dense_reward()`, state tracking, step logging) |
 | **Fix P28** | **Phase-end progress reward for Bob** — mirrors Alice's episodic feedback: `r_progress = clamp(w_pos·(init−final)/init + w_rot·(init−final)/init, −1, +1)`, paid once at Bob termination. Init errors captured on Bob's first step via `_compute_bob_sparse_rewards`. Progress computed in `_handle_bob_completion` and early-success path. `bob_timesteps` 200→100 halves credit-assignment horizon for single-object T-block task. | **Critical (ASP)** | ✅ Fixed | `tasks/utils/wrapper.py` (+40 lines: `bob_init_pos_err`, `bob_init_rot_err`, `_bob_progress_captured`, init capture, progress computation, reward injection); `cfg/task/AsyncDualPlay.yaml:15` |
+| Fix P29 | Push-PPO: critic output layer `gain=1.0` → initial V≈±5–10, GAE chain-reacts at 512 envs → Val loss 27k–357k. Reduced to `gain=0.01` — initial V≈0.057, GAE stable. | Critical (Push) | ✅ Fixed | `module_push.py:83` (_critic_out gain 1.0→0.01) |
+| Fix P30 | Push-PPO: PhysX glitches launch object to Z=1863m → single-step reward spikes of −3400/−81600 → critic permanently destroyed. Reward components clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` kills env if `d_now > 0.5`m (out-of-bounds). | Critical (Push) | ✅ Fixed | `wrapper_push.py:219-223,272-274` |
 
 **Proposed additional tests (not yet implemented):**
 

@@ -212,6 +212,15 @@ class PushEnvWrapper:
         rot_imp  = PUSH_DENSE_ROT_ALPHA * (y_prev - y_now)          # yaw-only (Fix P15)
         penalty  = -PUSH_DENSE_BETA * d_now
         rot_penalty = -PUSH_DENSE_ROT_BETA * y_now                   # continuous yaw urgency (Fix P17)
+
+        # Clamp reward components to defend against PhysX collision glitches
+        # that launch objects thousands of metres away (0.26% of episodes).
+        # Without clamping, d_now=6800m → penalty=−3400, pos_imp=−81600,
+        # and the resulting return slaughters the critic (Val loss 356k+).
+        pos_imp = torch.clamp(pos_imp, min=-5.0, max=5.0)           # Fix P30
+        rot_imp = torch.clamp(rot_imp, min=-4.0, max=4.0)           # Fix P30
+        penalty = torch.clamp(penalty, min=-2.0, max=0.0)           # Fix P30
+        rot_penalty = torch.clamp(rot_penalty, min=-1.0, max=0.0)   # Fix P30
         reward = pos_imp + rot_imp + penalty + rot_penalty
 
         # Completion bonus (position gate — keeps 5.7% SR floor)
@@ -258,7 +267,11 @@ class PushEnvWrapper:
         launched = obj_z > 0.05
         tipped = (_obs[:, _OBS_ROBOT_DIM + 3].abs() > TIP_OVER_THRESHOLD) | \
                  (_obs[:, _OBS_ROBOT_DIM + 4].abs() > TIP_OVER_THRESHOLD)
-        return terminated | max_pushes | launched | tipped
+        # Out-of-bounds kill volume: object displaced > 0.5m from goal (glitch launch defence)
+        obj_pos = _obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
+        goal_pos = _obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM: _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
+        out_of_bounds = (obj_pos - goal_pos).norm(dim=-1) > 0.5
+        return terminated | max_pushes | launched | tipped | out_of_bounds
 
     def reset_done_envs(self, dones: torch.Tensor):
         """Reset per-env state and resample goals for envs that finished an episode."""
