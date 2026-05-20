@@ -1129,9 +1129,14 @@ class AsyncDualPlayEnvWrapper:
             # in the --alice_sandbox test.
             if getattr(self, "_diag_alice_shaping", False):
                 alice_obs = obs_dict["alice_policy"][is_alice]
-                ee_pos  = alice_obs[:, :3]
-                obj_pos = alice_obs[:, self.robot_state_dim : self.robot_state_dim + 3]
-                delta   = (obj_pos - ee_pos).norm(dim=-1)
+                ee_pos = alice_obs[:, :3]
+                # Distance to nearest object across all num_objects (14D per object).
+                _obj_dim = 14
+                obj_pos_list = [
+                    alice_obs[:, self.robot_state_dim + k * _obj_dim : self.robot_state_dim + k * _obj_dim + 3]
+                    for k in range(self.num_objects)
+                ]
+                delta = torch.stack([(p - ee_pos).norm(dim=-1) for p in obj_pos_list], dim=1).min(dim=1)[0]
                 shaping = 0.005 * torch.clamp(0.3 - delta, 0.0, 0.3)
                 rewards[is_alice] += shaping
 
