@@ -1409,17 +1409,33 @@ def main():
                         _dense = _dbg_rew_acc[_gi].item()
                         _ik_f  = _dbg_ik_fails[_gi].item()
                         _step  = _prev_steps[_gi].item()
-                        _start_pos = _prev_initial[_gi, 0:3].tolist()
-                        _goal_pos  = (_gstates[_gi, 0:3].tolist() if _gstates is not None else [0,0,0])
-                        _start_ori = _prev_initial[_gi, 3:6].tolist()
-                        _goal_ori  = (_gstates[_gi, 3:6].tolist() if _gstates is not None else [0,0,0])
+                        _nobj  = args.num_objects
+
+                        def _fmt_vec(v):
+                            return f"({v[0]:.3f},{v[1]:.3f},{v[2]:.3f})"
+
+                        _start_1 = _prev_initial[_gi, 0:3].tolist()
+                        _start_o1 = _prev_initial[_gi, 3:6].tolist()
+                        _goal_1  = (_gstates[_gi, 0:3].tolist() if _gstates is not None else [0.0, 0.0, 0.0])
+                        _goal_o1 = (_gstates[_gi, 3:6].tolist() if _gstates is not None else [0.0, 0.0, 0.0])
+
+                        _obj2_str = ""
+                        if _nobj >= 2:
+                            _start_2 = _prev_initial[_gi, 6:9].tolist()
+                            _start_o2 = _prev_initial[_gi, 9:12].tolist()
+                            _goal_2  = (_gstates[_gi, 6:9].tolist() if _gstates is not None else [0.0, 0.0, 0.0])
+                            _goal_o2 = (_gstates[_gi, 9:12].tolist() if _gstates is not None else [0.0, 0.0, 0.0])
+                            _obj2_str = (
+                                f"  |  obj2 start={_fmt_vec(_start_2)} ori={_fmt_vec(_start_o2)}"
+                                f"  →  final={_fmt_vec(_goal_2)} ori={_fmt_vec(_goal_o2)}"
+                            )
+
                         print(
                             f"  [ALICE END | iter={bob_updates} env={_gi}]"
                             f"  goal={_valid}"
-                            f"  start=({_start_pos[0]:.3f},{_start_pos[1]:.3f},{_start_pos[2]:.3f})"
-                            f"  ori_start=({_start_ori[0]:.3f},{_start_ori[1]:.3f},{_start_ori[2]:.3f})"
-                            f"  →  final=({_goal_pos[0]:.3f},{_goal_pos[1]:.3f},{_goal_pos[2]:.3f})"
-                            f"  ori_final=({_goal_ori[0]:.3f},{_goal_ori[1]:.3f},{_goal_ori[2]:.3f})"
+                            f"  obj1 start={_fmt_vec(_start_1)} ori={_fmt_vec(_start_o1)}"
+                            f"  →  final={_fmt_vec(_goal_1)} ori={_fmt_vec(_goal_o1)}"
+                            + _obj2_str +
                             f"  phase_rew={_rew:+.3f}  dense_acc={_dense:+.3f}  total={_rew+_dense:+.3f}"
                             f"  ik_fails={_ik_f}  steps={_step}",
                             flush=True,

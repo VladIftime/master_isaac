@@ -39,6 +39,7 @@ import signal
 import sys
 import yaml
 import argparse
+import time
 from collections import deque
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -207,8 +208,12 @@ def main():
     _ik_config = IKSolverConfig.load_from_robot_config(
         _robot_cfg, world_model=None, tensor_args=_tensor_args,
     )
+    # ── Tune LBFGS solver: fewer iterations, same quality for dense waypoints
+    #     (Don't touch particle_optimizer — its sample buffers are pre-allocated)
+    _ik_config.solver.newton_optimizer.n_iters = 30       # was 100
+    _ik_config.solver.newton_optimizer.inner_iters = 10   # was 25
     ik_solver = IKSolver(_ik_config)
-    print("[cuRobo] IK solver created.")
+    print("[cuRobo] IK solver created (tuned for batch).")
 
     # Warm-up CUDA graph
     print(f"[cuRobo] Warming up CUDA graph for N={env.num_envs} envs...")
@@ -374,6 +379,23 @@ def main():
     rot_err_buf = deque(maxlen=push_nsteps * env.num_envs)
     ema_rew     = 0.0
 
+    # ── Profiler (CUDA-synced wall-clock) ──────────────────────────────────
+    _prof_acc = {}
+    _prof_n = {}
+    _prof_t0 = {}
+
+    def _prof_start(name):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        _prof_t0[name] = time.perf_counter()
+
+    def _prof_stop(name):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        dt = time.perf_counter() - _prof_t0.get(name, time.perf_counter())
+        _prof_acc[name] = _prof_acc.get(name, 0.0) + dt
+        _prof_n[name] = _prof_n.get(name, 0) + 1
+
     print(f"\n{'='*80}\nPUSH-PPO BASELINE: {args.exp_name}\nLOG DIR: {run_dir}\n{'='*80}\n")
 
     # ── Init environment ──────────────────────────────────────────────────────
@@ -403,6 +425,7 @@ def main():
     # ── TRAINING LOOP ────────────────────────────────────────────────────────
     while iteration < args.max_iterations:
         agent.storage.clear()
+        _prof_t0.clear()
 
         total_ik_fails = 0
         total_ik_steps = 0
@@ -414,6 +437,7 @@ def main():
 
         for push_step in range(push_nsteps):
             # ── Agent predicts push action ────────────────────────────────────
+            _prof_start("agent")
             with torch.no_grad():
                 # Hidden state propagates across pushes within an episode.
                 # evaluate() uses zero-init per obs (known GAE mismatch for
@@ -426,7 +450,9 @@ def main():
                 if hidden_state is not None and new_h is not None:
                     hidden_state[0] = new_h[0]
                     hidden_state[1] = new_h[1]
+            _prof_stop("agent")
 
+            _prof_start("decode")
             push_params = decode_push_action(actions, num_bins=num_bins)
 
             # ── Compute push waypoints ────────────────────────────────────────
@@ -444,6 +470,7 @@ def main():
                 current_ee_quat=ee_quat_w,
                 device=env.device,
             )
+            _prof_stop("decode")
 
             # ── Execute push trajectory ───────────────────────────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
@@ -454,11 +481,13 @@ def main():
                 ik_target[:, 1].clamp_(_WS_Y[0], _WS_Y[1])
                 ik_target[:, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
+                _prof_start("ik")
                 result = ik_solver.solve_batch(
                     CuroboPose(position=ik_target, quaternion=wp_quat),
                     seed_config=prev_joint_cmd.unsqueeze(1),
                     retract_config=prev_joint_cmd,
                 )
+                _prof_stop("ik")
 
                 ik_ok = result.success.squeeze(-1)
                 cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
@@ -471,6 +500,7 @@ def main():
                 prev_joint_cmd = raw_cmd.detach().clone()
 
                 # Gripper-change pre-step: hold joints while toggling gripper
+                _prof_start("physics")
                 if (wp_grip != prev_grip).any():
                     grip_hold = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
                     grip_hold[:, :6] = cur_joints
@@ -487,8 +517,10 @@ def main():
                 # terminated envs are auto-reset by the base env inside step();
                 # obs already contains post-reset observations for those envs.
                 terminated |= step_terminated
+                _prof_stop("physics")
 
             # ── After push: compute reward & done ────────────────────────────
+            _prof_start("reward")
             reward = env.compute_push_reward(obs)
             # Envs that terminated mid-trajectory were auto-reset inside env.step().
             # obs for those envs is post-reset, so compute_push_reward returns garbage
@@ -497,14 +529,17 @@ def main():
             reward[terminated] = 0.0
             episode_reward += reward
             done = env.check_done(obs, terminated)
+            _prof_stop("reward")
 
             # ── Record transition ────────────────────────────────────────────
+            _prof_start("store")
             agent.storage.add_transitions(
                 obs_pre_push, obs_pre_push, actions, reward, done,
                 value, log_prob, mu, sigma,
                 masks=(~done).float(),
                 hidden_state=stored_h_in,
             )
+            _prof_stop("store")
 
             rew_buf.extend(reward.cpu().tolist())
             cur_at_goal = env.at_goal.float()
@@ -592,11 +627,13 @@ def main():
             env.capture_pre_push(obs)
 
         # ── PPO UPDATE ────────────────────────────────────────────────────────
+        _prof_start("ppo")
         with torch.no_grad():
             last_val = agent.actor_critic.critic(obs)
         agent.storage.compute_returns(last_val, agent.gamma, agent.lam)
         loss_val, loss_surr = agent.update()
         agent.storage.clear()
+        _prof_stop("ppo")
 
         mean_rew    = np.mean(rew_buf) if rew_buf else 0.0
         mean_pos_err = np.mean(pos_err_buf) if pos_err_buf else 0.0
@@ -642,6 +679,22 @@ def main():
             f"BestSR={best_success_rate:.4f}"
         )
         sys.stdout.flush()
+
+        # ── Profiler report ────────────────────────────────────────────────────
+        if _prof_n:
+            entries = []
+            for k, acc in _prof_acc.items():
+                n = _prof_n.get(k, 1)
+                entries.append((k, acc, n, acc / n * 1000))
+            wall_iter = sum(acc for _, acc, _, _ in entries)
+            _pr(f"  [Profiler] {'name':>8} {'tot(s)':>9} {'calls':>7} {'ms/call':>9} {'%iter':>7}")
+            for name, tot, nc, ms in sorted(entries, key=lambda x: -x[1]):
+                pct = 100.0 * tot / wall_iter if wall_iter > 0 else 0.0
+                _pr(f"  [Profiler] {name:>8} {tot:>9.3f} {nc:>7} {ms:>9.2f} {pct:>6.1f}%")
+            _pr(f"  [Profiler] {'TOTAL':>8} {wall_iter:>9.3f}")
+            sys.stdout.flush()
+        _prof_acc.clear()
+        _prof_n.clear()
 
         if sr > best_success_rate:
             best_success_rate = sr

@@ -156,11 +156,25 @@ def reset_objects_to_random_safe_pose(
         pass
 
     try:
-        # Place second object offset from target so they don't collide.
-        # T-block at scale 2.0 is ~0.10×0.16 m; 20 cm X + small Y jitter ensures
-        # clearance even at worst-case random orientations.
-        cx_local = (x_local - 0.20).clamp(x_range[0], x_range[1])
-        cy_local = (y_local + 0.10).clamp(y_range[0], y_range[1])
+        # Place second object with guaranteed minimum separation from target.
+        # Clamping (x-0.20) and (y+0.10) can collapse to the target XY when the
+        # target is near a boundary (e.g. x=-0.35 → cx=clamp(-0.55)=-0.35).
+        # Fixed offset in opposite quadrant avoids this:
+        #   cx = x + sign * 0.25  (flip sign if out of bounds)
+        #   cy = y - sign * 0.15  (ditto)
+        _sign = torch.where(x_local < 0.0, +1.0, -1.0)
+        cx_local = x_local + _sign * 0.25
+        cy_local = y_local - _sign * 0.15
+        # Clamp each independently, then verify separation and fall back if needed.
+        cx_local = cx_local.clamp(x_range[0], x_range[1])
+        cy_local = cy_local.clamp(y_range[0], y_range[1])
+        # If clamping collapsed the gap, push to opposite side.
+        _gap = ((cx_local - x_local) ** 2 + (cy_local - y_local) ** 2).sqrt()
+        _too_close = _gap < 0.15
+        if _too_close.any():
+            _fallback_sign = -_sign[_too_close]
+            cx_local[_too_close] = (x_local[_too_close] + _fallback_sign * 0.25).clamp(x_range[0], x_range[1])
+            cy_local[_too_close] = (y_local[_too_close] - _fallback_sign * 0.15).clamp(y_range[0], y_range[1])
         c_spawn = torch.stack([cx_local, cy_local, spawn_z], dim=1)
         c_world = c_spawn + env_origins
         quat = identity_quat.unsqueeze(0).expand(num_resets, -1)

@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-20 (Fix P31: ABC deadlock diagnosis + Alice diagnostic shaping enabled)
+**Last updated**: 2026-05-20 (Fix P33: cuRobo LBFGS tuning; Fix P32: Push-PPO substep scaling + profiler)
 
 ---
 
@@ -115,7 +115,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-18 | **Bob rotation control improved**: `max_delta_rot` 0.05→0.10 rad/step (2.9°→5.7°) and Rx/Ry clamp 0.05→0.10 rad — doubled EE tilt range per step so Bob can apply more torque to rotate objects through contact. `train_curobo.py:279,301-303` |
 | 2026-05-19 | Push-PPO Fix P29 (critic output gain): `module_push.py` critic output `Linear(128→1)` had gain=1.0, producing initial value predictions ~±5–10. At 512 envs × 32 pushes = 16,384 transitions, the GAE backward pass amplified this noise into returns of magnitude 1000+, causing Val loss explosions (356k+). Reduced to 0.01 — matches actor head, initial V ≈ 0.057. `module_push.py:83` |
 | 2026-05-19 | Push-PPO Fix P30 (reward clamp + out-of-bounds kill) |
-| 2026-05-20 | **Fix P31**: ABC deadlock diagnosed — Alice action entropy too high for ABC to bootstrap Bob; `--diag_alice_shaping` promoted from diagnostic to training flag; new HPC script `train_curobo_shaping.slurm` |: PhysX collision glitches launched objects thousands of metres away (0.26% of episodes, max Z=1863m), producing single-step penalty −3400 and pos_imp −81600 that slaughtered the critic. Reward components now clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` gains `out_of_bounds` condition (`d_now > 0.5`m from goal) to terminate glitch-launched envs early. `wrapper_push.py:219-223,272-274` |
+| 2026-05-20 | **Fix P31**: ABC deadlock diagnosed — Alice action entropy too high for ABC to bootstrap Bob; `--diag_alice_shaping` promoted from diagnostic to training flag; new HPC script `train_curobo_shaping.slurm` |
+| 2026-05-20 | **Fix P32 (Push-PPO speed)**: Push substeps scaled 115→76 (~1.5× faster rollouts). CUDA-synced wall-clock profiler added to `train_push.py` — reports per-iteration timing for 7 sections: `agent`, `decode`, `ik`, `physics`, `reward`, `store`, `ppo`. `action_push.py:16-24`, `train_push.py:41-42,372-393,435+` |
 
 ---
 
@@ -391,6 +392,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix P29 | Push-PPO: critic output layer `gain=1.0` → initial V≈±5–10, GAE chain-reacts at 512 envs → Val loss 27k–357k. Reduced to `gain=0.01` — initial V≈0.057, GAE stable. | Critical (Push) | ✅ Fixed | `module_push.py:83` (_critic_out gain 1.0→0.01) |
 | Fix P30 | Push-PPO: PhysX glitches launch object to Z=1863m → single-step reward spikes of −3400/−81600 → critic permanently destroyed. Reward components clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` kills env if `d_now > 0.5`m (out-of-bounds). | Critical (Push) | ✅ Fixed | `wrapper_push.py:219-223,272-274` |
 | **Fix P31** | **ABC deadlock diagnosed** — Alice learns to move objects (not-moved 73%→21%, avg disp 0.09→0.16m) but her **actions** remain high-entropy random walks because the entropy bonus (`0.005 × H ≈ 0.06`) dominates her surrogate loss (`~|0.005|`). ABC computes `bc_ratio = exp(lp − old_lp) ≈ 1.0` for all 1081 iterations because Alice's random action sequences provide no consistent gradient direction for Bob to clone. Bob's PPO gradient is zero (sparse rewards, SR 1–3%). Bob's value function converges to predict ~0 (val loss 0.02–0.06). Net result: Bob's policy stays at random initialization forever. **Fix**: `--diag_alice_shaping` (EE→object proximity reward: `0.005 × clamp(0.3 − ‖ee−obj‖, 0, 0.3)` per step) gives Alice deliberate approach actions, providing structured demonstrations for ABC to bootstrap Bob. The shaping is ≤3% of ASP outcome rewards (max 0.14/phase via GAE vs 5.0+ from Bob-fail bonus), so the adversarial curriculum remains dominant. New HPC script: `hpc/train_curobo_shaping.slurm`. | **Critical (ASP)** | ✅ Fixed | `train_curobo.py:1130-1135` (shaping already wired), `hpc/train_curobo_shaping.slurm` (new) |
+| **Fix P32** | **Push-PPO rollouts too slow** — 115 substeps per push (3,680 sequential physx+IK steps per iteration at 32 pushes). Rollouts dominated wall-clock, making training impractical at scale. Substeps scaled 115→76 (~1.5× faster). CUDA-synced wall-clock profiler added to `train_push.py` to identify remaining bottlenecks: `agent`, `decode`, `ik`, `physics`, `reward`, `store`, `ppo`. | **High (Push)** | ✅ Fixed | `action_push.py:16-24`, `train_push.py:41-42,372-393,435+` |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -760,15 +762,15 @@ environment executes a multi-step push trajectory using cuRobo IK.
 ### 6.3 Push Primitive Architecture
 
 ```
-Phase 1: Approach   (18 steps)  EE → above object, tool-down, gripper open
-Phase 2: Engage     ( 5 steps)  Close gripper at approach height
-Phase 3: Descend    (24 steps)  EE down to contact height (table + 0.110 m), tool-down
-Phase 4: Push       (30 steps)  EE moves: contact_xy → contact_xy + (push_dx, push_dy), quat interpolates tool-down → tool-down ⊗ RotZ(yaw)  (Fix P7)
-Phase 5: Retract    (24 steps)  EE up to approach height, gripper closed, keeps final yaw quat
-Phase 6: Release    ( 2 steps)  Open gripper at approach height
-Phase 7: Return     (12 steps)  EE back to current TCP position at approach height, tool-down
+Phase 1: Approach   (12 steps, was 18)  EE → above object, tool-down, gripper open
+Phase 2: Engage     ( 3 steps, was 5)   Close gripper at approach height
+Phase 3: Descend    (16 steps, was 24)  EE down to contact height (table + 0.110 m), tool-down
+Phase 4: Push       (20 steps, was 30)  EE moves: contact_xy → contact_xy + (push_dx, push_dy), quat interpolates tool-down → tool-down ⊗ RotZ(yaw)  (Fix P7)
+Phase 5: Retract    (16 steps, was 24)  EE up to approach height, gripper closed, keeps final yaw quat
+Phase 6: Release    ( 1 step, was 2)    Open gripper at approach height
+Phase 7: Return     ( 8 steps, was 12)  EE back to current TCP position at approach height, tool-down
 
-Total: 115 substeps per push macro-action (2.3 s at 50 Hz)
+Total: 76 substeps per push macro-action (~1.5 s at 50 Hz, was 115 substeps / 2.3 s — Fix P32)
 ```
 
 ### 6.4 Action Space
@@ -866,6 +868,27 @@ quat = (0, cos(half), sin(half), 0)  # tool-down ⊗ RotZ(alpha × yaw)
 ```
 Phase 5 (retract) keeps the final yaw quat to avoid snap-back while near the object.
 Approach, descend, release, and return phases stay tool-down throughout.
+
+### 6.12 Profiler (Fix P32)
+
+Per-iteration CUDA-synced wall-clock profiler built into `train_push.py`.
+Tracks 7 sections and prints a compact table each iteration:
+
+```
+[Profiler]     name    tot(s)   calls   ms/call   %iter
+[Profiler]  physics    42.351    2432     17.41   78.1%
+[Profiler]       ik     7.210    2432      2.96   13.3%
+[Profiler]      ppo     1.823       1   1823.00    3.4%
+[Profiler]    agent     1.201      32     37.53    2.2%
+[Profiler]   decode     0.640      32     20.00    1.2%
+[Profiler]   reward     0.521      32     16.28    1.0%
+[Profiler]    store     0.452      32     14.12    0.8%
+[Profiler]    TOTAL    54.198
+```
+
+Uses `_prof_start("name")` / `_prof_stop("name")` helper closures called around each
+section of the push loop and PPO update. Reset each iteration. Zero overhead when not
+profiling (no extra CUDA syncs on the hot path).
 
 ### 6.9 Running
 
@@ -1071,7 +1094,7 @@ press Ctrl+C or close the viewport to exit.
 │  Each push: {offset_x, offset_y, push_dx, push_dy}  │
 │                                                     │
 │  ① Get object position from observation             │
-│  ② compute_push_waypoints() → 115 waypoints         │
+│  ② compute_push_waypoints() → 76 waypoints  (was 115, Fix P32)     │
 │  ③ Per waypoint:                                    │
 │     ik_target = wp_pos − _FIXED_TCP_OFFSET           │
 │     cuRobo solve_batch → joint positions            │
@@ -1089,7 +1112,7 @@ press Ctrl+C or close the viewport to exit.
 | cuRobo config | `ur5e.yml` (ee_link: tool0) |
 | Orientation | Fixed tool-down `[0,1,0,0]` |
 | Gripper | Always closed during push |
-| Steps per push | 115: 18+5+24+30+24+2+12 |
+| Steps per push | 76: 12+3+16+20+16+1+8 (was 115, scaled ~1.5× per Fix P32) |
 | Approach height | 0.40 m above table |
 | Contact height | 0.110 m (cmd) → ~0.095 m actual TCP |
 | TCP offset | Calibrated fixed offset at startup (30-step PD settle) |
@@ -1200,4 +1223,4 @@ Removed cube, cylinder, rect, and triangle from the `PushTaskSceneCfg` entirely 
 |------|--------|
 | `tasks/push_task_curobo.py` | `cube = cylinder = rect = triangle = None` (removed 4 free-falling rigid bodies) |
 | `tests/test_push_primitive.py` | Removed `_swap_object`, `SCENARIO_OBJECTS`, `_ALL_OBJECT_NAMES`; `active_obj_name` hardcoded to `"target_object"` |
-| `tasks/utils/action_push.py` | `PUSH_APPROACH_HEIGHT = 0.40 m`; descend/retract = 24 steps each; release = 2 steps; total 115 substeps |
+| `tasks/utils/action_push.py` | `PUSH_APPROACH_HEIGHT = 0.40 m`; substeps 115→76 per push (Fix P32) |

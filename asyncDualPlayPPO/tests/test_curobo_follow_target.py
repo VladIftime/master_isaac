@@ -552,39 +552,40 @@ def main():
 
     # Viewport windows stacked on the left — pass positions to the constructor
     # so the underlying setPosition() call fires correctly.
-    _vp_side = vp_util.create_viewport_window(
-        "Side View", width=420, height=280, position_x=0, position_y=0
-    )
-    _vp_side.viewport_api.camera_path = _cam_side
-
-    _vp_top = vp_util.create_viewport_window(
-        "Top View", width=420, height=280, position_x=0, position_y=290
-    )
-    _vp_top.viewport_api.camera_path = _cam_top
-
-    _vp_ee = vp_util.create_viewport_window(
-        "EE View", width=420, height=280, position_x=0, position_y=580
-    )
-    _vp_ee.viewport_api.camera_path = _cam_ee_path
-
-    # Zoom the main viewport in by 50% — move its camera halfway toward the
-    # robot working-area centre so the scene fills the screen more tightly.
-    _active_vp = vp_util.get_active_viewport()
-    _main_cam_prim = stage.GetPrimAtPath(_active_vp.camera_path)
-    if _main_cam_prim.IsValid():
-        _cam_xform = UsdGeom.Xformable(_main_cam_prim)
-        _eye = _cam_xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
-        _focus = Gf.Vec3d(0.0, 0.5, 0.4)
-        _new_eye = _focus + (_eye - _focus) * 0.5
-        _main_translate_op = next(
-            (op for op in _cam_xform.GetOrderedXformOps()
-             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
-            None,
+    if not args.headless:
+        _vp_side = vp_util.create_viewport_window(
+            "Side View", width=420, height=280, position_x=0, position_y=0
         )
-        if _main_translate_op is not None:
-            _main_translate_op.Set(_new_eye)
-        else:
-            UsdGeom.XformCommonAPI(_main_cam_prim).SetTranslate(_new_eye)
+        _vp_side.viewport_api.camera_path = _cam_side
+
+        _vp_top = vp_util.create_viewport_window(
+            "Top View", width=420, height=280, position_x=0, position_y=290
+        )
+        _vp_top.viewport_api.camera_path = _cam_top
+
+        _vp_ee = vp_util.create_viewport_window(
+            "EE View", width=420, height=280, position_x=0, position_y=580
+        )
+        _vp_ee.viewport_api.camera_path = _cam_ee_path
+
+        # Zoom the main viewport in by 50% — move its camera halfway toward the
+        # robot working-area centre so the scene fills the screen more tightly.
+        _active_vp = vp_util.get_active_viewport()
+        _main_cam_prim = stage.GetPrimAtPath(_active_vp.camera_path)
+        if _main_cam_prim.IsValid():
+            _cam_xform = UsdGeom.Xformable(_main_cam_prim)
+            _eye = _cam_xform.ComputeLocalToWorldTransform(Usd.TimeCode.Default()).ExtractTranslation()
+            _focus = Gf.Vec3d(0.0, 0.5, 0.4)
+            _new_eye = _focus + (_eye - _focus) * 0.5
+            _main_translate_op = next(
+                (op for op in _cam_xform.GetOrderedXformOps()
+                 if op.GetOpType() == UsdGeom.XformOp.TypeTranslate),
+                None,
+            )
+            if _main_translate_op is not None:
+                _main_translate_op.Set(_new_eye)
+            else:
+                UsdGeom.XformCommonAPI(_main_cam_prim).SetTranslate(_new_eye)
 
     def _read_ball_pos() -> torch.Tensor:
         mat = _xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
