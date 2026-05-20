@@ -1128,8 +1128,9 @@ class AsyncDualPlayEnvWrapper:
             # manipulation.  Remove after the diagnostic confirms ValidGoals trends upward
             # in the --alice_sandbox test.
             if getattr(self, "_diag_alice_shaping", False):
-                obj_pos = obs_dict["object_state"][is_alice, :3]
-                ee_pos  = obs_dict["ee_pose"][is_alice, :3]
+                alice_obs = obs_dict["alice_policy"][is_alice]
+                ee_pos  = alice_obs[:, :3]
+                obj_pos = alice_obs[:, self.robot_state_dim : self.robot_state_dim + 3]
                 delta   = (obj_pos - ee_pos).norm(dim=-1)
                 shaping = 0.005 * torch.clamp(0.3 - delta, 0.0, 0.3)
                 rewards[is_alice] += shaping
