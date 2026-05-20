@@ -64,7 +64,7 @@ ALICE_ROT_RE = re.compile(
     r"\[AliceRot\]\s+roll=([-\d.]+)rad\s+pitch=([-\d.]+)rad\s+yaw=([-\d.]+)rad\s+\(n=(\d+)\)"
 )
 BOB_SR_RE = re.compile(
-    r"\[BobSR\]\s+PosSR=([-\d.]+)\s+RotSR=([-\d.]+)\s+PosErr=([-\d.]+)m\s+RotErr=([-\d.]+)rad\s+\(n=(\d+)\)"
+    r"\[BobSR\]\s+PosSR=([-\d.]+)\s+RotSR=([-\d.]+)\s+PosErr=([-\d.]+)m\s+RotErr=([-\d.]+)rad(.*?)\(n=(\d+)\)"
 )
 # Push-PPO baseline log format — single-agent compact iteration line
 PUSH_ITER_RE = re.compile(
@@ -183,6 +183,13 @@ def parse_logs(log_dir: Path) -> dict:
                 iter_stats[n]["bob_rot_sr"] = float(bm.group(2))
                 iter_stats[n]["bob_pos_err"] = float(bm.group(3))
                 iter_stats[n]["bob_rot_err"] = float(bm.group(4))
+                
+                # Parse optional object-specific metrics
+                extra_str = bm.group(5)
+                for om in re.finditer(r"Obj(\d+)_pos=([-\d.]+)\s+Obj\1_rot=([-\d.]+)", extra_str):
+                    idx = int(om.group(1))
+                    iter_stats[n][f"bob_obj{idx}_pos_err"] = float(om.group(2))
+                    iter_stats[n][f"bob_obj{idx}_rot_err"] = float(om.group(3))
 
         # Old-format fallback: per-event [AliceEnd] lines
         valid_pos = []
@@ -295,6 +302,10 @@ def parse_logs(log_dir: Path) -> dict:
                     "rot_sr": ist.get("bob_rot_sr"),
                     "pos_err": ist.get("bob_pos_err"),
                     "rot_err": ist.get("bob_rot_err"),
+                    "obj0_pos_err": ist.get("bob_obj0_pos_err"),
+                    "obj0_rot_err": ist.get("bob_obj0_rot_err"),
+                    "obj1_pos_err": ist.get("bob_obj1_pos_err"),
+                    "obj1_rot_err": ist.get("bob_obj1_rot_err"),
                 }
             )
             
@@ -588,6 +599,10 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
         "avg_pushes",
         "episodes",
         "best_sr",
+        "obj0_pos_err",
+        "obj0_rot_err",
+        "obj1_pos_err",
+        "obj1_rot_err",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -595,7 +610,8 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
         for r in alice_records:
             writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "",
                              "rew_ema": "", "pos_sr": "", "rot_sr": "", "pos_err": "", "rot_err": "",
-                             "avg_pushes": "", "episodes": "", "best_sr": "", **r})
+                             "avg_pushes": "", "episodes": "", "best_sr": "", 
+                             "obj0_pos_err": "", "obj0_rot_err": "", "obj1_pos_err": "", "obj1_rot_err": "", **r})
         for r in bob_records:
             writer.writerow({
                 "agent": "bob",
@@ -638,6 +654,10 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
                     "avg_pushes": r.get("avg_pushes"),
                     "episodes": r.get("episodes"),
                     "best_sr": r.get("best_sr"),
+                    "obj0_pos_err": "",
+                    "obj0_rot_err": "",
+                    "obj1_pos_err": "",
+                    "obj1_rot_err": "",
                 })
     print(f"[INFO] Wrote {out_path}")
     return out_path
@@ -690,6 +710,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "avg_pushes",
         "episodes",
         "best_sr",
+        "obj0_pos_err",
+        "obj0_rot_err",
+        "obj1_pos_err",
+        "obj1_rot_err",
     ]
 
     def _v(d, k):
@@ -728,6 +752,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "rot_sr": "",
                     "pos_err": "",
                     "rot_err": "",
+                    "obj0_pos_err": "",
+                    "obj0_rot_err": "",
+                    "obj1_pos_err": "",
+                    "obj1_rot_err": "",
                 })
             for upd in job["bob"]:
                 writer.writerow({
@@ -760,6 +788,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "avg_pushes": "",
                     "episodes": "",
                     "best_sr": "",
+                    "obj0_pos_err": _v(upd, "obj0_pos_err"),
+                    "obj0_rot_err": _v(upd, "obj0_rot_err"),
+                    "obj1_pos_err": _v(upd, "obj1_pos_err"),
+                    "obj1_rot_err": _v(upd, "obj1_rot_err"),
                 })
             for upd in job["push"]:
                 writer.writerow({
@@ -792,6 +824,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "avg_pushes": upd["avg_pushes"],
                     "episodes": upd["episodes"],
                     "best_sr": upd["best_sr"],
+                    "obj0_pos_err": "",
+                    "obj0_rot_err": "",
+                    "obj1_pos_err": "",
+                    "obj1_rot_err": "",
                 })
     print(f"[INFO] Wrote {out_path}")
 
@@ -930,14 +966,7 @@ def plot_metrics(
     separate: bool = False,
     push_records: list[dict] = None,
 ):
-    """Render training plots.
-
-    separate=False (default): one combined PNG (plot_overview.png) with all panels
-                              plus the curriculum-tension panel.
-    separate=True:            one PNG per metric, matching the old behaviour.
-    
-    When push_records is provided, renders Push-PPO baseline plots instead of ASP plots.
-    """
+    """Render training plots."""
     if push_records:
         _plot_push_metrics(push_records, out_dir, title_suffix, separate)
         return
@@ -948,7 +977,6 @@ def plot_metrics(
 
     alice_colors = ["tab:blue", "cornflowerblue", "navy", "steelblue"]
     bob_colors   = ["tab:red",  "tomato",          "darkred", "salmon"]
-    abc_colors   = ["tab:green","mediumseagreen",  "darkgreen","lightgreen"]
 
     all_chain_indices = sorted(
         set([r["chain"] for r in alice_records] + [r["chain"] for r in bob_records])
@@ -958,28 +986,29 @@ def plot_metrics(
     a_labels = [f"Alice C{c}" for c in all_chain_indices]
     b_labels = [f"Bob C{c}"   for c in all_chain_indices]
 
-    a_ent_by_chain      = [[r for r in recs if r.get("entropy_coef")   is not None] for recs in a_by_chain]
     a_disp_by_chain     = [[r for r in recs if r.get("avg_xy")         is not None] for recs in a_by_chain]
     a_z_by_chain        = [[r for r in recs if r.get("avg_z")          is not None] for recs in a_by_chain]
-    a_ik_by_chain       = [[r for r in recs if r.get("ik_fail_rate")   is not None] for recs in a_by_chain]
     a_notmov_by_chain   = [[r for r in recs if r.get("not_moved_frac") is not None] for recs in a_by_chain]
     a_roll_by_chain     = [[r for r in recs if r.get("alice_rot_roll")  is not None] for recs in a_by_chain]
     a_pitch_by_chain    = [[r for r in recs if r.get("alice_rot_pitch") is not None] for recs in a_by_chain]
     a_yaw_by_chain      = [[r for r in recs if r.get("alice_rot_yaw")   is not None] for recs in a_by_chain]
     b_pos_sr_by_chain   = [[r for r in recs if r.get("pos_sr")          is not None] for recs in b_by_chain]
     b_rot_sr_by_chain   = [[r for r in recs if r.get("rot_sr")          is not None] for recs in b_by_chain]
-    has_ik_data         = any(a_ik_by_chain)
     has_alice_rot_data  = any(a_roll_by_chain)
 
+    b_pos_err_by_chain  = [[r for r in recs if r.get("pos_err")         is not None] for recs in b_by_chain]
+    b_rot_err_by_chain  = [[r for r in recs if r.get("rot_err")         is not None] for recs in b_by_chain]
+    has_bob_err         = any(b_pos_err_by_chain)
+
     # ------------------------------------------------------------------ helpers
-    def _draw(ax, records_list, labels, colors, key):
+    def _draw(ax, records_list, labels, colors, key, linestyle="-"):
         """Add lines for one metric onto ax — no axis formatting."""
         for records, label, color in zip(records_list, labels, colors):
             pts = [(r["global_iter"], r[key]) for r in records if r.get(key) is not None]
             if not pts:
                 continue
             xs, ys = zip(*pts)
-            ax.plot(xs, smooth(list(ys)), color=color, label=label, linewidth=1.5)
+            ax.plot(xs, smooth(list(ys)), color=color, label=label, linewidth=1.5, linestyle=linestyle)
 
     def _fmt(ax, ylabel, title):
         ax.set_title(title + title_suffix)
@@ -988,42 +1017,11 @@ def plot_metrics(
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
-    def _fill(ax, records_list_a, records_list_b, labels_a, labels_b, key, ylabel, title):
+    def _fill_both(ax, records_list_a, records_list_b, labels_a, labels_b, key, ylabel, title):
         """Draw both Alice and Bob series onto ax, then format."""
         _draw(ax, records_list_a, labels_a, alice_colors, key)
         _draw(ax, records_list_b, labels_b, bob_colors,   key)
         _fmt(ax, ylabel, title)
-
-    def _tension(ax):
-        """Overlay Alice entropy, Bob SR and Bob ABC_coef to show curriculum tension."""
-        for i, (a_c, b_c) in enumerate(zip(a_ent_by_chain, b_by_chain)):
-            ac = alice_colors[i % len(alice_colors)]
-            bc = bob_colors[i % len(bob_colors)]
-            gc = abc_colors[i % len(abc_colors)]
-            suffix = f" C{all_chain_indices[i]}"
-            # Alice entropy — solid
-            if a_c:
-                xs, ys = zip(*[(r["global_iter"], r["entropy_coef"]) for r in a_c])
-                ax.plot(xs, smooth(list(ys)), color=ac, linewidth=1.8,
-                        label=f"Alice Entropy{suffix}")
-            # Bob SR — dashed
-            sr_pts = [(r["global_iter"], r["sr"]) for r in b_c if r.get("sr") is not None]
-            if sr_pts:
-                xs, ys = zip(*sr_pts)
-                ax.plot(xs, smooth(list(ys)), color=bc, linewidth=1.8,
-                        linestyle="--", label=f"Bob SR{suffix}")
-            # Bob ABC_coef — dotted
-            abc_pts = [(r["global_iter"], r["abc_coef"]) for r in b_c
-                       if r.get("abc_coef") is not None]
-            if abc_pts:
-                xs, ys = zip(*abc_pts)
-                ax.plot(xs, smooth(list(ys)), color=gc, linewidth=1.8,
-                        linestyle=":", label=f"ABC Coef{suffix}")
-        # Reference line at target SR = 0.5
-        ax.axhline(0.5, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
-                   label="Target SR = 0.5")
-        _fmt(ax, "Value [0–1]",
-             "Curriculum Tension: Alice Entropy / Bob SR / ABC Coef")
 
     # ---------------------------------------------------------------- save helper
     def _save(fig, name):
@@ -1034,25 +1032,18 @@ def plot_metrics(
 
     # ============================================================ separate mode
     if separate:
-        def _solo(draw_fn, ylabel, title, fname, figsize=(10, 5)):
-            fig, ax = plt.subplots(figsize=figsize)
-            draw_fn(ax)
-            _fmt(ax, ylabel, title)
-            plt.tight_layout()
-            _save(fig, fname)
-
         fig, ax = plt.subplots(figsize=(10, 5))
-        _fill(ax, a_by_chain, b_by_chain, a_labels, b_labels, "loss", "Loss",
-              "Policy Loss — Alice & Bob")
+        _draw(ax, a_by_chain, a_labels, alice_colors, "loss")
+        _fmt(ax, "Loss", "Policy Loss — Alice")
         plt.tight_layout(); _save(fig, "plot_loss.png")
 
         fig, ax = plt.subplots(figsize=(10, 5))
-        _fill(ax, a_by_chain, b_by_chain, a_labels, b_labels, "val", "Value Loss",
+        _fill_both(ax, a_by_chain, b_by_chain, a_labels, b_labels, "val", "Value Loss",
               "Value Loss — Alice & Bob")
         plt.tight_layout(); _save(fig, "plot_value_loss.png")
 
         fig, ax = plt.subplots(figsize=(10, 5))
-        _fill(ax, a_by_chain, b_by_chain, a_labels, b_labels, "rew", "Reward",
+        _fill_both(ax, a_by_chain, b_by_chain, a_labels, b_labels, "rew", "Reward",
               "Mean Episode Reward — Alice & Bob")
         plt.tight_layout(); _save(fig, "plot_reward.png")
 
@@ -1061,58 +1052,26 @@ def plot_metrics(
         _fmt(ax, "Success Rate", "Bob — Success Rate")
         plt.tight_layout(); _save(fig, "plot_bob_sr.png")
 
-        fig, ax = plt.subplots(figsize=(10, 5))
-        _draw(ax, b_by_chain, b_labels, bob_colors, "abc")
-        _fmt(ax, "ABC Loss", "Bob — ABC Loss")
-        plt.tight_layout(); _save(fig, "plot_bob_abc.png")
-
-        if any(a_ent_by_chain):
-            fig, ax = plt.subplots(figsize=(10, 5))
-            _draw(ax, a_ent_by_chain, a_labels, alice_colors, "entropy_coef")
-            _fmt(ax, "Entropy Coef", "Alice — Entropy Coefficient")
-            plt.tight_layout(); _save(fig, "plot_alice_entropy.png")
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-        _draw(ax, a_by_chain, a_labels, alice_colors, "valid_goals")
-        _fmt(ax, "Goals", "Alice — Valid Goals")
-        plt.tight_layout(); _save(fig, "plot_alice_valid_goals.png")
-
-        fig, ax = plt.subplots(figsize=(10, 5))
-        _draw(ax, a_by_chain, a_labels, alice_colors, "invalid_goals")
-        _fmt(ax, "Goals", "Alice — Invalid Goals")
-        plt.tight_layout(); _save(fig, "plot_alice_invalid_goals.png")
-
         if any(a_disp_by_chain):
-            ncols = 3 if any(a_z_by_chain) else 2
-            fig, axes_d = plt.subplots(1, ncols, figsize=(7 * ncols, 5))
-            _draw(axes_d[0], a_disp_by_chain, a_labels, alice_colors, "avg_xy")
-            _fmt(axes_d[0], "Avg XY (m)", "Alice — Avg Goal Displacement XY")
-            _draw(axes_d[1], a_disp_by_chain, a_labels, alice_colors, "max_xy")
-            _fmt(axes_d[1], "Max XY (m)", "Alice — Max Goal Displacement XY")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            _draw(ax, a_disp_by_chain, [f"XY {l}" for l in a_labels], alice_colors, "avg_xy")
             if any(a_z_by_chain):
-                _draw(axes_d[2], a_z_by_chain, a_labels, alice_colors, "avg_z")
-                _fmt(axes_d[2], "Avg Z (m)", "Alice — Avg Goal Displacement Z")
+                _draw(ax, a_z_by_chain, [f"Z {l}" for l in a_labels], ["tab:orange"]*len(a_labels), "avg_z", linestyle="--")
+            _fmt(ax, "Displacement (m)", "Alice — Avg Goal Displacement")
             plt.tight_layout(); _save(fig, "plot_alice_goal_displacement.png")
 
-        if has_ik_data:
-            fig, axes_ik = plt.subplots(1, 2, figsize=(14, 5))
-            _draw(axes_ik[0], a_ik_by_chain, a_labels, alice_colors, "ik_fail_rate")
-            _fmt(axes_ik[0], "IK Fail Rate", "cuRobo — IK Fail Rate per Iteration")
-            axes_ik[0].axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
-                               label="5% threshold")
-            axes_ik[0].legend(fontsize=8)
-            _draw(axes_ik[1], a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
-            _fmt(axes_ik[1], "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
-            plt.tight_layout(); _save(fig, "plot_curobo.png")
+        if any(a_notmov_by_chain):
+            fig, ax = plt.subplots(figsize=(10, 5))
+            _draw(ax, a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
+            _fmt(ax, "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
+            plt.tight_layout(); _save(fig, "plot_not_moved.png")
 
         if has_alice_rot_data:
-            fig, axes_rot = plt.subplots(1, 3, figsize=(21, 5))
-            _draw(axes_rot[0], a_roll_by_chain, a_labels, alice_colors, "alice_rot_roll")
-            _fmt(axes_rot[0], "Roll (rad)", "Alice — Goal Rotation Change (Roll)")
-            _draw(axes_rot[1], a_pitch_by_chain, a_labels, alice_colors, "alice_rot_pitch")
-            _fmt(axes_rot[1], "Pitch (rad)", "Alice — Goal Rotation Change (Pitch)")
-            _draw(axes_rot[2], a_yaw_by_chain, a_labels, alice_colors, "alice_rot_yaw")
-            _fmt(axes_rot[2], "Yaw (rad)", "Alice — Goal Rotation Change (Yaw)")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            _draw(ax, a_roll_by_chain, [f"Roll {l}" for l in a_labels], alice_colors, "alice_rot_roll")
+            _draw(ax, a_pitch_by_chain, [f"Pitch {l}" for l in a_labels], ["tab:orange"]*len(a_labels), "alice_rot_pitch", linestyle="--")
+            _draw(ax, a_yaw_by_chain, [f"Yaw {l}" for l in a_labels], ["tab:green"]*len(a_labels), "alice_rot_yaw", linestyle=":")
+            _fmt(ax, "Rotation (rad)", "Alice — Goal Rotation Change")
             plt.tight_layout(); _save(fig, "plot_alice_rotation.png")
 
         if any(b_pos_sr_by_chain) or any(b_rot_sr_by_chain):
@@ -1123,116 +1082,110 @@ def plot_metrics(
             _fmt(axes_sr[1], "Rotation SR", "Bob — Rotation-Only Success Rate")
             plt.tight_layout(); _save(fig, "plot_bob_sr_split.png")
 
-        fig, ax = plt.subplots(figsize=(14, 5))
-        _tension(ax)
-        plt.tight_layout(); _save(fig, "plot_tension.png")
+        if has_bob_err:
+            fig, axes_err = plt.subplots(1, 2, figsize=(14, 5))
+            _draw(axes_err[0], b_pos_err_by_chain, [f"Global {l}" for l in b_labels], bob_colors, "pos_err", linestyle="-")
+            _draw(axes_err[1], b_rot_err_by_chain, [f"Global {l}" for l in b_labels], bob_colors, "rot_err", linestyle="-")
+            
+            _draw(axes_err[0], b_pos_err_by_chain, [f"Obj0 {l}" for l in b_labels], ["tab:orange"]*len(b_labels), "obj0_pos_err", linestyle="--")
+            _draw(axes_err[1], b_rot_err_by_chain, [f"Obj0 {l}" for l in b_labels], ["tab:orange"]*len(b_labels), "obj0_rot_err", linestyle="--")
+            
+            _draw(axes_err[0], b_pos_err_by_chain, [f"Obj1 {l}" for l in b_labels], ["tab:purple"]*len(b_labels), "obj1_pos_err", linestyle=":")
+            _draw(axes_err[1], b_rot_err_by_chain, [f"Obj1 {l}" for l in b_labels], ["tab:purple"]*len(b_labels), "obj1_rot_err", linestyle=":")
+            
+            _fmt(axes_err[0], "Position Error (m)", "Bob — Position Error")
+            _fmt(axes_err[1], "Rotation Error (rad)", "Bob — Rotation Error")
+            plt.tight_layout(); _save(fig, "plot_bob_errors.png")
 
         return
 
     # ============================================================ combined mode
     from matplotlib.gridspec import GridSpec
+    import math
 
-    n_rows = 5
-    extra_rows = 0
-    if has_ik_data:
-        extra_rows += 1  # IK fail + notmov
-    if has_alice_rot_data:
-        extra_rows += 1  # Alice rotation change (roll/pitch/yaw)
-    if any(b_pos_sr_by_chain) or any(b_rot_sr_by_chain):
-        extra_rows += 1  # Bob PosSR / RotSR
-    n_rows += extra_rows
-    fig_h = 6 * n_rows
-    fig = plt.figure(figsize=(18, fig_h))
-    gs  = GridSpec(n_rows, 3, figure=fig, hspace=0.45, wspace=0.32)
-    _row = 0
+    panels = []
 
-    ax_loss    = fig.add_subplot(gs[_row, 0])
-    ax_val     = fig.add_subplot(gs[_row, 1])
-    ax_rew     = fig.add_subplot(gs[_row, 2]); _row += 1
+    def plot_loss(ax):
+        _draw(ax, a_by_chain, a_labels, alice_colors, "loss")
+        _fmt(ax, "Loss", "Policy Loss — Alice")
+    panels.append(plot_loss)
 
-    ax_sr      = fig.add_subplot(gs[_row, 0])
-    ax_ent     = fig.add_subplot(gs[_row, 1])
-    ax_abc_l   = fig.add_subplot(gs[_row, 2]); _row += 1
+    def plot_val(ax):
+        _fill_both(ax, a_by_chain, b_by_chain, a_labels, b_labels, "val", "Value Loss", "Value Loss — Alice & Bob")
+    panels.append(plot_val)
 
-    ax_valid   = fig.add_subplot(gs[_row, 0])
-    ax_invalid = fig.add_subplot(gs[_row, 1])
-    ax_disp    = fig.add_subplot(gs[_row, 2]); _row += 1
-    tension_row = n_rows - 1
-    ax_tension = fig.add_subplot(gs[tension_row, :])
+    def plot_rew(ax):
+        _fill_both(ax, a_by_chain, b_by_chain, a_labels, b_labels, "rew", "Reward", "Episode Reward — Alice & Bob")
+    panels.append(plot_rew)
 
-    _fill(ax_loss,  a_by_chain, b_by_chain, a_labels, b_labels, "loss", "Loss",
-          "Policy Loss — Alice & Bob")
-    _fill(ax_val,   a_by_chain, b_by_chain, a_labels, b_labels, "val",  "Value Loss",
-          "Value Loss — Alice & Bob")
-    _fill(ax_rew,   a_by_chain, b_by_chain, a_labels, b_labels, "rew",  "Reward",
-          "Episode Reward — Alice & Bob")
+    def plot_sr(ax):
+        _draw(ax, b_by_chain, b_labels, bob_colors, "sr")
+        _fmt(ax, "Success Rate", "Bob — Success Rate")
+    panels.append(plot_sr)
 
-    _draw(ax_sr, b_by_chain, b_labels, bob_colors, "sr")
-    _fmt(ax_sr, "Success Rate", "Bob — Success Rate")
+    def plot_goals(ax):
+        _draw(ax, a_by_chain, [f"Valid {l}" for l in a_labels], alice_colors, "valid_goals")
+        _draw(ax, a_by_chain, [f"Invalid {l}" for l in a_labels], ["tab:orange", "darkorange", "saddlebrown", "peru"], "invalid_goals", linestyle="--")
+        _fmt(ax, "Goals", "Alice — Valid & Invalid Goals")
+    panels.append(plot_goals)
 
-    _draw(ax_ent, a_ent_by_chain, a_labels, alice_colors, "entropy_coef")
-    _fmt(ax_ent, "Entropy Coef", "Alice — Entropy Coefficient")
-
-    _draw(ax_abc_l, b_by_chain, b_labels, bob_colors, "abc")
-    _fmt(ax_abc_l, "ABC Loss", "Bob — ABC Loss")
-
-    _draw(ax_valid,   a_by_chain, a_labels, alice_colors, "valid_goals")
-    _fmt(ax_valid, "Goals", "Alice — Valid Goals")
-
-    _draw(ax_invalid, a_by_chain, a_labels, alice_colors, "invalid_goals")
-    _fmt(ax_invalid, "Goals", "Alice — Invalid Goals")
-
-    _draw(ax_disp, a_disp_by_chain, a_labels, alice_colors, "avg_xy")
     if any(a_disp_by_chain):
-        _draw(ax_disp, a_disp_by_chain,
-              [f"max {l}" for l in a_labels],
-              ["tab:purple", "mediumpurple", "indigo", "plum"], "max_xy")
-    if any(a_z_by_chain):
-        _draw(ax_disp, a_z_by_chain,
-              [f"Z {l}" for l in a_labels],
-              ["tab:orange", "darkorange", "saddlebrown", "peru"], "avg_z")
-    _fmt(ax_disp, "Displacement (m)", "Alice — Goal Displacement XY / Z")
-
-    if has_ik_data:
-        ax_ik       = fig.add_subplot(gs[_row, 0])
-        ax_notmov   = fig.add_subplot(gs[_row, 1])
-        ax_ik_spare = fig.add_subplot(gs[_row, 2]); _row += 1
-        _draw(ax_ik, a_ik_by_chain, a_labels, alice_colors, "ik_fail_rate")
-        ax_ik.axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6,
-                      label="5% threshold")
-        _fmt(ax_ik, "IK Fail Rate", "cuRobo — IK Fail Rate")
-        _draw(ax_notmov, a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
-        _fmt(ax_notmov, "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
-        if _row > 0:
-            ax_ik_spare.axis("off")
+        def plot_disp(ax):
+            _draw(ax, a_disp_by_chain, [f"XY {l}" for l in a_labels], alice_colors, "avg_xy")
+            if any(a_z_by_chain):
+                _draw(ax, a_z_by_chain, [f"Z {l}" for l in a_labels], ["tab:orange"]*len(a_labels), "avg_z", linestyle="--")
+            _fmt(ax, "Displacement (m)", "Alice — Avg Goal Displacement")
+        panels.append(plot_disp)
 
     if has_alice_rot_data:
-        ax_rot_roll  = fig.add_subplot(gs[_row, 0])
-        ax_rot_pitch = fig.add_subplot(gs[_row, 1])
-        ax_rot_yaw   = fig.add_subplot(gs[_row, 2]); _row += 1
-        _draw(ax_rot_roll,  a_roll_by_chain,  a_labels, alice_colors, "alice_rot_roll")
-        _fmt(ax_rot_roll, "Roll (rad)", "Alice — Rot Change (Roll)")
-        _draw(ax_rot_pitch, a_pitch_by_chain, a_labels, alice_colors, "alice_rot_pitch")
-        _fmt(ax_rot_pitch, "Pitch (rad)", "Alice — Rot Change (Pitch)")
-        _draw(ax_rot_yaw,   a_yaw_by_chain,   a_labels, alice_colors, "alice_rot_yaw")
-        _fmt(ax_rot_yaw, "Yaw (rad)", "Alice — Rot Change (Yaw)")
+        def plot_rot(ax):
+            _draw(ax, a_roll_by_chain, [f"Roll {l}" for l in a_labels], alice_colors, "alice_rot_roll")
+            _draw(ax, a_pitch_by_chain, [f"Pitch {l}" for l in a_labels], ["tab:orange"]*len(a_labels), "alice_rot_pitch", linestyle="--")
+            _draw(ax, a_yaw_by_chain, [f"Yaw {l}" for l in a_labels], ["tab:green"]*len(a_labels), "alice_rot_yaw", linestyle=":")
+            _fmt(ax, "Rotation (rad)", "Alice — Rot Change")
+        panels.append(plot_rot)
 
     if any(b_pos_sr_by_chain) or any(b_rot_sr_by_chain):
-        ax_pos_sr = fig.add_subplot(gs[_row, 0])
-        ax_rot_sr2 = fig.add_subplot(gs[_row, 1])
-        ax_spare_sr = fig.add_subplot(gs[_row, 2]); _row += 1
-        _draw(ax_pos_sr, b_pos_sr_by_chain, b_labels, bob_colors, "pos_sr")
-        _fmt(ax_pos_sr, "Position SR", "Bob — Position-Only Success Rate")
-        _draw(ax_rot_sr2, b_rot_sr_by_chain, b_labels, bob_colors, "rot_sr")
-        _fmt(ax_rot_sr2, "Rotation SR", "Bob — Rotation-Only Success Rate")
-        ax_spare_sr.axis("off")
+        def plot_bob_srs(ax):
+            _draw(ax, b_pos_sr_by_chain, [f"Pos SR {l}" for l in b_labels], bob_colors, "pos_sr")
+            _draw(ax, b_rot_sr_by_chain, [f"Rot SR {l}" for l in b_labels], ["tab:purple"]*len(b_labels), "rot_sr", linestyle="--")
+            _fmt(ax, "Success Rate", "Bob — Pos/Rot Success Rate")
+        panels.append(plot_bob_srs)
 
-    tension_row = _row
-    ax_tension = fig.add_subplot(gs[tension_row, :])
+    if any(a_notmov_by_chain):
+        def plot_notmov(ax):
+            _draw(ax, a_notmov_by_chain, a_labels, alice_colors, "not_moved_frac")
+            _fmt(ax, "Not-Moved Fraction", "Alice — Not-Moved Phase Fraction")
+        panels.append(plot_notmov)
 
-    _tension(ax_tension)
+    if has_bob_err:
+        def plot_err_pos(ax):
+            _draw(ax, b_pos_err_by_chain, [f"Global {l}" for l in b_labels], bob_colors, "pos_err", linestyle="-")
+            _draw(ax, b_pos_err_by_chain, [f"Obj0 {l}" for l in b_labels], ["tab:orange"]*len(b_labels), "obj0_pos_err", linestyle="--")
+            _draw(ax, b_pos_err_by_chain, [f"Obj1 {l}" for l in b_labels], ["tab:purple"]*len(b_labels), "obj1_pos_err", linestyle=":")
+            _fmt(ax, "Position Error (m)", "Bob — Position Error")
+        panels.append(plot_err_pos)
 
-    fig.suptitle(f"Training Overview{title_suffix}", fontsize=15, fontweight="bold", y=1.005)
+        def plot_err_rot(ax):
+            _draw(ax, b_rot_err_by_chain, [f"Global {l}" for l in b_labels], bob_colors, "rot_err", linestyle="-")
+            _draw(ax, b_rot_err_by_chain, [f"Obj0 {l}" for l in b_labels], ["tab:orange"]*len(b_labels), "obj0_rot_err", linestyle="--")
+            _draw(ax, b_rot_err_by_chain, [f"Obj1 {l}" for l in b_labels], ["tab:purple"]*len(b_labels), "obj1_rot_err", linestyle=":")
+            _fmt(ax, "Rotation Error (rad)", "Bob — Rotation Error")
+        panels.append(plot_err_rot)
+
+    n_cols = 3
+    n_rows = math.ceil(len(panels) / n_cols)
+    fig_h = max(4.5 * n_rows, 5.0)
+    fig = plt.figure(figsize=(18, fig_h))
+    gs = GridSpec(n_rows, n_cols, figure=fig, hspace=0.35, wspace=0.25)
+    
+    for idx, panel_fn in enumerate(panels):
+        r = idx // n_cols
+        c = idx % n_cols
+        ax = fig.add_subplot(gs[r, c])
+        panel_fn(ax)
+
+    fig.suptitle(f"Training Overview{title_suffix}", fontsize=15, fontweight="bold")
     plt.tight_layout()
     _save(fig, "plot_overview.png")
 

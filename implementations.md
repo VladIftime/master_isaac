@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-19 (Push-PPO Fix P29–P30: critic output gain fix + reward clamp + out-of-bounds kill)
+**Last updated**: 2026-05-20 (Fix P31: ABC deadlock diagnosis + Alice diagnostic shaping enabled)
 
 ---
 
@@ -114,7 +114,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-19 | **Phase-end progress reward for Bob (Fix P28)** — episodic feedback mirrors Alice's structure. `r_progress = clamp(w_pos·(init−final)/init + w_rot·(init−final)/init, −1, +1)` paid once at Bob termination. `bob_timesteps` 200→100 halves credit-assignment horizon. |
 | 2026-05-18 | **Bob rotation control improved**: `max_delta_rot` 0.05→0.10 rad/step (2.9°→5.7°) and Rx/Ry clamp 0.05→0.10 rad — doubled EE tilt range per step so Bob can apply more torque to rotate objects through contact. `train_curobo.py:279,301-303` |
 | 2026-05-19 | Push-PPO Fix P29 (critic output gain): `module_push.py` critic output `Linear(128→1)` had gain=1.0, producing initial value predictions ~±5–10. At 512 envs × 32 pushes = 16,384 transitions, the GAE backward pass amplified this noise into returns of magnitude 1000+, causing Val loss explosions (356k+). Reduced to 0.01 — matches actor head, initial V ≈ 0.057. `module_push.py:83` |
-| 2026-05-19 | Push-PPO Fix P30 (reward clamp + out-of-bounds kill): PhysX collision glitches launched objects thousands of metres away (0.26% of episodes, max Z=1863m), producing single-step penalty −3400 and pos_imp −81600 that slaughtered the critic. Reward components now clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` gains `out_of_bounds` condition (`d_now > 0.5`m from goal) to terminate glitch-launched envs early. `wrapper_push.py:219-223,272-274` |
+| 2026-05-19 | Push-PPO Fix P30 (reward clamp + out-of-bounds kill) |
+| 2026-05-20 | **Fix P31**: ABC deadlock diagnosed — Alice action entropy too high for ABC to bootstrap Bob; `--diag_alice_shaping` promoted from diagnostic to training flag; new HPC script `train_curobo_shaping.slurm` |: PhysX collision glitches launched objects thousands of metres away (0.26% of episodes, max Z=1863m), producing single-step penalty −3400 and pos_imp −81600 that slaughtered the critic. Reward components now clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` gains `out_of_bounds` condition (`d_now > 0.5`m from goal) to terminate glitch-launched envs early. `wrapper_push.py:219-223,272-274` |
 
 ---
 
@@ -241,7 +242,7 @@ Policy output (6D MultiCategorical, 11 bins)
 
 - `AsyncDualPlayEnvWrapper` (`tasks/utils/wrapper.py`): phase management, goal validation, reward, ABC buffer
 - `AsyncDualPlayCuRoboEnvCfg` (`tasks/async_dual_play_curobo.py`): scene with `JointPositionActionCfg`
-- Alice per-step rewards unconditionally 0.0 (Fixes 3 & 11)
+- Alice per-step rewards: **0.0 by default** (Fixes 3 & 11).  **Fix P31**: `--diag_alice_shaping` adds per-step EE→object proximity reward (`0.005 × clamp(0.3 − ‖ee−obj‖, 0, 0.3)`) to give Alice deliberate approach actions for ABC bootstrapping.  Max cumulative contribution ≤0.14/phase via GAE vs 5.0+ ASP outcome rewards — the adversarial curriculum remains dominant.
 - T-block (`t_shape.usda`) as sole task object, scale (2.0, 2.0, 1.5), spawn position (0.0, 0.5, 0.05)
 - Goal ghost matches T-block shape (no random spawn function)
 - Goal validation: z_max=0.05 rejects airborne goals; out_of_zone goals fully invalid; shallow goals (displacement 0.05–0.10m) valid for Bob but Alice gets −1 penalty instead of +1 (Fix P23)
@@ -269,7 +270,8 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 
 | Script | Purpose |
 |---|---|
-| `train_curobo.slurm` | Production cuRobo training run |
+| `train_curobo.slurm` | Production cuRobo training run (baseline sparse) |
+| `train_curobo_shaping.slurm` | Production cuRobo + `--diag_alice_shaping` (Fix P31 — EE→obj proximity) |
 | `train_curobo_large.slurm` | Large-scale (512+ envs) |
 | `train_curobo_profile.slurm` | 3-iteration profiler run |
 | `diagnostic_tests.slurm` | Full 4-test suite on HPC |
@@ -388,6 +390,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | **Fix P28** | **Phase-end progress reward for Bob** — mirrors Alice's episodic feedback: `r_progress = clamp(w_pos·(init−final)/init + w_rot·(init−final)/init, −1, +1)`, paid once at Bob termination. Init errors captured on Bob's first step via `_compute_bob_sparse_rewards`. Progress computed in `_handle_bob_completion` and early-success path. `bob_timesteps` 200→100 halves credit-assignment horizon for single-object T-block task. | **Critical (ASP)** | ✅ Fixed | `tasks/utils/wrapper.py` (+40 lines: `bob_init_pos_err`, `bob_init_rot_err`, `_bob_progress_captured`, init capture, progress computation, reward injection); `cfg/task/AsyncDualPlay.yaml:15` |
 | Fix P29 | Push-PPO: critic output layer `gain=1.0` → initial V≈±5–10, GAE chain-reacts at 512 envs → Val loss 27k–357k. Reduced to `gain=0.01` — initial V≈0.057, GAE stable. | Critical (Push) | ✅ Fixed | `module_push.py:83` (_critic_out gain 1.0→0.01) |
 | Fix P30 | Push-PPO: PhysX glitches launch object to Z=1863m → single-step reward spikes of −3400/−81600 → critic permanently destroyed. Reward components clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` kills env if `d_now > 0.5`m (out-of-bounds). | Critical (Push) | ✅ Fixed | `wrapper_push.py:219-223,272-274` |
+| **Fix P31** | **ABC deadlock diagnosed** — Alice learns to move objects (not-moved 73%→21%, avg disp 0.09→0.16m) but her **actions** remain high-entropy random walks because the entropy bonus (`0.005 × H ≈ 0.06`) dominates her surrogate loss (`~|0.005|`). ABC computes `bc_ratio = exp(lp − old_lp) ≈ 1.0` for all 1081 iterations because Alice's random action sequences provide no consistent gradient direction for Bob to clone. Bob's PPO gradient is zero (sparse rewards, SR 1–3%). Bob's value function converges to predict ~0 (val loss 0.02–0.06). Net result: Bob's policy stays at random initialization forever. **Fix**: `--diag_alice_shaping` (EE→object proximity reward: `0.005 × clamp(0.3 − ‖ee−obj‖, 0, 0.3)` per step) gives Alice deliberate approach actions, providing structured demonstrations for ABC to bootstrap Bob. The shaping is ≤3% of ASP outcome rewards (max 0.14/phase via GAE vs 5.0+ from Bob-fail bonus), so the adversarial curriculum remains dominant. New HPC script: `hpc/train_curobo_shaping.slurm`. | **Critical (ASP)** | ✅ Fixed | `train_curobo.py:1130-1135` (shaping already wired), `hpc/train_curobo_shaping.slurm` (new) |
 
 **Proposed additional tests (not yet implemented):**
 
