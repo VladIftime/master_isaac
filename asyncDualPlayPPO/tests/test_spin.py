@@ -34,24 +34,25 @@ _WS_Y = (0.25,  0.70)
 _WS_Z = ( 0.00, 0.55)
 
 
-# ── Spin-focused scenarios: large offset + tangential push = max torque ────
-# Torque = offset_x * push_dy - offset_y * push_dx
+# ── Spin-focused scenarios: push at offset from object centroid for torque ──
+# Object at (0,0.5).  Xs,Ys offset from object centroid creates lever arm;
+# theta gives tangential push direction for max spin.
 SPIN_SCENARIOS = [
-    # S0: offset far right, push up → CCW spin
-    {"label": "offset right 0.15, push up 0.25 → CCW spin (torque ~0.0375)",
-     "offset_x": 0.15, "offset_y": 0.0, "push_dx": 0.0, "push_dy": 0.25},
-    # S1: offset far up, push left → CW spin
-    {"label": "offset up 0.15, push left 0.25 → CW spin (torque ~0.0375)",
-     "offset_x": 0.0, "offset_y": 0.15, "push_dx": -0.25, "push_dy": 0.0},
+    # S0: offset right, push up → CCW spin
+    {"label": "offset right, push up → CCW spin",
+     "Xs": 0.15, "Ys": 0.50, "length": 0.25, "theta": 1.571},
+    # S1: offset up, push left → CW spin
+    {"label": "offset up, push left → CW spin",
+     "Xs": 0.00, "Ys": 0.65, "length": 0.25, "theta": 3.142},
     # S2: offset diagonal, push perpendicular → spin
-    {"label": "offset (0.1,0.1), push (-0.15,0.15) → spin (torque ~0.03)",
-     "offset_x": 0.10, "offset_y": 0.10, "push_dx": -0.15, "push_dy": 0.15},
-    # S3: pure forward offset → no torque (control test)
-    {"label": "offset y=0.15, push y=0.25 → NO spin (torque=0)",
-     "offset_x": 0.0, "offset_y": 0.15, "push_dx": 0.0, "push_dy": 0.25},
-    # S4: offset far left, push up → CW spin
-    {"label": "offset left 0.15, push up 0.25 → CW spin (torque ~0.0375)",
-     "offset_x": -0.15, "offset_y": 0.0, "push_dx": 0.0, "push_dy": 0.25},
+    {"label": "offset (0.1,0.1), push diagonal → spin",
+     "Xs": 0.10, "Ys": 0.60, "length": 0.21, "theta": 2.356},
+    # S3: aligned with object → no torque (control)
+    {"label": "aligned behind, push forward → NO spin",
+     "Xs": 0.00, "Ys": 0.65, "length": 0.25, "theta": 1.571},
+    # S4: offset left, push up → CW spin
+    {"label": "offset left, push up → CW spin",
+     "Xs": -0.15, "Ys": 0.50, "length": 0.25, "theta": 1.571},
 ]
 
 
@@ -145,40 +146,28 @@ def main():
         obj_before = obs[0, env.robot_dim:env.robot_dim + 6].clone()
         yaw_before_deg = math.degrees(float(obj_before[5]))
 
-        # Compute torque prediction
-        torque = sc["offset_x"] * sc["push_dy"] - sc["offset_y"] * sc["push_dx"]
-        print(f"  Predicted yaw torque: {torque:+.4f}  (offset × push)")
+        print(f"  Xs=({sc['Xs']:+.2f},{sc['Ys']:+.2f})  len={sc['length']:.2f}  theta={math.degrees(sc['theta']):.0f}°")
 
         # Execute push
         prev_jcmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
         current_ee = _tcp_local()
 
         waypoints = compute_push_waypoints(
-            offset_x=torch.tensor([sc["offset_x"]], device=device),
-            offset_y=torch.tensor([sc["offset_y"]], device=device),
-            push_dx=torch.tensor([sc["push_dx"]], device=device),
-            push_dy=torch.tensor([sc["push_dy"]], device=device),
-            push_dz=torch.tensor([0.0], device=device),
-            yaw    =torch.tensor([sc.get("yaw", 0.0)], device=device),
-            obj_pos=obs[:, env.robot_dim:env.robot_dim + 3],
+            Xs=torch.tensor([sc["Xs"]], device=device),
+            Ys=torch.tensor([sc["Ys"]], device=device),
+            length=torch.tensor([sc["length"]], device=device),
+            theta=torch.tensor([sc["theta"]], device=device),
             current_ee_pos=current_ee,
             current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),
             device=device,
         )
 
         last_good_joints = prev_jcmd.clone()
-        prev_grip = torch.ones(1, device=device)
         max_angvel_seen = 0.0
         ik_ok = 0
 
-        for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
+        for wp_i, (wp_pos, wp_quat, _wp_grip) in enumerate(waypoints):
             cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
-            if (wp_grip != prev_grip).any():
-                grip_hold = torch.zeros(1, env.action_space.shape[0], device=device)
-                grip_hold[:, :6] = cur_joints
-                grip_hold[:, 6] = wp_grip
-                obs, _, _, _, _ = env.step(grip_hold)
-                prev_grip = wp_grip.clone()
 
             ik_target = wp_pos - _FIXED_TCP_OFFSET
             ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
@@ -200,7 +189,7 @@ def main():
 
             env_full = torch.zeros(1, env.action_space.shape[0], device=device)
             env_full[:, :6] = raw_cmd
-            env_full[:, 6] = wp_grip
+            env_full[:, 6] = -1.0  # always closed
             obs, _, _, _, _ = env.step(env_full)
 
             angvel = float(obs[0, env.robot_dim + 9:env.robot_dim + 12].norm().item())

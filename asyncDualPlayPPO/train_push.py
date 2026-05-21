@@ -4,8 +4,14 @@ Push-PPO baseline training script.
 Single-agent PPO with push primitive macro-actions.  No ASP, no ABC, no
 historical pool — just a single PPO agent learning to push objects to goals.
 
+Action space: 4D MultiCategorical (Xs, Ys, length, theta).
+  Xs, Ys  = push start position in world coords
+  length   = push length
+  theta    = push orientation angle
+  Gripper always closed — no control over it.
+
 Architecture:
-  Agent predicts 6D push parameters → push waypoints → cuRobo IK per
+  Agent predicts 4D push params → push waypoints → cuRobo IK per
   waypoint → physics step → dense reward after push completes → PPO update.
 
 Run locally:
@@ -39,7 +45,7 @@ import signal
 import sys
 import yaml
 import argparse
-import time
+import math
 from collections import deque
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -148,7 +154,7 @@ def main():
 
     _policy_cfg = ppo_cfg["params"]["policy"]
 
-    num_cat_dims = 6
+    num_cat_dims = 4
     num_bins = 21
     use_lstm = _policy_cfg.get("use_lstm", True)
 
@@ -228,6 +234,8 @@ def main():
 
     _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
 
+    _debug_per_env = args.num_envs <= 5
+
     # ── Goal marker visualizer (VisualizationMarkers — no physics, no collision) ──
     _goal_viz = VisualizationMarkers(
         VisualizationMarkersCfg(
@@ -258,6 +266,71 @@ def main():
     # Import _euler_to_quat from wrapper_push for the helper
     from asyncDualPlayPPO.tasks.utils.wrapper_push import _euler_to_quat
     env._euler_to_quat_imported = True
+
+    # ── Push debug markers: green sphere at start, red at end, blue cylinder arrow ──
+    _push_viz_start = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/PushStart",
+            markers={
+                "sphere": sim_utils.SphereCfg(
+                    radius=0.015,
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
+                ),
+            },
+        )
+    )
+    _push_viz_end = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/PushEnd",
+            markers={
+                "sphere": sim_utils.SphereCfg(
+                    radius=0.015,
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
+                ),
+            },
+        )
+    )
+    _push_viz_arrow = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/PushArrow",
+            markers={
+                "cylinder": sim_utils.CylinderCfg(
+                    radius=0.005, height=0.30,
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.4, 1.0)),
+                ),
+            },
+        )
+    )
+
+    _ident_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], dtype=torch.float32)
+
+    def _update_push_markers(Xs, Ys, Xf, Yf, theta):
+        try:
+            N = Xs.shape[0]
+            origins = env.env.scene.env_origins
+            z_table = 0.002
+            ident = _ident_quat.to(env.device).expand(N, 4)
+
+            start_pos = torch.stack([Xs, Ys, torch.full((N,), z_table, device=env.device)], dim=-1) + origins
+            end_pos   = torch.stack([Xf, Yf, torch.full((N,), z_table, device=env.device)], dim=-1) + origins
+
+            _push_viz_start.visualize(translations=start_pos, orientations=ident)
+            _push_viz_end.visualize(translations=end_pos, orientations=ident)
+
+            # Cylinder at midpoint, oriented along push direction
+            mid_w = torch.stack([(Xs + Xf) / 2, (Ys + Yf) / 2,
+                                 torch.full((N,), z_table, device=env.device)], dim=-1) + origins
+            half = math.pi / 4
+            ch, sh = math.cos(half), math.sin(half)
+            arrow_quat = torch.stack([
+                torch.full((N,), ch, device=env.device),
+                -sh * torch.sin(theta),
+                 sh * torch.cos(theta),
+                torch.zeros(N, device=env.device),
+            ], dim=-1)
+            _push_viz_arrow.visualize(translations=mid_w, orientations=arrow_quat)
+        except Exception:
+            pass  # markers are non-critical debug visualisation
 
     # Workspace clamp limits (local / env-origin-relative frame, metres)
     _WS_X = (-0.50, 0.50)
@@ -316,6 +389,7 @@ def main():
     agent_cfg["learn"]["lam"] = lam
     agent_cfg["learn"]["optim_stepsize"] = learning_rate
     agent_cfg["policy"]["num_bins"] = num_bins
+    agent_cfg["policy"]["num_cat_dims"] = num_cat_dims
 
     agent = PPO(
         vec_env=env,
@@ -379,23 +453,6 @@ def main():
     rot_err_buf = deque(maxlen=push_nsteps * env.num_envs)
     ema_rew     = 0.0
 
-    # ── Profiler (CUDA-synced wall-clock) ──────────────────────────────────
-    _prof_acc = {}
-    _prof_n = {}
-    _prof_t0 = {}
-
-    def _prof_start(name):
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        _prof_t0[name] = time.perf_counter()
-
-    def _prof_stop(name):
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-        dt = time.perf_counter() - _prof_t0.get(name, time.perf_counter())
-        _prof_acc[name] = _prof_acc.get(name, 0.0) + dt
-        _prof_n[name] = _prof_n.get(name, 0) + 1
-
     print(f"\n{'='*80}\nPUSH-PPO BASELINE: {args.exp_name}\nLOG DIR: {run_dir}\n{'='*80}\n")
 
     # ── Init environment ──────────────────────────────────────────────────────
@@ -405,6 +462,12 @@ def main():
     _update_goal_markers()
     print("Training loop starting...")
     sys.stdout.flush()
+
+    # ── Close gripper once (always closed in push primitive) ──────────────
+    _close_act = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
+    _close_act[:, :6] = _robot_scene.data.joint_pos[:, _arm_jids]
+    _close_act[:, 6] = -1.0
+    env.step(_close_act)
 
     # Per-env state accumulators
     episode_reward = torch.zeros(env.num_envs, device=env.device)
@@ -425,7 +488,6 @@ def main():
     # ── TRAINING LOOP ────────────────────────────────────────────────────────
     while iteration < args.max_iterations:
         agent.storage.clear()
-        _prof_t0.clear()
 
         total_ik_fails = 0
         total_ik_steps = 0
@@ -437,7 +499,6 @@ def main():
 
         for push_step in range(push_nsteps):
             # ── Agent predicts push action ────────────────────────────────────
-            _prof_start("agent")
             with torch.no_grad():
                 # Hidden state propagates across pushes within an episode.
                 # evaluate() uses zero-init per obs (known GAE mismatch for
@@ -450,44 +511,42 @@ def main():
                 if hidden_state is not None and new_h is not None:
                     hidden_state[0] = new_h[0]
                     hidden_state[1] = new_h[1]
-            _prof_stop("agent")
 
-            _prof_start("decode")
-            push_params = decode_push_action(actions, num_bins=num_bins)
-
-            # ── Compute push waypoints ────────────────────────────────────────
-            obj_pos = env._get_obj_pos(obs)
+            Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
+            Xf = Xs + length * torch.cos(theta)
+            Yf = Ys + length * torch.sin(theta)
 
             waypoints = compute_push_waypoints(
-                offset_x=push_params[:, 0],
-                offset_y=push_params[:, 1],
-                push_dx=push_params[:, 2],
-                push_dy=push_params[:, 3],
-                push_dz=push_params[:, 5],
-                yaw=push_params[:, 4],
-                obj_pos=obj_pos,
+                Xs=Xs, Ys=Ys, length=length, theta=theta,
                 current_ee_pos=ee_pos_local,
                 current_ee_quat=ee_quat_w,
                 device=env.device,
             )
-            _prof_stop("decode")
 
-            # ── Execute push trajectory ───────────────────────────────────────
+            _update_push_markers(Xs, Ys, Xf, Yf, theta)
+
+            if _debug_per_env:
+                for e in range(env.num_envs):
+                    _pr(
+                        f"    env {e}: bins=({', '.join(f'{int(actions[e,i].item()):2d}' for i in range(4))})  "
+                        f"Xs={float(Xs[e]):+.3f} Ys={float(Ys[e]):+.3f} "
+                        f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°  "
+                        f"→ Xf={float(Xf[e]):+.3f} Yf={float(Yf[e]):+.3f}"
+                    )
+
+            # ── Execute push trajectory (gripper always closed) ────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            prev_grip = torch.ones(env.num_envs, device=env.device)
-            for wp_idx, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
+            for wp_idx, (wp_pos, wp_quat, _wp_grip) in enumerate(waypoints):
                 ik_target = wp_pos - _TOTAL_IK_ERROR
                 ik_target[:, 0].clamp_(_WS_X[0], _WS_X[1])
                 ik_target[:, 1].clamp_(_WS_Y[0], _WS_Y[1])
                 ik_target[:, 2].clamp_(_WS_Z[0], _WS_Z[1])
 
-                _prof_start("ik")
                 result = ik_solver.solve_batch(
                     CuroboPose(position=ik_target, quaternion=wp_quat),
                     seed_config=prev_joint_cmd.unsqueeze(1),
                     retract_config=prev_joint_cmd,
                 )
-                _prof_stop("ik")
 
                 ik_ok = result.success.squeeze(-1)
                 cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
@@ -496,31 +555,23 @@ def main():
                 total_ik_fails += int((~ik_ok).sum().item())
 
                 solved = result.solution.view(env.num_envs, 6)
+                # Elbow joint (index 2) muststay positive  — negative = arm folded inward, dangerous
+                elbow_bad = solved[:, 2] < 0.0
+                if elbow_bad.any():
+                    terminated[elbow_bad] = True
+                    ik_ok[elbow_bad] = False
                 raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, prev_joint_cmd)
                 prev_joint_cmd = raw_cmd.detach().clone()
 
-                # Gripper-change pre-step: hold joints while toggling gripper
-                _prof_start("physics")
-                if (wp_grip != prev_grip).any():
-                    grip_hold = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
-                    grip_hold[:, :6] = cur_joints
-                    grip_hold[:, 6] = wp_grip
-                    obs, _, step_term2, _, _ = env.step(grip_hold)
-                    terminated |= step_term2
-                    prev_grip = wp_grip.clone()
-
+                # Gripper always closed — no toggle step needed
                 env_full = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
                 env_full[:, :6] = raw_cmd
-                env_full[:, 6] = wp_grip
+                env_full[:, 6] = -1.0  # always closed
 
                 obs, _, step_terminated, truncated, _ = env.step(env_full)
-                # terminated envs are auto-reset by the base env inside step();
-                # obs already contains post-reset observations for those envs.
                 terminated |= step_terminated
-                _prof_stop("physics")
 
             # ── After push: compute reward & done ────────────────────────────
-            _prof_start("reward")
             reward = env.compute_push_reward(obs)
             # Envs that terminated mid-trajectory were auto-reset inside env.step().
             # obs for those envs is post-reset, so compute_push_reward returns garbage
@@ -529,17 +580,14 @@ def main():
             reward[terminated] = 0.0
             episode_reward += reward
             done = env.check_done(obs, terminated)
-            _prof_stop("reward")
 
             # ── Record transition ────────────────────────────────────────────
-            _prof_start("store")
             agent.storage.add_transitions(
                 obs_pre_push, obs_pre_push, actions, reward, done,
                 value, log_prob, mu, sigma,
                 masks=(~done).float(),
                 hidden_state=stored_h_in,
             )
-            _prof_stop("store")
 
             rew_buf.extend(reward.cpu().tolist())
             cur_at_goal = env.at_goal.float()
@@ -558,7 +606,9 @@ def main():
                     f"  [Push {push_step:3d}] "
                     f"rew={reward.mean().item():+.3f}  (pos={pi:+.3f} rot={ri:+.3f} dist={dp:+.3f} bonus={cb:+.3f})  "
                     f"pos_err={env._last_pos_err.mean().item():.3f}  rot_err={env._last_rot_err.mean().item():.3f}  "
-                    f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}"
+                    f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}  "
+                    f"Xs=({float(Xs.mean().item()):+.2f},{float(Ys.mean().item()):+.2f}) "
+                    f"len={float(length.mean().item()):.2f} θ={math.degrees(float(theta.mean().item())):.0f}°"
                 )
 
             # ── Handle done envs ──────────────────────────────────────────────
@@ -627,13 +677,11 @@ def main():
             env.capture_pre_push(obs)
 
         # ── PPO UPDATE ────────────────────────────────────────────────────────
-        _prof_start("ppo")
         with torch.no_grad():
             last_val = agent.actor_critic.critic(obs)
         agent.storage.compute_returns(last_val, agent.gamma, agent.lam)
         loss_val, loss_surr = agent.update()
         agent.storage.clear()
-        _prof_stop("ppo")
 
         mean_rew    = np.mean(rew_buf) if rew_buf else 0.0
         mean_pos_err = np.mean(pos_err_buf) if pos_err_buf else 0.0
@@ -679,22 +727,6 @@ def main():
             f"BestSR={best_success_rate:.4f}"
         )
         sys.stdout.flush()
-
-        # ── Profiler report ────────────────────────────────────────────────────
-        if _prof_n:
-            entries = []
-            for k, acc in _prof_acc.items():
-                n = _prof_n.get(k, 1)
-                entries.append((k, acc, n, acc / n * 1000))
-            wall_iter = sum(acc for _, acc, _, _ in entries)
-            _pr(f"  [Profiler] {'name':>8} {'tot(s)':>9} {'calls':>7} {'ms/call':>9} {'%iter':>7}")
-            for name, tot, nc, ms in sorted(entries, key=lambda x: -x[1]):
-                pct = 100.0 * tot / wall_iter if wall_iter > 0 else 0.0
-                _pr(f"  [Profiler] {name:>8} {tot:>9.3f} {nc:>7} {ms:>9.2f} {pct:>6.1f}%")
-            _pr(f"  [Profiler] {'TOTAL':>8} {wall_iter:>9.3f}")
-            sys.stdout.flush()
-        _prof_acc.clear()
-        _prof_n.clear()
 
         if sr > best_success_rate:
             best_success_rate = sr
