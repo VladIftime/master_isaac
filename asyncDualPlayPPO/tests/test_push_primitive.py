@@ -48,44 +48,46 @@ _WS_Y = (0.25,  0.70)
 _WS_Z = ( 0.232, 0.55)  # floor = 0.093 TCP + ~0.139 tool0-to-TCP offset
 
 # ── Scenarios: each is a 3-push sequence ─────────────────────────────────────
-# Each push: {offset_x, offset_y, push_dx, push_dy}
+# Each push: {Xs, Ys, length, theta}
+#   Xs, Ys   = push start position in world coords
+#   length    = push length
+#   theta     = push orientation angle (rad)
 SCENARIOS = [
-    # S0 works to spin dont change
+    # S0: push forward-left from right side
     [
-        {"offset_x": -0.08, "offset_y": 0.08, "push_dx": 0.0,   "push_dy": -0.10},
-        {"offset_x": 0.1, "offset_y": 0.00, "push_dx": -0.15, "push_dy": 0.0},
-        {"offset_x": 0.08, "offset_y": -0.08, "push_dx": -0.1,   "push_dy": 0.1},
+        {"Xs": -0.10, "Ys": 0.55, "length": 0.10, "theta": -1.571},
+        {"Xs":  0.10, "Ys": 0.50, "length": 0.15, "theta":  3.142},
+        {"Xs":  0.05, "Ys": 0.45, "length": 0.12, "theta":  2.356},
     ],
-
-    # S1: Push1=Fwd + Push2=Right2
+    # S1: push right from left side
     [
-        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
-        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
-        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
+        {"Xs": -0.15, "Ys": 0.55, "length": 0.10, "theta": 0.0},
+        {"Xs": -0.25, "Ys": 0.45, "length": 0.12, "theta": 0.0},
+        {"Xs": -0.35, "Ys": 0.55, "length": 0.10, "theta": 0.0},
     ],
-    # S2: Push1=Fwd + Push2=Bwd
+    # S2: push left from right side
     [
-        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
-        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
-        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
+        {"Xs": 0.15, "Ys": 0.50, "length": 0.10, "theta": 3.142},
+        {"Xs": 0.25, "Ys": 0.60, "length": 0.12, "theta": 3.142},
+        {"Xs": 0.35, "Ys": 0.40, "length": 0.10, "theta": 3.142},
     ],
-    # S3: Push1=Fwd + Push2=Fwd
+    # S3: push forward from behind
     [
-        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
-        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
-        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
+        {"Xs": -0.05, "Ys": 0.35, "length": 0.12, "theta": 1.571},
+        {"Xs":  0.05, "Ys": 0.30, "length": 0.12, "theta": 1.571},
+        {"Xs": -0.10, "Ys": 0.30, "length": 0.10, "theta": 1.571},
     ],
-    # S4: Push1=Fwd + Push2=LeftFwd
+    # S4: diagonal push
     [
-        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
-        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
-        {"offset_x": 0.1, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
+        {"Xs": -0.20, "Ys": 0.60, "length": 0.12, "theta": 0.785},
+        {"Xs": -0.10, "Ys": 0.45, "length": 0.12, "theta": 2.356},
+        {"Xs":  0.05, "Ys": 0.65, "length": 0.12, "theta": -0.785},
     ],
-    # S5: Push1=Fwd + Push2=RightFwd
+    # S5: varied approaches at same object
     [
-        {"offset_x": -0.1, "offset_y": -0.1, "push_dx": 0.07,  "push_dy": 0.07},
-        {"offset_x": -0.1, "offset_y": 0.00, "push_dx": 0.10, "push_dy": 0.05},
-        {"offset_x": 0.00, "offset_y": 0.1, "push_dx": 0.05,  "push_dy": -0.10},
+        {"Xs": -0.10, "Ys": 0.55, "length": 0.10, "theta": -1.571},
+        {"Xs":  0.10, "Ys": 0.45, "length": 0.08, "theta":  1.571},
+        {"Xs": -0.10, "Ys": 0.50, "length": 0.14, "theta":  0.0},
     ],
 ]
 
@@ -253,59 +255,44 @@ def main():
                 if not simulation_app.is_running():
                     break
 
-                offset_x = cfg["offset_x"]
-                offset_y = cfg["offset_y"]
-                push_dx  = cfg["push_dx"]
-                push_dy  = cfg["push_dy"]
-
-                # ── Get current object position from active scene object ──────
-                obj_pos_obs, _obj_euler_pre, _, _ = _obj_state_local(active_obj_name)
+                Xs     = cfg["Xs"]
+                Ys     = cfg["Ys"]
+                length = cfg["length"]
+                theta  = cfg["theta"]
 
                 # ── Compute waypoints ─────────────────────────────────────────
                 prev_jcmd  = _robot_scene.data.joint_pos[:, _arm_jids].clone()
                 current_ee = _tcp_local()
 
                 waypoints = compute_push_waypoints(
-                    offset_x=torch.tensor([offset_x], device=device),
-                    offset_y=torch.tensor([offset_y], device=device),
-                    push_dx =torch.tensor([push_dx],  device=device),
-                    push_dy =torch.tensor([push_dy],  device=device),
-                    push_dz =torch.tensor([0.0],       device=device),
-                    yaw     =torch.tensor([0.0],       device=device),
-                    obj_pos =obj_pos_obs,
-                    current_ee_pos =current_ee,
+                    Xs=torch.tensor([Xs], device=device),
+                    Ys=torch.tensor([Ys], device=device),
+                    length=torch.tensor([length], device=device),
+                    theta=torch.tensor([theta], device=device),
+                    current_ee_pos=current_ee,
                     current_ee_quat=_QUAT_DOWN.expand(1, 4).clone(),
                     device=device,
                 )
 
-                label = f"Push {push_i + 1}  ({push_dx:+.2f}, {push_dy:+.2f})m"
+                obj_pos_pre, _, _, _ = _obj_state_local(active_obj_name)
+
+                label = f"Push {push_i + 1}  len={length:.2f} theta={theta:.2f}"
 
                 print(
                     f"\n  [{scenario_idx}.{push_i + 1}] "
-                    f"obj=({float(obj_pos_obs[0, 0]):+.2f},{float(obj_pos_obs[0, 1]):+.2f})  "
+                    f"Xs=({Xs:+.2f},{Ys:+.2f})  "
                     f"{label}",
                     flush=True,
                 )
 
-                # ── Execute push (velocity-smooth IK, like follow-target test) ──
+                # ── Execute push (gripper always closed) ──────────────────────
                 ik_ok = 0
                 last_good_joints = prev_jcmd.clone()
-                prev_grip = torch.ones(1, device=device)  # start open
-                for wp_i, (wp_pos, wp_quat, wp_grip) in enumerate(waypoints):
+                for wp_i, (wp_pos, wp_quat, _wp_grip) in enumerate(waypoints):
                     if not simulation_app.is_running():
                         break
 
                     cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
-
-                    # If gripper state changes, apply as separate hold step
-                    grip_changed = bool((wp_grip != prev_grip).any())
-                    if grip_changed:
-                        env_full        = torch.zeros(1, env.action_space.shape[0], device=device)
-                        env_full[:, :6] = cur_joints
-                        env_full[:, 6]  = wp_grip
-                        obs, _, _, _, _ = env.step(env_full)
-                        _viewer_step()
-                        prev_grip = wp_grip.clone()
 
                     ik_target = wp_pos - _FIXED_TCP_OFFSET
                     ik_target[0, 0].clamp_(_WS_X[0], _WS_X[1])
@@ -339,7 +326,7 @@ def main():
 
                     env_full        = torch.zeros(1, env.action_space.shape[0], device=device)
                     env_full[:, :6] = raw_cmd
-                    env_full[:, 6]  = wp_grip
+                    env_full[:, 6]  = -1.0  # always closed
                     obs, _, _, _, _ = env.step(env_full)
 
                     _viewer_step()
@@ -349,7 +336,7 @@ def main():
                 # ── Result ────────────────────────────────────────────────────
                 n_wp = len(waypoints)
                 obj_after, obj_euler_after, obj_linvel_after, obj_angvel_after = _obj_state_local(active_obj_name)
-                disp = obj_after[0] - obj_pos_obs[0]
+                disp = obj_after[0] - obj_pos_pre[0]
                 print(
                     f"         IK {ik_ok}/{n_wp}  "
                     f"disp=({float(disp[0]):+.3f},{float(disp[1]):+.3f})m  "

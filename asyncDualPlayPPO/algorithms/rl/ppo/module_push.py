@@ -2,11 +2,11 @@
 Simplified ActorCritic for push-PPO baseline.
 
 No permutation-invariant encoder, no goal encoder — just a flat MLP trunk
-with optional LSTM.  Outputs 6D MultiCategorical action logits.
+with optional LSTM.  Outputs 4D MultiCategorical action logits (Xs, Ys, length, theta).
 
 Architecture:
   obs (29D) → Linear(29→512)→ReLU → Linear(512→256)→ReLU → Linear(256→128)→ReLU
-    → LSTMCell(128→256) → actor_head(256→66) + critic_head(29→512→256→128→1)
+    → LSTMCell(128→256) → actor_head(256→4×21=84) + critic_head(29→512→256→128→1)
 """
 
 import torch
@@ -34,7 +34,7 @@ class ActorCriticPush(nn.Module):
         self.use_lstm = model_cfg.get("use_lstm", True)
 
         obs_dim = obs_shape[0]
-        self.num_cat_dims = model_cfg.get("num_cat_dims", 6)
+        self.num_cat_dims = model_cfg.get("num_cat_dims", 4)
         self.num_bins = model_cfg.get("num_bins", 11)
         self.actor_out_dim = self.num_cat_dims * self.num_bins
 

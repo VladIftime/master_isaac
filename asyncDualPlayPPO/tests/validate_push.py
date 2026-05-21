@@ -127,8 +127,8 @@ def main():
     _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
 
     # ── Load checkpoint ────────────────────────────────────────────────────────
-    num_cat_dims = 6
-    num_bins = 11
+    num_cat_dims = 4
+    num_bins = 21
 
     _mc_space = gym_mc.spaces.Box(
         low=0.0, high=float(num_bins - 1), shape=(num_cat_dims,), dtype=np.float32,
@@ -142,7 +142,7 @@ def main():
             "value_loss_coef": 1.0, "max_grad_norm": 1.0,
         },
         "policy": {
-            "use_multicategorical": True, "num_cat_dims": 6, "num_bins": 11,
+            "use_multicategorical": True, "num_cat_dims": 4, "num_bins": 21,
             "use_lstm": True, "lstm_hidden_size": 256,
             "pi_hid_sizes": [512, 256, 128],
             "vf_hid_sizes": [512, 256, 128],
@@ -230,19 +230,16 @@ def main():
                 hidden[0] = new_h[0]
                 hidden[1] = new_h[1]
 
-            push_params = decode_push_action(actions, num_bins=num_bins)
-            obj_pos = env._get_obj_pos(obs)
+            Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
 
             waypoints = compute_push_waypoints(
-                offset_x=push_params[:, 0], offset_y=push_params[:, 1],
-                push_dx=push_params[:, 2], push_dy=push_params[:, 3],
-                push_dz=push_params[:, 5], yaw=push_params[:, 4],
-                obj_pos=obj_pos, current_ee_pos=ee_pos_local,
+                Xs=Xs, Ys=Ys, length=length, theta=theta,
+                current_ee_pos=ee_pos_local,
                 current_ee_quat=ee_quat_w, device=device,
             )
 
             terminated = torch.zeros(1, dtype=torch.bool, device=device)
-            for wp_pos, wp_quat, wp_grip in waypoints:
+            for wp_pos, wp_quat, _wp_grip in waypoints:
                 tcp_offs = _tcp_offset()
                 ik_target = wp_pos - tcp_offs
                 result = ik_solver.solve_batch(
@@ -258,7 +255,7 @@ def main():
 
                 env_full = torch.zeros(1, env.action_space.shape[0], device=device)
                 env_full[:, :6] = raw_cmd
-                env_full[:, 6] = wp_grip
+                env_full[:, 6] = -1.0  # always closed
                 obs, _, terminated, _, _ = env.step(env_full)
 
             env.push_count[0] += 1

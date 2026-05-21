@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-20 (Fix P33: cuRobo LBFGS tuning; Fix P32: Push-PPO substep scaling + profiler)
+**Last updated**: 2026-05-21 (Fix P38: 4D action space, markers, per-env debug, profiler removed)
 
 ---
 
@@ -117,6 +117,12 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-19 | Push-PPO Fix P30 (reward clamp + out-of-bounds kill) |
 | 2026-05-20 | **Fix P31**: ABC deadlock diagnosed — Alice action entropy too high for ABC to bootstrap Bob; `--diag_alice_shaping` promoted from diagnostic to training flag; new HPC script `train_curobo_shaping.slurm` |
 | 2026-05-20 | **Fix P32 (Push-PPO speed)**: Push substeps scaled 115→76 (~1.5× faster rollouts). CUDA-synced wall-clock profiler added to `train_push.py` — reports per-iteration timing for 7 sections: `agent`, `decode`, `ik`, `physics`, `reward`, `store`, `ppo`. `action_push.py:16-24`, `train_push.py:41-42,372-393,435+` |
+| 2026-05-20 | **Fix P33 (cuRobo IK tuning)**: Profiler revealed cuRobo `solve_batch` at 65ms/call (69% of iteration), 100× slower than expected. Root cause: default `n_iters=100`, `inner_iters=25` per env with sequential `n_problems=1` loop. LBFGS reduced to `n_iters=30, inner_iters=10` — IK dropped 65→18ms/call (3.6×). MPPI particle_optimizer left untouched to avoid CUDA graph shape errors. `train_push.py:211-214` |
+| 2026-05-21 | **Fix P34 (4D action space)**: Push-PPO action space redesigned from 6D (offset_x, offset_y, push_dx, push_dy, yaw, push_dz) to 4D (Xs, Ys, length, theta). Xs/Ys = push start in world coords, length ∈ [0, 0.20] m, theta ∈ [−π, π] rad. Push endpoint: Xf=Xs+len·cosθ, Yf=Ys+len·sinθ. Gripper always closed — no engage/release phases. 5 phases now (approach, descend, push, retract, return) = 72 substeps. Actor head 126→84 dims (4×21). `action_push.py`, `train_push.py`, `module_push.py` |
+| 2026-05-21 | **Fix P35 (push debug markers)**: Green sphere at (Xs,Ys), red sphere at (Xf,Yf), blue cylinder arrow from start→end on table surface. Three independent `VisualizationMarkers`, updated every push. `train_push.py:269-334` |
+| 2026-05-21 | **Fix P36 (per-env debug logging)**: When `num_envs ≤ 5`, each push logs per-env bins and decoded (Xs, Ys, length, θ, Xf, Yf). `train_push.py:238,549-556` |
+| 2026-05-21 | **Fix P37 (length limit)**: Push length clamped to [0, 0.20] m (was [0, 0.30]). `action_push.py:130,152,158` |
+| 2026-05-21 | **Fix P38 (profiler removed)**: Inline CUDA-synced profiler removed from `train_push.py` — replaced by per-push marker + per-env debug logging for visibility. `import time` also removed. |
 
 ---
 
@@ -393,6 +399,12 @@ directly simulates camera measurement noise on the physical tracking system.
 | Fix P30 | Push-PPO: PhysX glitches launch object to Z=1863m → single-step reward spikes of −3400/−81600 → critic permanently destroyed. Reward components clamped: `pos_imp∈[−5,5]`, `rot_imp∈[−4,4]`, `penalty∈[−2,0]`, `rot_penalty∈[−1,0]`. `check_done` kills env if `d_now > 0.5`m (out-of-bounds). | Critical (Push) | ✅ Fixed | `wrapper_push.py:219-223,272-274` |
 | **Fix P31** | **ABC deadlock diagnosed** — Alice learns to move objects (not-moved 73%→21%, avg disp 0.09→0.16m) but her **actions** remain high-entropy random walks because the entropy bonus (`0.005 × H ≈ 0.06`) dominates her surrogate loss (`~|0.005|`). ABC computes `bc_ratio = exp(lp − old_lp) ≈ 1.0` for all 1081 iterations because Alice's random action sequences provide no consistent gradient direction for Bob to clone. Bob's PPO gradient is zero (sparse rewards, SR 1–3%). Bob's value function converges to predict ~0 (val loss 0.02–0.06). Net result: Bob's policy stays at random initialization forever. **Fix**: `--diag_alice_shaping` (EE→object proximity reward: `0.005 × clamp(0.3 − ‖ee−obj‖, 0, 0.3)` per step) gives Alice deliberate approach actions, providing structured demonstrations for ABC to bootstrap Bob. The shaping is ≤3% of ASP outcome rewards (max 0.14/phase via GAE vs 5.0+ from Bob-fail bonus), so the adversarial curriculum remains dominant. New HPC script: `hpc/train_curobo_shaping.slurm`. | **Critical (ASP)** | ✅ Fixed | `train_curobo.py:1130-1135` (shaping already wired), `hpc/train_curobo_shaping.slurm` (new) |
 | **Fix P32** | **Push-PPO rollouts too slow** — 115 substeps per push (3,680 sequential physx+IK steps per iteration at 32 pushes). Rollouts dominated wall-clock, making training impractical at scale. Substeps scaled 115→76 (~1.5× faster). CUDA-synced wall-clock profiler added to `train_push.py` to identify remaining bottlenecks: `agent`, `decode`, `ik`, `physics`, `reward`, `store`, `ppo`. | **High (Push)** | ✅ Fixed | `action_push.py:16-24`, `train_push.py:41-42,372-393,435+` |
+| **Fix P33** | **cuRobo IK dominates push training** — profiler showed `solve_batch` at 65ms/call, 69% of iteration wall-clock. Default solver config had `n_iters=100, inner_iters=25` per env. LBFGS reduced to `n_iters=30, inner_iters=10` — IK dropped 65→18ms/call (3.6×), total iteration 232→116s (2×). `n_problems=1` (sequential env loop) could not be changed without breaking CUDA graph shapes. | **High (Push)** | ✅ Fixed | `train_push.py:211-214` |
+| **Fix P34** | **4D action space** — redesigned from 6D (offset_x/y, push_dx/dy, yaw, push_dz) to 4D macro-params (Xs, Ys, length, theta). Xs/Ys = absolute push start in world coords; push endpoint Xf=Xs+len·cosθ, Yf=Ys+len·sinθ. Gripper always closed — engage/release phases removed. Waypoints: approach→descend→push→retract→return (72 substeps, down from 76). Actor head 126→84 dims. All test scripts updated. | **Critical (Push)** | ✅ Fixed | `action_push.py`, `train_push.py`, `module_push.py`, `test_push_primitive.py`, `test_spin.py`, `validate_push.py` |
+| **Fix P35** | **Push debug markers** — green sphere at (Xs,Ys), red sphere at (Xf,Yf), blue cylinder arrow connecting them. Three independent `VisualizationMarkers`, updated every push. `_update_push_markers()` wrapped in try/except for safety. | **Low** | ✅ Fixed | `train_push.py:269-334` |
+| **Fix P36** | **Per-env debug logging** — when `num_envs ≤ 5`, each push logs per-env bin indices and decoded params: bins=(10, 12, 8, 5) Xs=+0.00 Ys=+0.57 len=0.06 θ=45° → Xf=+0.04 Yf=+0.61. | **Low** | ✅ Fixed | `train_push.py:238,549-556` |
+| **Fix P37** | **Length limit** — push length clamped to [0, 0.20] m (was [0, 0.30]). Tightens action space, preventing over-aggressive pushes. | **Medium (Push)** | ✅ Fixed | `action_push.py:130,152,158` |
+| **Fix P38** | **Profiler removed** — inline CUDA-synced profiler removed from `train_push.py`. Replaced by per-push markers (Fix P35) and per-env debug logging (Fix P36) for visibility. `import time` also removed. | **Low** | ✅ Fixed | `train_push.py` |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -869,26 +881,36 @@ quat = (0, cos(half), sin(half), 0)  # tool-down ⊗ RotZ(alpha × yaw)
 Phase 5 (retract) keeps the final yaw quat to avoid snap-back while near the object.
 Approach, descend, release, and return phases stay tool-down throughout.
 
-### 6.12 Profiler (Fix P32)
+### 6.12 Profiler (Fix P32 + Fix P33)
 
 Per-iteration CUDA-synced wall-clock profiler built into `train_push.py`.
-Tracks 7 sections and prints a compact table each iteration:
+Tracks 7 sections and prints a compact table each iteration.
+
+**Measured at 64 envs, 76 substeps/push, RTX 3060 Ti (after Fix P33):**
 
 ```
 [Profiler]     name    tot(s)   calls   ms/call   %iter
-[Profiler]  physics    42.351    2432     17.41   78.1%
-[Profiler]       ik     7.210    2432      2.96   13.3%
-[Profiler]      ppo     1.823       1   1823.00    3.4%
-[Profiler]    agent     1.201      32     37.53    2.2%
-[Profiler]   decode     0.640      32     20.00    1.2%
-[Profiler]   reward     0.521      32     16.28    1.0%
-[Profiler]    store     0.452      32     14.12    0.8%
-[Profiler]    TOTAL    54.198
+[Profiler]  physics    71.548    2432     29.42   61.9%
+[Profiler]       ik    43.781    2432     18.00   37.9%
+[Profiler]   decode     0.165      32      5.16    0.1%
+[Profiler]      ppo     0.072       1     71.98    0.1%
+[Profiler]   reward     0.032      32      1.01    0.0%
+[Profiler]    agent     0.030      32      0.93    0.0%
+[Profiler]    store     0.006      32      0.17    0.0%
+[Profiler]    TOTAL   115.633
 ```
 
-Uses `_prof_start("name")` / `_prof_stop("name")` helper closures called around each
-section of the push loop and PPO update. Reset each iteration. Zero overhead when not
-profiling (no extra CUDA syncs on the hot path).
+**Before tuning (Fix P32, no IK tuning):**
+```
+[Profiler]       ik   166.879    2432     68.62   69.1%
+[Profiler]  physics    74.025    2432     30.44   30.7%
+[Profiler]    TOTAL   241.354
+```
+
+IK dropped 65→18ms via LBFGS `n_iters=30, inner_iters=10` (was 100/25).
+Physics remains the dominant bottleneck at 62%. Further improvements require
+cutting substep count or reducing PhysX complexity. PPO update is negligible
+at 0.06% of iteration time.
 
 ### 6.9 Running
 
