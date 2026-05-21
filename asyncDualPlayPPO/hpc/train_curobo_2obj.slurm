@@ -14,7 +14,7 @@ set -o pipefail
 NUM_ENVS=512
 NSTEPS=300
 MAX_ITERATIONS=100000
-SAVE_INTERVAL=10
+SAVE_INTERVAL=100
 NUM_OBJECTS=2
 EXP_NAME="hpc_curobo_${NUM_ENVS}env_${NUM_OBJECTS}obj"
 
@@ -30,7 +30,7 @@ cleanup() {
     echo "[INFO] Sync complete."
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_curobo_2obj.slurm" 2>&1)
+        SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_curobo_2obj.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
         if [ -n "$NEXT_JOB" ]; then
             echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
@@ -39,6 +39,7 @@ cleanup() {
         fi
     else
         echo "[INFO] Training complete or stop requested — no resubmission."
+        touch "$PROJECT_ROOT/runs/$EXP_NAME/.done"
     fi
 }
 trap cleanup EXIT
@@ -46,7 +47,7 @@ trap cleanup EXIT
 # --- Auto-resume: find latest checkpoint on NFS ---
 RESUME_ARGS=""
 ITER_NUM=""
-if [ -d "$NFS_RUN_DIR/bob" ] && [ -d "$NFS_RUN_DIR/alice" ]; then
+if [ "$RESUME_CHAIN" = "1" ] && [ -d "$NFS_RUN_DIR/bob" ] && [ -d "$NFS_RUN_DIR/alice" ]; then
     LATEST_BOB=$(ls "$NFS_RUN_DIR/bob"/model_*.pt 2>/dev/null | grep -v best | grep -v final \
         | sed 's/.*model_//' | sed 's/\.pt//' | sort -n | tail -1)
     if [ -n "$LATEST_BOB" ]; then
@@ -101,6 +102,7 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     --save_interval  "$SAVE_INTERVAL" \
     --exp_name       "$EXP_NAME" \
     --arm_config     rotated \
+    --diag_alice_shaping \
     --num_objects    "$NUM_OBJECTS" \
     --headless \
     $RESUME_ARGS \

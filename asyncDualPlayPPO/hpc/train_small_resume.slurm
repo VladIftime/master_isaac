@@ -42,7 +42,7 @@ cleanup() {
     echo "[INFO] Sync complete."
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_small_resume.slurm" 2>&1)
+        SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_small_resume.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
         if [ -n "$NEXT_JOB" ]; then
             echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
@@ -51,6 +51,7 @@ cleanup() {
         fi
     else
         echo "[INFO] Training complete or stop requested — no resubmission."
+        touch "$PROJECT_ROOT/runs/$EXP_NAME/.done"
     fi
 }
 trap cleanup EXIT
