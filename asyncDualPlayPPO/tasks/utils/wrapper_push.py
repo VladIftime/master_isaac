@@ -35,12 +35,12 @@ _GOAL_Y_RANGE = (0.30, 0.70)
 _GOAL_Z = 0.02   # just above table surface so the ghost marker is visible
 
 # Observation layout indices (see push_task_curobo.py)
-# [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 29D
-_OBS_ROBOT_DIM = 7
+# [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 28D (no gripper)
+_OBS_ROBOT_DIM = 6
 _OBS_OBJ_STATE_DIM = 14
 _OBS_GOAL_DIM = 6
 _OBS_DIST_DIM = 2
-_OBS_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  # 29
+_OBS_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  # 28
 
 
 def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:

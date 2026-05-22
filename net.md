@@ -798,22 +798,22 @@ ABC — a minimal PPO agent learns to push a single object to a target position.
 ```
 Agent (Push-PPO)
     │
-    │  obs (29D): [ee_pose(6)|gripper(1)|obj_state(14)|goal_pose(6)|goal_dist(2)]
+    │  obs (28D): [ee_pose(6)|obj_state(14)|goal_pose(6)|goal_dist(2)]
     ▼
 ┌──────────────────────────────────────────────────────────┐
 │  ActorCriticPush                                          │
 │                                                            │
-│  obs (29D)                                                 │
+│  obs (28D)                                                 │
 │    │                                                       │
-│    ├─ Linear(29→512)→ReLU                                 │
+│    ├─ Linear(28→512)→ReLU                                 │
 │    ├─ Linear(512→256)→ReLU                                │
 │    ├─ LSTMCell(256→256)                                   │
 │    │                                                       │
-│    ├─ Actor: Linear(256→66) → (6,11) → MultiCategorical   │
-│    └─ Critic: Linear(29→512)→ReLU→256→ReLU→128→ReLU→1    │
+│    ├─ Actor: Linear(256→84) → (4,21) → MultiCategorical    │
+│    └─ Critic: Linear(28→512)→ReLU→256→ReLU→128→ReLU→1    │
 └──────────────────────────────────────────────────────────┘
     │
-    │  push params (6D): [offset_x, offset_y, push_dx, push_dy, yaw, push_dz]
+     │  push params (4D): [Xs, Ys, length, theta]
     ▼
 ┌──────────────────────────────────────────────────────────┐
 │  Push Primitive (action_push.py)                          │
@@ -850,16 +850,17 @@ Agent (Push-PPO)
 ## 2. Observation Layout (Push Agent)
 
 ```
-push_obs (29D) = [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_distance(2)]
+push_obs (28D) = [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_distance(2)]
 
 ee_pose(6)       = [pos_x, pos_y, pos_z, roll, pitch, yaw]  — ZYX Euler, local frame
-gripper(1)       = [finger_joint_angle]                       — raw joint position
 obj_state(14)    = [pos(3)|euler(3)|linvel(3)|angvel(3)|ee_dist(1)|contact(1)]
 goal_pose(6)     = [pos_x, pos_y, pos_z, roll, pitch, yaw]   — ZYX Euler
 goal_distance(2) = [pos_dist(1), rot_dist(1)]                 — L2 position + max-Euler diff
 ```
 
-No PI encoder, no goal encoder — flat MLP input.
+No PI encoder, no goal encoder, no gripper state — flat MLP input.
+The gripper is always closed for push primitive macro-actions and carries no
+useful signal for the policy.
 
 ---
 
@@ -881,15 +882,15 @@ MultiCategorical: **6D × 11 bins**.  Decoded to push parameters via `decode_pus
 ## 4. Network Forward Pass (Push Agent)
 
 ```
-obs (29D)
+obs (28D)
     │
-    ├─ actor_trunk: Linear(29→512)→ReLU → Linear(512→256)→ReLU
+    ├─ actor_trunk: Linear(28→512)→ReLU → Linear(512→256)→ReLU
     │      │ (256D)
     │   LSTMCell(256→256)
     │      │ (256D)
-    │   actor_head: Linear(256→66) → reshape(6,11) → MultiCategorical
+    │   actor_head: Linear(256→84) → reshape(4,21) → MultiCategorical
     │
-    └─ critic: Linear(29→512)→ReLU → Linear(512→256)→ReLU
+    └─ critic: Linear(28→512)→ReLU → Linear(512→256)→ReLU
                 → Linear(256→128)→ReLU → Linear(128→1)
 ```
 
@@ -932,11 +933,11 @@ while iteration < max_iterations:
 | | ASP (`train_curobo.py`) | Push-PPO (`train_push.py`) |
 |---|---|---|
 | **Agents** | Alice + Bob (adversarial) | Single agent |
-| **Action type** | EE delta (6D, per-step) | Push parameters (6D, macro-action) |
-| **Action frequency** | Every physics step | Every 28 physics steps (one push) |
+| **Action type** | EE delta (6D, per-step) | Push parameters (4D, macro-action) |
+| **Action frequency** | Every physics step | Every 72 physics steps (one push) |
 | **Controller** | Alice/Bob phases, ABC, historical pool | None — pure PPO |
 | **Network** | PI encoder + GoalEncoder + LSTM | Flat MLP + LSTM |
-| **Observation** | 35D (Alice) / 51D (Bob) | 29D |
+| **Observation** | 35D (Alice) / 51D (Bob) | 28D |
 | **Reward** | Sparse {+1/−1/+5} per physics step | Dense improvement reward per push |
 | **Objects** | 1–2 objects | 1 object |
 

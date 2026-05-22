@@ -71,8 +71,8 @@ Bob (PPOABC + GoalEncoder, abc_coef=0.5):
     Role: reproduce the goal Alice left behind
 
 Push-PPO Baseline (single-agent, no ASP no ABC):
-    Obs: 29D flat vector
-    Acts: MultiCategorical 6D × 21 bins → push primitive macro-action (115 substeps)
+    Obs: 28D flat vector (ee_pose + obj_state + goal_pose + goal_dist, no gripper)
+    Acts: MultiCategorical 4D × 21 bins → push primitive macro-action (72 substeps)
     Reward: dense improvement per push + completion bonus
 ```
 
