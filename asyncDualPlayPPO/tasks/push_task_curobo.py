@@ -39,8 +39,8 @@ class PushTaskObservationsCfg:
     """
     Single-agent observation for push-PPO baseline.
 
-    Layout (flat, 29D for 1 object):
-      [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_dist(2)]
+    Layout (flat, 28D for 1 object):
+      [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)]
     """
 
     @configclass
@@ -51,12 +51,6 @@ class PushTaskObservationsCfg:
             func=observations.ee_poses,
             params={
                 "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
-            },
-        )
-        gripper_pos = ObsTerm(
-            func=observations.gripper_positions,
-            params={
-                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
         object_state = ObsTerm(

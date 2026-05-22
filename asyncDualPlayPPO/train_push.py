@@ -143,9 +143,17 @@ def main():
 
     # ── Push hyperparameters ─────────────────────────────────────────────────
     max_pushes_per_episode = 5
-    push_nsteps = 32          # pushes per PPO rollout (per env)
+    push_nsteps = 15          # pushes per PPO rollout (per env) — fixed temporal window
+
     noptepochs = 3
-    nminibatches = 4
+
+    # Dynamic minibatches: keep mini-batch size roughly constant so GPU memory
+    # usage doesn't explode at high env counts.  Aim for ~16 envs per minibatch.
+    envs_per_minibatch = 16
+    nminibatches = max(1, args.num_envs // envs_per_minibatch)
+    while nminibatches > 1 and args.num_envs % nminibatches != 0:
+        nminibatches -= 1
+
     cliprange = 0.2
     ent_coef = 0.002
     gamma = 0.95
@@ -555,12 +563,16 @@ def main():
                 total_ik_fails += int((~ik_ok).sum().item())
 
                 solved = result.solution.view(env.num_envs, 6)
-                # Elbow joint (index 2) muststay positive  — negative = arm folded inward, dangerous
+                # Elbow joint (index 2) must stay positive — negative = arm folded inward
                 elbow_bad = solved[:, 2] < 0.0
                 if elbow_bad.any():
                     terminated[elbow_bad] = True
                     ik_ok[elbow_bad] = False
                 raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, prev_joint_cmd)
+                # Dead envs already auto-reset by base env — hold joints to prevent
+                # teleport explosions when waypoint targets push the robot back to table
+                if terminated.any():
+                    raw_cmd[terminated] = cur_joints[terminated]
                 prev_joint_cmd = raw_cmd.detach().clone()
 
                 # Gripper always closed — no toggle step needed
@@ -573,11 +585,9 @@ def main():
 
             # ── After push: compute reward & done ────────────────────────────
             reward = env.compute_push_reward(obs)
-            # Envs that terminated mid-trajectory were auto-reset inside env.step().
-            # obs for those envs is post-reset, so compute_push_reward returns garbage
-            # (distance from spawn to goal, not where the block landed).  Zero it out
-            # so corrupted values don't enter GAE.
-            reward[terminated] = 0.0
+            # Envs that terminated mid-trajectory were auto-reset: apply a heavy
+            # negative penalty so the agent learns to avoid off-table / exploded states.
+            reward[terminated] = -10.0
             episode_reward += reward
             done = env.check_done(obs, terminated)
 
@@ -656,9 +666,9 @@ def main():
                 if hidden_state is not None:
                     hidden_state[0][done] = 0.0
                     hidden_state[1][done] = 0.0
-                # Only at_goal / max_pushes envs need explicit reset; terminated
-                # ones were already auto-reset by the base env inside step().
-                needs_reset = done & ~terminated
+                # Reset all done envs — terminated envs need explicit reset too
+                # so their observations don't hold exploded/auto-reset state.
+                needs_reset = done
                 if needs_reset.any():
                     reset_ids = torch.where(needs_reset)[0]
                     obs_dict_r, _ = env.env.reset(env_ids=reset_ids)

@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-21 (Fix P38: 4D action space, markers, per-env debug, profiler removed)
+**Last updated**: 2026-05-22 (Fixes P39–P43: push obs 29→28D, waypoint loop death, exploded state, zero penalty, dynamic minibatches)
 
 ---
 
@@ -123,6 +123,11 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-21 | **Fix P36 (per-env debug logging)**: When `num_envs ≤ 5`, each push logs per-env bins and decoded (Xs, Ys, length, θ, Xf, Yf). `train_push.py:238,549-556` |
 | 2026-05-21 | **Fix P37 (length limit)**: Push length clamped to [0, 0.20] m (was [0, 0.30]). `action_push.py:130,152,158` |
 | 2026-05-21 | **Fix P38 (profiler removed)**: Inline CUDA-synced profiler removed from `train_push.py` — replaced by per-push marker + per-env debug logging for visibility. `import time` also removed. |
+| 2026-05-22 | **Fix P39 (gripper removed from push obs)**: Gripper carries no useful signal (always closed in push primitive). Removed from `PushPolicyCfg` observation terms. `_OBS_ROBOT_DIM` 7→6, total obs 29D→28D. `push_task_curobo.py`, `wrapper_push.py`, `module_push.py`. |
+| 2026-05-22 | **Fix P40 (waypoint loop death)**: After `env.step()` auto-resets a terminated env, subsequent waypoint IK targets commanded the robot back to table position → teleport → infinite force → object explodes to 3000m. Terminated envs now hold `cur_joints` instead of executing new waypoint targets. `train_push.py:564-567`. |
+| 2026-05-22 | **Fix P41 (exploded state saved into PPO buffer)**: `needs_reset = done & ~terminated` skipped explicit reset for terminated envs, leaving `obs` with post-explosion 3000m values. These observations were then captured by `obs_pre_push = obs.clone()` for the next push. Now `needs_reset = done` — all done envs get explicit `env.env.reset()` for clean observations. `train_push.py:663`. |
+| 2026-05-22 | **Fix P42 (zero penalty for terminated envs)**: `reward[terminated] = 0.0` gave zero signal for off-table/exploded pushes — agent never learned to avoid them. Changed to −10.0 penalty. `train_push.py:582`. |
+| 2026-05-22 | **Fix P43 (dynamic minibatches)**: `nminibatches` now derived from `num_envs` via `max(1, num_envs // 16)` with a while loop to ensure `num_envs % nminibatches == 0` (avoids wasted samples from `drop_last=True`). Keeps mini-batch size ~240 transitions independent of env count — manages GPU memory at scale without touching `push_nsteps` (LSTM temporal window stays fixed at 15). `train_push.py:149-153`. |
 
 ---
 
@@ -405,6 +410,11 @@ directly simulates camera measurement noise on the physical tracking system.
 | **Fix P36** | **Per-env debug logging** — when `num_envs ≤ 5`, each push logs per-env bin indices and decoded params: bins=(10, 12, 8, 5) Xs=+0.00 Ys=+0.57 len=0.06 θ=45° → Xf=+0.04 Yf=+0.61. | **Low** | ✅ Fixed | `train_push.py:238,549-556` |
 | **Fix P37** | **Length limit** — push length clamped to [0, 0.20] m (was [0, 0.30]). Tightens action space, preventing over-aggressive pushes. | **Medium (Push)** | ✅ Fixed | `action_push.py:130,152,158` |
 | **Fix P38** | **Profiler removed** — inline CUDA-synced profiler removed from `train_push.py`. Replaced by per-push markers (Fix P35) and per-env debug logging (Fix P36) for visibility. `import time` also removed. | **Low** | ✅ Fixed | `train_push.py` |
+| **Fix P39** | **Gripper removed from push observation** — gripper is always closed in push primitive, carries no useful signal. `_OBS_ROBOT_DIM` 7→6, total obs 29D→28D. Removed `gripper_pos` ObsTerm from `PushPolicyCfg`. | **High (Push)** | ✅ Fixed | `wrapper_push.py:37-43`, `push_task_curobo.py:39-44,50-55`, `module_push.py:8`, `net.md`, `README.md` |
+| **Fix P40** | **Waypoint loop ignores death** — after `env.step()` auto-resets terminated env, subsequent waypoint IK targets teleport robot back to table, causing object to explode to 3000m. Terminated envs now hold `cur_joints` instead of executing new waypoint targets. | **Critical (Push)** | ✅ Fixed | `train_push.py:564-567` |
+| **Fix P41** | **Exploded state saved into PPO buffer** — `needs_reset = done & ~terminated` skipped explicit reset for terminated envs; `obs` held post-explosion 3000m values captured by `obs_pre_push = obs.clone()` for next push. Now `needs_reset = done`. | **Critical (Push)** | ✅ Fixed | `train_push.py:663` |
+| **Fix P42** | **Zero penalty for terminated envs** — `reward[terminated] = 0.0` gave no signal for off-table/exploded pushes. Changed to −10.0 so agent learns to avoid them. | **Critical (Push)** | ✅ Fixed | `train_push.py:582` |
+| **Fix P43** | **Dynamic minibatches** — `nminibatches` now derived from `num_envs` via `max(1, num_envs // 16)`, with a divisibility fallback loop. Keeps mini-batch size ~240 transitions regardless of env count so GPU memory scales predictably. `push_nsteps` stays fixed at 15 (LSTM temporal depth); only breadth scales. | **Medium (Push)** | ✅ Fixed | `train_push.py:149-153` |
 
 **Proposed additional tests (not yet implemented):**
 
