@@ -1,7 +1,7 @@
 #!/bin/bash
 # Usage: ./run_curobo.sh <num_envs> [exp_name] [max_iterations] [nsteps] [mig_uuid]
+# Requires: ~/master/master_isaac/isaac-lab-curobo.sif (cuRobo baked in)
 # Logs:    ~/master/master_isaac/logs/<exp_name>_<timestamp>.log
-# TensorBoard: ~/master/master_isaac/runs/<exp_name>/summary
 # Survives SSH drops via screen.
 
 NUM_ENVS=${1:-64}
@@ -27,13 +27,19 @@ LOG_DIR="$PROJECT_ROOT/logs"
 RUNS_DIR="$PROJECT_ROOT/runs"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$LOG_DIR/${EXP_NAME}_${TIMESTAMP}.log"
+SIF_IMAGE="$PROJECT_ROOT/isaac-lab-curobo.sif"
 
-# MUST create dirs before screen auto-wrap or apptainer mount check
 mkdir -p "$LOG_DIR" "$RUNS_DIR" \
     "$PROJECT_ROOT/.cache" \
     "$PROJECT_ROOT/.isaac_cache/kit/data" \
     "$PROJECT_ROOT/.isaac_cache/kit/cache" \
     "$PROJECT_ROOT/.isaac_cache/kit/logs"
+
+if [ ! -f "$SIF_IMAGE" ]; then
+    echo "[ERROR] $SIF_IMAGE not found — build it first:"
+    echo "  APPTAINER_TMPDIR=~/tmp apptainer build --fakeroot $SIF_IMAGE $PROJECT_ROOT/curobo.def"
+    exit 1
+fi
 
 echo "================================================"
 echo " train_curobo.py (ASP)"
@@ -46,7 +52,6 @@ echo "   Log:       $LOG_FILE"
 echo "   TB:        $RUNS_DIR/$EXP_NAME/summary"
 echo "================================================"
 
-# Auto-wrap in screen if not already inside one
 if [ -z "$STY" ] && [ -z "$TMUX" ]; then
     echo "[INFO] Launching inside screen to survive SSH drops..."
     SCREEN_NAME=$(echo "$EXP_NAME" | tr '/' '_')
@@ -60,13 +65,12 @@ cd "$SCRIPT_DIR"
 
 CUDA_VISIBLE_DEVICES="$MIG_UUID" \
 apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
-    --overlay "$PROJECT_ROOT/curobo_overlay.img":ro \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
-    "$PROJECT_ROOT/isaac-lab.sif" \
+    "$SIF_IMAGE" \
     /workspace/isaaclab/isaaclab.sh -p train_curobo.py \
     --num_envs "$NUM_ENVS" \
     --nsteps "$NSTEPS" \
