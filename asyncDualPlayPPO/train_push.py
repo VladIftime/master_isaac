@@ -127,7 +127,9 @@ def main():
     import isaaclab.sim as sim_utils
     from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
     from isaaclab.assets import RigidObjectCfg
-    from asyncDualPlayPPO.tasks.utils.reach_dual_arm_diffik_env_cfg import ISAACLAB_DUAL_ARM_EXT_DIR, spawn_random_block
+    from asyncDualPlayPPO.tasks.utils.push_primitive_1arm_env import ISAACLAB_DUAL_ARM_EXT_DIR
+
+    from asyncDualPlayPPO.tasks.utils.reach_dual_arm_diffik_env_cfg import spawn_random_block
     from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
     from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
@@ -242,7 +244,7 @@ def main():
 
     _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
 
-    _debug_per_env = args.num_envs <= 5
+    _debug_per_env = args.num_envs <= 50
 
     # ── Goal marker visualizer (VisualizationMarkers — no physics, no collision) ──
     _goal_viz = VisualizationMarkers(
@@ -563,10 +565,12 @@ def main():
                 total_ik_fails += int((~ik_ok).sum().item())
 
                 solved = result.solution.view(env.num_envs, 6)
-                # Elbow joint (index 2) must stay positive — negative = arm folded inward
+                # Elbow joint (index 2) must stay positive — negative = arm folded inward.
+                # Reject bad IK solutions but don't terminate: the fallback to prev_joint_cmd
+                # already holds position safely.  Letting the episode continue teaches the
+                # policy that unreachable (Xs, Ys) pairs produce zero improvement.
                 elbow_bad = solved[:, 2] < 0.0
                 if elbow_bad.any():
-                    terminated[elbow_bad] = True
                     ik_ok[elbow_bad] = False
                 raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, prev_joint_cmd)
                 # Dead envs already auto-reset by base env — hold joints to prevent

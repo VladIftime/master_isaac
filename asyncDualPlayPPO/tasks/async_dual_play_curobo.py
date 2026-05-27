@@ -1,7 +1,7 @@
-"""
-Environment configuration for asymmetric dual-play — cuRobo IK variant.
+"""Environment configuration for asymmetric dual-play — cuRobo IK variant.
 
-Re-uses the DiffIK scene/events/terminations (JointPositionActionCfg arm).
+Re-uses the DiffIK scene/events/terminations (JointPositionActionCfg arm), now
+based on push_primitive_1arm_env.py which includes workspace border markers.
 train_curobo.py overrides the arm action to JointPositionActionCfg at runtime
 and drives joints directly from the cuRobo IK solution, so the DiffIK controller
 is never actually invoked — the action spec only defines the action-space shape

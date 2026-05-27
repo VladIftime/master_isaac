@@ -21,9 +21,9 @@ from isaaclab.sensors import ContactSensorCfg, patterns
 import isaaclab.sim as sim_utils
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 
-from .utils.reach_dual_arm_diffik_env_cfg import (
-    ReachDualArmDiffIKEnvCfg,
-    ReachDualArmSceneCfg,
+from .utils.push_primitive_1arm_env import (
+    Push1ArmEnvCfg,
+    Push1ArmSceneCfg,
     ActionsCfg,
     EventCfg,
     TerminationsCfg,
@@ -142,7 +142,7 @@ class AsyncDualPlayDiffIKEnvCfg(ManagerBasedRLEnvCfg):
     """Full environment configuration — DifferentialIK variant."""
 
     @configclass
-    class AsyncDualPlaySceneCfg(ReachDualArmSceneCfg):
+    class AsyncDualPlaySceneCfg(Push1ArmSceneCfg):
         """Scene: target_object (T-block) + cube (second task or distractor)."""
 
         cylinder = None

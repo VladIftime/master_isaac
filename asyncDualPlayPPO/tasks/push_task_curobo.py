@@ -23,9 +23,9 @@ import isaaclab.sim as sim_utils
 
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 
-from .utils.reach_dual_arm_diffik_env_cfg import (
-    ReachDualArmDiffIKEnvCfg,
-    ReachDualArmSceneCfg,
+from .utils.push_primitive_1arm_env import (
+    Push1ArmEnvCfg,
+    Push1ArmSceneCfg,
     ActionsCfg,
     EventCfg,
     TerminationsCfg,
@@ -92,12 +92,12 @@ class PushTaskCuRoboEnvCfg(ManagerBasedRLEnvCfg):
     """
     Full environment configuration for the push-PPO baseline.
 
-    Inherits scene/actions/terminations/events from ReachDualArmDiffIKEnvCfg.
+    Inherits scene/actions/terminations/events from Push1ArmEnvCfg.
     Uses JointPositionActionCfg for cuRobo-driven joint control.
     """
 
     @configclass
-    class PushTaskSceneCfg(ReachDualArmSceneCfg):
+    class PushTaskSceneCfg(Push1ArmSceneCfg):
         """Scene with all block shapes; each scenario activates one, others hidden."""
         camera = None
         contact_forces = None
