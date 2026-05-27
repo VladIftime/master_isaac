@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-22 (Fixes P39–P43: push obs 29→28D, waypoint loop death, exploded state, zero penalty, dynamic minibatches)
+**Last updated**: 2026-05-22 (Fixes P39–P44: push obs 29→28D, waypoint loop death, exploded state, zero penalty, dynamic minibatches, elbow-IK no-terminate)
 
 ---
 
@@ -128,6 +128,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-05-22 | **Fix P41 (exploded state saved into PPO buffer)**: `needs_reset = done & ~terminated` skipped explicit reset for terminated envs, leaving `obs` with post-explosion 3000m values. These observations were then captured by `obs_pre_push = obs.clone()` for the next push. Now `needs_reset = done` — all done envs get explicit `env.env.reset()` for clean observations. `train_push.py:663`. |
 | 2026-05-22 | **Fix P42 (zero penalty for terminated envs)**: `reward[terminated] = 0.0` gave zero signal for off-table/exploded pushes — agent never learned to avoid them. Changed to −10.0 penalty. `train_push.py:582`. |
 | 2026-05-22 | **Fix P43 (dynamic minibatches)**: `nminibatches` now derived from `num_envs` via `max(1, num_envs // 16)` with a while loop to ensure `num_envs % nminibatches == 0` (avoids wasted samples from `drop_last=True`). Keeps mini-batch size ~240 transitions independent of env count — manages GPU memory at scale without touching `push_nsteps` (LSTM temporal window stays fixed at 15). `train_push.py:149-153`. |
+| 2026-05-22 | **Fix P44 (elbow-IK no-terminate)**: Elbow-negative IK solutions (`wrist_1_joint < 0`) caused immediate episode termination via `terminated=True` → −10 penalty. The IK fallback `ik_ok[elbow_bad] = False` already safely holds `prev_joint_cmd`, so the IK issue is recoverable. Removed `terminated[elbow_bad] = True` — unreachable (Xs, Ys) pairs now produce zero improvement (static penalty only) instead of death, giving PPO a continuous gradient away from bad workspace regions without destroying episodes. `train_push.py:567-572`. |
 
 ---
 
@@ -415,6 +416,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | **Fix P41** | **Exploded state saved into PPO buffer** — `needs_reset = done & ~terminated` skipped explicit reset for terminated envs; `obs` held post-explosion 3000m values captured by `obs_pre_push = obs.clone()` for next push. Now `needs_reset = done`. | **Critical (Push)** | ✅ Fixed | `train_push.py:663` |
 | **Fix P42** | **Zero penalty for terminated envs** — `reward[terminated] = 0.0` gave no signal for off-table/exploded pushes. Changed to −10.0 so agent learns to avoid them. | **Critical (Push)** | ✅ Fixed | `train_push.py:582` |
 | **Fix P43** | **Dynamic minibatches** — `nminibatches` now derived from `num_envs` via `max(1, num_envs // 16)`, with a divisibility fallback loop. Keeps mini-batch size ~240 transitions regardless of env count so GPU memory scales predictably. `push_nsteps` stays fixed at 15 (LSTM temporal depth); only breadth scales. | **Medium (Push)** | ✅ Fixed | `train_push.py:149-153` |
+| **Fix P44** | **Elbow-IK no longer terminates episode** — elbow-negative IK solutions set `terminated=True`, causing a −10 penalty for trivial IK-unreachable (Xs,Ys) pairs. The existing fallback `ik_ok[elbow_bad]=False` already holds `prev_joint_cmd` safely. Removed `terminated[elbow_bad]=True` — bad pushes get static penalty, not death. Gives PPO a smooth gradient away from unreachable workspace. | **Critical (Push)** | ✅ Fixed | `train_push.py:567-572` |
 
 **Proposed additional tests (not yet implemented):**
 
