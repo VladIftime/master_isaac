@@ -23,7 +23,7 @@ PUSH_SUCCESS_THRESHOLD_ROT = 0.2    # radians (~11°), matches ASP wrapper goal_
 PUSH_COMPLETION_BONUS = 5.0
 PUSH_ROTATION_SUB_BONUS = 2.0   # layered on top of position bonus when rotation also matched (Fix P14)
 PUSH_DENSE_ALPHA = 12.0      # position improvement gain (metres → reward)  — 1.2× scaled from original 10 (Fix P18)
-PUSH_DENSE_ROT_ALPHA = 5.0   # rotation improvement gain (radians → reward) — 2.5× scaled from original 2  (Fix P18)
+PUSH_DENSE_ROT_ALPHA = 1.0   # rotation improvement gain (radians → reward) — reduced from 5.0 (Fix P47)
 PUSH_DENSE_BETA = 0.5        # distance penalty (urgency)
 PUSH_DENSE_ROT_BETA = 0.25   # continuous rotation penalty — mirror of positional urgency (Fix P17)
 
@@ -259,19 +259,20 @@ class PushEnvWrapper:
         return reward
 
     def check_done(self, _obs: torch.Tensor, terminated: torch.Tensor) -> torch.Tensor:
-        """Episode ends: base termination, max pushes, object launched, or tipped.
-        Position success does NOT terminate — episode runs to max_pushes
-        so rotation refinement can continue earning rot_imp reward."""
+        """Episode ends: base termination, max pushes, position success, object launched, or tipped.
+        Position success now terminates immediately — the object reached the goal,
+        so the agent should reset and practice on a fresh goal instead of pushing
+        it away with remaining push budget."""
         max_pushes = self.push_count >= self.max_pushes_per_episode
         obj_z = _obs[:, _OBS_ROBOT_DIM + 2]
         launched = obj_z > 0.05
         tipped = (_obs[:, _OBS_ROBOT_DIM + 3].abs() > TIP_OVER_THRESHOLD) | \
                  (_obs[:, _OBS_ROBOT_DIM + 4].abs() > TIP_OVER_THRESHOLD)
-        # Out-of-bounds kill volume: object displaced > 0.5m from goal (glitch launch defence)
         obj_pos = _obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
         goal_pos = _obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM: _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
         out_of_bounds = (obj_pos - goal_pos).norm(dim=-1) > 0.5
-        return terminated | max_pushes | launched | tipped | out_of_bounds
+        at_goal_pos = (obj_pos - goal_pos).norm(dim=-1) < PUSH_SUCCESS_THRESHOLD_POS
+        return terminated | max_pushes | at_goal_pos | launched | tipped | out_of_bounds
 
     def reset_done_envs(self, dones: torch.Tensor):
         """Reset per-env state and resample goals for envs that finished an episode."""

@@ -24,9 +24,9 @@ from pathlib import Path
 from collections import defaultdict
 
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 
 # --- Patterns ---
 ALICE_RE = re.compile(
@@ -68,13 +68,13 @@ BOB_SR_RE = re.compile(
 )
 # Push-PPO baseline log format — single-agent compact iteration line
 PUSH_ITER_RE = re.compile(
-    r"\[Iter\s+(\d+)\]\s+Loss=([-\d.]+)[^\|]*\|\s+Val=([-\d.]+)\s*\|\s+"
-    r"Rew=([-\d.]+)\s+\(EMA\s+([-\d.]+)\)\s*\|\s+"
-    r"PosErr=([-\d.]+)\s*\|\s+RotErr=([-\d.]+)\s*\|\s+"
-    r"SR=([-\d.]+)\s*\|\s+RotSR=([-\d.]+)\s*\|\s+"
-    r"IK_fail=([-\d.]+)\s*\|\s+"
+    r"\[Iter\s+(\d+)\]\s+Loss=([-+\d.]+)[^\|]*\|\s+Val=([-+\d.]+)\s*\|\s+"
+    r"Rew=([-+\d.]+)\s+\(EMA\s+([-+\d.]+)\)\s*\|\s+"
+    r"PosErr=([-+\d.]+)\s*\|\s+RotErr=([-+\d.]+)\s*\|\s+"
+    r"SR=([-+\d.]+)\s*\|\s+RotSR=([-+\d.]+)\s*\|\s+"
+    r"IK_fail=([-+\d.]+)\s*\|\s+"
     r"AvgPushes=([^\s|]+)\s*\|\s+Epi=(\d+)\s*\|\s+"
-    r"BestSR=([-\d.]+)"
+    r"BestSR=([-+\d.]+)"
 )
 
 
@@ -848,8 +848,10 @@ def _plot_push_metrics(
     out_dir: Path,
     title_suffix: str = "",
     separate: bool = False,
+    log_paths: list[Path] = None,
 ):
-    """Render Push-PPO baseline plots."""
+    """Render Push-PPO baseline plots from iter records + re-parsed episode data."""
+    # ── Iter-level metrics (same as before) ──────────────────────────────
     push_colors = ["tab:green", "mediumseagreen", "darkgreen", "lightgreen"]
 
     all_chain_indices = sorted(set(r["chain"] for r in push_records))
@@ -957,6 +959,68 @@ def _plot_push_metrics(
     plt.tight_layout()
     _save(fig, "plot_overview.png")
 
+    # ── Episode-level plots (re-parse slurm logs for [Episode] lines) ────
+    if log_paths:
+        import re as _re
+        EP_RE = _re.compile(
+            r"\[Episode\]\s+pushes=(\d+)\s+(SUCCESS|fail)\s+"
+            r"rew=([-+\d.]+)\s+"
+            r"goal=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+orient=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
+            r"final=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
+            r"rot=\(([-+\d.]+),([-+\d.]+),([-+\d.]+)\)\s+"
+            r"err_pos=([-\d.]+)m\s+err_rot=([-\d.]+)rad"
+        )
+        episodes = []
+        for lp in log_paths:
+            if lp.exists():
+                for m in EP_RE.finditer(lp.read_text(errors="replace")):
+                    episodes.append({
+                        "pushes": int(m.group(1)),
+                        "success": m.group(2) == "SUCCESS",
+                        "rew": float(m.group(3)),
+                        "goal_x": float(m.group(4)), "goal_y": float(m.group(5)),
+                        "final_x": float(m.group(10)), "final_y": float(m.group(11)),
+                        "err_pos": float(m.group(16)),
+                        "err_rot": float(m.group(17)),
+                    })
+        if episodes:
+            # Episode rolling SR
+            fig2, ax2 = plt.subplots(figsize=(14, 4))
+            w = min(200, len(episodes) // 10)
+            srs = [1.0 if e["success"] else 0.0 for e in episodes]
+            rolling = np.convolve(srs, np.ones(w) / w, mode="valid")
+            ax2.plot(range(len(rolling)), rolling, color="blue", linewidth=1.5,
+                     label=f"Episode SR (window={w})")
+            ax2.set_title(f"Push-PPO — Episode-Level Success Rate{title_suffix}")
+            ax2.set_xlabel("Episode"); ax2.set_ylabel("Success Rate")
+            ax2.legend(); ax2.grid(True, alpha=0.3)
+            _save(fig2, "plot_episode_sr.png")
+
+            # Reward histogram
+            fig3, ax3 = plt.subplots(figsize=(10, 5))
+            rews = [e["rew"] for e in episodes]
+            ax3.hist(rews, bins=80, color="blue", alpha=0.7, edgecolor="white")
+            ax3.axvline(np.mean(rews), color="red", linewidth=1.5, linestyle="--",
+                        label=f"Mean = {np.mean(rews):+.2f}")
+            ax3.set_title(f"Push-PPO — Episode Reward Distribution{title_suffix} ({len(episodes)} eps)")
+            ax3.set_xlabel("Episode Reward"); ax3.set_ylabel("Count")
+            ax3.legend(); ax3.grid(True, alpha=0.3)
+            _save(fig3, "plot_reward_histogram.png")
+
+            # Final positions scatter
+            fig4, ax4 = plt.subplots(figsize=(8, 8))
+            sample = episodes[-10000:] if len(episodes) > 10000 else episodes
+            fx = [e["final_x"] for e in sample]; fy = [e["final_y"] for e in sample]
+            gx = [e["goal_x"] for e in sample]; gy = [e["goal_y"] for e in sample]
+            ax4.scatter(fx, fy, s=1, alpha=0.3, color="red", label="Final obj pos")
+            ax4.scatter(gx, gy, s=1, alpha=0.15, color="green", label="Goal pos")
+            ax4.set_xlim(-0.6, 0.6); ax4.set_ylim(0.15, 0.75)
+            ax4.set_aspect("equal")
+            ax4.set_title(f"Push-PPO — Object Final Positions{title_suffix} (last {len(sample)} eps)")
+            ax4.set_xlabel("X (m)"); ax4.set_ylabel("Y (m)")
+            ax4.legend(fontsize=8, markerscale=5); ax4.grid(True, alpha=0.3)
+            _save(fig4, "plot_final_positions.png")
+
 
 def plot_metrics(
     alice_records: list[dict],
@@ -965,10 +1029,11 @@ def plot_metrics(
     title_suffix: str = "",
     separate: bool = False,
     push_records: list[dict] = None,
+    log_paths: list[Path] = None,
 ):
     """Render training plots."""
     if push_records:
-        _plot_push_metrics(push_records, out_dir, title_suffix, separate)
+        _plot_push_metrics(push_records, out_dir, title_suffix, separate, log_paths)
         return
 
     if not alice_records and not bob_records:
@@ -1359,8 +1424,11 @@ def main():
         write_raw_csv(i, ch, jobs, chain_dir)
         write_csv(a_c, b_c, chain_dir, push_records=p_c)
         write_summary_txt(i, ch, a_c, b_c, chain_dir, push_c=p_c)
-        plot_metrics(a_c, b_c, chain_dir, title_suffix=f" (Chain {i})",
-                     separate=args.separate_plots, push_records=p_c)
+        plots_dir = chain_dir / "plots"
+        plots_dir.mkdir(parents=True, exist_ok=True)
+        plot_metrics(a_c, b_c, plots_dir, title_suffix=f" (Chain {i})",
+                     separate=args.separate_plots, push_records=p_c,
+                     log_paths=[jobs[jid]["path"] for jid in ch])
 
     write_csv(alice_records, bob_records, out_dir, push_records=push_records)
     print("[INFO] Done.")
