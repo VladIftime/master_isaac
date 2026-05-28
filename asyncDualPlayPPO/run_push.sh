@@ -26,17 +26,17 @@ LOG_DIR="$PROJECT_ROOT/logs"
 RUNS_DIR="$PROJECT_ROOT/runs"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="$LOG_DIR/${EXP_NAME}_${TIMESTAMP}.log"
-SIF_IMAGE="$PROJECT_ROOT/isaac-lab-curobo.sif"
+SIF_IMAGE="$PROJECT_ROOT/isaac-lab.sif"
+OVERLAY="$PROJECT_ROOT/curobo_overlay.img"
 
 mkdir -p "$LOG_DIR" "$RUNS_DIR" \
-    "$PROJECT_ROOT/.cache" \
-    "$PROJECT_ROOT/.isaac_cache/kit/data" \
-    "$PROJECT_ROOT/.isaac_cache/kit/cache" \
-    "$PROJECT_ROOT/.isaac_cache/kit/logs"
 
 if [ ! -f "$SIF_IMAGE" ]; then
-    echo "[ERROR] $SIF_IMAGE not found — build it first:"
-    echo "  APPTAINER_TMPDIR=~/tmp apptainer build --fakeroot $SIF_IMAGE $PROJECT_ROOT/curobo.def"
+    echo "[ERROR] $SIF_IMAGE not found"
+    exit 1
+fi
+if [ ! -f "$OVERLAY" ]; then
+    echo "[ERROR] $OVERLAY not found — install cuRobo into it first"
     exit 1
 fi
 
@@ -63,6 +63,7 @@ cd "$SCRIPT_DIR"
 
 CUDA_VISIBLE_DEVICES="$MIG_UUID" \
 apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
+    --overlay "$OVERLAY":ro \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
