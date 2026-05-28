@@ -142,7 +142,7 @@ def decode_push_action(
     Dim layout:
       0: Xs     → push start X world coords [−0.50, 0.50] m
       1: Ys     → push start Y world coords [0.25, 0.70] m
-      2: length → push length [0.01, 0.20] m (clamped)
+       2: length → push length [0.0, 0.20] m (clamped)
       3: theta  → push orientation [−π, π] rad
     """
     center = (num_bins - 1) / 2.0
@@ -150,7 +150,7 @@ def decode_push_action(
 
     Xs = norm[:, 0] * max_xs
     Ys = norm[:, 1] * max_ys + 0.475
-    length = (norm[:, 2] * max_len).clamp(min=0.01, max=max_len)
+    length = (norm[:, 2] * max_len).clamp(min=0.0, max=max_len)
     theta = norm[:, 3] * max_theta
 
     return Xs, Ys, length, theta

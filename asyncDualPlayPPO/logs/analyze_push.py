@@ -334,7 +334,7 @@ def plot_metrics(data: dict, out_dir: Path):
         gy = [e["goal_y"] for e in sample]
         moved = sum(1 for e in sample if abs(e["final_x"]) > 0.04 or abs(e["final_y"] - 0.5) > 0.04)
         ax4.scatter(fx, fy, s=1, alpha=0.3, color="red", label=f"Final obj pos ({moved}/{len(sample)} moved)")
-        ax4.scatter(gx, gy, s=1, alpha=0.1, color="orange", label="Goal pos")
+        ax4.scatter(gx, gy, s=1, alpha=0.15, color="green", label="Goal pos")
         # Workspace rectangle
         ws_x = [-0.50, 0.50, 0.50, -0.50, -0.50]
         ws_y = [0.25, 0.25, 0.70, 0.70, 0.25]
