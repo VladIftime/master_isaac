@@ -23,8 +23,8 @@ Architecture:
     actions per Alice trajectory.
 
 Observations:
-  Alice: [ee_pose(6)|gripper(1)|obj_state(14)] = 21D (num_objects=1)
-  Bob:   [ee_pose(6)|gripper(1)|obj_state(14)|goal_pose(6)|goal_dist(2)] = 29D
+  Alice: [ee_pose(6)|obj_state(14)] = 20D (num_objects=1)
+  Bob:   [ee_pose(6)|obj_state(14)|goal_pose(6)|goal_dist(2)] = 28D
 
 Run locally:
   python -m asyncDualPlayPPO.train_push_asp --num_envs 16 --max_iterations 500 --exp_name push_asp_test --headless
@@ -120,7 +120,7 @@ def main():
     parser.add_argument("--debug_rewards", action="store_true")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
-    if args.num_envs < 20:
+    if args.num_envs < 50:
         args.debug_rewards = True
 
     app_launcher = AppLauncher(args)
@@ -142,6 +142,9 @@ def main():
     from asyncDualPlayPPO.tasks.utils.wrapper_push_asp import _OBS_ROBOT_DIM
     from asyncDualPlayPPO.tasks.utils.action_push import (
         decode_push_action, compute_push_waypoints,
+    )
+    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+        decode_push_action_relative,
     )
     from asyncDualPlayPPO.tasks.utils.events import (
         reset_objects_to_random_safe_pose, reset_robot_joints,
@@ -384,7 +387,7 @@ def main():
     alice_cfg["policy"]["use_goal_encoder"] = False
     alice_cfg["policy"]["num_cat_dims"] = num_cat_dims
     alice_cfg["policy"]["num_bins"] = num_bins
-    alice_cfg["policy"]["robot_state_dim"] = 7
+    alice_cfg["policy"]["robot_state_dim"] = 6
 
     alice_ppo = PPO(
         vec_env=env,
@@ -428,7 +431,7 @@ def main():
     bob_cfg["policy"]["num_cat_dims"] = num_cat_dims
     bob_cfg["policy"]["num_bins"] = num_bins
     bob_cfg["policy"]["num_objects"] = 1
-    bob_cfg["policy"]["robot_state_dim"] = 7
+    bob_cfg["policy"]["robot_state_dim"] = 6
     bob_cfg["policy"]["goal_embed_dim"] = 8
 
     bob_ppo = PPOABC(
@@ -538,7 +541,6 @@ def main():
     best_bob_success_rate = -1.0
     last_alice_mean_rew = 0.0
     ema_alice_rew = 0.0
-    _abc_size_prev = 0  # track ABC buffer growth per iteration
 
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     print(f"\n{'='*80}\nTRAINING RUN: {args.exp_name}\nLOG DIR: {run_dir}\n{'='*80}\n")
@@ -564,7 +566,7 @@ def main():
         alice_updates += 1
 
     def perform_bob_update(current_bob_obs):
-        nonlocal bob_updates, best_bob_success_rate, _abc_size_prev
+        nonlocal bob_updates, best_bob_success_rate
         total_bob_transitions = bob_ppo.storage.step * env.num_envs
         if total_bob_transitions < bob_ppo.num_mini_batches:
             print(f"  [Bob Update {bob_updates}] SKIPPED (only {total_bob_transitions} transitions)", flush=True)
@@ -577,7 +579,7 @@ def main():
         if bob_ppo.actor_critic.use_goal_encoder:
             with torch.no_grad():
                 sample_obs = current_bob_obs[:8]
-                _robot_dim = 7
+                _robot_dim = 6
                 s_t_batch = sample_obs[:, _robot_dim: _robot_dim + 6]
                 _gs = _robot_dim + 14
                 s_star_batch = sample_obs[:, _gs: _gs + 6]
@@ -599,8 +601,6 @@ def main():
 
         writer.add_scalar("Loss/Bob/Value", loss_val, bob_updates)
         writer.add_scalar("Loss/Bob/Surrogate", loss_surr, bob_updates)
-        if loss_abc is not None:
-            writer.add_scalar("Loss/Bob/ABC", loss_abc, bob_updates)
         writer.add_scalar("Reward/Bob", mean_bob_rew, bob_updates)
         writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
         writer.add_scalar("Metrics/Bob/PosError", mean_pos_err, bob_updates)
@@ -608,15 +608,9 @@ def main():
         writer.add_scalar("Metrics/Bob/PositionSR", bob_pos_sr_val, bob_updates)
         writer.add_scalar("Metrics/Bob/RotationSR", bob_rot_sr_val, bob_updates)
 
-        _abc_buf_size = bob_ppo.abc_buffer.size
-        _abc_delta = _abc_buf_size - _abc_size_prev
-        _abc_size_prev = _abc_buf_size
-        _abc_str = f" | ABC: {loss_abc:.4f}" if loss_abc is not None else ""
-        writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
         print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | "
-              f"Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f}{_abc_str} | "
-              f"SR: {bob_success_rate:.4f} | "
-              f"ABCbuf: {_abc_buf_size} (+{_abc_delta})", flush=True)
+              f"Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | "
+              f"SR: {bob_success_rate:.4f}", flush=True)
 
         if bob_success_rate > best_bob_success_rate:
             best_bob_success_rate = bob_success_rate
@@ -692,6 +686,11 @@ def main():
             env.reset_iter_stats()
 
         iter_sr_counts = [0, 0]
+        _iter_obj_lifted = 0
+        _iter_robot_table = 0
+        _iter_terminated = 0
+        _iter_ik_fails = 0
+        _iter_ik_steps = 0
 
         full_push_obs = env._get_push_obs()
         current_alice_obs = env._get_alice_obs(full_push_obs)
@@ -861,9 +860,38 @@ def main():
                 new_len = (active_steps + 1).to(alice_traj_len.dtype)
                 alice_traj_len[active_alice] = torch.max(alice_traj_len[active_alice], new_len)
 
-            # ── DECODE PUSH ACTIONS: Alice and Bob ───────────────────────────────
-            a_Xs, a_Ys, a_len, a_theta = decode_push_action(a_acts_active, num_bins=num_bins)
-            b_Xs, b_Ys, b_len, b_theta = decode_push_action(b_acts_active, num_bins=num_bins)
+            # ── DECODE PUSH ACTIONS: object-relative (guaranteed contact) ────────
+            _obj_xy_all = full_push_obs[:, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 2]
+            _obj_yaw_all = full_push_obs[:, _OBS_ROBOT_DIM + 5]
+
+            min_r = 0.03
+            max_r = 0.15
+            max_l = 0.25
+            if len(alice_indices) > 0:
+                a_Xs, a_Ys, a_len, a_theta = decode_push_action_relative(
+                    a_acts_active,
+                    _obj_xy_all[alice_indices],
+                    _obj_yaw_all[alice_indices],
+                    num_bins=num_bins,
+                    min_r=min_r,
+                    max_r=max_r,
+                    max_len=max_l,
+                )
+            else:
+                a_Xs = a_Ys = a_len = a_theta = torch.zeros(0, device=env.device)
+
+            if len(bob_indices) > 0:
+                b_Xs, b_Ys, b_len, b_theta = decode_push_action_relative(
+                    b_acts_active,
+                    _obj_xy_all[bob_indices],
+                    _obj_yaw_all[bob_indices],
+                    num_bins=num_bins,
+                    min_r=min_r,
+                    max_r=max_r,
+                    max_len=max_l,
+                )
+            else:
+                b_Xs = b_Ys = b_len = b_theta = torch.zeros(0, device=env.device)
 
             # Merge per-agent push params into full-env tensors
             Xs = torch.zeros(env.num_envs, device=env.device)
@@ -878,6 +906,17 @@ def main():
             Ys[bob_indices] = b_Ys
             length[bob_indices] = b_len
             theta[bob_indices] = b_theta
+
+            # Clamp push start and end to workspace so credit matches execution
+            _margin = 0.02
+            Xs.clamp_(_WS_X[0] + _margin, _WS_X[1] - _margin)
+            Ys.clamp_(_WS_Y[0] + _margin, _WS_Y[1] - _margin)
+            _Xf = Xs + length * torch.cos(theta)
+            _Yf = Ys + length * torch.sin(theta)
+            _Xf.clamp_(_WS_X[0] + _margin, _WS_X[1] - _margin)
+            _Yf.clamp_(_WS_Y[0] + _margin, _WS_Y[1] - _margin)
+            length = torch.sqrt((_Xf - Xs) ** 2 + (_Yf - Ys) ** 2)
+            theta = torch.atan2(_Yf - Ys, _Xf - Xs)
 
             # ── Visual markers ────────────────────────────────────────────────────
             _update_push_markers(Xs, Ys, length, theta)
@@ -909,16 +948,20 @@ def main():
 
                 ik_ok = result.success.squeeze(-1)
                 cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
+                _iter_ik_steps += env.num_envs
+                _iter_ik_fails += int((~ik_ok).sum().item())
 
                 solved = result.solution.view(env.num_envs, 6)
                 elbow_bad = solved[:, 2] < 0.0
                 if elbow_bad.any():
-                    terminated[elbow_bad] = True
                     ik_ok[elbow_bad] = False
-                raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, prev_joint_cmd)
-                prev_joint_cmd = raw_cmd.detach().clone()
+                raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, cur_joints)
+                if terminated.any():
+                    raw_cmd[terminated] = cur_joints[terminated]
+                if (~ik_ok).any():
+                    prev_joint_cmd[~ik_ok] = cur_joints[~ik_ok]
+                prev_joint_cmd[ik_ok] = raw_cmd[ik_ok].detach().clone()
 
-                # Gripper always closed
                 env_full = torch.zeros(env.num_envs, env.action_space.shape[0], device=env.device)
                 env_full[:, :6] = raw_cmd
                 env_full[:, 6] = -1.0
@@ -926,16 +969,22 @@ def main():
                 obs_ret, _, step_terminated, truncated, _ = env.step(env_full)
                 terminated |= step_terminated
 
-                # Object-lifted check: Z > 0.10m means gripper scooped/hooked object
                 _z_obs = env._get_push_obs()
                 obj_lifted |= (_z_obs[:, _OBS_ROBOT_DIM + 2] > 0.10)
 
-                # Robot through table: TCP Z < 0 in local frame
-                _tcp_z = ee_pos_local[:, 2]
-                robot_through_table |= (_tcp_z < 0.0) & ~terminated
+                _tcp_local = _tcp_pos_local()
+                robot_through_table |= (_tcp_local[:, 2] < 0.0) & ~terminated
 
             # Merge into terminated
             terminated |= obj_lifted | robot_through_table
+            _iter_obj_lifted += int(obj_lifted.sum().item())
+            _iter_robot_table += int(robot_through_table.sum().item())
+            _iter_terminated += int(terminated.sum().item())
+
+            # Sync EE trackers to current physics state after push execution
+            ee_pos_local = _tcp_pos_local()
+            ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
+            prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
 
             # ── POST-PUSH OBSERVATION ─────────────────────────────────────────────
             full_push_obs = env._get_push_obs()
@@ -950,6 +999,16 @@ def main():
             bob_rewards[terminated] = 0.0
 
             bob_achieved_completion = bob_rewards >= 4.0
+
+            # ── INITIALIZE PER-STEP OUTCOME TENSORS ──────────────────────────
+            alice_rewards_now = torch.zeros(env.num_envs, device=env.device)
+            alice_done_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+            bob_done_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+            bob_success_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+            goal_valid_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+            bob_pos_err_now = torch.zeros(env.num_envs, device=env.device)
+            bob_rot_err_now = torch.zeros(env.num_envs, device=env.device)
+            bob_progress_rew = torch.zeros(env.num_envs, device=env.device)
 
             # ── HANDLE OBJECT-LIFTED & ROBOT-THROUGH-TABLE ENVS ─────────────────
             _abnormal = obj_lifted | robot_through_table
@@ -992,15 +1051,6 @@ def main():
             # Alice phase end: use phase_info flags directly (NOT phase_changed & is_alice)
             alice_done_mask = phase_info.get("alice_done", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
             bob_done_mask = phase_info.get("bob_done", torch.zeros(env.num_envs, dtype=torch.bool, device=env.device))
-
-            alice_rewards_now = torch.zeros(env.num_envs, device=env.device)
-            alice_done_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            bob_done_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            bob_success_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            goal_valid_now = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            bob_pos_err_now = torch.zeros(env.num_envs, device=env.device)
-            bob_rot_err_now = torch.zeros(env.num_envs, device=env.device)
-            bob_progress_rew = torch.zeros(env.num_envs, device=env.device)
 
             # Alice phase end
             alice_done_ids = torch.where(alice_done_mask)[0]
@@ -1271,6 +1321,9 @@ def main():
             env.capture_pre_push(full_push_obs)
 
         # ── END ROLLOUT: PPO UPDATES ──────────────────────────────────────
+        perform_alice_update()
+        perform_bob_update(current_bob_obs)
+
         current_sr = iter_sr_counts[1] / max(1, iter_sr_counts[0])
         if args.debug_rewards:
             print(f"  [DEBUG SR] iter_sr_counts[0]={iter_sr_counts[0]}  iter_sr_counts[1]={iter_sr_counts[1]}  "
@@ -1291,10 +1344,6 @@ def main():
         writer.add_scalar("Alice/LearningRate", _alice_lr, bob_updates)
 
         bob_ppo.abc_coef = ppo_cfg["params"]["learn"].get("abc_coef", 0.5)
-        writer.add_scalar("Bob/ABCCoef", bob_ppo.abc_coef, bob_updates)
-
-        perform_alice_update()
-        perform_bob_update(current_bob_obs)
 
         # ── Iteration summary ───────────────────────────────────────────────
         _stats = env.get_iter_stats() if hasattr(env, "get_iter_stats") else {}
@@ -1310,15 +1359,19 @@ def main():
         _alice_total = _stats.get("alice_total", 1)
         _mean_disp = _alice_disp / max(1, _alice_total)
         writer.add_scalar("Metrics/Alice/MeanDisp3D", _mean_disp, bob_updates)
-        _abc_buf_size = bob_ppo.abc_buffer.size
-        writer.add_scalar("Metrics/ABC/BufferSize", _abc_buf_size, bob_updates)
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
+        _ik_fail_rate = _iter_ik_fails / max(1, _iter_ik_steps)
+        writer.add_scalar("Metrics/IKFailRate", _ik_fail_rate, bob_updates)
+        writer.add_scalar("Metrics/ObjLifted", _iter_obj_lifted, bob_updates)
+        writer.add_scalar("Metrics/RobotThroughTable", _iter_robot_table, bob_updates)
+        writer.add_scalar("Metrics/Terminated", _iter_terminated, bob_updates)
 
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | "
             f"Goals valid={_valid_goals} invalid={_invalid_goals} | "
             f"Bob succ={_bob_succ} fail={_bob_fail} | "
-            f"ABC buf: {_abc_buf_size}",
+            f"IK_fail={_ik_fail_rate:.3f} | "
+            f"ObjLifted={_iter_obj_lifted} RobotTable={_iter_robot_table} Term={_iter_terminated}",
             flush=True,
         )
 

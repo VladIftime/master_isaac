@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import torch
 from typing import TYPE_CHECKING
 
@@ -121,6 +122,7 @@ def reset_objects_to_random_safe_pose(
     env_ids: torch.Tensor,
     x_range: tuple[float, float] = (-0.35, 0.35),
     y_range: tuple[float, float] = (0.45, 0.80),
+    random_yaw: bool = False,
 ) -> dict:
     """
     Reset objects to random positions within the table workspace.
@@ -148,10 +150,22 @@ def reset_objects_to_random_safe_pose(
         obj = env.scene["target_object"]
         t_spawn = torch.stack([x_local, y_local, spawn_z], dim=1)
         t_world = t_spawn + env_origins
-        quat = identity_quat.unsqueeze(0).expand(num_resets, -1)
+        if random_yaw:
+            _yaw = torch.rand(num_resets, device=env.device) * 2.0 * math.pi - math.pi
+            _half = _yaw * 0.5
+            quat = torch.stack([
+                torch.cos(_half),
+                torch.zeros(num_resets, device=env.device),
+                torch.zeros(num_resets, device=env.device),
+                torch.sin(_half),
+            ], dim=1)
+        else:
+            _yaw = torch.zeros(num_resets, device=env.device)
+            quat = identity_quat.unsqueeze(0).expand(num_resets, -1)
         obj.write_root_pose_to_sim(torch.cat([t_world, quat], dim=1), env_ids=env_ids)
         obj.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
         result["target_local"] = torch.stack([x_local, y_local, settled_z], dim=1)
+        result["target_yaw"] = _yaw
     except KeyError:
         pass
 

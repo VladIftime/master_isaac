@@ -35,13 +35,13 @@ from ...utils.goal_validator import validate_goal
 from . import rewards as reward_utils
 from .events import reset_objects_to_random_safe_pose, reset_robot_joints
 
-# Observation layout indices (matches push_task_curobo.py):
-# [ee_pose(6) | gripper(1) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 29D total
-_OBS_ROBOT_DIM = 7
+# Observation layout indices (matches push_task_curobo.py, Fix P39: no gripper):
+# [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 28D total
+_OBS_ROBOT_DIM = 6
 _OBS_OBJ_STATE_DIM = 14
 _OBS_GOAL_DIM = 6
 _OBS_DIST_DIM = 2
-_OBS_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  # 29
+_OBS_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  # 28
 
 # Success thresholds (matching wrapper.py and train_curobo.py)
 POS_THRESHOLD = 0.05
@@ -88,9 +88,9 @@ class PushASPEnvWrapper:
         self.goal_dim = _OBS_GOAL_DIM
         self.dist_dim = _OBS_DIST_DIM
 
-        # Alice obs: robot(7) + obj_state(14) = 21D (no goal info)
+        # Alice obs: robot(6) + obj_state(14) = 20D (no goal info)
         self.alice_obs_dim = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM
-        # Bob obs: full 29D (robot + obj + goal + dist)
+        # Bob obs: full 28D (robot + obj + goal + dist)
         self.bob_obs_dim = _OBS_DIM
         self.push_obs_dim = _OBS_DIM
 
@@ -179,6 +179,19 @@ class PushASPEnvWrapper:
         print(f"[PushASP Wrapper] Initialized: Alice {alice_pushes} pushes, "
               f"Bob {bob_pushes} pushes, max_goals={max_goals_per_episode}")
         print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D")
+
+        # Tight spawn bounds (10cm × 10cm box) + random yaw to limit OOB
+        self.spawn_x_range = (-0.04, 0.04)
+        self.spawn_y_range = (0.4, 0.45)
+
+    def _rand_reset_objs(self, env_ids: torch.Tensor) -> dict:
+        """Reset objects with tight spawn bounds and random yaw."""
+        return reset_objects_to_random_safe_pose(
+            self.env, env_ids,
+            x_range=self.spawn_x_range,
+            y_range=self.spawn_y_range,
+            random_yaw=True,
+        )
 
     # ------------------------------------------------------------------
     # Stats helpers
@@ -271,7 +284,7 @@ class PushASPEnvWrapper:
         self._bob_at_goal[env_ids] = False
         self._bob_gave_completion[env_ids] = False
 
-        spawn_info = reset_objects_to_random_safe_pose(self.env, env_ids)
+        spawn_info = self._rand_reset_objs(env_ids)
         reset_robot_joints(self.env, env_ids)
         self.env.scene.write_data_to_sim()
         self.episode_manager.initial_states = self._initial_states_from_spawn(
@@ -295,9 +308,11 @@ class PushASPEnvWrapper:
         return obs, torch.zeros(self.num_envs, device=self.device), terminated, truncated, {}
 
     def _initial_states_from_spawn(self, spawn_info: dict, n: int) -> torch.Tensor:
-        """Build initial_states tensor from reset_objects_to_random_safe_pose output."""
-        _id_euler = torch.zeros(n, 3, device=self.device)
+        """Build initial_states tensor from _rand_reset_objs output."""
         t_local = spawn_info.get("target_local", torch.zeros(n, 3, device=self.device))
+        t_yaw = spawn_info.get("target_yaw", torch.zeros(n, device=self.device))
+        _id_euler = torch.zeros(n, 3, device=self.device)
+        _id_euler[:, 2] = t_yaw
         if self.num_objects == 1:
             return torch.cat([t_local, _id_euler], dim=-1)
         t2_local = spawn_info.get("cube_local")
@@ -513,7 +528,7 @@ class PushASPEnvWrapper:
         if len(invalid_env_ids) > 0:
             self.episode_manager.reset_episode(invalid_env_ids, reason="Alice Invalid Goal")
             self.hide_goal_ghost(invalid_env_ids)
-            _sp = reset_objects_to_random_safe_pose(self.env, invalid_env_ids)
+            _sp = self._rand_reset_objs( invalid_env_ids)
             reset_robot_joints(self.env, invalid_env_ids)
             self.env.scene.write_data_to_sim()
             self.episode_manager.initial_states[invalid_env_ids] = (
@@ -555,7 +570,7 @@ class PushASPEnvWrapper:
         if len(too_easy_ids) > 0:
             self.episode_manager.reset_episode(too_easy_ids, reason="Alice Too-Easy Goal")
             self.hide_goal_ghost(too_easy_ids)
-            _sp = reset_objects_to_random_safe_pose(self.env, too_easy_ids)
+            _sp = self._rand_reset_objs( too_easy_ids)
             reset_robot_joints(self.env, too_easy_ids)
             self.env.scene.write_data_to_sim()
             self.episode_manager.initial_states[too_easy_ids] = (
@@ -648,7 +663,7 @@ class PushASPEnvWrapper:
         if len(continue_ids) > 0:
             self.episode_manager.transition_to_alice(continue_ids)
             self.hide_goal_ghost(continue_ids)
-            _sp = reset_objects_to_random_safe_pose(self.env, continue_ids)
+            _sp = self._rand_reset_objs( continue_ids)
             reset_robot_joints(self.env, continue_ids)
             self.env.scene.write_data_to_sim()
             self.episode_manager.initial_states[continue_ids] = (
@@ -661,7 +676,7 @@ class PushASPEnvWrapper:
             reason = "Bob Succeeded" if success[~can_continue].any() else "Bob Failed"
             self.episode_manager.reset_episode(reset_ids, reason=reason)
             self.hide_goal_ghost(reset_ids)
-            _sp = reset_objects_to_random_safe_pose(self.env, reset_ids)
+            _sp = self._rand_reset_objs( reset_ids)
             reset_robot_joints(self.env, reset_ids)
             self.env.scene.write_data_to_sim()
             self.episode_manager.initial_states[reset_ids] = (
@@ -719,7 +734,7 @@ class PushASPEnvWrapper:
         if len(continue_ids) > 0:
             self.episode_manager.transition_to_alice(continue_ids)
             self.hide_goal_ghost(continue_ids)
-            _sp = reset_objects_to_random_safe_pose(self.env, continue_ids)
+            _sp = self._rand_reset_objs( continue_ids)
             reset_robot_joints(self.env, continue_ids)
             self.env.scene.write_data_to_sim()
             self.episode_manager.initial_states[continue_ids] = (
@@ -731,7 +746,7 @@ class PushASPEnvWrapper:
         if len(reset_ids) > 0:
             self.episode_manager.reset_episode(reset_ids, reason="Episode Complete")
             self.hide_goal_ghost(reset_ids)
-            _sp = reset_objects_to_random_safe_pose(self.env, reset_ids)
+            _sp = self._rand_reset_objs( reset_ids)
             reset_robot_joints(self.env, reset_ids)
             self.env.scene.write_data_to_sim()
             self.episode_manager.initial_states[reset_ids] = (
