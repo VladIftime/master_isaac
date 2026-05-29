@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-05-28 (Fixes P39–P49: push obs 29→28D, waypoint loop death, exploded state, zero penalty, dynamic minibatches, elbow-IK no-terminate, zero-length push, completion termination, rotation rebalance, object-relative push actions for Push-ASP, Push-ASP IK-death fix)
+**Last updated**: 2026-05-29 (Fix P50: object-relative observation switch for Push-PPO baseline)
 
 ---
 
@@ -288,11 +288,13 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 #### HPC Slurm Scripts (`hpc/`)
 
 | Script | Purpose |
-|---|---|
+|  |---|
 | `train_curobo.slurm` | Production cuRobo training run (baseline sparse) |
 | `train_curobo_shaping.slurm` | Production cuRobo + `--diag_alice_shaping` (Fix P31 — EE→obj proximity) |
 | `train_curobo_large.slurm` | Large-scale (512+ envs) |
 | `train_curobo_profile.slurm` | 3-iteration profiler run |
+| `train_push.slurm` | Push-PPO baseline (absolute world-coord obs) |
+| `train_push_rel.slurm` | Push-PPO baseline + `--rel-obs` (30D object-relative delta appended) |
 | `diagnostic_tests.slurm` | Full 4-test suite on HPC |
 | `test1_ppo_reward.slurm` | Test 1 only |
 | `test2_alice_exploration.slurm` | Test 2 only (200 iters, random Bob) |
@@ -428,6 +430,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | **Fix P47** | **Rotation reward rebalanced** — `PUSH_DENSE_ROT_ALPHA` 5.0→1.0. At the old value, rotation improvement (up to 2.5 reward per push) dominated position improvement (typically 0.12 per push) by ~20×. PPO learned rotation control (RotSR=42%) while ignoring position (PosErr=0.25m flat). Now both components produce comparable gradients at observed step sizes. | **Critical (Push)** | ✅ Fixed | `wrapper_push.py:26` |
 | **Fix P48** | **Object-relative push actions for Push-ASP** — absolute `(Xs, Ys)` action space had ~2% contact probability per push, making Alice unable to bootstrap (object never moved → no reward → no gradient). New parameterization: `(r, φ, length, θ)` where `r∈[0.02, 0.08]m` is offset from object center, `φ∈[-π,π]` is approach angle in object's frame, `length∈[0,0.20]m`, and `θ∈[-π,π]` is push direction in world frame (decoupled from approach). Conversion: `Xs=obj_x+r·cos(obj_yaw+φ)`, `Ys=obj_y+r·sin(obj_yaw+φ)`, `Xf=Xs+len·cos(θ)`, `Yf=Ys+len·sin(θ)`. Guarantees ~95%+ contact rate. World-frame θ makes translation trivially learnable (θ≈atan2(goal_y-obj_y, goal_x-obj_x)). Object-frame φ provides rotational equivariance for contact-point selection. `compute_push_waypoints()` unchanged — only decode step replaced. Bob observation updated to include relative goal features: `[delta_x, delta_y, rel_yaw, pos_dist, rot_dist]` (5D) with world-frame deltas aligned to world-frame θ for direct policy mapping. Alice obs: 20D (6+14), Bob obs: 25D (6+14+5). | **Critical (Push-ASP)** | ✅ Fixed | `tasks/utils/action_push_relative.py` (new), `train_push_asp.py`, `tasks/utils/wrapper_push_asp.py`, `net.md` |
 | **Fix P49** | **Push-ASP IK-death fix** — IK failures in waypoint loop fell back to `prev_joint_cmd` (last commanded position), which could differ from the arm's actual physics state `cur_joints`. When gravity or contact forces displaced the arm from the previously-commanded position, the fallback would command a snap-back teleport, potentially through the table or into the object. Now IK failures hold `cur_joints` (actual physics state), and `prev_joint_cmd` is overwritten from `cur_joints` on failure so subsequent waypoints also freeze in place. The arm stays at its current physical pose until the push trajectory completes — no teleport, no table penetration, no phantom object-launching on IK fail. | **Critical (Push-ASP)** | ✅ Fixed | `train_push_asp.py:947-960` |
+| **Fix P50** | **Object-relative observations for Push-PPO baseline** — the 28D flat observation `[ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)]` contains raw world-frame positions, forcing the network to learn `atan2(goal_y-obj_y, goal_x-obj_x)` internally from a fully-connected MLP before it can predict the correct push direction `θ`. The result: the policy converges to a fixed θ regardless of goal position, succeeding only when goals happen to be in the landing zone of that fixed push (SR ~5%). New `--rel-obs` flag appends `[rel_dx, rel_dy] = goal_pos[:2] - obj_pos[:2]` (2D world-frame delta) to the observation (28D→30D), giving the policy direct access to the answer. The network sees the direction-to-goal explicitly and maps it to a push θ bin — `atan2` is trivialized. The flag is fully backward-compatible (off by default). New HPC script: `hpc/train_push_rel.slurm`. | **Critical (Push)** | ✅ Fixed | `wrapper_push.py`, `train_push.py`, `hpc/train_push_rel.slurm` (new) |
 
 **Proposed additional tests (not yet implemented):**
 
@@ -797,37 +800,46 @@ environment executes a multi-step push trajectory using cuRobo IK.
 ### 6.3 Push Primitive Architecture
 
 ```
-Phase 1: Approach   (12 steps, was 18)  EE → above object, tool-down, gripper open
-Phase 2: Engage     ( 3 steps, was 5)   Close gripper at approach height
-Phase 3: Descend    (16 steps, was 24)  EE down to contact height (table + 0.110 m), tool-down
-Phase 4: Push       (20 steps, was 30)  EE moves: contact_xy → contact_xy + (push_dx, push_dy), quat interpolates tool-down → tool-down ⊗ RotZ(yaw)  (Fix P7)
-Phase 5: Retract    (16 steps, was 24)  EE up to approach height, gripper closed, keeps final yaw quat
-Phase 6: Release    ( 1 step, was 2)    Open gripper at approach height
-Phase 7: Return     ( 8 steps, was 12)  EE back to current TCP position at approach height, tool-down
+Phase 1: Approach   (12 steps)  EE → above push start at approach height, tool-down
+Phase 2: Descend    (16 steps)  EE down to contact height, tool-down
+Phase 3: Push       (20 steps)  EE moves: contact_xy → push_endpoint_xy, tool-down
+Phase 4: Retract    (16 steps)  EE up to approach height, tool-down
+Phase 5: Return     ( 8 steps)  EE back to pre-push position at approach height, tool-down
 
-Total: 76 substeps per push macro-action (~1.5 s at 50 Hz, was 115 substeps / 2.3 s — Fix P32)
+Total: 72 substeps per push macro-action. Gripper always closed — no engage/release phases.
+(Fix P34: 4D action + gripper-always-closed, Fix P32: substeps scaled from 115)
 ```
 
 ### 6.4 Action Space
 
-MultiCategorical: **6D × 21 bins**  (Fix P6: was 11 bins → 0.03m/bin resolution, below 0.05m success threshold)
+MultiCategorical: **4D × 21 bins**  (Fix P6: was 11 bins → 0.03m/bin resolution, below 0.05m success threshold; Fix P34: 6D→4D)
 
-| Dim | Parameter | Range |
-|-----|-----------|-------|
-| 0 | `approach_offset_x` | [-0.15, 0.15] m |
-| 1 | `approach_offset_y` | [-0.15, 0.15] m |
-| 2 | `push_dx` | [-0.30, 0.30] m |
-| 3 | `push_dy` | [-0.30, 0.30] m |
-| 4 | `yaw` | [-1.0, 1.0] rad — **EE Z-rotation during push phase** (Fix P7: was dead dim; Fix P9: was ±π, reduced to ±1.0 rad for 0.1 rad/bin precision and elbow-up IK branch) |
-| 5 | `push_dz` | [-0.03, 0.03] m |
+| Dim | Parameter | Range | Description |
+|-----|-----------|-------|-------------|
+| 0 | `Xs` | `[-0.50, 0.50]` m | Push start X world coords |
+| 1 | `Ys` | `[0.25, 0.70]` m | Push start Y world coords |
+| 2 | `length` | `[0.00, 0.20]` m | Push length (zero allowed — Fix P45) |
+| 3 | `theta` | `[-π, π]` rad | Push direction in world frame |
 
-### 6.5 Observation Space (29D)
+Xf = Xs + length × cos(theta),  Yf = Ys + length × sin(theta)
+
+### 6.5 Observation Space
 
 ```
-[ee_pos(3) | ee_euler(3) | gripper(1) | obj_pos(3) | obj_euler(3) | obj_linvel(3) |
- obj_angvel(3) | ee_obj_dist(1) | obj_contact(1) | goal_pos(3) | goal_euler(3) |
- pos_dist(1) | rot_dist(1)]
+Base (28D, --rel-obs off):    [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)]
+Relative (30D, --rel-obs on): [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2) | rel_dx(1) | rel_dy(1)]
 ```
+
+where `rel_dx = goal_x - obj_x`, `rel_dy = goal_y - obj_y` are the world-frame goal-offset deltas.
+These give the policy direct access to the push direction without requiring the MLP to learn
+`atan2` internally. The 2D delta is a sufficient statistic for the optimal push θ (ignoring
+rotational goals): if the policy needs to push the object toward the goal, θ should
+approximately equal `atan2(rel_dy, rel_dx)`.
+
+The `--rel-obs` flag controls which mode is used. Both modes share the same `action_push.py`
+decode logic and reward structure. Only the wrapper's `_build_obs()` and `obs_dim` differ.
+The network (`module_push.py`) auto-adapts to observation dimension — no architecture changes
+needed between modes.
 
 ### 6.6 Reward Structure
 
@@ -847,7 +859,7 @@ where:
 - `d_prev` / `d_now` = L2 position error before / after the push (metres)
 - `y_prev` / `y_now` = yaw-only Euler difference before / after (radians, wraparound-aware) — isolates Z-axis rotation from roll/pitch wobble (Fix P15)
 - `α = 12.0` — position improvement gain (symmetric: rewards getting closer, penalizes moving away) — 1.2× scaled (Fix P18)
-- `γ = 5.0` — rotation improvement gain — 2.5× scaled (Fix P18)
+- `γ = 1.0` — rotation improvement gain — reduced from 5.0 (Fix P47: rotation dominated position ~20×, agent converged to rigid-body rotation trick while ignoring translation)
 - `β = 0.5` — distance penalty per step
 - `β_rot = 0.25` — continuous yaw penalty per step (Fix P17)
 - `completion_bonus = +5.0` when object enters goal zone (pos < 0.05 m) — position-only gate preserves 5.7% SR floor
@@ -863,15 +875,15 @@ prunes unrecoverable states from the PPO buffer, preventing batch pollution.
 ### 6.7 Network Architecture
 
 ```
-obs (29D)
+obs (28D or 30D depending on --rel-obs)
   │
-  ├─ Linear(29 → 512) → ReLU     ← orthogonal init gain=sqrt(2) (Fix P1)
+  ├─ Linear(obs_dim → 512) → ReLU     ← orthogonal init gain=sqrt(2) (Fix P1)
   ├─ Linear(512 → 256) → ReLU    ← orthogonal init gain=sqrt(2) (Fix P1)
   ├─ Linear(256 → 128) → ReLU    ← orthogonal init gain=sqrt(2) (Fix P1)
   ├─ LSTM(128 → 256)             ← hidden propagates across pushes within episode (Fix P3)
   │
-  ├─ Actor head:  Linear(256 → 126) → (6, 21) → MultiCategorical  ← gain=0.01 (Fix P6)
-  └─ Critic head: Linear(29 → 512) → ReLU → Linear(512 → 256) → ReLU → Linear(256 → 128) → ReLU → Linear(128 → 1)
+  ├─ Actor head:  Linear(256 → 84) → (4, 21) → MultiCategorical  ← gain=0.01 (Fix P34: 6D→4D)
+  └─ Critic head: Linear(obs_dim → 512) → ReLU → Linear(512 → 256) → ReLU → Linear(256 → 128) → ReLU → Linear(128 → 1)
 ```
 
 **Weight init**: trunk layers use `orthogonal_(gain=sqrt(2))` for ReLU activations; actor head uses `gain=0.01` only (Fix P1). Previously gain=0.01 was applied to all layers, making activations ~100× too small and killing gradient signal.
@@ -881,12 +893,12 @@ obs (29D)
 ### 6.8 Files
 
 | File | Purpose |
-|------|---------|
+|  |---|
 | `tasks/push_task_curobo.py` | Environment config (single agent, single object) |
-| `tasks/utils/wrapper_push.py` | Push env wrapper: macro-action execution, reward, reset |
-| `tasks/utils/action_push.py` | Push primitive: trajectory generation + cuRobo IK |
-| `algorithms/rl/ppo/module_push.py` | Simplified ActorCritic (flat MLP + LSTM) |
-| `train_push.py` | Training script |
+| `tasks/utils/wrapper_push.py` | Push env wrapper: obs (28D abs / 30D rel), reward, reset, goals |
+| `tasks/utils/action_push.py` | Push primitive: trajectory generation + decode (4D, 21 bins) |
+| `algorithms/rl/ppo/module_push.py` | ActorCritic (flat MLP + LSTM, auto-adapts to obs_dim) |
+| `train_push.py` | Training script (`--rel-obs` flag for object-relative δ) |
 | `tests/validate_push.py` | Validation script |
 | `tests/test_push_primitive.py` | Interactive scenario-loop test |
 | `tests/test_spin.py` | Yaw-rotation spin test |

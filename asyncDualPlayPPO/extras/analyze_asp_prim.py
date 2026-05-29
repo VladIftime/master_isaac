@@ -4,14 +4,15 @@ Parses slurm log files across one or more training-run directories,
 traces job chains, stitches them together, deduplicates overlapping
 iterations at run boundaries, writes clean CSVs/TXTs, and plots metrics.
 
-Compatible with cuRobo (train_curobo.py) and legacy (train.py / train_diffik.py) logs.
+Compatible with push-primitive ASP (train_push_asp.py), cuRobo (train_curobo.py),
+and legacy (train.py / train_diffik.py) logs.
 
 Usage (single dir):
-    python analyze_training.py --log-dir logs/curobo_hpc
+    python asyncDualPlayPPO/extras/analyze_asp_prim.py --log-dir logs/push_asp
 
 Usage (stitch prior run + current):
-    python analyze_training.py \
-        --log-dir logs/curobo_hpc \
+    python asyncDualPlayPPO/extras/analyze_asp_prim.py \
+        --log-dir logs/push_asp \
         --prior-dirs logs/prev_run \
         --out-dir logs/combined
 """
@@ -40,6 +41,10 @@ BOB_RE = re.compile(
     r"\[Bob Update\s+(\d+)\]\s+Loss:\s*([-\d.]+)\s*\|\s*Val:\s*([-\d.]+)\s*\|\s*Rew:\s*([-\d.]+)\s*\|\s*ABC:\s*([-\d.]+)\s*\|\s*SR:\s*([-\d.]+)"
     r"(?:\s*\|\s*ABCCoef:\s*([-\d.]+))?"
 )
+# Push-ASP Bob updates: no ABC field (push-primitive ASP from train_push_asp.py)
+PUSH_ASP_BOB_RE = re.compile(
+    r"\[Bob Update\s+(\d+)\]\s+Loss:\s*([-\d.]+)\s*\|\s*Val:\s*([-\d.]+)\s*\|\s*Rew:\s*([-\d.]+)\s*\|\s*SR:\s*([-\d.]+)"
+)
 CHAIN_RE = re.compile(r"chained next job:\s*(\d+)")
 RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
 # Explicit anchor emitted by train_high.slurm after the checkpoint detection block
@@ -53,6 +58,15 @@ ITER_RE = re.compile(
     r"\s*\|\s*Bob succ=(\d+) fail=(\d+)"
     r"(?:.*?\|\s*ABC buf:\s*(\d+))?"
     r"(?:.*?ABC warm:\s*(YES|NO))?"
+)
+# Push-ASP iteration summary (train_push_asp.py): different field ordering,
+# IK_fail after Bob succ/fail, plus ObjLifted/RobotTable/Term
+PUSH_ASP_ITER_RE = re.compile(
+    r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)"
+    r"\s*\|\s*Goals valid=(\d+) invalid=(\d+)"
+    r"\s*\|\s*Bob succ=(\d+) fail=(\d+)"
+    r"\s*\|\s*IK_fail=([-\d.]+)"
+    r"\s*\|\s*ObjLifted=(\d+) RobotTable=(\d+) Term=(\d+)"
 )
 ALICE_DISP_RE = re.compile(
     r"\[AliceDisp\]\s+(\d+)/(\d+) valid\s*\|\s*avg 3D=[-\d.]+m\s+avg XY=([-\d.]+)m\s+max XY=([-\d.]+)m"
@@ -108,7 +122,7 @@ def parse_logs(log_dir: Path) -> dict:
 
         # New-format: parse [Iter N] summary lines (one per iteration boundary)
         # [Iter N] is printed after Update N-1, so its goals belong to Update N-1.
-        # Groups: (iter, sr, ik_fail?, valid, invalid, bob_succ, bob_fail, abc_buf?, abc_warm?)
+        # Try curobo/legacy format first, then push-ASP variant.
         iter_stats: dict[int, dict] = {}
         for im in ITER_RE.finditer(text):
             n = int(im.group(1))
@@ -121,6 +135,9 @@ def parse_logs(log_dir: Path) -> dict:
                 "bob_fail": int(im.group(7)),
                 "abc_buf": int(im.group(8)) if im.group(8) is not None else None,
                 "abc_warm": (im.group(9) == "YES") if im.group(9) is not None else None,
+                "obj_lifted": None,
+                "robot_table": None,
+                "terminated": None,
                 "pos": im.start(),
                 "avg_xy": None,
                 "max_xy": None,
@@ -134,6 +151,36 @@ def parse_logs(log_dir: Path) -> dict:
                 "bob_pos_err": None,
                 "bob_rot_err": None,
             }
+
+        if not iter_stats:
+            # Fallback: push-ASP format (train_push_asp.py)
+            for im in PUSH_ASP_ITER_RE.finditer(text):
+                n = int(im.group(1))
+                iter_stats[n] = {
+                    "sr": float(im.group(2)),
+                    "ik_fail_rate": float(im.group(7)),
+                    "valid": int(im.group(3)),
+                    "invalid": int(im.group(4)),
+                    "bob_succ": int(im.group(5)),
+                    "bob_fail": int(im.group(6)),
+                    "abc_buf": None,
+                    "abc_warm": None,
+                    "obj_lifted": int(im.group(8)),
+                    "robot_table": int(im.group(9)),
+                    "terminated": int(im.group(10)),
+                    "pos": im.start(),
+                    "avg_xy": None,
+                    "max_xy": None,
+                    "avg_z": None,
+                    "not_moved_frac": None,
+                    "alice_rot_roll": None,
+                    "alice_rot_pitch": None,
+                    "alice_rot_yaw": None,
+                    "bob_pos_sr": None,
+                    "bob_rot_sr": None,
+                    "bob_pos_err": None,
+                    "bob_rot_err": None,
+                }
 
         # Attach [AliceDisp] displacement data to the preceding [Iter N]
         # Groups: (valid_n, total_n, avg_xy, max_xy, avg_z?, not_moved_n?)
@@ -306,8 +353,41 @@ def parse_logs(log_dir: Path) -> dict:
                     "obj0_rot_err": ist.get("bob_obj0_rot_err"),
                     "obj1_pos_err": ist.get("bob_obj1_pos_err"),
                     "obj1_rot_err": ist.get("bob_obj1_rot_err"),
+                    "ik_fail_rate": ist.get("ik_fail_rate"),
+                    "obj_lifted": ist.get("obj_lifted"),
+                    "robot_table": ist.get("robot_table"),
+                    "terminated_count": ist.get("terminated"),
                 }
             )
+
+        if not bob_updates:
+            # Fallback: push-ASP Bob format (train_push_asp.py) — no ABC field
+            for bm in PUSH_ASP_BOB_RE.finditer(text):
+                it = int(bm.group(1))
+                ist = iter_stats.get(it + 1, {}) if iter_stats else {}
+                bob_updates.append(
+                    {
+                        "local_iter": it,
+                        "loss": float(bm.group(2)),
+                        "val": float(bm.group(3)),
+                        "rew": float(bm.group(4)),
+                        "abc": float("nan"),
+                        "sr": float(bm.group(5)),
+                        "abc_coef": None,
+                        "pos_sr": ist.get("bob_pos_sr"),
+                        "rot_sr": ist.get("bob_rot_sr"),
+                        "pos_err": ist.get("bob_pos_err"),
+                        "rot_err": ist.get("bob_rot_err"),
+                        "obj0_pos_err": ist.get("bob_obj0_pos_err"),
+                        "obj0_rot_err": ist.get("bob_obj0_rot_err"),
+                        "obj1_pos_err": ist.get("bob_obj1_pos_err"),
+                        "obj1_rot_err": ist.get("bob_obj1_rot_err"),
+                        "ik_fail_rate": ist.get("ik_fail_rate"),
+                        "obj_lifted": ist.get("obj_lifted"),
+                        "robot_table": ist.get("robot_table"),
+                        "terminated_count": ist.get("terminated"),
+                    }
+                )
             
         # Backward compatibility for old logs (scaling step rewards to episodic returns)
         if bob_updates:
@@ -603,6 +683,9 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
         "obj0_rot_err",
         "obj1_pos_err",
         "obj1_rot_err",
+        "obj_lifted",
+        "robot_table",
+        "terminated_count",
     ]
     with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -611,7 +694,8 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
             writer.writerow({"agent": "alice", "abc": "", "abc_coef": "", "sr": "",
                              "rew_ema": "", "pos_sr": "", "rot_sr": "", "pos_err": "", "rot_err": "",
                              "avg_pushes": "", "episodes": "", "best_sr": "", 
-                             "obj0_pos_err": "", "obj0_rot_err": "", "obj1_pos_err": "", "obj1_rot_err": "", **r})
+                             "obj0_pos_err": "", "obj0_rot_err": "", "obj1_pos_err": "", "obj1_rot_err": "",
+                             "obj_lifted": "", "robot_table": "", "terminated_count": "", **r})
         for r in bob_records:
             writer.writerow({
                 "agent": "bob",
@@ -658,6 +742,9 @@ def write_csv(alice_records: list[dict], bob_records: list[dict], out_dir: Path,
                     "obj0_rot_err": "",
                     "obj1_pos_err": "",
                     "obj1_rot_err": "",
+                    "obj_lifted": "",
+                    "robot_table": "",
+                    "terminated_count": "",
                 })
     print(f"[INFO] Wrote {out_path}")
     return out_path
@@ -714,6 +801,9 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
         "obj0_rot_err",
         "obj1_pos_err",
         "obj1_rot_err",
+        "obj_lifted",
+        "robot_table",
+        "terminated_count",
     ]
 
     def _v(d, k):
@@ -756,8 +846,10 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "obj0_rot_err": "",
                     "obj1_pos_err": "",
                     "obj1_rot_err": "",
+                    "obj_lifted": "",
+                    "robot_table": "",
+                    "terminated_count": "",
                 })
-            for upd in job["bob"]:
                 writer.writerow({
                     "agent": "bob",
                     "chain": chain_idx,
@@ -792,6 +884,9 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "obj0_rot_err": _v(upd, "obj0_rot_err"),
                     "obj1_pos_err": _v(upd, "obj1_pos_err"),
                     "obj1_rot_err": _v(upd, "obj1_rot_err"),
+                    "obj_lifted": _v(upd, "obj_lifted"),
+                    "robot_table": _v(upd, "robot_table"),
+                    "terminated_count": _v(upd, "terminated_count"),
                 })
             for upd in job["push"]:
                 writer.writerow({
@@ -828,6 +923,9 @@ def write_raw_csv(chain_idx: int, chain: list[int], jobs: dict, out_dir: Path):
                     "obj0_rot_err": "",
                     "obj1_pos_err": "",
                     "obj1_rot_err": "",
+                    "obj_lifted": "",
+                    "robot_table": "",
+                    "terminated_count": "",
                 })
     print(f"[INFO] Wrote {out_path}")
 
@@ -1065,6 +1163,13 @@ def plot_metrics(
     b_rot_err_by_chain  = [[r for r in recs if r.get("rot_err")         is not None] for recs in b_by_chain]
     has_bob_err         = any(b_pos_err_by_chain)
 
+    # Push-ASP specific metrics (train_push_asp.py)
+    b_ik_fail_by_chain     = [[r for r in recs if r.get("ik_fail_rate")       is not None] for recs in b_by_chain]
+    b_obj_lifted_by_chain  = [[r for r in recs if r.get("obj_lifted")         is not None] for recs in b_by_chain]
+    b_robot_table_by_chain = [[r for r in recs if r.get("robot_table")        is not None] for recs in b_by_chain]
+    b_terminated_by_chain  = [[r for r in recs if r.get("terminated_count")   is not None] for recs in b_by_chain]
+    has_push_asp_stability = any(b_obj_lifted_by_chain)
+
     # ------------------------------------------------------------------ helpers
     def _draw(ax, records_list, labels, colors, key, linestyle="-"):
         """Add lines for one metric onto ax — no axis formatting."""
@@ -1237,6 +1342,32 @@ def plot_metrics(
             _draw(ax, b_rot_err_by_chain, [f"Obj1 {l}" for l in b_labels], ["tab:purple"]*len(b_labels), "obj1_rot_err", linestyle=":")
             _fmt(ax, "Rotation Error (rad)", "Bob — Rotation Error")
         panels.append(plot_err_rot)
+
+    # Push-ASP specific: IK fail rate and training stability
+    if has_push_asp_stability or any(b_ik_fail_by_chain):
+        def plot_ik_fail(ax):
+            if any(b_ik_fail_by_chain):
+                _draw(ax, b_ik_fail_by_chain, b_labels, bob_colors, "ik_fail_rate")
+            _fmt(ax, "IK Fail Rate", "IK Fail Rate")
+            ax.axhline(0.05, color="grey", linewidth=0.8, linestyle="--", alpha=0.6, label="5% threshold")
+            ax.legend(fontsize=8)
+        panels.append(plot_ik_fail)
+
+    if has_push_asp_stability:
+        def plot_obj_lifted(ax):
+            _draw(ax, b_obj_lifted_by_chain, b_labels, bob_colors, "obj_lifted")
+            _fmt(ax, "Count", "Obj Lifted Count")
+        panels.append(plot_obj_lifted)
+
+        def plot_robot_table(ax):
+            _draw(ax, b_robot_table_by_chain, b_labels, bob_colors, "robot_table")
+            _fmt(ax, "Count", "Robot Through Table")
+        panels.append(plot_robot_table)
+
+        def plot_terminated(ax):
+            _draw(ax, b_terminated_by_chain, b_labels, bob_colors, "terminated_count")
+            _fmt(ax, "Count", "Terminated Count")
+        panels.append(plot_terminated)
 
     n_cols = 3
     n_rows = math.ceil(len(panels) / n_cols)
