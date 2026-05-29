@@ -36,11 +36,13 @@ _GOAL_Z = 0.02   # just above table surface so the ghost marker is visible
 
 # Observation layout indices (see push_task_curobo.py)
 # [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 28D (no gripper)
+#   — rel_obs adds [rel_dx(1) | rel_dy(1)] at the end → 30D
 _OBS_ROBOT_DIM = 6
 _OBS_OBJ_STATE_DIM = 14
 _OBS_GOAL_DIM = 6
 _OBS_DIST_DIM = 2
-_OBS_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  # 28
+_OBS_BASE_DIM = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM + _OBS_DIST_DIM  # 28
+_OBS_REL_DIM = 2  # rel_dx, rel_dy appended when rel_obs=True
 
 
 def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:
@@ -98,14 +100,16 @@ class PushEnvWrapper:
         num_objects: int = 1,
         max_pushes_per_episode: int = 20,
         headless: bool = False,
+        rel_obs: bool = False,
     ):
         self.env = env
         self.device = device
         self.num_objects = num_objects
         self.max_pushes_per_episode = max_pushes_per_episode
         self.headless = headless
+        self.rel_obs = rel_obs
 
-        self.obs_dim = _OBS_DIM
+        self.obs_dim = _OBS_BASE_DIM + (_OBS_REL_DIM if rel_obs else 0)
         self.robot_dim = _OBS_ROBOT_DIM
         self.obj_state_dim = _OBS_OBJ_STATE_DIM
 
@@ -133,6 +137,10 @@ class PushEnvWrapper:
         self._last_penalty  = torch.zeros(self.num_envs, device=device)
         self._last_completion = torch.zeros(self.num_envs, device=device)
 
+        self._ep_start_pos = torch.zeros(self.num_envs, 3, device=device)
+        self._ep_start_euler = torch.zeros(self.num_envs, 3, device=device)
+        self._ep_started = torch.zeros(self.num_envs, dtype=torch.bool, device=device)
+
         self.episode_push_counts = []
         self.episode_successes = []
         self.episode_rew_ema = 0.0
@@ -143,6 +151,7 @@ class PushEnvWrapper:
         self.at_goal.zero_()
         self._gave_completion.zero_()
         self._gave_rot_bonus.zero_()
+        self._ep_started.zero_()
 
         obs_dict = self.env.reset()[0]
         all_ids = torch.arange(self.num_envs, device=self.device)
@@ -164,12 +173,26 @@ class PushEnvWrapper:
         return obs, torch.zeros_like(reward), terminated, truncated, {}
 
     def _build_obs(self, obs_dict: dict) -> torch.Tensor:
-        return obs_dict["push_policy"]
+        obs = obs_dict["push_policy"]
+        if self.rel_obs:
+            obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
+            goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
+                           _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
+            rel_dx = (goal_pos[:, 0:1] - obj_pos[:, 0:1])
+            rel_dy = (goal_pos[:, 1:2] - obj_pos[:, 1:2])
+            obs = torch.cat([obs, rel_dx, rel_dy], dim=-1)
+        return obs
 
     def capture_pre_push(self, obs: torch.Tensor):
         """Snapshot object pose before a push for improvement computation."""
         self.prev_obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3].clone()
         self.prev_obj_euler = obs[:, _OBS_ROBOT_DIM + 3: _OBS_ROBOT_DIM + 6].clone()
+        # Record episode start state (first push of a new episode)
+        new_ep = ~self._ep_started
+        if new_ep.any():
+            self._ep_start_pos[new_ep] = self.prev_obj_pos[new_ep].clone()
+            self._ep_start_euler[new_ep] = self.prev_obj_euler[new_ep].clone()
+            self._ep_started[new_ep] = True
 
     def compute_push_reward(self, obs: torch.Tensor) -> torch.Tensor:
         """
@@ -285,7 +308,7 @@ class PushEnvWrapper:
         self.at_goal[done_ids] = False
         self._gave_completion[done_ids] = False
         self._gave_rot_bonus[done_ids] = False
-        # Give each done env a fresh goal for the next episode
+        self._ep_started[done_ids] = False
         self._sample_goals(done_ids)
         self._update_goal_in_extras()
         self._move_goal_ghost(done_ids)

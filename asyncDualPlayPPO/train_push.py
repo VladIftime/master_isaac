@@ -96,6 +96,9 @@ def main():
                         help="Write terminal output to this file as well")
     parser.add_argument("--with_distractor", action="store_true",
                         help="Spawn a random cube/cylinder as clutter (no goal)")
+    parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
+                        help="Append object-relative goal delta (dx, dy) to observation (28D→30D). "
+                             "Gives the policy direct access to push direction without learning atan2.")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -213,8 +216,9 @@ def main():
         num_objects=1,
         max_pushes_per_episode=max_pushes_per_episode,
         headless=args.headless,
+        rel_obs=args.rel_obs,
     )
-    print("Environment ready.")
+    print(f"Environment ready (rel_obs={args.rel_obs}, obs_dim={env.obs_dim}D).")
 
     # ── cuRobo IK solver ──────────────────────────────────────────────────────
     print("[cuRobo] Initialising IK solver...")
@@ -244,7 +248,7 @@ def main():
 
     _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
 
-    _debug_per_env = args.num_envs <= 50
+    _debug_per_env = args.num_envs <= 20
 
     # ── Goal marker visualizer (VisualizationMarkers — no physics, no collision) ──
     _goal_viz = VisualizationMarkers(
@@ -536,13 +540,15 @@ def main():
             _update_push_markers(Xs, Ys, Xf, Yf, theta)
 
             if _debug_per_env:
+                has_len = length.abs() > 0.001
                 for e in range(env.num_envs):
-                    _pr(
-                        f"    env {e}: bins=({', '.join(f'{int(actions[e,i].item()):2d}' for i in range(4))})  "
-                        f"Xs={float(Xs[e]):+.3f} Ys={float(Ys[e]):+.3f} "
-                        f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°  "
-                        f"→ Xf={float(Xf[e]):+.3f} Yf={float(Yf[e]):+.3f}"
-                    )
+                    if has_len[e]:
+                        _pr(
+                            f"    env {e}: bins=({', '.join(f'{int(actions[e,i].item()):2d}' for i in range(4))})  "
+                            f"Xs={float(Xs[e]):+.3f} Ys={float(Ys[e]):+.3f} "
+                            f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°  "
+                            f"→ Xf={float(Xf[e]):+.3f} Yf={float(Yf[e]):+.3f}"
+                        )
 
             # ── Execute push trajectory (gripper always closed) ────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
@@ -616,14 +622,27 @@ def main():
                 ri = env._last_rot_imp.mean().item()
                 dp = env._last_penalty.mean().item()
                 cb = env._last_completion.mean().item()
-                _pr(
-                    f"  [Push {push_step:3d}] "
-                    f"rew={reward.mean().item():+.3f}  (pos={pi:+.3f} rot={ri:+.3f} dist={dp:+.3f} bonus={cb:+.3f})  "
-                    f"pos_err={env._last_pos_err.mean().item():.3f}  rot_err={env._last_rot_err.mean().item():.3f}  "
-                    f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}  "
-                    f"Xs=({float(Xs.mean().item()):+.2f},{float(Ys.mean().item()):+.2f}) "
-                    f"len={float(length.mean().item()):.2f} θ={math.degrees(float(theta.mean().item())):.0f}°"
-                )
+                if args.rel_obs:
+                    rel_dx_avg = obs[:, 28].mean().item()
+                    rel_dy_avg = obs[:, 29].mean().item()
+                    _pr(
+                        f"  [Push {push_step:3d}] "
+                        f"rew={reward.mean().item():+.3f}  (pos={pi:+.3f} rot={ri:+.3f} dist={dp:+.3f} bonus={cb:+.3f})  "
+                        f"pos_err={env._last_pos_err.mean().item():.3f}  rot_err={env._last_rot_err.mean().item():.3f}  "
+                        f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}  "
+                        f"Xs=({float(Xs.mean().item()):+.2f},{float(Ys.mean().item()):+.2f}) "
+                        f"len={float(length.mean().item()):.2f} θ={math.degrees(float(theta.mean().item())):.0f}°  "
+                        f"Δ=({rel_dx_avg:+.3f},{rel_dy_avg:+.3f})"
+                    )
+                else:
+                    _pr(
+                        f"  [Push {push_step:3d}] "
+                        f"rew={reward.mean().item():+.3f}  (pos={pi:+.3f} rot={ri:+.3f} dist={dp:+.3f} bonus={cb:+.3f})  "
+                        f"pos_err={env._last_pos_err.mean().item():.3f}  rot_err={env._last_rot_err.mean().item():.3f}  "
+                        f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}  "
+                        f"Xs=({float(Xs.mean().item()):+.2f},{float(Ys.mean().item()):+.2f}) "
+                        f"len={float(length.mean().item()):.2f} θ={math.degrees(float(theta.mean().item())):.0f}°"
+                    )
 
             # ── Handle done envs ──────────────────────────────────────────────
             if done.any():
@@ -656,15 +675,19 @@ def main():
                         g_rot = goal_euler_done[gi]
                         o_pos = obj_pos_done[gi]
                         o_rot = obj_euler_done[gi]
+                        s_pos = env._ep_start_pos[max(0, done_ids[gi])]
+                        s_rot = env._ep_start_euler[max(0, done_ids[gi])]
                         pe = pos_err_done[gi]
                         re = float(rot_err_done[gi])
                         er = float(ep_rews_done[gi])
                         _pr(
                             f"  [Episode] pushes={p}  {status}  rew={er:+.3f}  "
+                            f"start=({s_pos[0]:+.3f},{s_pos[1]:+.3f},{s_pos[2]:+.3f}) "
+                            f"yaw={s_rot[2]:+.3f}  "
                             f"goal=({g_pos[0]:+.3f},{g_pos[1]:+.3f},{g_pos[2]:+.3f}) "
-                            f"orient=({g_rot[0]:+.3f},{g_rot[1]:+.3f},{g_rot[2]:+.3f})  "
+                            f"yaw={g_rot[2]:+.3f}  "
                             f"final=({o_pos[0]:+.3f},{o_pos[1]:+.3f},{o_pos[2]:+.3f}) "
-                            f"rot=({o_rot[0]:+.3f},{o_rot[1]:+.3f},{o_rot[2]:+.3f})  "
+                            f"yaw={o_rot[2]:+.3f}  "
                             f"err_pos={pe:.3f}m  err_rot={re:.3f}rad"
                         )
                 if hidden_state is not None:
@@ -731,6 +754,7 @@ def main():
         # Single compact iteration line — machine-parseable
         avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"
         trend = "↓" if loss_delta < -0.01 else ("↑" if loss_delta > 0.01 else "→")
+        _mode = "rel" if args.rel_obs else "abs"
         _pr(
             f"[Iter {iteration:5d}] "
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
@@ -738,7 +762,7 @@ def main():
             f"PosErr={mean_pos_err:.4f} | RotErr={mean_rot_err:.4f} | SR={sr:.4f} | RotSR={rot_sr:.4f} | "
             f"IK_fail={ik_fail_rate:.3f} | "
             f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
-            f"BestSR={best_success_rate:.4f}"
+            f"BestSR={best_success_rate:.4f} | {_mode}"
         )
         sys.stdout.flush()
 
