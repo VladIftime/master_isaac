@@ -1,224 +1,146 @@
-# Asymmetric Self-Play with Goal Encoders for Robotic Manipulation
+# Ping Pong Dual-Arm Environment
 
-Combines two papers to train dual-arm manipulation policies via adversarial self-play
-in Isaac Lab / Isaac Sim.
+Competitive ping pong with two dual-arm robot systems in Isaac Lab / Isaac Sim.
+Each robot has a rendered body, head, and two UR5e arms with Robotiq grippers.
 
----
-
-## Papers
-
-### 1. Asymmetric Self-Play (OpenAI, Plappert et al. 2021)
-
-Two agents — **Alice** and **Bob** — play an adversarial game:
-
-- **Alice** (100 steps): manipulates objects freely to construct a goal configuration.
-- **Bob** (100 steps): observes the goal and must reproduce it from a fresh reset.
-- Goals repeat across 5 sub-goals per episode.
-- **ABC**: when Bob fails, Alice's trajectory is stored as a demonstration for Bob
-  to clone via clipped imitation loss (β = 0.5).
-- **Historical pool**: 20% of episodes pit each agent against a past policy snapshot
-  (last 5 saved every 50 iters).
-
-**Alice rewards** (per goal, at phase end):
-| Outcome | Reward |
-|---|---|
-| Valid goal (>0.10m displacement) | +1 |
-| Shallow goal (0.05–0.10m) | −1 |
-| Out-of-zone / invalid | −3 |
-| Bob fails | +5 at Bob phase end |
-| Bob succeeds | −1 at Bob phase end |
-| Off-table / IK fail | −3 / −1 (early termination) |
-
-**Bob rewards** (per step + phase end):
-| Event | Reward |
-|---|---|
-| Object enters goal threshold | +1 |
-| Object leaves goal threshold | −1 |
-| All objects at goal simultaneously | +5 (episode ends) |
-| Phase-end progress | clamp(0.6·Δpos/init + 0.4·Δrot/init, −1, +1) |
-
-The phase-end progress reward mirrors Alice's episodic feedback structure — Bob
-gets a grade on every trial, not just the 2–4% where sparse thresholds fire.
-Per-step dense delta rewards were tested (v2–v5) and reverted (Fix P27): they
-produced zero-mean noise that killed both agents' gradient flow.
-
-### 2. Goal Embeddings via Self-Play (Sukhbaatar et al. 2018)
-
-A **GoalEncoder** φ-MLP compresses `(goal_pose, current_pose)` into an 8D latent
-vector, injected additively into Bob's first trunk layer:
-`h₁ = ReLU(LN(W·enc + Wg·g_pooled))`. Difference variant: `g_i = φ(goal_i) − φ(current_i)`.
-
-### 3. Single-object T-block variant (this implementation)
-
-OpenAI's 2021 paper used 200 Bob steps for multi-block stacking tasks. For
-single-object tabletop pushing, Bob's horizon is halved to 100 steps — credit
-assignment is the bottleneck, not task complexity.
-
----
-
-## Architecture
+## Scene
 
 ```
-Alice (PPO, ent_coef=0.005):
-    Obs: EE pose(6 Euler) + gripper(1) + obj_state(14) = 21D (1 T-block)
-    Acts: MultiCategorical 6D × 11 bins → cuRobo IK → joint positions
-    Role: explore and construct interesting goal configurations
-
-Bob (PPOABC + GoalEncoder, abc_coef=0.5):
-    Obs: robot(7) + obj_state(14) + goal_pose(6) + goal_dist(2) = 29D
-    GoalEncoder: difference variant, K=8, max-pool
-    Acts: same action space as Alice
-    Role: reproduce the goal Alice left behind
-
-Push-PPO Baseline (single-agent, no ASP no ABC):
-    Obs: 28D flat vector (ee_pose + obj_state + goal_pose + goal_dist, no gripper)
-    Acts: MultiCategorical 4D × 21 bins → push primitive macro-action (72 substeps)
-    Reward: dense improvement per push + completion bonus
+                    Robot B
+                +---[BODY]---+
+                | left  right |
+                | arm   arm   |
+                |             |
+                |  [RacketB]  |
+         -Y  ===|=====|===========|=====  (net)
+                |  [RacketA]  |
+                |             |
+                | arm   arm   |
+                | left  right |
+                +---[BODY]---+
+                    Robot A
+                        +Y →
 ```
 
-**Kinematic pipeline** (cuRobo):
-```
-Policy bins → XYZ/RxRy delta → accumulated ee_target ± TCP offset → solve_batch(N) → joints
-```
-
----
-
-## Key Hyperparameters
-
-| Parameter | Value | Notes |
-|---|---|---|
-| `ent_coef` | 0.005 | Both agents (was 0.05 — Fix P23) |
-| `optim_stepsize` | 3e-4 | Alice LR; cosine decay → 5e-5 |
-| `cliprange` | 0.2 | PPO ε-clip |
-| `gamma` | 0.998 | Discount |
-| `lam` | 0.95 | GAE lambda |
-| `abc_coef` | 0.5 | Fixed (paper Table 2) |
-| `abc_traj_maxlen` | 500 | ABC buffer capacity |
-| `abc_n_trajs` | 16 | Trajectories sampled per Bob update |
-| `aux_coef` | 0.1 | GoalEncoder auxiliary distance loss |
-| `alice_timesteps` | 100 | Steps per Alice phase |
-| `bob_timesteps` | 100 | Steps per Bob phase (was 200 — Fix P28) |
-| `max_goals_per_episode` | 5 | |
-| `num_objects` | 1 or 2 | Two T-blocks at non-overlapping spawns: (0, 0.5) and (−0.25, 0.7) |
-| `num_bins` | 11 | Per MultiCategorical dim (ASP) |
-| `lstm_hidden_size` | 256 | |
-| Success threshold | 0.05 m / 0.2 rad | |
-
----
-
-## Stack
-
-| Component | Version |
-|---|---|
-| Isaac Sim | 5.1.0 |
-| Isaac Lab | 2.3.0 |
-| cuRobo | 0.7.5 |
-| PyTorch | 2.7.0+cu128 |
-| Python | 3.11.5 |
-| HPC container | `nvcr.io/nvidia/isaac-lab:2.3.0` (Apptainer) |
-| HPC GPU | RTX Pro 6000 (96 GB) |
-
----
+- **2 dual-arm robot systems** (each: body + head + 2 UR5e arms + grippers)
+- **Ping pong table** with net and ball
+- **Kinematic rackets** attached to each robot's playing arm
+- **Standard Gymnasium `reset()/step()` interface** — plug in any RL library
 
 ## Running
 
-### Local
-
 ```bash
-source /home/vlad/env_isaaclab/bin/activate
-cd /home/vladi/IsaacLab/master_isaac
+cd /home/vladi/IsaacLab/master_isaac/pingpong_dual_arm
 
-# Smoke test
-python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 10 --headless
+# Test the environment (CPU — default, works out of the box)
+../../isaaclab.sh -p scripts/test_env.py --ik diffik --num_envs 4 --headless
 
-# Full local
-python -m asyncDualPlayPPO.train_curobo --num_envs 64 --max_iterations 1000 \
-    --exp_name curobo_local --headless
+# Test a different IK solver
+../../isaaclab.sh -p scripts/test_env.py --ik osc --headless
 
-# Resume
-python -m asyncDualPlayPPO.train_curobo --num_envs 64 --max_iterations 2000 \
-    --chkpt_alice runs/curobo_local/alice/model_500.pt \
-    --chkpt_bob   runs/curobo_local/bob/model_500.pt \
-    --resume_iteration 500 --headless
+# IK solver comparison (single robot, reach task)
+../../isaaclab.sh -p scripts/test_ik.py --solver rmpflow <<EOF
 ```
 
-### HPC
+## Development
+
+Use the venv for IDE support (autocomplete, type checking):
 
 ```bash
-cd /home/<you>/master_isaac
-
-# One-time setup (see implementations.md §5)
-#   apptainer pull isaac-lab.sif
-#   apptainer overlay create --size 8192 curobo_overlay.img
-#   install cuRobo inside overlay
-
-# Submit job (512 envs, auto-resume)
-sbatch asyncDualPlayPPO/hpc/train_curobo.slurm
-
-# Monitor
-tail -f slurm-<JOBID>-curobo.out
+source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
 ```
 
-### Diagnostics
+Note: Runtime execution must use `isaaclab.sh` — it boots Isaac Sim's environment.
+Do NOT activate the venv when running `isaaclab.sh` (it overrides Isaac Sim's Python).
 
-```bash
-bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh          # all 4 tests
-python -m asyncDualPlayPPO.train_curobo --test_reward_pipeline # Test 1
-python -m asyncDualPlayPPO.train_curobo --alice_sandbox        # Test 2
-python -m asyncDualPlayPPO.train_curobo --test_hparams          # hyperparameter audit
+## GPU Pipeline
+
+GPU mode (`--device cuda:0`) requires version-matching between Isaac Lab and Isaac Sim.
+The current Isaac Lab source (commit `d94504bcf`, 2026-04-29) has GPU tensor API changes
+incompatible with Isaac Sim 5.1.0-rc.19. To enable GPU:
+
+1. Checkout Isaac Lab at a known-compatible commit, or
+2. Update Isaac Sim to match, or
+3. Run inside the Apptainer container (`isaac-lab.sif`) which ships matched versions
+
+## IK Solvers
+
+| Solver | Description | Command |
+|--------|-------------|---------|
+| `diffik` | Differential IK (DLS) — default, no config files needed | `--ik diffik` |
+| `osc` | Operational Space Control — impedance-based torque control | `--ik osc` |
+| `rmpflow` | Riemannian Motion Policies — collision-aware GPU planning | `--ik rmpflow` |
+| `curobo` | GPU-accelerated nonlinear IK (requires cuRobo) | `--ik curobo` |
+
+Configure the IK solver in code:
+```python
+cfg = PingPongDualArmEnvCfg()
+cfg.ik_solver = "osc"          # swap IK solver
+cfg.playing_arm_side = "left"  # use left arm instead of right
 ```
 
----
+Or programmatically:
+```python
+from ik_solvers import build_ik_action
+action_cfg = build_ik_action("osc", asset_name="robot_A", side="right")
+```
+
+## Plugging in RL
+
+The environment is a `ManagerBasedRLEnv` subclass exposing standard Gymnasium API:
+
+```python
+from tasks.pingpong_env import PingPongDualArmEnv
+from tasks.pingpong_env_cfg import PingPongDualArmEnvCfg
+
+cfg = PingPongDualArmEnvCfg()
+cfg.scene.num_envs = 64
+env = PingPongDualArmEnv(cfg)
+
+obs = env.reset()
+action = model(obs)
+obs, reward, terminated, truncated, info = env.step(action)
+```
+
+Compatible with `stable-baselines3`, `rsl-rl`, `skrl`, or any PPO library.
 
 ## File Structure
 
 ```
-asyncDualPlayPPO/
-├── train_curobo.py                  # Main training (cuRobo IK, ASP)
-├── train_push.py                    # Push-PPO baseline
-├── train_diffik.py / train.py       # Legacy controllers
-├── cfg/
-│   ├── ppo/ppo_continuous.yaml      # PPO + ABC hyperparameters
-│   └── task/AsyncDualPlay.yaml      # Episode structure
-├── algorithms/
-│   ├── goal_encoder.py              # GoalEncoder φ-MLP
-│   └── rl/ppo/
-│       ├── module.py                # ActorCritic, PermInvEncoder
-│       ├── module_push.py           # Flat MLP network (push baseline)
-│       ├── ppo.py                   # Base PPO (Alice)
-│       ├── ppo_abc.py               # PPOABC (Bob)
-│       └── storage.py               # RolloutStorage + GPUDemonstrationBuffer
-├── tasks/utils/
-│   ├── wrapper.py                   # ASP env wrapper (phases, rewards)
-│   ├── wrapper_push.py              # Push env wrapper
-│   ├── observations.py / rewards.py # Observation & reward logic
-│   └── terminations.py / events.py  # Termination & reset logic
-├── utils/
-│   ├── episode_manager.py           # Phase tracking, goal storage
-│   ├── goal_validator.py            # Goal displacement validation
-│   ├── historical_pool.py           # Policy snapshot ring buffer
-│   └── profiler.py                  # Per-section timing
-├── diagnostics/                     # 4-test diagnostic suite
-├── tests/                           # Validation + cuRobo tests
-├── hpc/                             # Slurm scripts
-└── extras/                          # Log analysis / plotting
+pingpong_dual_arm/
+├── ik_solvers/
+│   └── __init__.py              # Swappable IK solver builders
+├── tasks/
+│   ├── pingpong_env_cfg.py      # Scene config + MDP (2 robots, table, ball, rackets)
+│   ├── pingpong_env.py          # Environment class (ManagerBasedRLEnv)
+│   ├── observations.py          # EE poses, ball state, joint positions
+│   ├── rewards.py               # Rally time, ball contact, point scoring
+│   ├── events.py                # Serve, robot reset
+│   └── terminations.py          # Ball out-of-bounds, point detection
+├── scripts/
+│   ├── test_env.py              # Launch & step through environment
+│   ├── test_ik.py               # Compare IK solvers
+│   ├── random_policy.py         # Random action rollout
+│   └── convert_pingpong_assets.py  # STL → USD mesh converter
+├── meshes/                      # All mesh assets
+│   ├── dual_arm_head/           # Robot head (blue_head)
+│   ├── intuition_body/          # Robot body (multiple colors)
+│   ├── pingpong/                # Table, racket, ball meshes
+│   ├── robotiq_*_gripper*/      # Gripper meshes
+│   └── ur5e/                    # UR5e arm meshes
+├── urdf/
+│   ├── dual_arm_robot.urdf      # Full dual-arm robot (body + head + arms + grippers)
+│   ├── dual_arm_robot_no_gripper_col.usd  # Generated USD for simulation
+│   └── cuMotion/                # RMPflow and Lula IK configs
+└── cfg/task/
+    └── pingpong_dual_arm.yaml   # Task parameters
 ```
 
-Full documentation: `implementations.md`, `net.md`.
+## Stack
 
----
-
-## References
-
-```bibtex
-@article{plappert2021asymmetric,
-  title={Asymmetric self-play for automatic goal discovery in robotic manipulation},
-  author={Plappert, Matthias and Rajeswaran, Aravind and others},
-  journal={arXiv preprint arXiv:2101.04882}, year={2021}
-}
-@article{sukhbaatar2018learning,
-  title={Learning Goal Embeddings via Self-Play for Hierarchical RL},
-  author={Sukhbaatar, Sainbayar and Lin, Zeming and others},
-  journal={arXiv preprint arXiv:1811.09083}, year={2018}
-}
-```
+| Component | Version |
+|-----------|---------|
+| Isaac Sim | 5.1.0 |
+| Isaac Lab | 0.54.3 |
+| PyTorch | 2.7.0 |
+| Python | 3.11 |

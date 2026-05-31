@@ -1,0 +1,29 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/isaac-lab:2.3.0
+
+%post
+    set -e
+    apt-get update
+    apt-get install -y gnupg wget
+
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+    dpkg -i cuda-keyring_1.1-1_all.deb
+    apt-get update
+
+    apt-get install -y cuda-compiler-12-8 cuda-cudart-dev-12-8 ninja-build
+
+    export CUDA_HOME=/usr/local/cuda-12.8
+    export PATH=$CUDA_HOME/bin:$PATH
+    nvcc --version
+
+    git clone https://github.com/NVlabs/curobo.git /tmp/curobo
+    cd /tmp/curobo && git checkout v0.7.5
+    /isaac-sim/python.sh -m pip install -e ".[no_dev]" --no-build-isolation
+    /isaac-sim/python.sh -c "import curobo; print('cuRobo OK')"
+
+    rm -rf /tmp/curobo /tmp/*.deb
+    apt-get clean
+
+%environment
+    export CUDA_HOME=/usr/local/cuda-12.8
+    export PATH=$CUDA_HOME/bin:$PATH
