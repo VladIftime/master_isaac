@@ -1,38 +1,30 @@
-"""Ping pong environment class — two dual-arm robots playing competitive ping pong.
-
-Provides a standard Gymnasium interface compatible with any RL library
-(SB3, rsl-rl, torchrl, etc.).
-"""
+"""Ping pong environment — tracks rackets to end-effector poses each step."""
 
 from __future__ import annotations
 
 import torch
-import numpy as np
 
-from isaaclab.envs import ManagerBasedRLEnv, ManagerBasedRLEnvCfg
-from isaaclab.envs.mdp import events
-
-from .pingpong_env_cfg import PingPongDualArmEnvCfg
+from isaaclab.envs import ManagerBasedRLEnv
 
 
-class PingPongDualArmEnv(ManagerBasedRLEnv):
-    """Environment with two dual-arm robots playing ping pong."""
+class PingPongEnv(ManagerBasedRLEnv):
+    """Environment that positions kinematic rackets at the playing-arm EE."""
 
-    cfg: PingPongDualArmEnvCfg
+    def step(self, action):
+        obs, reward, terminated, truncated, info = super().step(action)
 
-    def __init__(self, cfg: PingPongDualArmEnvCfg, render_mode: str | None = None, **kwargs):
-        super().__init__(cfg, render_mode, **kwargs)
+        for robot_name, racket_name in [("robot_A", "racket_A"), ("robot_B", "racket_B")]:
+            try:
+                robot = self.scene[robot_name]
+                racket = self.scene[racket_name]
+            except KeyError:
+                continue
 
-    def _configure_env_timers(self) -> None:
-        if self.cfg.rewards:
-            self._step_timers["rewards"] = self._Timer()
-        if self.cfg.terminations:
-            self._step_timers["terminations"] = self._Timer()
-        self._step_timers["physics_step"] = self._Timer()
+            body_ids, _ = robot.find_bodies(["right_wrist_3_link"])
+            racket_pose = torch.cat([
+                robot.data.body_pos_w[:, body_ids[0]],
+                robot.data.body_quat_w[:, body_ids[0]],
+            ], dim=-1)
+            racket.write_root_pose_to_sim(racket_pose)
 
-    def _pre_physics_step(self, actions: torch.Tensor) -> None:
-        return
-
-    def _apply_action(self) -> None:
-        for action_term in self.action_manager._terms.values():
-            action_term.apply()
+        return obs, reward, terminated, truncated, info

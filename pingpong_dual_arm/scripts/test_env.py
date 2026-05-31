@@ -2,19 +2,25 @@
 """Test script: launch the ping pong dual-arm environment and step through it.
 
 Usage:
+    source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
     cd pingpong_dual_arm
-    ../isaaclab.sh -p scripts/test_env.py --ik diffik --num_envs 4
+    python scripts/test_env.py --ik diffik --num_envs 4
 """
 
 import argparse
 import os
 import sys
-import torch
-
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+# Lock torch submodules before AppLauncher — Isaac Sim's pip_prebundle
+# contains incompatible torch builds that break imports otherwise.
+import torch
+import torch._dynamo     # noqa: F401
+import torch._C          # noqa: F401
+import torch.optim       # noqa: F401
 
 from isaaclab.app import AppLauncher
 
@@ -30,14 +36,13 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+from isaaclab.envs import ManagerBasedRLEnv
 from tasks.pingpong_env_cfg import PingPongDualArmEnvCfg
-from tasks.pingpong_env import PingPongDualArmEnv
+from tasks.pingpong_env import PingPongEnv
 
 cfg = PingPongDualArmEnvCfg()
 cfg.scene.num_envs = args_cli.num_envs
 cfg.ik_solver = args_cli.ik
-cfg.sim.device = "cpu"
-cfg.sim.use_fabric = False
 
 print(f"\n=== Testing Ping Pong Dual-Arm Environment ===")
 print(f"  Num envs: {args_cli.num_envs}")
@@ -45,7 +50,7 @@ print(f"  IK solver: {args_cli.ik}")
 print(f"  Steps: {args_cli.steps}")
 print()
 
-env = PingPongDualArmEnv(cfg)
+env = PingPongEnv(cfg=cfg)
 
 print(f"Action space: {env.action_space}")
 print(f"Observation space shape:")
@@ -56,7 +61,7 @@ obs, info = env.reset()
 print(f"Reset done. Starting rollout for {args_cli.steps} steps...")
 
 for step in range(args_cli.steps):
-    action = torch.randn(args_cli.num_envs, env.action_space.shape[1], device=env.device)
+    action = torch.rand(args_cli.num_envs, env.action_space.shape[1], device=env.device) * 0.3 - 0.15
     obs, reward, terminated, truncated, info = env.step(action)
 
     if step % 100 == 0:

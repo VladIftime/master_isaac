@@ -13,3 +13,6 @@ asyncDualPlayPPO/paper-async.master_venv/
 curobo/
 .master_venv/
 curobo_overlay.imgcurobo_repo/
+pingpong_dual_arm/.isaac_cache
+/pingpong_dual_arm/.venv
+pingpong_dual_arm/.vscode

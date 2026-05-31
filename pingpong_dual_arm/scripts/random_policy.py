@@ -33,7 +33,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 from tasks.pingpong_env_cfg import PingPongDualArmEnvCfg
-from tasks.pingpong_env import PingPongDualArmEnv
+from isaaclab.envs import ManagerBasedRLEnv
 
 cfg = PingPongDualArmEnvCfg()
 cfg.scene.num_envs = args_cli.num_envs
@@ -41,7 +41,7 @@ cfg.ik_solver = args_cli.ik
 
 print(f"Random policy with {args_cli.ik} IK, {args_cli.num_envs} envs")
 
-env = PingPongDualArmEnv(cfg)
+env = ManagerBasedRLEnv(cfg=cfg)
 
 obs, info = env.reset()
 

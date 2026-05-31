@@ -140,7 +140,7 @@ cfg.scene.robot = ArticulationCfg(
 
 cfg.actions = type("ActionsCfg", (), {"arm": action_cfg})()
 
-env = PingPongDualArmEnv(cfg)
+env = ManagerBasedRLEnv(cfg=cfg)
 obs, info = env.reset()
 print(f"Environment initialized. Action dim: {env.action_space.shape}")
 

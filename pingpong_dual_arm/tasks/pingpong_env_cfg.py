@@ -89,8 +89,15 @@ UR5e_SINGLE_CFG = ArticulationCfg(
 )
 
 DualArm_CFG = UR5e_SINGLE_CFG.replace(
-    spawn=UsdFileCfg(
-        usd_path=f"{_PKG_ROOT}/urdf/dual_arm_robot_no_gripper_col.usd",
+    spawn=UrdfFileCfg(
+        asset_path=f"{_PKG_ROOT}/urdf/dual_arm_robot_no_gripper_col.urdf",
+        fix_base=False,
+        joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
+            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
+                stiffness=1000.0,
+                damping=50.0,
+            ),
+        ),
         rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=False,
@@ -140,7 +147,7 @@ ARM_JOINTS_RIGHT = ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"]
 
 TABLE_WIDTH = 1.525
 TABLE_LENGTH = 2.74
-TABLE_HEIGHT = 0.76
+TABLE_HEIGHT = 0.45
 TABLE_THICKNESS = 0.02
 NET_HEIGHT = 0.1525
 BALL_RADIUS = 0.02
@@ -170,31 +177,23 @@ class PingPongSceneCfg(InteractiveSceneCfg):
     table = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.0, TABLE_HEIGHT / 2.0],
+            pos=[0.0, 0.0, 0.0],
             rot=[1.0, 0, 0, 0],
         ),
-        spawn=sim_utils.CuboidCfg(
-            size=(TABLE_WIDTH, TABLE_LENGTH, TABLE_THICKNESS),
+        spawn=UsdFileCfg(
+            usd_path=f"{_PKG_ROOT}/assets/pingpong/table.usd",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.0,
-                dynamic_friction=0.0,
-                restitution=0.877,
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.0, 0.4, 0.75),
-            ),
         ),
     )
 
     ball = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Ball",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.0, TABLE_HEIGHT + 0.3],
+            pos=[0.0, 0.0, TABLE_HEIGHT + 0.15],
             rot=[1.0, 0, 0, 0],
         ),
         spawn=sim_utils.SphereCfg(
@@ -228,14 +227,6 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=(TABLE_WIDTH, 0.015, NET_HEIGHT),
             collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.3,
-                dynamic_friction=0.3,
-                restitution=0.5,
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.9, 0.9, 0.9),
-            ),
         ),
     )
 
@@ -245,21 +236,13 @@ class PingPongSceneCfg(InteractiveSceneCfg):
             pos=[0.0, -TABLE_LENGTH / 2.0 + 0.15, TABLE_HEIGHT + 0.15],
             rot=[1.0, 0, 0, 0],
         ),
-        spawn=sim_utils.CuboidCfg(
-            size=(0.16, 0.16, 0.01),
+        spawn=UsdFileCfg(
+            usd_path=f"{_PKG_ROOT}/assets/pingpong/racket.usd",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.5,
-                dynamic_friction=0.5,
-                restitution=1.0,
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.8, 0.2, 0.2),
-            ),
         ),
     )
 
@@ -269,38 +252,30 @@ class PingPongSceneCfg(InteractiveSceneCfg):
             pos=[0.0, TABLE_LENGTH / 2.0 - 0.15, TABLE_HEIGHT + 0.15],
             rot=[1.0, 0, 0, 0],
         ),
-        spawn=sim_utils.CuboidCfg(
-            size=(0.16, 0.16, 0.01),
+        spawn=UsdFileCfg(
+            usd_path=f"{_PKG_ROOT}/assets/pingpong/racket.usd",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.5,
-                dynamic_friction=0.5,
-                restitution=1.0,
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.2, 0.2, 0.8),
-            ),
         ),
     )
 
-    # Robot A: positioned at one end of the table (-Y side)
+    # Robot A: -Y side, facing +Y (toward table)
     robot_A = DualArm_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotA",
         init_state=DualArm_CFG.init_state.replace(
-            pos=(0.0, -TABLE_LENGTH / 2.0 - 0.15, 0.0),
+            pos=(0.0, -TABLE_LENGTH / 2.0 - 0.5, 0.0),
         ),
     )
 
-    # Robot B: positioned at the other end of the table (+Y side), facing inward
+    # Robot B: +Y side, facing -Y (toward table) — 180° yaw = quat (0, 0, 0, 1)
     robot_B = DualArm_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotB",
         init_state=DualArm_CFG.init_state.replace(
-            pos=(0.0, TABLE_LENGTH / 2.0 + 0.15, 0.0),
-            rot=(0.0, 0.0, 1.0, 0.0),  # Yaw 180 (facing -Y)
+            pos=(0.0, TABLE_LENGTH / 2.0 + 0.5, 0.0),
+            rot=(0.0, 0.0, 0.0, 1.0),
         ),
     )
 
@@ -363,39 +338,19 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events (resets)."""
 
-    reset_robot_joints = EventTerm(func=evt_mod.reset_robot_joints, mode="reset")
-    serve_ball = EventTerm(func=evt_mod.serve_ball_random, mode="reset")
+    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 
 @configclass
 class TerminationsCfg:
-    """Termination terms."""
-
-    ball_fell_off = DoneTerm(
-        func=term_mod.ball_out_of_bounds,
-        params={"z_min": 0.0, "x_range": (-1.2, 1.2), "y_range": (-1.4, 1.4)},
-    )
-
-    robot_out_of_bounds = DoneTerm(
-        func=term_mod.robot_out_of_bounds,
-        params={
-            "asset_cfg": SceneEntityCfg("robot_A", body_names=["right_wrist_3_link"]),
-            "table_z": 0.0,
-            "margin": -0.1,
-            "x_range": (-1.2, 1.2),
-            "y_range": (-1.4, 1.4),
-        },
-    )
+    """No terminations — ball respawn handled manually in swing script."""
+    pass
 
 
 @configclass
 class RewardsCfg:
-    """Reward terms."""
-
-    rally = RewTerm(func=rew_mod.rally_time_reward, weight=0.001)
-    ball_height = RewTerm(func=rew_mod.ball_height_reward, weight=0.1)
-    ball_contact = RewTerm(func=rew_mod.ball_contact_reward, weight=1.0)
-    point_won = RewTerm(func=rew_mod.point_won_reward, weight=1.0)
+    """Reward terms — minimal for swing demo."""
+    pass
 
 
 @configclass
@@ -413,20 +368,15 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
 
     def __post_init__(self):
-        self.decimation = 2
-        self.episode_length_s = 30.0
-        self.sim.dt = 0.01
+        self.decimation = 1
+        self.episode_length_s = 20.0
+        self.sim.dt = 0.02
         self.sim.render_interval = self.decimation
+        self.reset_settle_steps = 5
 
         self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
-        self.sim.physx.gpu_max_rigid_contact_count = 1024 * 256
+        self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
         self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
-        self.sim.physx.gpu_heap_capacity = 64 * 1024 * 1024
-        self.sim.physx.gpu_temp_buffer_capacity = 16 * 1024 * 1024
-        self.sim.physx.gpu_max_soft_body_contacts = 1024 * 1024
-
-        self.sim.physx.bounce_threshold_velocity = 0.01
-        self.sim.physx.friction_correlation_distance = 0.0
 
         self.actions.arm_A = build_ik_action(
             self.ik_solver, asset_name="robot_A", side=self.playing_arm_side,
