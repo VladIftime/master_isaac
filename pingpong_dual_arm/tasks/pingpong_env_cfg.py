@@ -149,7 +149,6 @@ TABLE_WIDTH = 1.525
 TABLE_LENGTH = 2.74
 TABLE_HEIGHT = 0.45
 TABLE_THICKNESS = 0.02
-NET_HEIGHT = 0.1525
 BALL_RADIUS = 0.02
 BALL_MASS = 0.0027
 
@@ -178,7 +177,7 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/Table",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.0, 0.0, 0.0],
-            rot=[1.0, 0, 0, 0],
+            rot=[0.707, 0.0, 0.0, 0.707],
         ),
         spawn=UsdFileCfg(
             usd_path=f"{_PKG_ROOT}/assets/pingpong/table.usd",
@@ -215,18 +214,6 @@ class PingPongSceneCfg(InteractiveSceneCfg):
             visual_material=sim_utils.PreviewSurfaceCfg(
                 diffuse_color=(1.0, 0.5, 0.0),
             ),
-        ),
-    )
-
-    net = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Net",
-        init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[0.0, 0.0, TABLE_HEIGHT + NET_HEIGHT / 2.0],
-            rot=[1.0, 0, 0, 0],
-        ),
-        spawn=sim_utils.CuboidCfg(
-            size=(TABLE_WIDTH, 0.015, NET_HEIGHT),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
     )
 
