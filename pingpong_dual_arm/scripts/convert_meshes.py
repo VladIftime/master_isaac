@@ -60,21 +60,23 @@ for item in conversions:
 
     print(f"Converting: {stl_path}  ->  {OUTPUT}/{item['usd']}", flush=True)
 
-    MeshConverter(
-        MeshConverterCfg(
-            asset_path=stl_path,
-            usd_dir=OUTPUT,
-            usd_file_name=item["usd"],
-            force_usd_conversion=True,
-            make_instanceable=False,
-            scale=item["scale"],
-            rigid_props=schemas_cfg.RigidBodyPropertiesCfg(
-                kinematic_enabled=item["kinematic"],
-                disable_gravity=True,
-            ),
-            collision_props=schemas_cfg.CollisionPropertiesCfg(),
-        )
+    cfg_kwargs = dict(
+        asset_path=stl_path,
+        usd_dir=OUTPUT,
+        usd_file_name=item["usd"],
+        force_usd_conversion=True,
+        make_instanceable=False,
+        scale=item["scale"],
+        rigid_props=schemas_cfg.RigidBodyPropertiesCfg(
+            kinematic_enabled=item["kinematic"],
+            disable_gravity=True,
+        ),
+        collision_props=schemas_cfg.CollisionPropertiesCfg(),
     )
+    if "rotation" in item:
+        cfg_kwargs["rotation"] = item["rotation"]
+
+    MeshConverter(MeshConverterCfg(**cfg_kwargs))
     print(f"  Done", flush=True)
 
 print("\nAll assets converted.", flush=True)

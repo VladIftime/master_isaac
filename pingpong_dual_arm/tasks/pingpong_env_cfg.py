@@ -147,11 +147,12 @@ ARM_JOINTS_RIGHT = ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"]
 
 TABLE_WIDTH = 1.525
 TABLE_LENGTH = 2.74
-TABLE_HEIGHT = 0.45
+TABLE_HEIGHT = 0.78
 TABLE_THICKNESS = 0.02
+NET_HEIGHT = 0.1525
 BALL_RADIUS = 0.02
 BALL_MASS = 0.0027
-
+DISTANCE_FROM_TABLE_EDGE = 0.25
 
 @configclass
 class PingPongSceneCfg(InteractiveSceneCfg):
@@ -161,7 +162,7 @@ class PingPongSceneCfg(InteractiveSceneCfg):
 
     plane = AssetBaseCfg(
         prim_path="/World/GroundPlane",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, -1.0]),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]),
         spawn=GroundPlaneCfg(
             size=(6.0, 6.0),
             color=(0.15, 0.15, 0.15),
@@ -173,14 +174,20 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=3000.0),
     )
 
-    table = RigidObjectCfg(
+    # Table USD origin is at lower-left corner.  Position shifts the table centre
+    # to the env origin (0,0,0).  Robots below are already laid out around that centre.
+    # Layers: table_shape (visual), side_p1 / side_p2 (left/right contact zones),
+    # net (net collision zone).  Uses AssetBaseCfg (not RigidObjectCfg) because the
+    # USD contains multiple rigid-body prims (net, side_p1, side_p2).
+    table = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.0, 0.0],
-            rot=[0.707, 0.0, 0.0, 0.707],
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=[TABLE_WIDTH/2, -TABLE_LENGTH/2, 0.0],
+            rot=[0.0, 0.0, 0.0, 0.0],
         ),
         spawn=UsdFileCfg(
-            usd_path=f"{_PKG_ROOT}/assets/pingpong/table.usd",
+            usd_path=f"{_PKG_ROOT}/meshes/pingpong/ping_pong_/ping_pong_table/table_extra_parts.usd",
+            scale=(10.0, 10.0, 10.0),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
@@ -253,7 +260,7 @@ class PingPongSceneCfg(InteractiveSceneCfg):
     robot_A = DualArm_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotA",
         init_state=DualArm_CFG.init_state.replace(
-            pos=(0.0, -TABLE_LENGTH / 2.0 - 0.5, 0.0),
+            pos=(0.0, -TABLE_LENGTH / 2.0 - DISTANCE_FROM_TABLE_EDGE, TABLE_HEIGHT),
         ),
     )
 
@@ -261,7 +268,7 @@ class PingPongSceneCfg(InteractiveSceneCfg):
     robot_B = DualArm_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotB",
         init_state=DualArm_CFG.init_state.replace(
-            pos=(0.0, TABLE_LENGTH / 2.0 + 0.5, 0.0),
+            pos=(0.0, TABLE_LENGTH / 2.0 + DISTANCE_FROM_TABLE_EDGE, TABLE_HEIGHT),
             rot=(0.0, 0.0, 0.0, 1.0),
         ),
     )

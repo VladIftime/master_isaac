@@ -26,7 +26,7 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test ping pong dual-arm environment.")
 parser.add_argument("--num_envs", type=int, default=4, help="Number of parallel environments.")
-parser.add_argument("--steps", type=int, default=1000, help="Number of steps to run.")
+parser.add_argument("--steps", type=int, default=10000, help="Number of steps to run.")
 parser.add_argument("--ik", type=str, default="diffik", choices=["diffik", "osc", "rmpflow", "curobo"],
                     help="IK solver to use.")
 
