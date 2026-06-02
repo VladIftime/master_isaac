@@ -1,4 +1,9 @@
-"""Event handlers for ping pong environment resets."""
+"""Event handlers for ping pong environment resets.
+
+Ported from Isaaclab-TableTennisRobot:
+  - serve_ball_alternating: serve from alternating sides with randomized velocity
+  - reset_robot_joints: reset both robots to default joint positions
+"""
 
 from __future__ import annotations
 
@@ -8,55 +13,18 @@ from typing import TYPE_CHECKING
 from isaaclab.managers import SceneEntityCfg
 
 if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedRLEnv
+    from .pingpong_env import PingPongEnv
 
 
-def serve_ball_random(
-    env: ManagerBasedRLEnv,
-    env_ids: torch.Tensor,
-    ball_cfg: SceneEntityCfg = SceneEntityCfg("ball"),
-) -> None:
-    """Serve the ball from a random position near the center of the table."""
-    num_resets = len(env_ids)
-    if num_resets == 0:
-        return
 
-    ball = env.scene[ball_cfg.name]
-    env_origins = env.scene.env_origins[env_ids].to(env.device)
-
-    x_local = (torch.rand(num_resets, device=env.device) - 0.5) * 0.3
-    y_local = (torch.rand(num_resets, device=env.device) - 0.5) * 0.2
-    z_local = torch.full((num_resets,), 0.28, device=env.device)
-
-    pos_global = torch.stack([
-        x_local + env_origins[:, 0],
-        y_local + env_origins[:, 1],
-        z_local + env_origins[:, 2],
-    ], dim=1)
-
-    yaw = torch.rand(num_resets, device=env.device) * 2 * torch.pi
-    quat = torch.stack([
-        torch.cos(yaw / 2.0),
-        torch.zeros_like(yaw),
-        torch.zeros_like(yaw),
-        torch.sin(yaw / 2.0),
-    ], dim=1)
-
-    vx = (torch.rand(num_resets, device=env.device) - 0.5) * 0.5
-    vy = (torch.rand(num_resets, device=env.device) - 0.5) * 0.8
-    vz = torch.rand(num_resets, device=env.device) * 0.3 + 0.3
-    lin_vel = torch.stack([vx, vy, vz], dim=1)
-    ang_vel = torch.zeros(num_resets, 3, device=env.device)
-
-    ball.write_root_pose_to_sim(torch.cat([pos_global, quat], dim=1), env_ids=env_ids)
-    ball.write_root_velocity_to_sim(torch.cat([lin_vel, ang_vel], dim=1), env_ids=env_ids)
+_serve_side = None
 
 
 def reset_robot_joints(
-    env: ManagerBasedRLEnv,
+    env: "PingPongEnv",
     env_ids: torch.Tensor,
 ) -> None:
-    """Reset both robots to their ready positions."""
+    """Reset both robots to their default joint positions."""
     if len(env_ids) == 0:
         return
 
@@ -71,30 +39,64 @@ def reset_robot_joints(
         except KeyError:
             pass
 
+    env._reset_game_state(env_ids)
 
-def reset_ball_to_serve(
-    env: ManagerBasedRLEnv,
+
+def serve_ball_alternating(
+    env: "PingPongEnv",
     env_ids: torch.Tensor,
-    server: str = "A",
+    ball_cfg: SceneEntityCfg = SceneEntityCfg("ball"),
 ) -> None:
-    """Reset the ball to a serving position for the specified robot."""
+    """Serve the ball from alternating sides with randomized velocity.
+
+    Velocity randomization matches Isaaclab-TableTennisRobot:
+      X speed: -1 to +1 m/s
+      Y speed: 3.5 to 5 m/s (toward opponent)
+      Z speed: 2.0 to 2.2 m/s (upward arc)
+      X position: -0.2 to +0.2 m noise
+    """
+    global _serve_side
+
     num_resets = len(env_ids)
     if num_resets == 0:
         return
 
-    ball = env.scene["ball"]
+    ball = env.scene[ball_cfg.name]
     env_origins = env.scene.env_origins[env_ids].to(env.device)
 
-    y_serve = -0.5 if server == "A" else 0.5
+    cfg = env.cfg
 
-    pos_global = torch.stack([
-        torch.zeros(num_resets, device=env.device) + env_origins[:, 0],
-        torch.full((num_resets,), y_serve, device=env.device) + env_origins[:, 1],
-        torch.full((num_resets,), 0.15, device=env.device) + env_origins[:, 2],
-    ], dim=1)
+    # Alternate serving side
+    if _serve_side is None or _serve_side == "B":
+        _serve_side = "A"
+    else:
+        _serve_side = "B"
 
+    # Ball spawn position: near the server's side, OUTSIDE the table zones
+    # (zones are y∈[-1.35, -0.1] and y∈[0, 1.36] — spawn outside these)
+    # Serve from A side means ball at y=-1.5 (behind neg zone), velocity toward +Y (toward B)
+    # Serve from B side means ball at y=+1.5 (behind pos zone), velocity toward -Y (toward A)
+    if _serve_side == "A":
+        y_spawn = -1.5
+        vy_mult = 1.0   # velocity toward +Y (toward B)
+    else:
+        y_spawn = 1.5
+        vy_mult = -1.0  # velocity toward -Y (toward A)
+
+    x_noise = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_pos_x_range)
+    x_local = x_noise.squeeze(-1) + env_origins[:, 0]
+    y_local = torch.full((num_resets,), y_spawn, device=env.device) + env_origins[:, 1]
+    z_local = torch.full((num_resets,), 1.0, device=env.device) + env_origins[:, 2]
+
+    pos_global = torch.stack([x_local, y_local, z_local], dim=1)
     identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=env.device).unsqueeze(0).expand(num_resets, -1)
-    zero_vel = torch.zeros(num_resets, 6, device=env.device)
+
+    v_x = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_speed_x_range).squeeze(-1)
+    v_y = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_speed_y_range).squeeze(-1) * vy_mult
+    v_z = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_speed_z_range).squeeze(-1)
+
+    lin_vel = torch.stack([v_x, v_y, v_z], dim=1)
+    ang_vel = torch.zeros(num_resets, 3, device=env.device)
 
     ball.write_root_pose_to_sim(torch.cat([pos_global, identity_quat], dim=1), env_ids=env_ids)
-    ball.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
+    ball.write_root_velocity_to_sim(torch.cat([lin_vel, ang_vel], dim=1), env_ids=env_ids)

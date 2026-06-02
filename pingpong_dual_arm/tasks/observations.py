@@ -1,7 +1,7 @@
 """Observation functions for the ping pong dual-arm environment.
 
 Key observations for competitive ping pong:
-  - Robot joint positions (12 DOF per robot, both arms)
+  - Robot joint positions and velocities (12 DOF per robot, both arms)
   - End-effector poses (position + Euler angles)
   - Ball position and velocity
 """
@@ -40,6 +40,22 @@ def robot_joint_positions(
         raise ValueError("robot_joint_positions: robot_cfg must specify joint_names")
     joint_ids, _ = robot.find_joints(robot_cfg.joint_names)
     return robot.data.joint_pos[:, joint_ids].to(env.device)
+
+
+def robot_joint_velocities(
+    env: ManagerBasedRLEnv,
+    robot_cfg: SceneEntityCfg = SceneEntityCfg("robot_A"),
+) -> torch.Tensor:
+    """Joint velocities for a specified robot articulation.
+
+    Returns:
+        (num_envs, num_joints)
+    """
+    robot = env.scene[robot_cfg.name]
+    if robot_cfg.joint_names is None:
+        raise ValueError("robot_joint_velocities: robot_cfg must specify joint_names")
+    joint_ids, _ = robot.find_joints(robot_cfg.joint_names)
+    return robot.data.joint_vel[:, joint_ids].to(env.device)
 
 
 def ee_poses(

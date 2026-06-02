@@ -1,0 +1,13 @@
+[package]
+name = "PingPong"
+version = "0.1.0"
+description = "Dual-arm ping pong RL environment"
+author = ""
+maintainer = ""
+website = ""
+keywords = ["isaaclab", "rl", "robot"]
+license = "BSD-3-Clause"
+repository = ""
+
+[dependencies]
+isaaclab = ">=0.0.1"

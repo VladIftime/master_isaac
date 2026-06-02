@@ -2,7 +2,8 @@
 
 Two identical dual-arm robot systems face each other across a ping pong table.
 Each robot uses one arm for the racket, controlled via a configurable IK solver.
-The environment provides a standard Gymnasium interface for plugging in any RL algorithm.
+Full table-tennis game logic: virtual paddle contact, table zone scoring,
+randomized ball serves, reward shaping (ported from Isaaclab-TableTennisRobot).
 """
 
 from dataclasses import MISSING
@@ -109,18 +110,18 @@ DualArm_CFG = UR5e_SINGLE_CFG.replace(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            "left_shoulder_pan_joint": 0.0,
-            "left_shoulder_lift_joint": -1.57,
-            "left_elbow_joint": -1.57,
-            "left_wrist_1_joint": -1.57,
-            "left_wrist_2_joint": 1.57,
-            "left_wrist_3_joint": 1.57,
-            "right_shoulder_pan_joint": 0.0,
-            "right_shoulder_lift_joint": -1.57,
-            "right_elbow_joint": 1.57,
-            "right_wrist_1_joint": -1.57,
-            "right_wrist_2_joint": -1.57,
-            "right_wrist_3_joint": 1.57,
+            "left_shoulder_pan_joint": -0.29,
+            "left_shoulder_lift_joint": -1.212,
+            "left_elbow_joint": 1.712,
+            "left_wrist_1_joint": 0.0,
+            "left_wrist_2_joint": -0.33,
+            "left_wrist_3_joint": 1.39,
+            "right_shoulder_pan_joint": -0.29,
+            "right_shoulder_lift_joint": -1.212,
+            "right_elbow_joint": 1.712,
+            "right_wrist_1_joint": 0.0,
+            "right_wrist_2_joint": -0.33,
+            "right_wrist_3_joint": 1.39,
         },
     ),
     actuators={
@@ -142,21 +143,25 @@ ARM_JOINTS_RIGHT = ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"]
 
 
 ##
-# Scene definition
+# Table geometry constants
 ##
 
 TABLE_WIDTH = 1.525
 TABLE_LENGTH = 2.74
 TABLE_HEIGHT = 0.78
-TABLE_THICKNESS = 0.02
-NET_HEIGHT = 0.1525
-BALL_RADIUS = 0.02
-BALL_MASS = 0.0027
-DISTANCE_FROM_TABLE_EDGE = 0.25
+STAND_Z = 0.6  # robot base height matches UR10 in TableTennisRobot
+
+STAND_A_POS = (0.0, -2.7, STAND_Z)
+STAND_B_POS = (0.0, 2.7, STAND_Z)
+
+
+##
+# Scene definition
+##
 
 @configclass
 class PingPongSceneCfg(InteractiveSceneCfg):
-    """Scene with two dual-arm robots, a ping pong table, ball, and rackets."""
+    """Scene with two dual-arm robots on stands, table, ball, and rackets."""
 
     replicate_physics: bool = False
 
@@ -174,61 +179,81 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=3000.0),
     )
 
-    # Table USD origin is at lower-left corner.  Position shifts the table centre
-    # to the env origin (0,0,0).  Robots below are already laid out around that centre.
-    # Layers: table_shape (visual), side_p1 / side_p2 (left/right contact zones),
-    # net (net collision zone).  Uses AssetBaseCfg (not RigidObjectCfg) because the
-    # USD contains multiple rigid-body prims (net, side_p1, side_p2).
-    table = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Table",
+    # Robot stands — matching UR10 base height from TableTennisRobot (z=0.6)
+    # Cuboid from z=0 to z=STAND_Z, centered at half height
+    stand_A = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/StandA",
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[TABLE_WIDTH/2, -TABLE_LENGTH/2, 0.0],
-            rot=[0.0, 0.0, 0.0, 0.0],
+            pos=[STAND_A_POS[0], STAND_A_POS[1], STAND_Z / 2.0],
         ),
-        spawn=UsdFileCfg(
-            usd_path=f"{_PKG_ROOT}/meshes/pingpong/ping_pong_/ping_pong_table/table_extra_parts.usd",
-            scale=(10.0, 10.0, 10.0),
+        spawn=sim_utils.CuboidCfg(
+            size=(0.5, 0.5, STAND_Z),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.3, 0.3, 0.35),
+            ),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
             ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
     )
 
+    stand_B = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/StandB",
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=[STAND_B_POS[0], STAND_B_POS[1], STAND_Z / 2.0],
+        ),
+        spawn=sim_utils.CuboidCfg(
+            size=(0.5, 0.5, STAND_Z),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.3, 0.3, 0.35),
+            ),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,
+                disable_gravity=True,
+            ),
+        ),
+    )
+
+    # Table — custom USD from TableTennisRobot (kinematic, fixed in place)
+    table = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Table",
+        spawn=UsdFileCfg(
+            usd_path=f"{_PKG_ROOT}/meshes/custom_usd_pingpong/Table_tennis.usd",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,
+                disable_gravity=True,
+            ),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(),
+    )
+
+    # Ball — custom USD from TableTennisRobot
     ball = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Ball",
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.0, TABLE_HEIGHT + 0.15],
-            rot=[1.0, 0, 0, 0],
-        ),
-        spawn=sim_utils.SphereCfg(
-            radius=BALL_RADIUS,
-            mass_props=sim_utils.MassPropertiesCfg(mass=BALL_MASS),
+        spawn=UsdFileCfg(
+            usd_path=f"{_PKG_ROOT}/meshes/custom_usd_pingpong/Ping_pong_ball.usd",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=False,
                 disable_gravity=False,
-                linear_damping=0.01,
-                angular_damping=0.01,
-                max_depenetration_velocity=0.5,
+                enable_gyroscopic_forces=True,
+                solver_position_iteration_count=8,
+                solver_velocity_iteration_count=0,
+                sleep_threshold=0.005,
+                stabilization_threshold=0.0025,
+                max_depenetration_velocity=1000.0,
             ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=0.0,
-                dynamic_friction=0.0,
-                restitution=0.95,
-            ),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(1.0, 0.5, 0.0),
-            ),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=(0.0, 0.0, TABLE_HEIGHT + 0.15),
         ),
     )
 
+    # Kinematic rackets — tracked to wrist_3_link each step
     racket_A = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/RacketA",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.0, -TABLE_LENGTH / 2.0 + 0.15, TABLE_HEIGHT + 0.15],
-            rot=[1.0, 0, 0, 0],
         ),
         spawn=UsdFileCfg(
             usd_path=f"{_PKG_ROOT}/assets/pingpong/racket.usd",
@@ -244,7 +269,6 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/RacketB",
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=[0.0, TABLE_LENGTH / 2.0 - 0.15, TABLE_HEIGHT + 0.15],
-            rot=[1.0, 0, 0, 0],
         ),
         spawn=UsdFileCfg(
             usd_path=f"{_PKG_ROOT}/assets/pingpong/racket.usd",
@@ -256,19 +280,19 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # Robot A: -Y side, facing +Y (toward table)
+    # Robot A: -Y side, facing +Y, body base at z=STAND_Z on stand
     robot_A = DualArm_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotA",
         init_state=DualArm_CFG.init_state.replace(
-            pos=(0.0, -TABLE_LENGTH / 2.0 - DISTANCE_FROM_TABLE_EDGE, TABLE_HEIGHT),
+            pos=STAND_A_POS,
         ),
     )
 
-    # Robot B: +Y side, facing -Y (toward table) — 180° yaw = quat (0, 0, 0, 1)
+    # Robot B: +Y side, facing -Y (180° yaw), body base at z=STAND_Z on stand
     robot_B = DualArm_CFG.replace(
         prim_path="{ENV_REGEX_NS}/RobotB",
         init_state=DualArm_CFG.init_state.replace(
-            pos=(0.0, TABLE_LENGTH / 2.0 + DISTANCE_FROM_TABLE_EDGE, TABLE_HEIGHT),
+            pos=STAND_B_POS,
             rot=(0.0, 0.0, 0.0, 1.0),
         ),
     )
@@ -280,10 +304,7 @@ class PingPongSceneCfg(InteractiveSceneCfg):
 
 @configclass
 class ActionsCfg:
-    """Action specifications.
-
-    Each arm receives a 6D relative pose delta command.
-    """
+    """12-D relative pose delta actions: 6-D per robot's playing arm."""
 
     arm_A: ActionTerm = MISSING
     arm_B: ActionTerm = MISSING
@@ -297,12 +318,16 @@ class ActionsCfg:
 
 @configclass
 class ObservationsCfg:
-    """Observation specifications for the policy."""
+    """Observation specifications: both robots' joints/EE + ball state."""
 
     @configclass
     class PolicyCfg(ObsGroup):
         joint_pos_A = ObsTerm(
             func=obs_mod.robot_joint_positions,
+            params={"robot_cfg": SceneEntityCfg("robot_A", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
+        )
+        joint_vel_A = ObsTerm(
+            func=obs_mod.robot_joint_velocities,
             params={"robot_cfg": SceneEntityCfg("robot_A", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
         )
         ee_pose_A = ObsTerm(
@@ -313,13 +338,15 @@ class ObservationsCfg:
             func=obs_mod.robot_joint_positions,
             params={"robot_cfg": SceneEntityCfg("robot_B", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
         )
+        joint_vel_B = ObsTerm(
+            func=obs_mod.robot_joint_velocities,
+            params={"robot_cfg": SceneEntityCfg("robot_B", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
+        )
         ee_pose_B = ObsTerm(
             func=obs_mod.ee_poses,
             params={"ee_cfg": SceneEntityCfg("robot_B", body_names=["right_wrist_3_link"])},
         )
-        ball_state = ObsTerm(
-            func=obs_mod.ball_state,
-        )
+        ball_state = ObsTerm(func=obs_mod.ball_state)
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -330,29 +357,83 @@ class ObservationsCfg:
 
 @configclass
 class EventCfg:
-    """Configuration for events (resets)."""
+    """Reset events: serve ball with randomization, reset robots."""
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
-
-
-@configclass
-class TerminationsCfg:
-    """No terminations — ball respawn handled manually in swing script."""
-    pass
+    randomize_robots = EventTerm(
+        func=evt_mod.reset_robot_joints,
+        mode="reset",
+    )
+    serve_ball = EventTerm(
+        func=evt_mod.serve_ball_alternating,
+        mode="reset",
+    )
 
 
 @configclass
 class RewardsCfg:
-    """Reward terms — minimal for swing demo."""
-    pass
+    """Reward terms: ported from TableTennisRobot, adapted for dual-robot self-play."""
+
+    contact_A = RewTerm(func=rew_mod.paddle_contact_reward_A, weight=1.0)
+    contact_B = RewTerm(func=rew_mod.paddle_contact_reward_B, weight=1.0)
+    table_success_A = RewTerm(func=rew_mod.table_success_reward_A, weight=5.0)
+    table_success_B = RewTerm(func=rew_mod.table_success_reward_B, weight=5.0)
+    table_fail_A = RewTerm(func=rew_mod.table_fail_reward_A, weight=-2.0)
+    table_fail_B = RewTerm(func=rew_mod.table_fail_reward_B, weight=-2.0)
+    ball_floor = RewTerm(func=rew_mod.ball_floor_penalty, weight=-3.5)
+    velocity_A = RewTerm(func=rew_mod.velocity_reward_A, weight=0.5)
+    velocity_B = RewTerm(func=rew_mod.velocity_reward_B, weight=0.5)
+    ball_pos_A = RewTerm(func=rew_mod.ball_pos_reward_A, weight=2.0)
+    ball_pos_B = RewTerm(func=rew_mod.ball_pos_reward_B, weight=2.0)
 
 
 @configclass
+class TerminationsCfg:
+    """Termination conditions — episode ends on point scored or ball out."""
+
+    time_limit = DoneTerm(func=mdp.time_out, time_out="truncated")
+    table_success_A = DoneTerm(func=term_mod.round_end_success_A, time_out="terminated")
+    table_success_B = DoneTerm(func=term_mod.round_end_success_B, time_out="terminated")
+    table_fail_A = DoneTerm(func=term_mod.round_end_fail_A, time_out="terminated")
+    table_fail_B = DoneTerm(func=term_mod.round_end_fail_B, time_out="terminated")
+    ball_floor = DoneTerm(func=term_mod.ball_to_floor, time_out="terminated")
+    ball_out_of_bounds = DoneTerm(func=term_mod.ball_out_of_bounds, time_out="terminated")
+
+
+##
+# Top-level environment config
+##
+
+@configclass
 class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
-    """Environment config for competitive ping pong with two dual-arm robots."""
+    """Environment config for competitive ping pong with two dual-arm robots.
+
+    Ported game logic from Isaaclab-TableTennisRobot:
+      - Virtual paddle contact detection (distance threshold)
+      - Table zone scoring (opponent vs own halves)
+      - Randomized ball serves with alternating sides
+      - Reward shaping: contact, velocity, table success/fail, floor penalty
+    """
 
     ik_solver: IK_SOLVER_TYPE = "diffik"
     playing_arm_side: str = "right"
+
+    # Game parameters — same ranges as TableTennisRobot
+    ball_speed_x_range: tuple = (-1.0, 1.0)
+    ball_speed_y_range: tuple = (3.5, 5.0)
+    ball_speed_z_range: tuple = (2.0, 2.2)
+    ball_pos_x_range: tuple = (-0.2, 0.2)
+    ball_pos_y_range: tuple = (-1.4, -1.0)
+
+    # Table contact zone definitions (in env-local coords, table centre at origin)
+    # Negative Y zone: y ∈ [-1.35, -0.1] -> Robot A's own zone, Robot B's opponent zone
+    # Positive Y zone: y ∈ [0, 1.36]   -> Robot B's own zone, Robot A's opponent zone
+    table_zone_neg_y: tuple = (-1.35, -0.1)
+    table_zone_pos_y: tuple = (0.0, 1.36)
+    table_zone_x: tuple = (-0.74, 0.74)
+    table_zone_z: tuple = (0.68, 0.735)
+
+    contact_threshold: float = 0.06
 
     scene: PingPongSceneCfg = PingPongSceneCfg(num_envs=4, env_spacing=3.0)
     observations: ObservationsCfg = ObservationsCfg()
@@ -363,9 +444,16 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         self.decimation = 1
-        self.episode_length_s = 20.0
-        self.sim.dt = 0.02
+        self.episode_length_s = 5.0
+        self.sim.dt = 1.0 / 120.0
         self.sim.render_interval = self.decimation
+        self.sim.physics_material = sim_utils.RigidBodyMaterialCfg(
+            friction_combine_mode="min",
+            restitution_combine_mode="min",
+            static_friction=1.0,
+            dynamic_friction=1.0,
+            restitution=0.8,
+        )
         self.reset_settle_steps = 5
 
         self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024

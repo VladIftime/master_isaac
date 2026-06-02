@@ -1,4 +1,13 @@
-"""Termination conditions for ping pong environment."""
+"""Termination conditions for ping pong environment.
+
+Ported from Isaaclab-TableTennisRobot, adapted for two robots:
+  - ball_to_floor: ball drops below z=0.65
+  - ball_out_of_bounds: ball leaves play area (x/y/z limits)
+  - round_end_success: ball reaches opponent's table half after paddle contact
+  - round_end_fail: ball hits own table half after bouncing from opponent
+
+Episode terminates on: success, fail, floor, or out-of-bounds.
+"""
 
 from __future__ import annotations
 
@@ -8,61 +17,48 @@ from typing import TYPE_CHECKING
 from isaaclab.managers import SceneEntityCfg
 
 if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedRLEnv
+    from .pingpong_env import PingPongEnv
 
 
 def ball_out_of_bounds(
-    env: ManagerBasedRLEnv,
-    z_min: float = 0.0,
-    x_range: tuple[float, float] = (-1.2, 1.2),
-    y_range: tuple[float, float] = (-1.4, 1.4),
+    env: "PingPongEnv",
+    z_min: float = -1.0,
+    x_range: tuple[float, float] = (-2.0, 2.0),
+    y_range: tuple[float, float] = (-3.5, 3.5),
 ) -> torch.Tensor:
-    """Terminate when the ball leaves the play area."""
+    """Terminate when the ball leaves the play area.
+
+    Wide bounds accommodate the full trajectory between robots at y=±2.7.
+    """
     ball = env.scene["ball"]
     pos_local = ball.data.root_pos_w - env.scene.env_origins.to(ball.data.root_pos_w.device)
 
-    below_table = pos_local[:, 2] < z_min
+    below_floor = pos_local[:, 2] < z_min
     out_x = (pos_local[:, 0] < x_range[0]) | (pos_local[:, 0] > x_range[1])
     out_y = (pos_local[:, 1] < y_range[0]) | (pos_local[:, 1] > y_range[1])
-    return below_table | out_x | out_y
+    return below_floor | out_x | out_y
 
 
-def robot_out_of_bounds(
-    env: ManagerBasedRLEnv,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot_A", body_names=["right_wrist_3_link"]),
-    table_z: float = 0.0,
-    margin: float = -0.1,
-    x_range: tuple[float, float] = (-1.2, 1.2),
-    y_range: tuple[float, float] = (-1.4, 1.4),
-) -> torch.Tensor:
-    """Terminate when the end-effector leaves the safe workspace."""
-    robot = env.scene[asset_cfg.name]
-    body_names = asset_cfg.body_names or ["right_wrist_3_link"]
-    body_ids, _ = robot.find_bodies(body_names)
-    ee_pos = robot.data.body_pos_w[:, body_ids[0]] - env.scene.env_origins.to(robot.data.body_pos_w.device)
-
-    z_violation = ee_pos[:, 2] < table_z + margin
-    x_violation = (ee_pos[:, 0] < x_range[0]) | (ee_pos[:, 0] > x_range[1])
-    y_violation = (ee_pos[:, 1] < y_range[0]) | (ee_pos[:, 1] > y_range[1])
-    return z_violation | x_violation | y_violation
+def ball_to_floor(env: "PingPongEnv") -> torch.Tensor:
+    """Terminate when ball drops below table height (z < 0.65)."""
+    return env._ball_floor
 
 
-def point_scored(
-    env: ManagerBasedRLEnv,
-    y_left_range: tuple[float, float] = (-1.4, -0.5),
-    y_right_range: tuple[float, float] = (0.5, 1.4),
-    z_min: float = 0.0,
-) -> torch.Tensor:
-    """Detect when a point has been scored."""
-    ball = env.scene["ball"]
-    pos_local = ball.data.root_pos_w - env.scene.env_origins.to(ball.data.root_pos_w.device)
-    vel_local = ball.data.root_lin_vel_w
+def round_end_success_A(env: "PingPongEnv") -> torch.Tensor:
+    """Episode ends when robot A successfully hits ball to opponent's table half."""
+    return env._table_success_A != 0
 
-    falling = vel_local[:, 2] < -0.1
-    crossed_left = (pos_local[:, 1] < y_left_range[0]) & (pos_local[:, 2] < 0.1)
-    crossed_right = (pos_local[:, 1] > y_right_range[0]) & (pos_local[:, 2] < 0.1)
-    below_table = pos_local[:, 2] < z_min
 
-    point_scored_left = crossed_left & (falling | below_table)
-    point_scored_right = crossed_right & (falling | below_table)
-    return point_scored_left | point_scored_right
+def round_end_success_B(env: "PingPongEnv") -> torch.Tensor:
+    """Episode ends when robot B successfully hits ball to opponent's table half."""
+    return env._table_success_B != 0
+
+
+def round_end_fail_A(env: "PingPongEnv") -> torch.Tensor:
+    """Episode ends when ball lands on robot A's own table half."""
+    return env._table_fail_A != 0
+
+
+def round_end_fail_B(env: "PingPongEnv") -> torch.Tensor:
+    """Episode ends when ball lands on robot B's own table half."""
+    return env._table_fail_B != 0
