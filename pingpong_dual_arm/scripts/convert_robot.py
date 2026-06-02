@@ -19,7 +19,7 @@ simulation_app = app.app
 from isaaclab.sim.converters import UrdfConverter
 from isaaclab.sim.converters.urdf_converter_cfg import UrdfConverterCfg
 
-URDF = os.path.join(_PROJECT_ROOT, "urdf", "dual_arm_robot_no_gripper_col.urdf")
+URDF = os.path.join(_PROJECT_ROOT, "urdf", "dual_arm_robot_rackets.urdf")
 OUTPUT = os.path.join(_PROJECT_ROOT, "meshes")
 os.makedirs(OUTPUT, exist_ok=True)
 

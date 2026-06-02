@@ -4,7 +4,7 @@ Extends ManagerBasedRLEnv with:
   - Virtual paddle-ball contact detection (distance threshold)
   - Table zone scoring (opponent vs own halves)
   - Latched boolean game-state tracking
-  - Kinematic racket tracking to EE each step
+  - Rackets are fixed child links of each arm's end-effector
 """
 
 from __future__ import annotations
@@ -55,25 +55,7 @@ class PingPongEnv(ManagerBasedRLEnv):
 
         self._compute_intermediate_values()
 
-        self._track_rackets()
-
         return obs, reward, terminated, truncated, info
-
-    def _track_rackets(self):
-        """Snap kinematic rackets to playing-arm wrist link each step."""
-        wrist = f"{self.cfg.playing_arm_side}_wrist_3_link"
-        for robot_name, racket_name in [("robot_A", "racket_A"), ("robot_B", "racket_B")]:
-            try:
-                robot = self.scene[robot_name]
-                racket = self.scene[racket_name]
-            except KeyError:
-                continue
-            body_ids, _ = robot.find_bodies([wrist])
-            racket_pose = torch.cat([
-                robot.data.body_pos_w[:, body_ids[0]],
-                robot.data.body_quat_w[:, body_ids[0]],
-            ], dim=-1)
-            racket.write_root_pose_to_sim(racket_pose)
 
     def _compute_intermediate_values(self):
         """Compute all game-state tensors from current physics state.

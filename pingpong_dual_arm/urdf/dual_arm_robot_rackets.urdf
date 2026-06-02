@@ -632,7 +632,7 @@
   <!-- ========== LEFT RACKET ========== -->
   <link name="left_racket_link">
     <visual>
-      <origin rpy="1.57079633 0 0" xyz="0 0 0" />
+      <origin rpy="0 0 1.57079633" xyz="0 0 0" />
       <geometry>
         <mesh filename="../meshes/pingpong/racket_bot_scale.stl" />
       </geometry>
@@ -656,7 +656,7 @@
   <!-- ========== RIGHT RACKET ========== -->
   <link name="right_racket_link">
     <visual>
-      <origin rpy="1.57079633 0 0" xyz="0 0 0" />
+      <origin rpy="0 0 1.57079633" xyz="0 0 0" />
       <geometry>
         <mesh filename="../meshes/pingpong/racket_bot_scale.stl" />
       </geometry>

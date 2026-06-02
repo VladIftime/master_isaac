@@ -1,4 +1,4 @@
-asset_path: /home/vladi/IsaacLab/master_isaac/pingpong_dual_arm/urdf/dual_arm_robot_no_gripper_col.urdf
+asset_path: /home/vladi/IsaacLab/master_isaac/pingpong_dual_arm/urdf/dual_arm_robot_rackets.urdf
 usd_dir: /home/vladi/IsaacLab/master_isaac/pingpong_dual_arm/meshes
 usd_file_name: dual_arm_robot.usd
 force_usd_conversion: true

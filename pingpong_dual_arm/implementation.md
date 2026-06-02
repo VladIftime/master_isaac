@@ -1,8 +1,8 @@
 # Ping Pong Dual-Arm Environment — Implementation
 
 Competitive ping pong simulation with two identical dual-arm UR5e robot systems in
-Isaac Lab / Isaac Sim. Each robot has a rendered body, head, two arms with Robotiq
-grippers, and a racket attached to the playing arm's end-effector.
+Isaac Lab / Isaac Sim. Each robot has a rendered body, head, two arms, and a racket
+attached to each arm's end-effector via fixed joints.
 
 Full table-tennis game logic ported from
 [Isaaclab-TableTennisRobot](https://github.com/org/repo): virtual paddle contact
@@ -57,9 +57,11 @@ pingpong_dual_arm/
 │   ├── urdf/ur_robotics/ur5e/             # Single-arm URDF files
 │   └── pingpong/                          # Generated USD files
 ├── urdf/
-│   ├── dual_arm_robot.urdf                # Full dual-arm + body + head
-│   ├── dual_arm_robot_no_gripper_col.urdf
-│   ├── dual_arm_robot_no_gripper_col.usd
+│   ├── dual_arm_robot.urdf                # Full dual-arm + body + head + Robotiq grippers
+│   ├── dual_arm_robot_no_gripper_col.urdf  # Dual-arm + body + head + Robotiq grippers (col)
+│   ├── dual_arm_robot_rackets.urdf          # Dual-arm + body + head + racket end-effectors
+│   ├── ur10_racket.urdf                     # Single UR10 arm + racket (reference)
+│   ├── UR10_instanceable_pong.usd           # UR10 USD source (legacy TableTennisRobot)
 │   ├── config.yaml                        # URDF→USD converter config
 │   ├── configuration/                     # Generated USD configs
 │   └── cuMotion/                          # RMPflow + Lula IK configs
@@ -99,7 +101,7 @@ pingpong_dual_arm/
 - **Ball**: `meshes/custom_usd_pingpong/Ping_pong_ball.usd` — dynamic with gyroscopic forces
 - **Robot A**: at Y=-2.7, body_base_link z=0.6 (on stand), facing +Y (toward table)
 - **Robot B**: at Y=+2.7, body_base_link z=0.6 (on stand), rotated 180° (facing -Y)
-- **Rackets**: Kinematic meshes from `racket.usd`, tracked to wrist_3_link each step
+- **Rackets**: Attached as fixed child links (`left_racket_link`, `right_racket_link`) to each arm's `tool0` end-effector frame via `dual_arm_robot_rackets.urdf`. Visual mesh `racket_bot_scale.stl` (in meters, origin at handle base, rotated 90° X).
 - **Arm initial pose**: both arms on each robot start with the UR10 ready stance joint angles (see below)
 
 ## Running
@@ -212,12 +214,12 @@ cfg.playing_arm_side = "left"
 
 ### Robot Articulation
 
-Each robot spawns from `dual_arm_robot_no_gripper_col.urdf` via `UrdfFileCfg`
+Each robot spawns from `dual_arm_robot_rackets.urdf` via `UrdfFileCfg`
 with runtime URDF→USD conversion. The URDF includes:
 - **Body**: `IRL_lab_robot_body.obj` + `robot_body_back.obj`
 - **Head**: `blue_head_with_headphone.obj`
 - **Two UR5e arms**: 6-DOF each (shoulder_pan/lift, elbow, wrist_1/2/3)
-- **Fixed joints** for body, head, and arm base connections
+- **Two racket end-effectors**: `racket_bot_scale.stl` (left=Red, right=Blue), fixed joints from each arm's `tool0` frame
 
 Global position constants:
 ```python
@@ -230,7 +232,7 @@ Robot body base positioned at z=0.6 on top of a 0.5×0.5×0.6 m kinematic stand
 cuboid. Stands are centered at half height (z=0.3), extending from z=0 to z=0.6.
 
 Actuators: position-controlled implicit (stiffness=5000, damping=200).
-Two groups: `arm_left` and `arm_right`.
+Two groups: `arm_left` and `arm_right`. Rackets are fixed (no actuator).
 
 ### Arm Initial Joint Positions (UR10 ready stance)
 
@@ -441,8 +443,7 @@ obs, reward, terminated, truncated, info = env.step(action)
    Isaac Sim 5.1.0-rc.19 PhysX expects CPU indices. Works with `--device cpu`
    or inside the Apptainer container with matched versions.
 
-2. **Rackets are kinematic**: Ball collision works but without compliant contact.
-   Virtual contact detection is used for game logic instead.
+2. **Rackets are fixed attachments**: Rackets are fixed child links of each arm's `tool0` frame in the URDF articulation. No compliant contact — virtual contact detection is used for game logic instead.
 
 3. **Left arms uncontrolled**: Only the configured playing arm receives IK commands.
    Both arms' joints are observed.

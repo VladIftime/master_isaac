@@ -91,7 +91,7 @@ UR5e_SINGLE_CFG = ArticulationCfg(
 
 DualArm_CFG = UR5e_SINGLE_CFG.replace(
     spawn=UrdfFileCfg(
-        asset_path=f"{_PKG_ROOT}/urdf/dual_arm_robot_no_gripper_col.urdf",
+        asset_path=f"{_PKG_ROOT}/urdf/dual_arm_robot_rackets.urdf",
         fix_base=False,
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
             gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
@@ -246,37 +246,6 @@ class PingPongSceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=(0.0, 0.0, TABLE_HEIGHT + 0.15),
-        ),
-    )
-
-    # Kinematic rackets — tracked to wrist_3_link each step
-    racket_A = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/RacketA",
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, -TABLE_LENGTH / 2.0 + 0.15, TABLE_HEIGHT + 0.15],
-        ),
-        spawn=UsdFileCfg(
-            usd_path=f"{_PKG_ROOT}/assets/pingpong/racket.usd",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-        ),
-    )
-
-    racket_B = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/RacketB",
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, TABLE_LENGTH / 2.0 - 0.15, TABLE_HEIGHT + 0.15],
-        ),
-        spawn=UsdFileCfg(
-            usd_path=f"{_PKG_ROOT}/assets/pingpong/racket.usd",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
     )
 
