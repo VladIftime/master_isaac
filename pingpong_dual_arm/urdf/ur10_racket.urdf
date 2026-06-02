@@ -1,0 +1,211 @@
+<robot name="ur10_racket">
+
+  <link name="world" />
+
+  <!-- ========== BASE ========== -->
+  <link name="base_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_base.obj" />
+      </geometry>
+      <material name="LightGrey">
+        <color rgba="0.7 0.7 0.7 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="4.0" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.004433" ixy="0.0" ixz="0.0" iyy="0.004433" iyz="0.0" izz="0.0072" />
+    </inertial>
+  </link>
+
+  <joint name="world_to_base" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0" />
+    <parent link="world" />
+    <child link="base_link" />
+  </joint>
+
+  <!-- ========== SHOULDER ========== -->
+  <link name="shoulder_link">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 -0.1273" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_shoulder.obj" />
+      </geometry>
+      <material name="DarkGray">
+        <color rgba="0.5 0.5 0.5 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="7.1" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01" />
+    </inertial>
+  </link>
+
+  <joint name="shoulder_pan_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="shoulder_link" />
+    <origin rpy="0 0 0" xyz="0 0 0.1273" />
+    <axis xyz="0 0 1" />
+    <limit effort="330.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="2.0944" />
+  </joint>
+
+  <!-- ========== UPPER ARM ========== -->
+  <link name="upper_arm_link">
+    <visual>
+      <origin rpy="0 -1.5707963267948966 0" xyz="-0.0007000065 -0.044941006 0" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_upper_arm.obj" />
+      </geometry>
+      <material name="LightGrey">
+        <color rgba="0.7 0.7 0.7 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="12.7" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01" />
+    </inertial>
+  </link>
+
+  <joint name="shoulder_lift_joint" type="revolute">
+    <parent link="shoulder_link" />
+    <child link="upper_arm_link" />
+    <origin rpy="0.0 1.5707963267948966 0.0" xyz="0.0 0.220941 0.0" />
+    <axis xyz="0 1 0" />
+    <limit effort="330.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="2.0944" />
+  </joint>
+
+  <!-- ========== FOREARM ========== -->
+  <link name="forearm_link">
+    <visual>
+      <origin rpy="0 -1.5707963267948966 0" xyz="-0.0007000351 -0.0010410404 0" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_forearm.obj" />
+      </geometry>
+      <material name="LightGrey">
+        <color rgba="0.7 0.7 0.7 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="4.27" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.01" />
+    </inertial>
+  </link>
+
+  <joint name="elbow_joint" type="revolute">
+    <parent link="upper_arm_link" />
+    <child link="forearm_link" />
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 -0.1719 0.612" />
+    <axis xyz="0 1 0" />
+    <limit effort="150.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="3.14159" />
+  </joint>
+
+  <!-- ========== WRIST 1 ========== -->
+  <link name="wrist_1_link">
+    <visual>
+      <origin rpy="3.141592653589793 0 3.141592653589793" xyz="0.0002999115 0.11495896 -0.0007000637" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_wrist_1.obj" />
+      </geometry>
+      <material name="DarkGray">
+        <color rgba="0.5 0.5 0.5 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="1.0" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+  </link>
+
+  <joint name="wrist_1_joint" type="revolute">
+    <parent link="forearm_link" />
+    <child link="wrist_1_link" />
+    <origin rpy="0.0 1.5707963267948966 0.0" xyz="0.0 0.0 0.5723" />
+    <axis xyz="0 1 0" />
+    <limit effort="56.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="3.14159" />
+  </joint>
+
+  <!-- ========== WRIST 2 ========== -->
+  <link name="wrist_2_link">
+    <visual>
+      <origin rpy="3.141592653589793 0 3.141592653589793" xyz="0.0002999115 0.000058994293 0.11529993" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_wrist_2.obj" />
+      </geometry>
+      <material name="DarkGray">
+        <color rgba="0.5 0.5 0.5 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="1.0" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+  </link>
+
+  <joint name="wrist_2_joint" type="revolute">
+    <parent link="wrist_1_link" />
+    <child link="wrist_2_link" />
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.1149 0.0" />
+    <axis xyz="0 0 1" />
+    <limit effort="56.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="3.14159" />
+  </joint>
+
+  <!-- ========== WRIST 3 ========== -->
+  <link name="wrist_3_link">
+    <visual>
+      <origin rpy="3.141592653589793 0 3.141592653589793" xyz="0.0002999115 0.09205898 -0.00040007472" />
+      <geometry>
+        <mesh filename="../meshes/ur10/visual/ur10_wrist_3.obj" />
+      </geometry>
+      <material name="LightGrey">
+        <color rgba="0.7 0.7 0.7 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="0.365" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.000187" ixy="0.0" ixz="0.0" iyy="0.000189" iyz="0.0" izz="0.000258" />
+    </inertial>
+  </link>
+
+  <joint name="wrist_3_joint" type="revolute">
+    <parent link="wrist_2_link" />
+    <child link="wrist_3_link" />
+    <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.1157" />
+    <axis xyz="0 1 0" />
+    <limit effort="56.0" lower="-3.141592653589793" upper="3.141592653589793" velocity="3.14159" />
+  </joint>
+
+  <!-- ========== RACKET LINK ========== -->
+  <link name="racket_link">
+    <visual>
+      <!-- racket_bot_scale.stl: already in meters, origin at handle base -->
+      <origin rpy="0 1.57079633 0" xyz="0 0 0" />
+      <geometry>
+        <mesh filename="../meshes/pingpong/racket_bot_scale.stl" />
+      </geometry>
+      <material name="Red">
+        <color rgba="0.9 0.1 0.1 1.0" />
+      </material>
+    </visual>
+    <inertial>
+      <mass value="0.2" />
+      <origin rpy="0 0 0" xyz="0 0 0" />
+      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001" />
+    </inertial>
+  </link>
+
+  <joint name="racket_joint" type="fixed">
+    <parent link="wrist_3_link" />
+    <child link="racket_link" />
+    <!-- Standard UR10 tool flange position -->
+    <origin rpy="0 0 1.57079633" xyz="0 0.0922 0" />
+  </joint>
+
+</robot>
