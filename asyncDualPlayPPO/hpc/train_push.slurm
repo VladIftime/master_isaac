@@ -59,7 +59,7 @@ if [ "$RESUME_CHAIN" = "1" ] && [ -d "$NFS_RUN_DIR/agent" ]; then
 
             rsync -a --no-perms "$NFS_RUN_DIR/" "$LOCAL_RUNS/$EXP_NAME/"
 
-            RESUME_ARGS="--chkpt runs/$EXP_NAME/agent/$AGENT_FILE"
+            RESUME_ARGS="--chkpt runs/$EXP_NAME/agent/$AGENT_FILE --resume_iteration $ITER_NUM"
         fi
     fi
 fi
