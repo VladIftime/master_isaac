@@ -55,6 +55,15 @@ def _rot_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Ten
     return diff.max(dim=-1)[0]
 
 
+def _yaw_distance_rad(euler_a: torch.Tensor, euler_b: torch.Tensor) -> torch.Tensor:
+    """Yaw-only Euler-angle difference with wraparound (range [0, pi])."""
+    yaw_a = euler_a[..., 2]
+    yaw_b = euler_b[..., 2]
+    diff = (yaw_a - yaw_b) % (2.0 * torch.pi)
+    diff = torch.where(diff > torch.pi, 2.0 * torch.pi - diff, diff)
+    return diff
+
+
 class PushASPEnvWrapper:
     """
     Wrapper for push-primitive Asymmetric Self-Play.
@@ -451,7 +460,40 @@ class PushASPEnvWrapper:
         prog_rew = torch.zeros(self.num_envs, device=self.device)
 
         if len(bob_done_ids) == 0:
-            return prog_rew
+        return prog_rew
+
+    # ── Dense push improvement reward for Bob (Fix P53) ─────────────────────
+    # Coefficients match wrapper_push.py (Fix P18, P47)
+    _PUSH_DENSE_ALPHA = 12.0
+    _PUSH_DENSE_ROT_ALPHA = 1.0
+    _PUSH_DENSE_BETA = 0.5
+    _PUSH_DENSE_ROT_BETA = 0.25
+
+    def compute_bob_dense_push_reward(self, push_obs: torch.Tensor) -> torch.Tensor:
+        """
+        Dense per-push improvement reward for Bob only.
+        R = α·(d_prev−d_now) + α_rot·(y_prev−y_now) − β·d_now − β_rot·y_now
+        All components clamped to guard against PhysX glitches (Fix P30).
+
+        No completion bonus here — that comes from the sparse reward.
+        This avoids double-counting the +5 and prevents critic instability.
+        """
+        cur_obj_pos = self._get_obj_pos(push_obs)
+        cur_obj_euler = self._get_obj_euler(push_obs)
+        goal_pos = self._get_goal_pos(push_obs)
+        goal_euler = self._get_goal_euler(push_obs)
+
+        d_prev = (self.prev_obj_pos - goal_pos).norm(dim=-1)
+        d_now = (cur_obj_pos - goal_pos).norm(dim=-1)
+        y_prev = _yaw_distance_rad(self.prev_obj_euler, goal_euler)
+        y_now = _yaw_distance_rad(cur_obj_euler, goal_euler)
+
+        pos_imp = (self._PUSH_DENSE_ALPHA * (d_prev - d_now)).clamp(-5.0, 5.0)
+        rot_imp = (self._PUSH_DENSE_ROT_ALPHA * (y_prev - y_now)).clamp(-4.0, 4.0)
+        penalty = (-self._PUSH_DENSE_BETA * d_now).clamp(-2.0, 0.0)
+        rot_penalty = (-self._PUSH_DENSE_ROT_BETA * y_now).clamp(-1.0, 0.0)
+
+        return pos_imp + rot_imp + penalty + rot_penalty
 
         init_pos = self.bob_init_pos_err[bob_done_ids]
         init_rot = self.bob_init_rot_err[bob_done_ids]

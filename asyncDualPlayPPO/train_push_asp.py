@@ -991,16 +991,19 @@ def main():
             current_alice_obs = env._get_alice_obs(full_push_obs)
             current_bob_obs = env._get_bob_obs(full_push_obs)
 
-            # ── COMPUTE BOB REWARD (sparse, per push) ─────────────────────────────
-            bob_rewards = torch.zeros(env.num_envs, device=env.device)
+            # ── COMPUTE BOB REWARD (dense improvement + sparse thresholds) ──────
+            bob_sparse = torch.zeros(env.num_envs, device=env.device)
+            bob_dense = torch.zeros(env.num_envs, device=env.device)
             if len(bob_indices) > 0:
-                bob_rewards = env.compute_bob_push_reward(full_push_obs)
+                bob_sparse = env.compute_bob_push_reward(full_push_obs)
+                bob_dense = env.compute_bob_dense_push_reward(full_push_obs)
+            bob_rewards = bob_sparse + bob_dense
             # Penalize Bob for object-lifted and robot-through-table (dead pushes)
             bob_rewards[obj_lifted | robot_through_table] = -5.0
             # Zero reward for early-terminated envs (post-reset obs produces garbage)
             bob_rewards[terminated & ~(obj_lifted | robot_through_table)] = 0.0
 
-            bob_achieved_completion = bob_rewards >= 4.0
+            bob_achieved_completion = bob_sparse >= 4.0
 
             # ── INITIALIZE PER-STEP OUTCOME TENSORS ──────────────────────────
             alice_rewards_now = torch.zeros(env.num_envs, device=env.device)
