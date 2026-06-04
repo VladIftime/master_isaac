@@ -995,8 +995,10 @@ def main():
             bob_rewards = torch.zeros(env.num_envs, device=env.device)
             if len(bob_indices) > 0:
                 bob_rewards = env.compute_bob_push_reward(full_push_obs)
-            # Zero reward for terminated envs (post-reset obs produces garbage)
-            bob_rewards[terminated] = 0.0
+            # Penalize Bob for object-lifted and robot-through-table (dead pushes)
+            bob_rewards[obj_lifted | robot_through_table] = -5.0
+            # Zero reward for early-terminated envs (post-reset obs produces garbage)
+            bob_rewards[terminated & ~(obj_lifted | robot_through_table)] = 0.0
 
             bob_achieved_completion = bob_rewards >= 4.0
 

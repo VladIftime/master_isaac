@@ -49,7 +49,7 @@ CHAIN_RE = re.compile(r"chained next job:\s*(\d+)")
 RESUME_RE = re.compile(r"Resuming from iteration\s+(\d+)")
 # Explicit anchor emitted by train_high.slurm after the checkpoint detection block
 GLOBAL_START_RE = re.compile(r"Global iteration start:\s*(\d+)")
-JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-(.*?))?\.(?:out|txt)")
+JOB_ID_RE = re.compile(r"slurm-(\d+)(?:-(.*?))?\.(?:out|txt|log)")
 # Summary lines — IK_fail and ABC buf/warm are curobo-only optional fields
 ITER_RE = re.compile(
     r"\[Iter\s+(\d+)\]\s+SR=([-\d.]+)"
@@ -95,7 +95,7 @@ PUSH_ITER_RE = re.compile(
 def parse_logs(log_dir: Path) -> dict:
     """Parse all slurm log files in log_dir (recursively) and return per-job data dict."""
     jobs = {}
-    for f in list(log_dir.rglob("slurm-*-*.out")) + list(log_dir.rglob("slurm-*-*.txt")):
+    for f in list(log_dir.rglob("slurm-*-*.out")) + list(log_dir.rglob("slurm-*-*.txt")) + list(log_dir.rglob("slurm-*-*.log")):
         if "chain_" in str(f.parent):
             continue
         m = JOB_ID_RE.match(f.name)
