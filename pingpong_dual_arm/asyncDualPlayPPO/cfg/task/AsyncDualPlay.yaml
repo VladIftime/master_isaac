@@ -1,0 +1,19 @@
+name: AsyncDualPlay
+physics_engine: physx
+pipeline: gpu
+sim_device: cuda:0
+rl_device: cuda:0
+graphics_device_id: 0
+
+num_envs: 512
+env_spacing: 1.5
+episode_length: 3250
+is_deterministic: False
+
+# Args for the python config
+alice_timesteps: 100
+bob_timesteps: 100
+max_goals_per_episode: 5
+
+use_dense_bob_rewards: false
+dense_reward_weight: 0.1

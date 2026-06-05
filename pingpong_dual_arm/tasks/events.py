@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from .pingpong_env import PingPongEnv
 
 
-
 _serve_side = None
 
 
@@ -78,25 +77,48 @@ def serve_ball_alternating(
     # Serve from B side means ball at y=+1.5 (behind pos zone), velocity toward -Y (toward A)
     if _serve_side == "A":
         y_spawn = -1.5
-        vy_mult = 1.0   # velocity toward +Y (toward B)
+        vy_mult = 1.0  # velocity toward +Y (toward B)
     else:
         y_spawn = 1.5
         vy_mult = -1.0  # velocity toward -Y (toward A)
 
-    x_noise = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_pos_x_range)
+    x_noise = torch.empty(num_resets, 1, device=env.device).uniform_(
+        *cfg.ball_pos_x_range
+    )
     x_local = x_noise.squeeze(-1) + env_origins[:, 0]
     y_local = torch.full((num_resets,), y_spawn, device=env.device) + env_origins[:, 1]
     z_local = torch.full((num_resets,), 1.0, device=env.device) + env_origins[:, 2]
 
     pos_global = torch.stack([x_local, y_local, z_local], dim=1)
-    identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=env.device).unsqueeze(0).expand(num_resets, -1)
+    identity_quat = (
+        torch.tensor([1.0, 0.0, 0.0, 0.0], device=env.device)
+        .unsqueeze(0)
+        .expand(num_resets, -1)
+    )
 
-    v_x = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_speed_x_range).squeeze(-1)
-    v_y = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_speed_y_range).squeeze(-1) * vy_mult
-    v_z = torch.empty(num_resets, 1, device=env.device).uniform_(*cfg.ball_speed_z_range).squeeze(-1)
+    v_x = (
+        torch.empty(num_resets, 1, device=env.device)
+        .uniform_(*cfg.ball_speed_x_range)
+        .squeeze(-1)
+    )
+    v_y = (
+        torch.empty(num_resets, 1, device=env.device)
+        .uniform_(*cfg.ball_speed_y_range)
+        .squeeze(-1)
+        * vy_mult
+    )
+    v_z = (
+        torch.empty(num_resets, 1, device=env.device)
+        .uniform_(*cfg.ball_speed_z_range)
+        .squeeze(-1)
+    )
 
     lin_vel = torch.stack([v_x, v_y, v_z], dim=1)
     ang_vel = torch.zeros(num_resets, 3, device=env.device)
 
-    ball.write_root_pose_to_sim(torch.cat([pos_global, identity_quat], dim=1), env_ids=env_ids)
-    ball.write_root_velocity_to_sim(torch.cat([lin_vel, ang_vel], dim=1), env_ids=env_ids)
+    ball.write_root_pose_to_sim(
+        torch.cat([pos_global, identity_quat], dim=1), env_ids=env_ids
+    )
+    ball.write_root_velocity_to_sim(
+        torch.cat([lin_vel, ang_vel], dim=1), env_ids=env_ids
+    )

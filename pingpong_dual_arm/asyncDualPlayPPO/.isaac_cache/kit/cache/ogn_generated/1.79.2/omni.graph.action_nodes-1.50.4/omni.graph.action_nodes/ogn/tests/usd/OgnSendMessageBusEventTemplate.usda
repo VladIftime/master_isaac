@@ -1,0 +1,34 @@
+#usda 1.0
+(
+    doc ="""Generated from node description file OgnSendMessageBusEvent.ogn
+Contains templates for node types found in that file."""
+)
+
+def OmniGraph "TestGraph"
+{
+    token evaluator:type = "push"
+    int2 fileFormatVersion = (1, 3)
+    token flatCacheBacking = "Shared"
+    token pipelineStage = "pipelineStageSimulation"
+
+    def OmniGraphNode "Template_omni_graph_action_SendMessageBusEvent" (
+        docs="""Pushes a named event to the Application Message Bus. The payload of the event is constructed from any dynamic input attributes that have been added to this node and consists of a dictionary whose key is the name of the attribute, with the 'inputs:' prefix stripped from it, with a value equal to the raw pointer to the attribute's data in Fabric. If the attribute has a type that is not able to be converted to this form then a warning is posted for the node but the execution continues."""
+    )
+    {
+        token node:type = "omni.graph.action.SendMessageBusEvent"
+        int node:typeVersion = 1
+
+        # 2 attributes
+        custom token inputs:eventName = "" (
+            docs="""The name of the custom event to be sent."""
+        )
+        custom uint inputs:execIn (
+            docs="""Signal to the graph that this node is ready to be executed."""
+        )
+
+        # 1 attribute
+        custom uint outputs:execOut (
+            docs="""Signal to the graph that execution can continue downstream."""
+        )
+    }
+}

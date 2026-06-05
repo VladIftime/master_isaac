@@ -31,7 +31,9 @@ def ball_out_of_bounds(
     Wide bounds accommodate the full trajectory between robots at y=±2.7.
     """
     ball = env.scene["ball"]
-    pos_local = ball.data.root_pos_w - env.scene.env_origins.to(ball.data.root_pos_w.device)
+    pos_local = ball.data.root_pos_w - env.scene.env_origins.to(
+        ball.data.root_pos_w.device
+    )
 
     below_floor = pos_local[:, 2] < z_min
     out_x = (pos_local[:, 0] < x_range[0]) | (pos_local[:, 0] > x_range[1])

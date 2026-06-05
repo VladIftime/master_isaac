@@ -2,6 +2,7 @@
 import os
 from isaaclab.app import AppLauncher
 import argparse
+
 parser = argparse.ArgumentParser()
 AppLauncher.add_app_launcher_args(parser)
 app = AppLauncher(parser.parse_args([]))
@@ -10,7 +11,9 @@ simulation_app = app.app
 from pxr import Usd, UsdGeom
 
 _PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-usd = os.path.join(_PKG, "meshes", "pingpong", "ping_pong_", "ping_pong_table", "table_extra_parts.usd")
+usd = os.path.join(
+    _PKG, "meshes", "pingpong", "ping_pong_", "ping_pong_table", "table_extra_parts.usd"
+)
 stage = Usd.Stage.Open(usd)
 for prim in stage.Traverse():
     if prim.IsA(UsdGeom.Mesh):
@@ -23,7 +26,9 @@ for prim in stage.Traverse():
         cy = (extent[0][1] + extent[1][1]) / 2
         cz = (extent[0][2] + extent[1][2]) / 2
         print(f"{prim.GetPath()}:")
-        print(f"  extent=({extent[0][0]:.4f},{extent[0][1]:.4f},{extent[0][2]:.4f}) -> ({extent[1][0]:.4f},{extent[1][1]:.4f},{extent[1][2]:.4f})")
+        print(
+            f"  extent=({extent[0][0]:.4f},{extent[0][1]:.4f},{extent[0][2]:.4f}) -> ({extent[1][0]:.4f},{extent[1][1]:.4f},{extent[1][2]:.4f})"
+        )
         print(f"  size=({dx:.4f}, {dy:.4f}, {dz:.4f})")
         print(f"  center=({cx:.4f}, {cy:.4f}, {cz:.4f})")
 

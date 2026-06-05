@@ -40,7 +40,9 @@ RACKET_HEIGHT = 0.16
 RACKET_THICKNESS = 0.01
 
 
-def _add_physics_material(stage, prim_path, restitution, static_friction, dynamic_friction):
+def _add_physics_material(
+    stage, prim_path, restitution, static_friction, dynamic_friction
+):
     """Add a physics material to the given prim."""
     material_path = prim_path + "/physicsMaterial"
     UsdShade.Material.Define(stage, material_path)
@@ -75,12 +77,16 @@ def create_ball_usd():
     collision_api.CreateCollisionEnabledAttr(True)
 
     # Physics material
-    mat_path = _add_physics_material(stage, "/ball/collisions/collision",
-                                     restitution=BALL_RESTITUTION,
-                                     static_friction=0.0,
-                                     dynamic_friction=0.0)
+    mat_path = _add_physics_material(
+        stage,
+        "/ball/collisions/collision",
+        restitution=BALL_RESTITUTION,
+        static_friction=0.0,
+        dynamic_friction=0.0,
+    )
     UsdPhysics.MaterialBindingAPI.Apply(collision.GetPrim()).Bind(
-        UsdShade.Material.Get(stage, mat_path))
+        UsdShade.Material.Get(stage, mat_path)
+    )
 
     # Rigid body
     rb_api = UsdPhysics.RigidBodyAPI.Apply(root)
@@ -120,12 +126,16 @@ def create_table_usd():
     collision_api = UsdPhysics.CollisionAPI.Apply(collision.GetPrim())
     collision_api.CreateCollisionEnabledAttr(True)
 
-    mat_path = _add_physics_material(stage, "/table/collisions/collision",
-                                     restitution=TABLE_RESTITUTION,
-                                     static_friction=0.0,
-                                     dynamic_friction=0.0)
+    mat_path = _add_physics_material(
+        stage,
+        "/table/collisions/collision",
+        restitution=TABLE_RESTITUTION,
+        static_friction=0.0,
+        dynamic_friction=0.0,
+    )
     UsdPhysics.MaterialBindingAPI.Apply(collision.GetPrim()).Bind(
-        UsdShade.Material.Get(stage, mat_path))
+        UsdShade.Material.Get(stage, mat_path)
+    )
 
     stage.GetRootLayer().Save()
     print(f"  Created {output}")
@@ -146,7 +156,9 @@ def create_racket_usd():
     # Racket head
     head = UsdGeom.Cylinder.Define(stage, "/racket/visuals/head")
     head.AddTranslateOp().Set(Gf.Vec3d(0, 0, 0))
-    head.AddScaleOp().Set(Gf.Vec3d(RACKET_WIDTH / 2, RACKET_HEIGHT / 2, RACKET_THICKNESS))
+    head.AddScaleOp().Set(
+        Gf.Vec3d(RACKET_WIDTH / 2, RACKET_HEIGHT / 2, RACKET_THICKNESS)
+    )
 
     # Handle (stick)
     handle = UsdGeom.Cylinder.Define(stage, "/racket/visuals/handle")
@@ -161,12 +173,16 @@ def create_racket_usd():
     collision_api = UsdPhysics.CollisionAPI.Apply(collision.GetPrim())
     collision_api.CreateCollisionEnabledAttr(True)
 
-    mat_path = _add_physics_material(stage, "/racket/collisions/collision",
-                                     restitution=1.0,
-                                     static_friction=0.5,
-                                     dynamic_friction=0.5)
+    mat_path = _add_physics_material(
+        stage,
+        "/racket/collisions/collision",
+        restitution=1.0,
+        static_friction=0.5,
+        dynamic_friction=0.5,
+    )
     UsdPhysics.MaterialBindingAPI.Apply(collision.GetPrim()).Bind(
-        UsdShade.Material.Get(stage, mat_path))
+        UsdShade.Material.Get(stage, mat_path)
+    )
 
     stage.GetRootLayer().Save()
     print(f"  Created {output}")

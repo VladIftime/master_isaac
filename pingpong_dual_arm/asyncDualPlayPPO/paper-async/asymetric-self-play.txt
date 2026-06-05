@@ -1,0 +1,332 @@
+Here is the research paper converted into a Markdown format.
+
+# Asymmetric Self-Play for Automatic Goal Discovery in Robotic Manipulation
+
+[cite_start]**Authors:** OpenAI et al. [cite: 3, 4]
+
+## Abstract
+
+[cite_start]We train a single, goal-conditioned policy that can solve many robotic manipulation tasks, including tasks with previously unseen goals and objects[cite: 7]. [cite_start]We rely on asymmetric self-play for goal discovery, where two agents, Alice and Bob, play a game[cite: 8]. [cite_start]Alice is asked to propose challenging goals and Bob aims to solve them[cite: 9]. [cite_start]We show that this method can discover highly diverse and complex goals without any human priors[cite: 10]. [cite_start]Bob can be trained with only sparse rewards because the interaction between Alice and Bob results in a natural curriculum and Bob can learn from Alice's trajectory when relabeled as a goal-conditioned demonstration[cite: 11]. [cite_start]Finally, our method scales, resulting in a single policy that can generalize to many unseen tasks such as setting a table, stacking blocks, and solving simple puzzles[cite: 12].
+
+---
+
+## 1. Introduction
+
+[cite_start]We are motivated to train a single goal-conditioned policy that can solve any robotic manipulation task that a human may request in a given environment[cite: 15]. [cite_start]In this work, we make progress towards this goal by solving a robotic manipulation problem in a table-top setting where the robot's task is to change the initial configuration of a variable number of objects on a table to match a given goal configuration[cite: 16]. [cite_start]This problem is simple in its formulation but likely to challenge a wide variety of cognitive abilities of a robot as objects become diverse and goals become complex[cite: 17].
+
+
+[cite_start]An open question in this approach is how we can build a training distribution rich enough to achieve generalization to many unseen manipulation tasks[cite: 19]. [cite_start]This involves defining both an environment's initial state distribution and a goal distribution[cite: 20]. [cite_start]In this work, we focus on a scalable way to define a rich goal distribution[cite: 22].
+
+[cite_start]We extend an approach called **asymmetric self-play** for automated goal generation[cite: 55].
+* [cite_start]**The Game:** Alice learns to propose goals that Bob is likely to fail at, and Bob, a goal-conditioned policy, learns to solve the proposed goals[cite: 57].
+* [cite_start]**Asymmetry:** Alice proposes a goal by manipulating objects and Bob has to solve the goal starting from the same initial state as Alice's[cite: 58].
+* [cite_start]**Feasibility:** This setup ensures that all proposed goals are provided with at least one solution: Alice's trajectory[cite: 59].
+
+
+We consider asymmetric self-play to be promising for two main reasons:
+1.  [cite_start]**Exploitable Trajectories:** Because any proposed goal is achievable, we can exploit Alice's trajectory to provide additional learning signals to Bob via behavioral cloning[cite: 61, 62]. [cite_start]This alleviates the overhead of heuristically designing a curriculum or reward shaping[cite: 63].
+2.  [cite_start]**Scalability:** This approach does not require labor-intensive data collection[cite: 64].
+
+[cite_start]To the best of our knowledge, this is the first work that presents zero-shot generalization to many previously unseen tasks by training purely with asymmetric self-play[cite: 66].
+
+---
+
+## 2. Problem Formulation
+
+[cite_start]Our training environment consists of a robot arm with a gripper attached and a wide range of objects placed on a table surface[cite: 68]. [cite_start]The goal-conditioned policy learns to control the robot to rearrange randomly placed objects (the initial state) into a specified goal configuration[cite: 69].
+
+### Mathematical Formulation
+[cite_start]We model the interaction as a goal-augmented Markov decision process $\mathcal{M}=\langle\mathcal{S},\mathcal{A},\mathcal{P},\mathcal{R},\mathcal{G}\rangle$[cite: 72].
+* $\mathcal{S}$: State space.
+* $\mathcal{A}$: Action space.
+* $\mathcal{G}\subseteq\mathcal{S}$: Goal space.
+* $\mathcal{R}:\mathcal{S}\times\mathcal{G}\mapsto\mathbb{R}$: Goal-specific reward function.
+
+[cite_start]A goal-augmented trajectory sequence is $\{(s_{0},g,a_{0},r_{0}),...,(s_{t},g,a_{t},r_{t})\}$, where the goal is provided to the policy as part of the observation at every step[cite: 73]. [cite_start]A goal is achieved if $s_{t}$ is sufficiently close to $g$[cite: 74]. [cite_start]We define the goal distribution $\mathcal{G}(g|s_{0})$ as the probability of a goal state $g\in\mathcal{G}$ conditioned on an initial state $s_{0}\in\mathcal{S}$[cite: 75].
+
+### Training Goal Distribution
+[cite_start]We automatically generate goals via training based on asymmetric self-play[cite: 81]. [cite_start]We use a policy named Alice $\pi_{A}(a|s)$ to set goals and a goal-conditioned policy Bob $\pi_{B}(a|s,g)$ to solve goals[cite: 82]. [cite_start]We run $\pi_{A}$ to generate a trajectory $\tau_{A}=\{(s_{0},a_{0},r_{0}),...,(s_{T},a_{T},r_{T})\}$ and the last state is labelled as a goal $g$ for $\pi_{B}$ to solve[cite: 83]. [cite_start]The goal distribution $\mathcal{G}(s_{T}=g|s_{0})$ is fully determined by $\pi_{A}$ and we train Bob only on this goal distribution[cite: 84].
+
+---
+
+## 3. Asymmetric Self-Play
+
+[cite_start]To train Alice policy $\pi_{A}(a|s)$ and Bob policy $\pi_{B}(a|s,g)$, we run the following multi-goal game within one episode[cite: 91]:
+
+1.  [cite_start]**Initialization:** An initial state $s_{0}$ is sampled[cite: 92]. [cite_start]Alice and Bob are instantiated into their own copies of the environment[cite: 93].
+2.  **Alice's Turn:** Alice interacts with the environment for $T$ steps. [cite_start]The state at the end of Alice's turn $s_{T}$ is used as a goal $g$ for Bob[cite: 94, 95].
+3.  **Bob's Turn:** Bob receives a reward if it successfully achieves goal $g$. [cite_start]Bob's turn ends upon success or timeout[cite: 97, 98]. [cite_start]If Bob fails, remaining turns are skipped and treated as failures[cite: 99].
+4.  [cite_start]**Scoring:** Alice receives a reward if Bob fails to solve the goal Alice proposed[cite: 100].
+5.  [cite_start]**Loop:** Steps 2-3 are repeated until 5 goals are set or Alice proposes an invalid goal[cite: 101].
+
+### 3.1 Reward Structure
+
+* **Bob:** Bob receives sparse goal-conditioned rewards. [cite_start]If an object is placed close enough to the goal state (based on Euclidean and Euler angle distance), Bob receives +1 immediately[cite: 109, 110]. [cite_start]If the object moves away, Bob gets -1[cite: 111]. [cite_start]When all objects are in the goal state, Bob receives an additional +5 reward[cite: 112].
+* [cite_start]**Alice:** Alice receives +5 if Bob failed at solving the goal, and 0 if Bob succeeded[cite: 114]. [cite_start]We shape Alice's reward by adding +1 for setting a valid goal and -3 for setting a goal with objects outside the placement area[cite: 115, 116].
+
+### 3.2 Alice Behavioral Cloning (ABC)
+
+[cite_start]Since Alice's trajectory is a guaranteed solution to the proposed goal, we exploit this by training Bob with Behavioral Cloning (BC) in addition to the RL objective[cite: 119, 120].
+
+**Demonstration Trajectory Filtering:** Alice's trajectory might be suboptimal. [cite_start]We only consider trajectories with goals that Bob *failed* to solve as demonstrations to avoid distracting Bob with suboptimal examples[cite: 125]. [cite_start]We relabel Alice's trajectory $\tau_{A}$ to be a goal-augmented version $\tau_{BC}$ where $s_{T}$ is the goal[cite: 126].
+
+[cite_start]**PPO-style BC Loss Clipping:** To prevent the policy from changing too drastically, we introduce PPO-style loss clipping on the BC loss[cite: 130]:
+$$\mathcal{L}_{abc}=-\mathbb{E}_{(s_{t},g_{t},a_{t})\in\mathcal{D}_{Bc}}[\mathcal{clip(\frac{\pi_{B}(a_{t}|s_{t},g_{t};\theta)}{\pi_{B}(a_{t}|s_{t},g_{t};\theta_{old})},1-\epsilon,1+\epsilon)]$$
+[cite_start]We use $\epsilon=0.2$ in all experiments[cite: 135].
+
+---
+
+## 4. Related Work
+
+* [cite_start]**Training Distribution:** Previous works manually designed task distributions (Multi-task RL, Meta RL) or used Domain Randomization[cite: 137, 138]. [cite_start]Self-play has been used to grow training distributions (OpenAI et al. 2019a)[cite: 140, 141].
+* [cite_start]**Automated Goal Generation:** Some works train generative models for goals, but these struggle with high-dimensional spaces[cite: 146, 148]. [cite_start]Others use teleoperation, which is labor-intensive[cite: 149].
+* **Asymmetric Self-Play:** Originally proposed by Sukhbaatar et al. (2018b) [cite_start]to supplement RL training[cite: 151]. [cite_start]To our knowledge, no previous work has trained a goal-conditioned policy purely based on asymmetric self-play and evaluated generalization to unseen holdout tasks[cite: 155].
+* [cite_start]**Curriculum Learning:** Hindsight Experience Replay (HER) and other methods use relabeling to reduce task complexity[cite: 156, 157]. Our work relies on an intrinsic curriculum from self-play.
+
+---
+
+## 5. Experiments
+
+[cite_start]We evaluate if asymmetric self-play generates an effective training curriculum for generalization to unseen holdout tasks and scales to complex objects[cite: 167, 168].
+
+
+### 5.1 Experimental Setup
+* [cite_start]**Environment:** Robot arm with gripper, ShapeNet objects for training, and holdout tasks for evaluation[cite: 68, 204].
+* [cite_start]**Agents:** Alice and Bob are independent policies with the same network architecture (PPO)[cite: 209, 211].
+* [cite_start]**Observations:** "State policy" for blocks, "Hybrid policy" (vision + state) for ShapeNet objects[cite: 210].
+
+### 5.2 Generalization Without Manual Curricula
+[cite_start]We compared Bob (trained via self-play) against baselines trained on a mixture of holdout tasks using manual curricula (No curriculum, Curriculum: distance, Curriculum: distribution, Curriculum: full)[cite: 242].
+* [cite_start]**Result:** Training directly on tasks without a curriculum fails drastically[cite: 242].
+* [cite_start]**Result:** Even "Curriculum: full" baselines failed to learn how to pick up or stack blocks[cite: 245].
+* [cite_start]**Result:** Bob learned to solve all holdout tasks quickly via asymmetric self-play[cite: 215].
+
+
+### 5.3 Discovery of Novel Goals
+[cite_start]Alice discovers goals not covered by holdout tasks, such as lifting multiple blocks or building a balanced tower[cite: 249, 250]. [cite_start]Bob eventually acquires the skills to solve these complex tasks via ABC[cite: 251].
+
+
+### 5.4 Generalization to Unseen Objects and Goals
+[cite_start]We scaled the approach to environments with up to 10 random ShapeNet objects using a hybrid policy (vision + state)[cite: 261, 263].
+* [cite_start]**Evaluation:** Tested on diverse tasks like setting a table, Rainbow, Ball-capture, and Tangram[cite: 264].
+* [cite_start]**Performance:** The policy achieved decent zero-shot generalization on many tasks, though some (Ball-capture, ordering for stacking >3 blocks) remain challenging[cite: 266, 316].
+
+
+### 5.5 Ablation Studies
+[cite_start]We performed ablation studies to measure the importance of components[cite: 317]:
+* [cite_start]**No ABC:** Bob completely fails without Alice Behavioral Cloning[cite: 336].
+* [cite_start]**No BC Loss Clipping:** Slightly slower learning and instability[cite: 337].
+* [cite_start]**No Demonstration Filter:** Noticeable instability on tasks like "flip"[cite: 341].
+* [cite_start]**Single-Goal:** Using 1 goal per episode (vs. 5) results in slower and less stable generalization[cite: 342, 344].
+
+
+---
+
+## 6. Conclusion
+
+[cite_start]We demonstrated that asymmetric self-play can define a single training distribution to learn arbitrary object manipulation tasks without prior knowledge[cite: 353, 354]. [cite_start]The method generates diverse goals and alleviates the need for manual curricula[cite: 355]. [cite_start]We highlighted the critical role of using the goal-setting trajectory as a demonstration (ABC)[cite: 356]. [cite_start]Our approach scales to complex objects and achieves zero-shot generalization to challenging unseen tasks[cite: 357]. [cite_start]A limitation is the reliance on a resettable simulator; future work will explore sim-to-real transfer[cite: 348, 350].
+
+---
+
+## Appendices
+
+### A. Asymmetric Self-Play Game Setup
+
+**A.1 Goal Validation**
+Some of the goals set via asymmetric self-play may not be useful or interesting enough to be included
+in the training distribution. For example, if Alice fails to touch any objects, Bob can declare a success
+without any action. A goal outside the table might be tricky to solve. We label such goals as invalid
+and make sure that Alice has generated a valid goal before starting Bob’s turn.
+Even when Alice generates a valid goal, we can still penalize certain undesired goals. Specifically,
+if the visual perception is limited to a restricted area on the table due to the camera setting, we can
+penalize goals containing objects outside that range of view.
+For goal validation, we check in the following order:
+1. We check whether any object has moved. If not, the goal is considered invalid and the
+episode resets.
+2. We check whether all the objects are on the table. If not, the goal is considered invalid and
+the episode resets.
+3. We check whether a valid goal has objects outside the placement area, defined to be a 3D
+space that the robot end effector can reach and the robot camera can see. If any object is
+outside the area, the goal is deemed valid but obtains a out-of-zone penalty reward and the
+episode continues to switch to Bob’s turn.
+
+**A.2 Reward Structure**
+Table 1 shows the reward structure for a single turn for goal setting and solving. The reward for
+Alice is based on whether it successfully generates a valid goal, and whether the generated goal is
+solved by Bob. Alice obtains 1 point for a valid goal, and obtains an additional 5 point game reward
+if Bob fails to achieve it. Additionally, a goal out of placement area triggers a −3 penalty. Rewarding
+Alice based only on Bob’s success or failure is simpler than the original reward from Sukhbaatar
+et al. (2018b), but we didn’t notice any degradation from this simplification (Appendix C.2).
+Since Bob is a goal-conditioned policy, we provide sparse goal-conditioned rewards. Whenever one
+object is placed at its desired position and orientation, Bob obtains 1 point per-object reward. Bob
+obtains -1 reward such that the sum of per-object reward is at most 1 during a given turn. When all
+the objects are in the goal state, Bob obtains a 5 point success reward and its turn terminates. If Bob
+reaches a maximum number of allowed steps before achieving the goal, it is deemed a failure with
+0 point reward.
+When checking whether a goal has been achieved, we compare the position and orientation of each
+object with its goal position and orientation. For position, we compute the Euclidean distance be-
+tween object centers. For rotation, we represent the orientation of an object by three Euler angles
+on three dimensions, roll, pitch, and yaw, respectively, and we compute the minimum angle needed
+to rotate the object into the goal orientation. If the distance and angle for all objects are less than a
+small error (0.04 meters and 0.2 radians respectively), we consider the goal achieved.
+
+See Table 1 for the specific rewards for Alice and Bob based on validity, success, and failure.
+
+| Alice | Bob | Alice Reward | Bob Reward |
+| :--- | :--- | :--- | :--- |
+| Invalid goal | - | 0 | - |
+| Out-of-zone goal | Failure | $1 - 3 + 5$ | $0 +$ per-object reward |
+| Out-of-zone goal | Success | $1 - 3 + 0$ | $5 +$ per-object reward |
+| Valid goal | Failure | $1 + 5$ | $0 +$ per-object reward |
+| Valid goal | Success | $1 + 0$ | $5 +$ per-object reward |
+[cite_start][cite: 526]
+
+*
+We expect a multi-goal game structure to induce a more complicated goal distribution, as goals
+can be built on top of each other. For example, in order to stack 3 blocks, you might need to
+stack 2 blocks first as a subgoal at the first step. A multi-goal structure also encourages Bob to
+internalize environmental information during multiple trials of goal solving. Many aspects of the
+environment, such as the simulator’s physical dynamics and properties of objects, stay constant
+within one episode, so Bob can systematically investigate these constant properties and exploit them
+to adapt its goal solving strategy accordingly. Similar behavior with multi-goal setting was observed
+by OpenAI et al. (2019a).
+In our experiments, when we report the success rate from multi-goal episodes, we run many episodes
+with a maximum of 5 goals each and compute the success rate as
+success_rate = total_successes
+total_goals .
+Note that because each episode terminates after one failure, at the end of one episode, we would
+have either total_goals = total_successes if Bob succeeded at every goal, or total_goals =
+total_successes + 1 if Bob fails in the middle.
+
+
+**A.4 Training Algorithm**
+The training involves collecting rollout data from parallel workers and updating Alice and Bob using PPO. Bob additionally updates using the ABC loss from filtered demonstrations.
+
+Algorithm 1: Asymmetric Self-Play
+
+Require:
+
+    θA​,θB​: Initial parameters for Alice and Bob
+
+    η: RL learning rate
+
+    β: Weight of BC (Behavioral Cloning) loss
+
+for training_steps = 1, 2, ... do
+    # Initialize behavior policy parameters
+    theta_A_old <- theta_A
+    theta_B_old <- theta_B
+
+    # Parallel data collection
+    for each rollout worker do
+        # Collect replay buffers for Alice (D_A), Bob (D_B), and ABC (D_BC)
+        D_A, D_B, D_BC = CollectRolloutData(theta_A_old, theta_B_old)
+    end for
+
+    # Optimize Alice: PPO loss with data popped from D_A
+    theta_A <- theta_A - eta * grad(L_RL(D_A))
+
+    # Optimize Bob: RL loss with D_B and ABC loss with D_BC
+    theta_B <- theta_B - eta * grad(L_RL(D_B) + beta * L_ABC(D_BC))
+end for
+
+
+Algorithm 2: CollectRolloutData
+
+Require:
+
+    θAold​,θBold​: Behavior policy parameters for Alice and Bob
+
+    πA​,πB​: Policies for Alice and Bob
+# Initialize empty replay buffers
+D_A <- {}
+D_B <- {}
+D_BC <- {}
+
+# Initialize success flag (True implies Bob is allowed to try solving)
+bob_succeeded <- True
+
+for number_of_goals = 1, ..., 5 do
+    # 1. Alice generates a trajectory and a goal
+    tau_A, g = GenerateAliceTrajectory(pi_A, theta_A_old)
+
+    # If the goal is invalid (e.g., no object moved), end the episode
+    if g is invalid then
+        break
+    end if
+
+    # 2. Bob tries to solve the goal (only if he hasn't failed yet)
+    if bob_succeeded is True then
+        tau_B, bob_succeeded = GenerateBobTrajectory(pi_B, theta_B_old, g)
+        D_B.append(tau_B)
+    end if
+
+    # 3. Compute Alice's reward based on Bob's performance
+    # Alice gets a bonus if Bob failed; otherwise standard reward
+    r_A = ComputeAliceReward(bob_succeeded)
+    
+    # Overwrite the last reward in Alice's trajectory with r_A
+    tau_A[-1].reward = r_A
+    D_A.append(tau_A)
+
+    # 4. Alice Behavioral Cloning (ABC) Logic
+    # If Bob failed, use Alice's trajectory as a demonstration for Bob
+    if bob_succeeded is False then
+        # Relabel Alice's trajectory to be goal-augmented (goal = final state)
+        tau_BC = RelabelDemonstration(tau_A, g, pi_B, theta_B_old)
+        D_BC.append(tau_BC)
+    end if
+end for
+
+return D_A, D_B, D_BC
+
+### B. Training Setup
+
+**B.1 Simulation & B.2 Action Space**
+* [cite_start]**Engine:** MuJoCo with a UR16e robot arm and RobotIQ 2F-85 gripper[cite: 572, 573].
+* [cite_start]**Action Space:** 6-dimensional (3D position, 2D rotation, 1D gripper finger position)[cite: 577].
+
+**B.3 Observation Space**
+B.2 ACTION SPACE
+We define a 6-dimensional action space consisting of 3D relative gripper position, 2D relative grip-
+per rotation, and a 1D desired relative gripper finger position output that is applied symmetrically
+17
+(a) Front camera (b) Wrist camera (c) Front camera (goal)
+Figure 11: Example vision observations from our camera setup. (a) observation from a camera
+mounted in front of the table (the front camera). (b) observation from the mobile camera mounted
+on the gripper wrist. (c) goal observation from the front camera.
+to the two gripper pinchers. The two rotational degrees of freedom correspond to yaw and pitch
+axes (wrist rotation and wrist tilt) respectively, with respect to the gripper base. We use a discretized
+action space with 11 bins per dimension and learn a multi-categorical distribution.
+B.3 OBSERVATION SPACE
+We feed observations of robot arm position, gripper position, object state, and goal state into the
+policy. The object state observation contains each object’s position, rotation, velocity, rotational
+velocity, the distance between the object and the gripper, as well as whether this object has contacts
+with the gripper. The goal state observation includes each object’s desired position and rotation, as
+well as the relative distance between the current object state and the desired state.
+
+
+**B.4 MODEL ARCHITECTURE
+We use independent policy and value networks in the PPO policy. Both have the same observation
+inputs and network architecture, as illustrated in Figure 13. The permutation invariant embedding
+module concatenates all the observations per object, learns an embedding vector per object and then
+does max pooling in the object dimension. The vision module uses the same model architecture as
+in IMPALA (Espeholt et al., 2018). For all experiments, we use completely separate parameters for
+the policy and the value network except the vision module, which is shared between them.
+
+**B.5 Hyperparameters**
+
+**Table 2: PPO Hyperparameters**
+| Hyperparameter | Value |
+| :--- | :--- |
+| discount factor $\gamma$ | 0.998 |
+| GAE $\lambda$ | 0.95 |
+| entropy regularization | 0.01 |
+| PPO clipping $\epsilon_{ppo}$ | 0.2 |
+| ABC clipping $\epsilon$ | 0.2 |
+| learning rate | $3\times10^{-4}$ |
+| ABC loss weight $\beta$ | 0.5 |
+[cite_start][cite: 623]
+
+
+

@@ -17,9 +17,9 @@ import os
 import sys
 import time
 import torch
-import torch._dynamo   # noqa: F401 — lock torch before AppLauncher
-import torch._C        # noqa: F401
-import torch.optim     # noqa: F401
+import torch._dynamo  # noqa: F401 — lock torch before AppLauncher
+import torch._C  # noqa: F401
+import torch.optim  # noqa: F401
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
@@ -28,13 +28,22 @@ if _PROJECT_ROOT not in sys.path:
 from isaaclab.app import AppLauncher
 
 import argparse
+
 parser = argparse.ArgumentParser(description="Ping pong swing demo")
-parser.add_argument("--ik", type=str, default="diffik",
-                    choices=["diffik", "osc", "rmpflow", "curobo"],
-                    help="IK solver")
+parser.add_argument(
+    "--ik",
+    type=str,
+    default="diffik",
+    choices=["diffik", "osc", "rmpflow", "curobo"],
+    help="IK solver",
+)
 parser.add_argument("--steps", type=int, default=2000, help="Simulation steps")
-parser.add_argument("--step-delay", type=float, default=0.0,
-                    help="Sleep between steps for visual inspection")
+parser.add_argument(
+    "--step-delay",
+    type=float,
+    default=0.0,
+    help="Sleep between steps for visual inspection",
+)
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 
@@ -51,19 +60,20 @@ from tasks.pingpong_env import PingPongEnv
 # Two robots swing their rackets on the X axis (left-right across the table)
 # with a sinusoidal motion.  Robot A and B are 180° out of phase.
 
-SWING_AMP     = 0.15               # ±0.15 m  on X axis
-SWING_PERIOD  = 60                 # steps per cycle (1.2 s at dt=0.02)
-SWING_Y_A     = -0.35              # nominal Y for robot A (over table)
-SWING_Y_B     = +0.35              # nominal Y for robot B (over table)
-SWING_Z       = 0.35               # nominal Z (above table top at ~0.235)
-DIFFIK_GAIN   = 0.3                # proportional gain for delta
+SWING_AMP = 0.15  # ±0.15 m  on X axis
+SWING_PERIOD = 60  # steps per cycle (1.2 s at dt=0.02)
+SWING_Y_A = -0.35  # nominal Y for robot A (over table)
+SWING_Y_B = +0.35  # nominal Y for robot B (over table)
+SWING_Z = 0.35  # nominal Z (above table top at ~0.235)
+DIFFIK_GAIN = 0.3  # proportional gain for delta
 
-TABLE_HEIGHT   = 0.45              # matches env cfg TABLE_HEIGHT
-BALL_SPAWN_Z  = TABLE_HEIGHT + 0.15  # spawn just above table
-BALL_SPEED    = 4.0                # launch speed (m/s)
-BALL_UP       = 4.0                # upward velocity for arc
-TABLE_SURFACE = 0.05               # ball respawn trigger z
-BODY_TRACK    = "right_wrist_3_link"
+TABLE_HEIGHT = 0.45  # matches env cfg TABLE_HEIGHT
+BALL_SPAWN_Z = TABLE_HEIGHT + 0.15  # spawn just above table
+BALL_SPEED = 4.0  # launch speed (m/s)
+BALL_UP = 4.0  # upward velocity for arc
+TABLE_SURFACE = 0.05  # ball respawn trigger z
+BODY_TRACK = "right_wrist_3_link"
+
 
 # ---------------------------------------------------------------------------
 # Helper — read EE pose in local frame (position + Euler ZYX)
@@ -78,6 +88,7 @@ def _ee_local(env, robot_name):
     euler = torch.stack([roll, pitch, yaw], dim=-1)
     return pos, euler
 
+
 # ---------------------------------------------------------------------------
 # Helper — spawn ball at centre with random ±Y velocity
 # ---------------------------------------------------------------------------
@@ -90,7 +101,9 @@ def _serve_ball(env):
     x = torch.zeros(N, device=env.device)
     y = torch.zeros(N, device=env.device)
     z = torch.full((N,), BALL_SPAWN_Z, device=env.device)
-    pos_global = torch.stack([x + origins[:, 0], y + origins[:, 1], z + origins[:, 2]], dim=1)
+    pos_global = torch.stack(
+        [x + origins[:, 0], y + origins[:, 1], z + origins[:, 2]], dim=1
+    )
 
     q = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=env.device)
 
@@ -104,6 +117,7 @@ def _serve_ball(env):
 
     ball.write_root_pose_to_sim(torch.cat([pos_global, q], dim=1))
     ball.write_root_velocity_to_sim(torch.cat([lin_vel, ang_vel], dim=1))
+
 
 # ---------------------------------------------------------------------------
 # Main

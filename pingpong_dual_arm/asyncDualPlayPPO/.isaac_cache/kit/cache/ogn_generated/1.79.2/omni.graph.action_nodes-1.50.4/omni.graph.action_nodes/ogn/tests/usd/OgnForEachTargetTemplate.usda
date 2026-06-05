@@ -1,0 +1,47 @@
+#usda 1.0
+(
+    doc ="""Generated from node description file OgnForEachTarget.ogn
+Contains templates for node types found in that file."""
+)
+
+def OmniGraph "TestGraph"
+{
+    token evaluator:type = "push"
+    int2 fileFormatVersion = (1, 3)
+    token flatCacheBacking = "Shared"
+    token pipelineStage = "pipelineStageSimulation"
+
+    def OmniGraphNode "Template_omni_graph_action_ForEachTarget" (
+        docs="""Activates the 'Loop Body' signal once for each target in 'Targets', making the current array member available in the output 'Target' with its index in 'Array Index'. After every element of 'Targets' has been processed the 'Finished' signal is activated. All of this will happen in a single execution of the node, giving you the ability to evaluate a downstream graph multiple times with different inputs coming from the changing 'Target' output."""
+    )
+    {
+        token node:type = "omni.graph.action.ForEachTarget"
+        int node:typeVersion = 1
+
+        # 2 attributes
+        custom uint inputs:execIn (
+            docs="""Signal to the graph that this node is ready to be executed."""
+        )
+        custom rel inputs:targets (
+            docs="""The targets array to loop over"""
+        )
+
+        # 4 attributes
+        custom int outputs:arrayIndex (
+            docs="""The value of the current index being visited by the loop. Keeps the value of the last index
+            after the loop has completed. The index starts at zero and increments by one as it
+            walks through the members of 'Targets'."""
+        )
+        custom uint outputs:finished (
+            docs="""When the final element of 'Targets' has been processed signal the graph that
+            execution can continue downstream."""
+        )
+        custom uint outputs:loopBody (
+            docs="""For each member of 'Targets' signal the graph that execution can continue downstream."""
+        )
+        custom rel outputs:target (
+            docs="""The current member of 'Targets' being visited by the loop. Keeps the value of the last
+            array element after the loop has completed."""
+        )
+    }
+}

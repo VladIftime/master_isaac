@@ -1,0 +1,110 @@
+# rmpflow_config_left.yaml
+api_version: 1.0
+joint_limit_buffers: [.01, .01, .01, .01, .01, .01]
+
+rmp_params:
+    cspace_target_rmp:
+        metric_scalar: 50.
+        position_gain: 100.
+        damping_gain: 50.
+        robust_position_term_thresh: .5
+        inertia: 1.
+    
+    # NOTE: "canonical_resolve" is commented out because it causes the
+    # "yaml-cpp: bad conversion" / "invalid node" crash in this version of Lula.
+    # The collision stability is handled by the 'body_cylinders' section below instead.
+    # canonical_resolve:
+    #     max_acceleration_norm: 50.
+    #     projection_tolerance: .01
+    #     verbose: false
+
+    cspace_trajectory_rmp:
+        p_gain: 80.
+        d_gain: 10.
+        ff_gain: .25
+        weight: 50.
+    cspace_affine_rmp:
+        final_handover_time_std_dev: .25
+        weight: 2000.
+    joint_limit_rmp:
+        metric_scalar: 1000.
+        metric_length_scale: .01
+        metric_exploder_eps: 1e-3
+        metric_velocity_gate_length_scale: .01
+        accel_damper_gain: 200.
+        accel_potential_gain: 1.
+        accel_potential_exploder_length_scale: .1
+        accel_potential_exploder_eps: 1e-2
+    joint_velocity_cap_rmp:
+        max_velocity: 2.15
+        velocity_damping_region: 0.5
+        damping_gain: 300.
+        metric_weight: 100.
+    target_rmp:
+        accel_p_gain: 80.
+        accel_d_gain: 120.
+        accel_norm_eps: .075
+        metric_alpha_length_scale: .05
+        min_metric_alpha: .01
+        max_metric_scalar: 10000.
+        min_metric_scalar: 2500.
+        proximity_metric_boost_scalar: 20.
+        proximity_metric_boost_length_scale: .02
+        accept_user_weights: false
+    axis_target_rmp:
+        accel_p_gain: 200.
+        accel_d_gain: 40.
+        metric_scalar: 10.
+        proximity_metric_boost_scalar: 3000.
+        proximity_metric_boost_length_scale: .05
+        accept_user_weights: false
+    collision_rmp:
+        damping_gain: 50.
+        damping_std_dev: .04
+        damping_robustness_eps: 1e-2
+        damping_velocity_gate_length_scale: .01
+        repulsion_gain: 1200.
+        repulsion_std_dev: .01
+        metric_modulation_radius: .5
+        metric_scalar: 10000.
+        metric_exploder_std_dev: .02
+        metric_exploder_eps: .001
+    damping_rmp:
+        accel_d_gain: 30.
+        metric_scalar: 50.
+        inertia: 100.
+
+canonical_resolve:
+    max_acceleration_norm: 50.
+    projection_tolerance: .01
+    verbose: false
+# -----------------------------------------------------------
+# COLLISION CONFIGURATION
+# -----------------------------------------------------------
+body_cylinders:
+    # 1. Main Central Pillar
+    - name: body_base_link
+      pt1: [0, 0, 0.7]
+      pt2: [0, 0, 0.0]
+      radius: 0.22
+
+    # 2. Arm Base & Shoulder (Extended Height)
+    - name: base_link_inertia
+      pt1: [0, 0, 0.25] # Increased from 0.15 to cover the shoulder joint
+      pt2: [0, 0, 0.0]
+      radius: 0.13
+
+# ACTIVE COLLISION CHECKERS
+body_collision_controllers:
+  - name: upper_arm_link
+    radius: 0.05 # Reduced from 0.08 to avoid overlap when rotated
+  - name: forearm_link
+    radius: 0.05 # Reduced from 0.07 to avoid overlap when rotated
+  - name: wrist_1_link
+    radius: 0.06
+  - name: wrist_2_link
+    radius: 0.06
+  - name: wrist_3_link
+    radius: 0.05
+  - name: robotiq_arg2f_base_link
+    radius: 0.1 # Increased from 0.05 to account for finger spread

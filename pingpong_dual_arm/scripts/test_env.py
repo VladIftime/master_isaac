@@ -18,17 +18,24 @@ if _PROJECT_ROOT not in sys.path:
 # Lock torch submodules before AppLauncher — Isaac Sim's pip_prebundle
 # contains incompatible torch builds that break imports otherwise.
 import torch
-import torch._dynamo     # noqa: F401
-import torch._C          # noqa: F401
-import torch.optim       # noqa: F401
+import torch._dynamo  # noqa: F401
+import torch._C  # noqa: F401
+import torch.optim  # noqa: F401
 
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test ping pong dual-arm environment.")
-parser.add_argument("--num_envs", type=int, default=4, help="Number of parallel environments.")
+parser.add_argument(
+    "--num_envs", type=int, default=4, help="Number of parallel environments."
+)
 parser.add_argument("--steps", type=int, default=10000, help="Number of steps to run.")
-parser.add_argument("--ik", type=str, default="diffik", choices=["diffik", "osc", "rmpflow", "curobo"],
-                    help="IK solver to use.")
+parser.add_argument(
+    "--ik",
+    type=str,
+    default="diffik",
+    choices=["diffik", "osc", "rmpflow", "curobo"],
+    help="IK solver to use.",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -61,17 +68,25 @@ obs, info = env.reset()
 print(f"Reset done. Starting rollout for {args_cli.steps} steps...")
 
 for step in range(args_cli.steps):
-    action = torch.rand(args_cli.num_envs, env.action_space.shape[1], device=env.device) * 0.3 - 0.15
+    action = (
+        torch.rand(args_cli.num_envs, env.action_space.shape[1], device=env.device)
+        * 0.3
+        - 0.15
+    )
     obs, reward, terminated, truncated, info = env.step(action)
 
     if step % 100 == 0:
         alive = (~terminated).sum().item()
         ball_z = env.scene["ball"].data.root_pos_w[0, 2].item()
-        print(f"  Step {step:4d}: alive={alive}, ball_z={ball_z:.3f}, "
-              f"reward_mean={reward.mean().item():.4f}")
+        print(
+            f"  Step {step:4d}: alive={alive}, ball_z={ball_z:.3f}, "
+            f"reward_mean={reward.mean().item():.4f}"
+        )
 
     if terminated.any():
-        print(f"  Step {step:4d}: {terminated.sum().item()} envs terminated, resetting...")
+        print(
+            f"  Step {step:4d}: {terminated.sum().item()} envs terminated, resetting..."
+        )
 
 print("\n=== Test complete ===")
 env.close()

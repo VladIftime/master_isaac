@@ -11,6 +11,7 @@ if _PROJECT_ROOT not in sys.path:
 import torch  # noqa: F401
 from isaaclab.app import AppLauncher
 import argparse
+
 parser = argparse.ArgumentParser()
 AppLauncher.add_app_launcher_args(parser)
 app = AppLauncher(parser.parse_args([]))
@@ -25,24 +26,26 @@ os.makedirs(OUTPUT, exist_ok=True)
 
 print(f"Converting: {URDF}  ->  {OUTPUT}/dual_arm_robot.usd", flush=True)
 
-UrdfConverter(UrdfConverterCfg(
-    asset_path=URDF,
-    usd_dir=OUTPUT,
-    usd_file_name="dual_arm_robot.usd",
-    force_usd_conversion=True,
-    make_instanceable=False,
-    fix_base=False,
-    merge_fixed_joints=False,
-    self_collision=False,
-    joint_drive=UrdfConverterCfg.JointDriveCfg(
-        drive_type="force",
-        target_type="position",
-        gains=UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
-            stiffness=1000.0,
-            damping=50.0,
+UrdfConverter(
+    UrdfConverterCfg(
+        asset_path=URDF,
+        usd_dir=OUTPUT,
+        usd_file_name="dual_arm_robot.usd",
+        force_usd_conversion=True,
+        make_instanceable=False,
+        fix_base=False,
+        merge_fixed_joints=False,
+        self_collision=False,
+        joint_drive=UrdfConverterCfg.JointDriveCfg(
+            drive_type="force",
+            target_type="position",
+            gains=UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
+                stiffness=1000.0,
+                damping=50.0,
+            ),
         ),
-    ),
-))
+    )
+)
 
 print("Done.", flush=True)
 simulation_app.close()

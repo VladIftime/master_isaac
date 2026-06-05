@@ -22,7 +22,11 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
-from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UrdfFileCfg, UsdFileCfg
+from isaaclab.sim.spawners.from_files.from_files_cfg import (
+    GroundPlaneCfg,
+    UrdfFileCfg,
+    UsdFileCfg,
+)
 from isaaclab.utils import configclass
 
 import isaaclab.envs.mdp as mdp
@@ -110,30 +114,32 @@ DualArm_CFG = UR5e_SINGLE_CFG.replace(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            "left_shoulder_pan_joint": -0.29,
-            "left_shoulder_lift_joint": -1.212,
-            "left_elbow_joint": 1.712,
-            "left_wrist_1_joint": 0.0,
-            "left_wrist_2_joint": -0.33,
-            "left_wrist_3_joint": 1.39,
-            "right_shoulder_pan_joint": -0.29,
-            "right_shoulder_lift_joint": -1.212,
-            "right_elbow_joint": 1.712,
-            "right_wrist_1_joint": 0.0,
-            "right_wrist_2_joint": -0.33,
-            "right_wrist_3_joint": 1.39,
+            # Left arm
+            "left_shoulder_pan_joint": 0.0,
+            "left_shoulder_lift_joint": -1.57,
+            "left_elbow_joint": -1.57,
+            "left_wrist_1_joint": -1.57,
+            "left_wrist_2_joint": 1.57,
+            "left_wrist_3_joint": 0.0,
+            # Right arm
+            "right_shoulder_pan_joint": 0.0,
+            "right_shoulder_lift_joint": -1.57,
+            "right_elbow_joint": 1.57,
+            "right_wrist_1_joint": -1.57,
+            "right_wrist_2_joint": -1.57,
+            "right_wrist_3_joint": 0.0,
         },
     ),
     actuators={
         "arm_left": ImplicitActuatorCfg(
             joint_names_expr=["left_shoulder_.*", "left_elbow_.*", "left_wrist_.*"],
-            stiffness=5000.0,
-            damping=200.0,
+            stiffness=8000.0,
+            damping=500.0,
         ),
         "arm_right": ImplicitActuatorCfg(
             joint_names_expr=["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"],
-            stiffness=5000.0,
-            damping=200.0,
+            stiffness=8000.0,
+            damping=500.0,
         ),
     },
 )
@@ -158,6 +164,7 @@ STAND_B_POS = (0.0, 2.7, STAND_Z)
 ##
 # Scene definition
 ##
+
 
 @configclass
 class PingPongSceneCfg(InteractiveSceneCfg):
@@ -271,6 +278,7 @@ class PingPongSceneCfg(InteractiveSceneCfg):
 # MDP settings
 ##
 
+
 @configclass
 class ActionsCfg:
     """12-D relative pose delta actions: 6-D per robot's playing arm."""
@@ -293,27 +301,47 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         joint_pos_A = ObsTerm(
             func=obs_mod.robot_joint_positions,
-            params={"robot_cfg": SceneEntityCfg("robot_A", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
+            params={
+                "robot_cfg": SceneEntityCfg(
+                    "robot_A", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT
+                )
+            },
         )
         joint_vel_A = ObsTerm(
             func=obs_mod.robot_joint_velocities,
-            params={"robot_cfg": SceneEntityCfg("robot_A", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
+            params={
+                "robot_cfg": SceneEntityCfg(
+                    "robot_A", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT
+                )
+            },
         )
         ee_pose_A = ObsTerm(
             func=obs_mod.ee_poses,
-            params={"ee_cfg": SceneEntityCfg("robot_A", body_names=["right_wrist_3_link"])},
+            params={
+                "ee_cfg": SceneEntityCfg("robot_A", body_names=["right_wrist_3_link"])
+            },
         )
         joint_pos_B = ObsTerm(
             func=obs_mod.robot_joint_positions,
-            params={"robot_cfg": SceneEntityCfg("robot_B", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
+            params={
+                "robot_cfg": SceneEntityCfg(
+                    "robot_B", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT
+                )
+            },
         )
         joint_vel_B = ObsTerm(
             func=obs_mod.robot_joint_velocities,
-            params={"robot_cfg": SceneEntityCfg("robot_B", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT)},
+            params={
+                "robot_cfg": SceneEntityCfg(
+                    "robot_B", joint_names=ARM_JOINTS_LEFT + ARM_JOINTS_RIGHT
+                )
+            },
         )
         ee_pose_B = ObsTerm(
             func=obs_mod.ee_poses,
-            params={"ee_cfg": SceneEntityCfg("robot_B", body_names=["right_wrist_3_link"])},
+            params={
+                "ee_cfg": SceneEntityCfg("robot_B", body_names=["right_wrist_3_link"])
+            },
         )
         ball_state = ObsTerm(func=obs_mod.ball_state)
 
@@ -328,7 +356,7 @@ class ObservationsCfg:
 class EventCfg:
     """Reset events: serve ball with randomization, reset robots."""
 
-    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset", params={"reset_joint_targets": True})
     randomize_robots = EventTerm(
         func=evt_mod.reset_robot_joints,
         mode="reset",
@@ -366,12 +394,15 @@ class TerminationsCfg:
     table_fail_A = DoneTerm(func=term_mod.round_end_fail_A, time_out="terminated")
     table_fail_B = DoneTerm(func=term_mod.round_end_fail_B, time_out="terminated")
     ball_floor = DoneTerm(func=term_mod.ball_to_floor, time_out="terminated")
-    ball_out_of_bounds = DoneTerm(func=term_mod.ball_out_of_bounds, time_out="terminated")
+    ball_out_of_bounds = DoneTerm(
+        func=term_mod.ball_out_of_bounds, time_out="terminated"
+    )
 
 
 ##
 # Top-level environment config
 ##
+
 
 @configclass
 class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
@@ -415,6 +446,7 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 1
         self.episode_length_s = 5.0
         self.sim.dt = 1.0 / 120.0
+        self.sim.use_fabric = True
         self.sim.render_interval = self.decimation
         self.sim.physics_material = sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="min",
@@ -430,8 +462,12 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
 
         self.actions.arm_A = build_ik_action(
-            self.ik_solver, asset_name="robot_A", side=self.playing_arm_side,
+            self.ik_solver,
+            asset_name="robot_A",
+            side=self.playing_arm_side,
         )
         self.actions.arm_B = build_ik_action(
-            self.ik_solver, asset_name="robot_B", side=self.playing_arm_side,
+            self.ik_solver,
+            asset_name="robot_B",
+            side=self.playing_arm_side,
         )

@@ -23,18 +23,24 @@ class PingPongEnv(ManagerBasedRLEnv):
 
         self.dt = self.cfg.sim.dt * self.cfg.decimation
 
-        self._racket_offset = torch.tensor(
-            [0.0, 0.265, 0.0], device=self.device
-        )
+        self._racket_offset = torch.tensor([0.0, 0.265, 0.0], device=self.device)
 
         self.has_touch_paddle_A = torch.zeros(self.num_envs, device=self.device).bool()
         self.has_touch_paddle_B = torch.zeros(self.num_envs, device=self.device).bool()
-        self.has_touch_own_table_prev_A = torch.zeros(self.num_envs, device=self.device).bool()
-        self.has_touch_own_table_prev_B = torch.zeros(self.num_envs, device=self.device).bool()
+        self.has_touch_own_table_prev_A = torch.zeros(
+            self.num_envs, device=self.device
+        ).bool()
+        self.has_touch_own_table_prev_B = torch.zeros(
+            self.num_envs, device=self.device
+        ).bool()
         self.has_first_bounce_A = torch.zeros(self.num_envs, device=self.device).bool()
         self.has_first_bounce_B = torch.zeros(self.num_envs, device=self.device).bool()
-        self.has_first_bounce_prev_A = torch.zeros(self.num_envs, device=self.device).bool()
-        self.has_first_bounce_prev_B = torch.zeros(self.num_envs, device=self.device).bool()
+        self.has_first_bounce_prev_A = torch.zeros(
+            self.num_envs, device=self.device
+        ).bool()
+        self.has_first_bounce_prev_B = torch.zeros(
+            self.num_envs, device=self.device
+        ).bool()
         self.reward_vel_prev_A = torch.zeros(self.num_envs, device=self.device)
         self.reward_vel_prev_B = torch.zeros(self.num_envs, device=self.device)
 
@@ -70,12 +76,18 @@ class PingPongEnv(ManagerBasedRLEnv):
         self.ball_pos = ball.data.root_pos_w - self.scene.env_origins
         self.ball_linvel = ball.data.root_lin_vel_w
 
-        self._paddle_contact_detection("robot_A", wrist, "has_touch_paddle_A", "_contact_A")
-        self._paddle_contact_detection("robot_B", wrist, "has_touch_paddle_B", "_contact_B")
+        self._paddle_contact_detection(
+            "robot_A", wrist, "has_touch_paddle_A", "_contact_A"
+        )
+        self._paddle_contact_detection(
+            "robot_B", wrist, "has_touch_paddle_B", "_contact_B"
+        )
 
         self._table_zone_detection()
 
-    def _paddle_contact_detection(self, robot_name, wrist_link, paddle_flag, contact_attr):
+    def _paddle_contact_detection(
+        self, robot_name, wrist_link, paddle_flag, contact_attr
+    ):
         """Detect whether the ball is near the playing arm's paddle.
 
         Uses virtual distance threshold (no contact sensors).
@@ -92,7 +104,9 @@ class PingPongEnv(ManagerBasedRLEnv):
         touch_point = paddle_pos + rotated_offset
 
         distance = torch.norm(self.ball_global_pos - touch_point, dim=1)
-        contact_score = (self.cfg.contact_threshold - distance) / self.cfg.contact_threshold
+        contact_score = (
+            self.cfg.contact_threshold - distance
+        ) / self.cfg.contact_threshold
         contact = torch.clamp(contact_score, min=0.0, max=1.0)
 
         paddle_tensor = getattr(self, paddle_flag)
@@ -128,12 +142,14 @@ class PingPongEnv(ManagerBasedRLEnv):
 
         # Robot A: own = neg Y zone, opponent = pos Y zone
         touch_own_just_now_A = in_zone_neg & (~self.has_touch_own_table_prev_A)
-        self._table_success_A = (
-            self.has_touch_paddle_A.float() * in_zone_pos.float()
+        self._table_success_A = self.has_touch_paddle_A.float() * in_zone_pos.float()
+        self.has_touch_own_table_prev_A = (
+            self.has_touch_own_table_prev_A | touch_own_just_now_A
         )
-        self.has_touch_own_table_prev_A = self.has_touch_own_table_prev_A | touch_own_just_now_A
         self.has_first_bounce_prev_A = self.has_first_bounce_A.clone()
-        self.has_first_bounce_A[~self.has_first_bounce_A] = touch_own_just_now_A[~self.has_first_bounce_A]
+        self.has_first_bounce_A[~self.has_first_bounce_A] = touch_own_just_now_A[
+            ~self.has_first_bounce_A
+        ]
         self._table_fail_A = (
             self.has_first_bounce_prev_A.float() * touch_own_just_now_A.float()
         )
@@ -142,12 +158,14 @@ class PingPongEnv(ManagerBasedRLEnv):
 
         # Robot B: own = pos Y zone, opponent = neg Y zone
         touch_own_just_now_B = in_zone_pos & (~self.has_touch_own_table_prev_B)
-        self._table_success_B = (
-            self.has_touch_paddle_B.float() * in_zone_neg.float()
+        self._table_success_B = self.has_touch_paddle_B.float() * in_zone_neg.float()
+        self.has_touch_own_table_prev_B = (
+            self.has_touch_own_table_prev_B | touch_own_just_now_B
         )
-        self.has_touch_own_table_prev_B = self.has_touch_own_table_prev_B | touch_own_just_now_B
         self.has_first_bounce_prev_B = self.has_first_bounce_B.clone()
-        self.has_first_bounce_B[~self.has_first_bounce_B] = touch_own_just_now_B[~self.has_first_bounce_B]
+        self.has_first_bounce_B[~self.has_first_bounce_B] = touch_own_just_now_B[
+            ~self.has_first_bounce_B
+        ]
         self._table_fail_B = (
             self.has_first_bounce_prev_B.float() * touch_own_just_now_B.float()
         )

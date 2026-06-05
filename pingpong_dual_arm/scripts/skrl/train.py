@@ -18,19 +18,69 @@ sys.path.insert(0, os.path.join(_PKG_ROOT, "source", "PingPong"))
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument(
+    "--video", action="store_true", default=False, help="Record videos during training."
+)
+parser.add_argument(
+    "--video_length",
+    type=int,
+    default=200,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--video_interval",
+    type=int,
+    default=2000,
+    help="Interval between video recordings (in steps).",
+)
+parser.add_argument(
+    "--num_envs", type=int, default=None, help="Number of environments to simulate."
+)
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes.")
-parser.add_argument("--checkpoint", type=str, default=None, help="Path to model checkpoint to resume training.")
-parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
-parser.add_argument("--ml_framework", type=str, default="torch", choices=["torch", "jax", "jax-numpy"], help="The ML framework used for training the skrl agent.")
-parser.add_argument("--algorithm", type=str, default="PPO", choices=["AMP", "PPO", "IPPO", "MAPPO"], help="The RL algorithm used for training the skrl agent.")
-parser.add_argument("--ik_solver", type=str, default=None, help="IK solver: diffik, osc, rmpflow, curobo.")
-parser.add_argument("--playing_arm_side", type=str, default="right", help="Which arm holds the racket: left or right.")
+parser.add_argument(
+    "--seed", type=int, default=None, help="Seed used for the environment"
+)
+parser.add_argument(
+    "--distributed",
+    action="store_true",
+    default=False,
+    help="Run training with multiple GPUs or nodes.",
+)
+parser.add_argument(
+    "--checkpoint",
+    type=str,
+    default=None,
+    help="Path to model checkpoint to resume training.",
+)
+parser.add_argument(
+    "--max_iterations", type=int, default=None, help="RL Policy training iterations."
+)
+parser.add_argument(
+    "--ml_framework",
+    type=str,
+    default="torch",
+    choices=["torch", "jax", "jax-numpy"],
+    help="The ML framework used for training the skrl agent.",
+)
+parser.add_argument(
+    "--algorithm",
+    type=str,
+    default="PPO",
+    choices=["AMP", "PPO", "IPPO", "MAPPO"],
+    help="The RL algorithm used for training the skrl agent.",
+)
+parser.add_argument(
+    "--ik_solver",
+    type=str,
+    default=None,
+    help="IK solver: diffik, osc, rmpflow, curobo.",
+)
+parser.add_argument(
+    "--playing_arm_side",
+    type=str,
+    default="right",
+    help="Which arm holds the racket: left or right.",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
@@ -52,7 +102,9 @@ from packaging import version
 
 SKRL_VERSION = "1.4.2"
 if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
-    skrl.logger.error(f"Unsupported skrl version: {skrl.__version__}. Install skrl>={SKRL_VERSION}")
+    skrl.logger.error(
+        f"Unsupported skrl version: {skrl.__version__}. Install skrl>={SKRL_VERSION}"
+    )
     exit()
 
 if args_cli.ml_framework.startswith("torch"):
@@ -60,7 +112,13 @@ if args_cli.ml_framework.startswith("torch"):
 elif args_cli.ml_framework.startswith("jax"):
     from skrl.utils.runner.jax import Runner
 
-from isaaclab.envs import DirectMARLEnv, DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg, multi_agent_to_single_agent
+from isaaclab.envs import (
+    DirectMARLEnv,
+    DirectMARLEnvCfg,
+    DirectRLEnvCfg,
+    ManagerBasedRLEnvCfg,
+    multi_agent_to_single_agent,
+)
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_yaml
@@ -74,13 +132,23 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import PingPong.tasks  # noqa: F401 — registers PingPong-DualArm-Direct-v0
 
 algorithm = args_cli.algorithm.lower()
-agent_cfg_entry_point = "skrl_cfg_entry_point" if algorithm in ["ppo"] else f"skrl_{algorithm}_cfg_entry_point"
+agent_cfg_entry_point = (
+    "skrl_cfg_entry_point"
+    if algorithm in ["ppo"]
+    else f"skrl_{algorithm}_cfg_entry_point"
+)
 
 
 @hydra_task_config(args_cli.task, agent_cfg_entry_point)
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
-    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
-    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+def main(
+    env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict
+):
+    env_cfg.scene.num_envs = (
+        args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    )
+    env_cfg.sim.device = (
+        args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    )
 
     if args_cli.ik_solver is not None:
         env_cfg.ik_solver = args_cli.ik_solver
@@ -91,7 +159,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env_cfg.sim.device = f"cuda:{app_launcher.local_rank}"
 
     if args_cli.max_iterations:
-        agent_cfg["trainer"]["timesteps"] = args_cli.max_iterations * agent_cfg["agent"]["rollouts"]
+        agent_cfg["trainer"]["timesteps"] = (
+            args_cli.max_iterations * agent_cfg["agent"]["rollouts"]
+        )
     agent_cfg["trainer"]["close_environment_at_exit"] = False
 
     if args_cli.ml_framework.startswith("jax"):
@@ -100,13 +170,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.seed == -1:
         args_cli.seed = random.randint(0, 10000)
 
-    agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
+    agent_cfg["seed"] = (
+        args_cli.seed if args_cli.seed is not None else agent_cfg["seed"]
+    )
     env_cfg.seed = agent_cfg["seed"]
 
-    log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
+    log_root_path = os.path.join(
+        "logs", "skrl", agent_cfg["agent"]["experiment"]["directory"]
+    )
     log_root_path = os.path.abspath(log_root_path)
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
-    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_{algorithm}_{args_cli.ml_framework}"
+    log_dir = (
+        datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        + f"_{algorithm}_{args_cli.ml_framework}"
+    )
     if agent_cfg["agent"]["experiment"]["experiment_name"]:
         log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
     agent_cfg["agent"]["experiment"]["directory"] = log_root_path
@@ -121,9 +198,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     with open(os.path.join(log_dir, "params", "agent.pkl"), "wb") as f:
         pickle.dump(agent_cfg, f)
 
-    resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
+    resume_path = (
+        retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
+    )
 
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(
+        args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None
+    )
 
     if isinstance(env.unwrapped, DirectMARLEnv) and algorithm in ["ppo"]:
         env = multi_agent_to_single_agent(env)

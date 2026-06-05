@@ -1,0 +1,56 @@
+#usda 1.0
+(
+    doc ="""Generated from node description file OgnOnKeyboardInput.ogn
+Contains templates for node types found in that file."""
+)
+
+def OmniGraph "TestGraph"
+{
+    token evaluator:type = "push"
+    int2 fileFormatVersion = (1, 3)
+    token flatCacheBacking = "Shared"
+    token pipelineStage = "pipelineStageSimulation"
+
+    def OmniGraphNode "Template_omni_graph_action_OnKeyboardInput" (
+        docs="""Event node which fires when a keyboard event occurs. The event can be any of the keys accepted by 'Key In', plus any combination of modifiers as specified by inputs 'Shift', 'Alt', and 'Ctrl'.
+For key combinations, the press event requires all modifiers to be held, with the 'Key In' pressed last. The release event is only triggered once when one of the chosen keys released after the pressed event happens.
+For example: if the combination is Ctrl-Shift-D, the pressed event happens once right after D is pressed while both Ctrl and Shift are held. The release event happens only once, when the user releases any one of Ctrl, Shift and D while holding them."""
+    )
+    {
+        token node:type = "omni.graph.action.OnKeyboardInput"
+        int node:typeVersion = 4
+
+        # 5 attributes
+        custom bool inputs:altIn = false (
+            docs="""When true, the Alt key modifier must be pressed along with the 'Key In' to activate the output."""
+        )
+        custom bool inputs:ctrlIn = false (
+            docs="""When true, the Ctrl key modifier must be pressed along with the 'Key In' to activate the output."""
+        )
+        custom token inputs:keyIn = "A" (
+            docs="""The key that triggers the downstream execution, not including modifiers."""
+        )
+        custom bool inputs:onlyPlayback = true (
+            docs="""When true, the node is only executed while the Stage is being played."""
+        )
+        custom bool inputs:shiftIn = false (
+            docs="""When true, the Shift key modifier must be pressed along with the 'Key In' to activate the output."""
+        )
+
+        # 4 attributes
+        custom bool outputs:isPressed (
+            docs="""True if the most recent activation was the key being pressed, False if it was released."""
+        )
+        custom token outputs:keyOut (
+            docs="""The key that was pressed or released to trigger the execution of this node."""
+        )
+        custom uint outputs:pressed (
+            docs="""After the key was pressed, along with any required modifiers,
+            signal to the graph that the execution can continue downstream."""
+        )
+        custom uint outputs:released (
+            docs="""After the key or any of the required modifiers were released,
+            signal to the graph that the execution can continue downstream."""
+        )
+    }
+}

@@ -21,8 +21,13 @@ if _PROJECT_ROOT not in sys.path:
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test IK solvers for dual-arm robot.")
-parser.add_argument("--solver", type=str, default="diffik", choices=["diffik", "osc", "rmpflow"],
-                    help="IK solver to test.")
+parser.add_argument(
+    "--solver",
+    type=str,
+    default="diffik",
+    choices=["diffik", "osc", "rmpflow"],
+    help="IK solver to test.",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -78,11 +83,22 @@ class TestIKEnvCfg(ManagerBasedRLEnvCfg):
     class TestObservationsCfg:
         @configclass
         class PolicyCfg(ObsGroup):
-            joint_pos = ObsTerm(func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot")})
-            ee_pos = ObsTerm(func=mdp.body_pos_w, params={"asset_cfg": SceneEntityCfg("robot", body_names="right_wrist_3_link")})
+            joint_pos = ObsTerm(
+                func=mdp.joint_pos, params={"asset_cfg": SceneEntityCfg("robot")}
+            )
+            ee_pos = ObsTerm(
+                func=mdp.body_pos_w,
+                params={
+                    "asset_cfg": SceneEntityCfg(
+                        "robot", body_names="right_wrist_3_link"
+                    )
+                },
+            )
+
             def __post_init__(self):
                 self.enable_corruption = False
                 self.concatenate_terms = True
+
         policy: PolicyCfg = PolicyCfg()
 
     @configclass
@@ -129,11 +145,13 @@ cfg.scene.robot = ArticulationCfg(
     actuators={
         "arm_left": ImplicitActuatorCfg(
             joint_names_expr=["left_shoulder_.*", "left_elbow_.*", "left_wrist_.*"],
-            stiffness=5000.0, damping=200.0,
+            stiffness=5000.0,
+            damping=200.0,
         ),
         "arm_right": ImplicitActuatorCfg(
             joint_names_expr=["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"],
-            stiffness=5000.0, damping=200.0,
+            stiffness=5000.0,
+            damping=200.0,
         ),
     },
 )
@@ -165,7 +183,9 @@ for step in range(500):
 
     if step % 10 == 0:
         ee_pos = env.scene["robot"].data.body_pos_w[:, 0] - env.scene.env_origins
-        print(f"  EE pos: x={ee_pos[0,0]:.3f}, y={ee_pos[0,1]:.3f}, z={ee_pos[0,2]:.3f}")
+        print(
+            f"  EE pos: x={ee_pos[0,0]:.3f}, y={ee_pos[0,1]:.3f}, z={ee_pos[0,2]:.3f}"
+        )
 
 print(f"\n=== IK test complete with solver '{args_cli.solver}' ===")
 env.close()

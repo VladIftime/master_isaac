@@ -25,8 +25,8 @@ if _PROJECT_ROOT not in sys.path:
 
 import torch
 import torch._dynamo  # noqa: F401
-import torch._C       # noqa: F401
-import torch.optim    # noqa: F401
+import torch._C  # noqa: F401
+import torch.optim  # noqa: F401
 
 from isaaclab.app import AppLauncher
 import argparse
@@ -43,8 +43,15 @@ OUTPUT_DIR = os.path.join(_PROJECT_ROOT, "assets", "pingpong")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-def add_physics_to_mesh(input_usd, output_usd, mass=None, kinematic=False,
-                         restitution=0.5, static_friction=0.5, dynamic_friction=0.5):
+def add_physics_to_mesh(
+    input_usd,
+    output_usd,
+    mass=None,
+    kinematic=False,
+    restitution=0.5,
+    static_friction=0.5,
+    dynamic_friction=0.5,
+):
     """Open a visual USD mesh, add RigidBodyAPI + collision + physics, save."""
     print(f"  Input:  {input_usd}")
     print(f"  Output: {output_usd}")
@@ -62,8 +69,9 @@ def add_physics_to_mesh(input_usd, output_usd, mass=None, kinematic=False,
             continue
         src_path = str(src_prim.GetPath())
         dst_stage.OverridePrim(src_path)
-        Sdf.CopySpec(src_stage.GetRootLayer(), src_path,
-                     dst_stage.GetRootLayer(), src_path)
+        Sdf.CopySpec(
+            src_stage.GetRootLayer(), src_path, dst_stage.GetRootLayer(), src_path
+        )
 
     # Find the first mesh prim as the root
     mesh_root = None
@@ -102,12 +110,16 @@ def add_physics_to_mesh(input_usd, output_usd, mass=None, kinematic=False,
     if coll_count == 0:
         # No mesh prims found — add collision from bounding box
         print("  No mesh prims found, adding box collision")
-        bbox = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_]).ComputeWorldBound(mesh_root)
+        bbox = UsdGeom.BBoxCache(
+            Usd.TimeCode.Default(), [UsdGeom.Tokens.default_]
+        ).ComputeWorldBound(mesh_root)
         bbox_range = bbox.GetRange()
         center = (bbox_range.GetMin() + bbox_range.GetMax()) * 0.5
         size = bbox_range.GetSize()
 
-        collision_prim = UsdGeom.Cube.Define(dst_stage, mesh_root.GetPath().AppendChild("collision"))
+        collision_prim = UsdGeom.Cube.Define(
+            dst_stage, mesh_root.GetPath().AppendChild("collision")
+        )
         collision_prim.AddTranslateOp().Set(Gf.Vec3d(center[0], center[1], center[2]))
         collision_prim.AddScaleOp().Set(Gf.Vec3d(size[0] / 2, size[1] / 2, size[2] / 2))
         PhysxSchema.PhysxCollisionAPI.Apply(collision_prim.GetPrim())
@@ -126,7 +138,8 @@ def add_physics_to_mesh(input_usd, output_usd, mass=None, kinematic=False,
     for prim in dst_stage.Traverse():
         if prim.HasAPI(UsdPhysics.CollisionAPI):
             UsdShade.MaterialBindingAPI.Apply(prim).Bind(
-                UsdShade.Material.Get(dst_stage, mat_path))
+                UsdShade.Material.Get(dst_stage, mat_path)
+            )
 
     dst_stage.SetDefaultPrim(mesh_root)
     dst_stage.GetRootLayer().Save()

@@ -60,7 +60,9 @@ def robot_joint_velocities(
 
 def ee_poses(
     env: ManagerBasedRLEnv,
-    ee_cfg: SceneEntityCfg = SceneEntityCfg("robot_A", body_names=["right_wrist_3_link"]),
+    ee_cfg: SceneEntityCfg = SceneEntityCfg(
+        "robot_A", body_names=["right_wrist_3_link"]
+    ),
 ) -> torch.Tensor:
     """End-effector pose in environment-local coordinates.
 
@@ -95,7 +97,9 @@ def ball_state(
 def ball_to_robot_relative(
     env: ManagerBasedRLEnv,
     ball_cfg: SceneEntityCfg = SceneEntityCfg("ball"),
-    robot_body_cfg: SceneEntityCfg = SceneEntityCfg("robot_A", body_names=["body_base_link"]),
+    robot_body_cfg: SceneEntityCfg = SceneEntityCfg(
+        "robot_A", body_names=["body_base_link"]
+    ),
 ) -> torch.Tensor:
     """Ball position relative to a robot's base link.
 

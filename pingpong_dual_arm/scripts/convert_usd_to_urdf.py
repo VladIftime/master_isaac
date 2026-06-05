@@ -19,11 +19,12 @@ if _PROJECT_ROOT not in sys.path:
 
 import torch
 import torch._dynamo  # noqa: F401
-import torch._C       # noqa: F401
-import torch.optim    # noqa: F401
+import torch._C  # noqa: F401
+import torch.optim  # noqa: F401
 
 from isaaclab.app import AppLauncher
 import argparse
+
 parser = argparse.ArgumentParser()
 AppLauncher.add_app_launcher_args(parser)
 app = AppLauncher(parser.parse_args([]))
