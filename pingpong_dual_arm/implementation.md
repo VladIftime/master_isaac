@@ -24,7 +24,9 @@ pingpong_dual_arm/
 │               └── agents/
 │                   └── skrl_ppo_cfg.yaml  # PPO agent configuration
 ├── ik_solvers/                            # Swappable IK solver builders
-│   └── __init__.py
+│   ├── __init__.py                        # build_ik_action() dispatcher
+│   ├── curobo_ik.py                       # Direct cuRobo IKSolver action term
+│   └── ur5e_arm.yml                       # cuRobo robot config (base_link_inertia → wrist_3_link)
 ├── tasks/                                 # Environment implementation
 │   ├── __init__.py
 │   ├── pingpong_env_cfg.py                # Scene + MDP config (full game logic)
@@ -39,6 +41,7 @@ pingpong_dual_arm/
 │   │   └── play.py                        # Inference / playback
 │   ├── test_env.py                        # Launch & step environment
 │   ├── pingpong_swing.py                  # Swing demo with macro primitives
+│   ├── test_ik_swing.py                   # IK solver benchmark (sinusoidal sweep)
 │   ├── test_ik.py                         # Compare IK solvers on reach tasks
 │   ├── random_policy.py                   # Random action rollout
 │   └── convert_meshes.py                  # STL → USD with MeshConverter
@@ -187,15 +190,68 @@ Alternating server each episode, ball spawns **outside** table zones:
 ## IK Solvers (`ik_solvers/`)
 
 Builder functions that return `ActionTermCfg` for a specific arm on a specific
-robot. Each solver uses `use_relative_mode=True` with `command_type="pose"`,
-producing 6D relative delta actions [dx, dy, dz, droll, dpitch, dyaw].
+robot. All solvers use the same **relative delta** action format: `[dx, dy, dz,
+droll, dpitch, dyaw]`.  The deltas are accumulated onto the current EE pose by
+each solver's controller.
 
 | Solver | Isaac Lab Class | Controller | Key Param |
 |--------|----------------|------------|-----------|
 | `diffik` | `DifferentialInverseKinematicsActionCfg` | Damped Least Squares | `lambda_val=0.1` |
 | `osc` | `OperationalSpaceControllerActionCfg` | Variable-KP impedance | `stiffness=[360]×6` |
 | `rmpflow` | `RMPFlowActionCfg` | Lula GPU motion policies | YAML configs |
-| `curobo` | Falls back to DiffIK | GPU nonlinear IK | Requires `curobo` |
+| `curobo` | `CuroboIKActionCfg` (custom) | cuRobo LBFGS optimizer (GPU) | `num_seeds=10`, `newton_iters=30` |
+
+### cuRobo Solver Details (`ik_solvers/curobo_ik.py`)
+
+The curobo solver is a custom `ActionTerm` that calls cuRobo's `IKSolver`
+directly.  Key characteristics:
+
+- **Action format**: 6-D **relative delta** `(dx, dy, dz, droll, dpitch, dyaw)` —
+  same as all other solvers.  `apply_actions()` accumulates the delta onto the
+  current EE world pose, then converts the absolute target to the UR5e arm base
+  frame before calling `solve_batch()`.
+- **Frame conversion**: The dual-arm URDF mounts UR5e arms on a body.  The arm
+  base is at `{side}_base_link_inertia` (not the articulation root).
+  `apply_actions()` subtracts the arm base world position and rotates by the
+  inverse base quaternion to express the target in the UR5e model's coordinate
+  frame.  The base quaternion includes the accumulated rotation from
+  `body_base_link` through all fixed joints: `world_to_body_joint` (90° Z) +
+  `{side}_base_joint` (-90° Z) + `{side}_base_link-base_link_inertia` (180° Z)
+  = net 180° Z.  Both position AND orientation are frame-converted using
+  `quat_apply(base_quat_inv, rel)` and `quat_mul(base_quat_inv, target_quat_w)`
+  respectively.
+- **Orientation accumulation**: The rotation delta from the action is
+  accumulated onto the current EE quaternion via
+  `target_quat_w = quat_mul(delta_quat, ee_quat_w)`.  When `delta_quat` is
+  identity (rotation error ≈ 0), this preserves the current EE orientation.
+  Previously the code assigned `target_quat_w = delta_quat` (treating the delta
+  as an absolute orientation from identity), which produced an identity
+  orientation target and caused IK to compromise position accuracy.
+- **Custom robot model**: Uses `ik_solvers/ur5e_arm.yml` instead of the
+  built-in cuRobo `ur5e.yml`.  Key differences from the built-in config:
+  - `base_link: "base_link_inertia"` — matches the simulation arm's FK root
+    (`right_base_link_inertia`), skipping the identity `base_link` frame.
+  - `ee_link: "wrist_3_link"` — matches the simulation's EE body
+    (`right_wrist_3_link`), instead of `tool0` which has extra fixed-joint
+    rotations (`wrist_3 → flange → tool0`) that shift the IK solution.
+  - `retract_config: [0.0, -1.57, 1.57, -1.57, -1.57, 0.0]` — matches the
+    simulation's actual initial joint configuration.
+  - No collision spheres or self-collision ignores (`world_model=None`).
+- **CUDA graphs**: `use_cuda_graph=True` with a warm-up `solve_batch()` call
+  at initialization.  Provides ~10x speedup by capturing the LBFGS kernel
+  graph once.  Warm-up parameters must exactly match runtime calls
+  (`num_seeds=1`, `use_nn_seed=False`, `newton_iters=30`) to avoid a graph-reset
+  crash on CUDA < 12.0.
+- **Tuned LBFGS**: Outer iterations 30, inner iterations 10 (defaults were
+  100/25).  Sufficient for step-by-step control where consecutive targets are
+  close.
+- **Retract config**: The current joint state is passed as `retract_config` to
+  regularize solutions toward the current pose, improving convergence and
+  smoothness.
+- **Swing benchmark**: `scripts/test_ik_swing.py` computes a sinusoidal XY
+  arc anchored at the initial EE position.  Targets are relative to the fixed
+  starting pose — not the moving current pose — to prevent chasing drift.
+  Blue/red path markers visualize the intended arc.
 
 Joint name patterns per side:
 - Right arm: `right_shoulder_.*`, `right_elbow_.*`, `right_wrist_.*`
@@ -277,7 +333,16 @@ Action space: Box (12,) per env
   arm_B (6:12):  [dx, dy, dz, droll, dpitch, dyaw]  — robot B playing arm
 ```
 
-DiffIK with `use_relative_mode=True`, scale=0.15. Configurable via `ik_solver`.
+All IK solvers use the same 6-D **relative delta** format.  The delta is
+accumulated onto the current end-effector pose by each solver's controller:
+
+| Solver | Accumulation | Description |
+|--------|-------------|-------------|
+| `diffik`, `osc`, `rmpflow` | `use_relative_mode=True` with `scale=0.15` | Isaac Lab internally accumulates deltas |
+| `curobo` | Manual accumulation in `apply_actions()` | `target_world = ee_pos_w + delta`, then frame-converted to arm base frame |
+
+For `diffik`/`osc`/`rmpflow`, scale=0.15 (default, overridable).  For
+`curobo`, no scaling is applied — the raw delta is used directly.
 
 ### Observations
 
@@ -443,13 +508,62 @@ obs, reward, terminated, truncated, info = env.step(action)
    Isaac Sim 5.1.0-rc.19 PhysX expects CPU indices. Works with `--device cpu`
    or inside the Apptainer container with matched versions.
 
-2. **Rackets are fixed attachments**: Rackets are fixed child links of each arm's `tool0` frame in the URDF articulation. No compliant contact — virtual contact detection is used for game logic instead.
+2. **Rackets are fixed attachments**: Rackets are fixed child links of each arm's
+   `tool0` frame in the URDF articulation. No compliant contact — virtual
+   contact detection is used for game logic instead.
 
-3. **Left arms uncontrolled**: Only the configured playing arm receives IK commands.
-   Both arms' joints are observed.
+3. **Left arms uncontrolled**: Only the configured playing arm receives IK
+   commands.  Both arms' joints are observed.
 
 4. **Self-play reward**: Both robots share a combined reward signal. May need
    separate reward optimization for competitive play.
+
+5. **cuRobo kinematic model mismatch**: The cuRobo solver loads a **separate
+   URDF** (standard `ur5e.urdf`) and computes FK/IK independently of the
+   simulation. For the IK solution to match the simulation's actual EE pose
+   when the same joint angles are applied, **four conditions** must hold:
+
+   | # | Condition | Status |
+   |---|-----------|--------|
+   | 1 | **Same FK root** — cuRobo's `base_link` and the simulation arm base must start from the same link in the kinematic tree | ✅ `base_link_inertia` (both models) |
+   | 2 | **Same EE link** — cuRobo's `ee_link` and the simulation's tracked body must be the same link with the same fixed-joint offsets | ✅ `wrist_3_link` (both models) |
+   | 3 | **Same joint axes / directions** — all revolute joint axes and sign conventions must match between the two URDFs | ⚠️ Standard UR5e matches, but verify after modifying URDF |
+   | 4 | **Same target frame conversion** — position AND orientation must both be frame-converted from world to arm-base frame | ✅ Both `quat_apply` and `quat_mul` applied |
+
+   If any condition is violated, cuRobo produces joint solutions that place
+   the EE at a different world position/orientation than intended. Common
+   symptoms and root causes tested during development:
+
+   | Symptom | Root Cause |
+   |---------|-----------|
+   | Catastrophic error growth (15cm → 130cm), reset at cycle boundaries | `ee_link: "tool0"` instead of `"wrist_3_link"` — extra `wrist_3→flange→tool0` fixed-joint rotations caused cuRobo to compute wrong wrist angles, cascading into a 167° shoulder_pan swing to compensate |
+   | 10-15cm offset in all directions, constant over time | `target_quat_w = delta_quat` (absolute identity) instead of `quat_mul(delta_quat, ee_quat_w)` (accumulated) — IK compromised position for wrong orientation target |
+   | IK returns `success=False` for all targets (freezes arm) | Too few LBFGS iterations (`n_iters < 20`) or `ee_link`/`base_link` mismatch making targets unreachable in cuRobo's FK |
+   | Arm moves in opposite Y direction | Orientation not frame-converted (`quat = target_quat_w` instead of `quat_mul(base_quat_inv, target_quat_w)`) — inconsistent pose passed to solver |
+
+   **Debugging cuRobo IK mismatches**: Add temporary `print()` calls in
+   `apply_actions()` to log:
+
+   ```
+   cur_joints, ee_pos_w, target_pos_w, base_pos_w, base_quat_w,
+   goal pos (base frame), solution joints, IK success
+   ```
+
+   Then manually compare forward kinematics:
+   - Use cuRobo's FK (or a standalone URDF tool) with the solution joints
+   - Use the simulation's FK (or the Isaac Lab body pose API) with the same joints
+   - If the two EE positions differ significantly, conditions 1-3 are violated.
+
+   **When adding/modifying arms in the URDF**: Always create a custom cuRobo
+   YAML with the correct `base_link` and `ee_link` for the new arm. The
+   `base_link` should be the immediate parent of `shoulder_pan_joint` in the
+   URDF tree. The `ee_link` should match the body name tracked by the
+   simulation (set in `ik_solvers/__init__.py`→`_DEFAULT_BODY_NAMES`).
+
+6. **cuRobo CUDA graph requires CUDA ≥ 12.0 for resets**: The cuRobo solver
+   uses `use_cuda_graph=True` for ~10x performance.  The warm-up call must
+   exactly match the runtime `solve_batch()` arguments; any parameter mismatch
+   triggers a graph reset which crashes on CUDA 11.x.
 
 ## Mesh Assets & Conversion
 

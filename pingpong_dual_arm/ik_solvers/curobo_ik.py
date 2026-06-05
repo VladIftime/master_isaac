@@ -1,15 +1,17 @@
 """cuRobo inverse kinematics action term for Isaac Lab.
 
-Calls cuRobo IKSolver directly — no redundant wrapper layers, no double-scaling.
-In absolute mode, the 6-D action = (x, y, z, roll, pitch, yaw) target pose in
-the robot base frame.  RPY is converted to quaternion per environment.
+Calls cuRobo IKSolver directly with frame conversion from env-local to the
+UR5e arm base frame (*_base_link_inertia).  The 6-D action is a relative delta
+[dx,dy,dz,droll,dpitch,dyaw]; apply_actions() accumulates it onto the current
+EE pose, converts to the arm base frame, and calls solve_batch().
 
-Matches the fast, stable pattern from asyncDualPlayPPO.
+CUDA graphs enabled for ~10x speedup; LBFGS tuned to 30/10 iterations.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -30,7 +32,7 @@ try:
     from curobo.types.math import Pose
     from curobo.types.robot import RobotConfig
     from curobo.types.base import TensorDeviceType
-    from curobo.util_file import get_robot_configs_path, join_path, load_yaml
+    from curobo.util_file import get_robot_configs_path, load_yaml
     _CUROBO_AVAILABLE = True
 except ImportError:
     pass
@@ -51,10 +53,11 @@ def _rpy_to_quat(roll: torch.Tensor, pitch: torch.Tensor, yaw: torch.Tensor):
 
 
 class CuroboInverseKinematicsAction(ActionTerm):
-    """cuRobo IK action — calls solve_batch() each step.
+    """cuRobo IK action — calls solve_batch() each step with frame conversion.
 
-    Action format (6-D per env): (x, y, z, roll, pitch, yaw) absolute target
-    pose in the robot base frame.
+    Action format (6-D per env): (dx, dy, dz, droll, dpitch, dyaw) relative delta.
+    The delta is accumulated onto the current EE pose, then the absolute target
+    is converted from env-local to the arm base frame before calling cuRobo.
     """
 
     cfg: CuroboIKActionCfg
@@ -78,17 +81,22 @@ class CuroboInverseKinematicsAction(ActionTerm):
             )
         self._body_idx = body_ids[0]
 
-        # Find arm base body for frame conversion (env-local → UR5e base frame)
-        _side = self._joint_names[0].split("_")[0]  # "right" or "left"
+        # Find arm base body for frame conversion
+        _side = self._joint_names[0].split("_")[0]
         _arm_base_name = f"{_side}_base_link_inertia"
         try:
-            _base_ids, _ = self._asset.find_bodies(_arm_base_name)
+            _base_ids, __ = self._asset.find_bodies(_arm_base_name)
         except ValueError:
             _base_ids = []
         self._arm_base_idx: int | None = _base_ids[0] if len(_base_ids) > 0 else None
 
         tensor_args = TensorDeviceType(device=self.device, dtype=torch.float32)
-        ur_yaml = load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
+        _custom_yaml = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ur5e_arm.yml")
+        _content_dir = os.path.dirname(os.path.dirname(get_robot_configs_path()))
+        _urdf_path = os.path.join(_content_dir, "assets", "robot", "ur_description", "ur5e.urdf")
+        ur_yaml = load_yaml(_custom_yaml)
+        ur_yaml["robot_cfg"]["kinematics"]["urdf_path"] = _urdf_path
+        ur_yaml["robot_cfg"]["kinematics"]["asset_root_path"] = os.path.dirname(_urdf_path)
         robot_cfg = RobotConfig.from_dict(ur_yaml["robot_cfg"], tensor_args)
         ik_cfg = IKSolverConfig.load_from_robot_config(
             robot_cfg,
@@ -99,16 +107,12 @@ class CuroboInverseKinematicsAction(ActionTerm):
             rotation_threshold=self.cfg.rotation_threshold,
             use_cuda_graph=True,
         )
-        # Tune LBFGS: fewer iterations, same quality for step-by-step control
         ik_cfg.solver.newton_optimizer.n_iters = 30
         ik_cfg.solver.newton_optimizer.inner_iters = 10
         self._solver = IKSolver(ik_cfg)
 
-        # Warm-up: capture CUDA graph once for the fixed batch size
-        logger.info(
-            f"[cuRobo] Warming up CUDA graph for N={self.num_envs} envs, "
-            f"num_seeds={self.cfg.num_seeds}..."
-        )
+        # Warm-up: capture CUDA graph
+        logger.info("[cuRobo] Warming up CUDA graph...")
         _wup_pos = torch.zeros(self.num_envs, 3, device=self.device)
         _wup_quat = torch.tensor(
             [[0.0, 1.0, 0.0, 0.0]], device=self.device, dtype=torch.float32
@@ -141,20 +145,38 @@ class CuroboInverseKinematicsAction(ActionTerm):
         self._raw_actions[:] = actions
 
     def apply_actions(self):
+        from isaaclab.utils.math import quat_apply, quat_mul
+
         cur_joints = self._asset.data.joint_pos[:, self._joint_ids]
         N = cur_joints.shape[0]
 
-        pos = self._raw_actions[:, :3]
-        roll = self._raw_actions[:, 3]
-        pitch = self._raw_actions[:, 4]
-        yaw = self._raw_actions[:, 5]
+        # Relative delta from action
+        delta_pos = self._raw_actions[:, :3]
+        delta_roll = self._raw_actions[:, 3]
+        delta_pitch = self._raw_actions[:, 4]
+        delta_yaw = self._raw_actions[:, 5]
+
+        # Current EE pose in world frame
+        ee_pos_w = self._asset.data.body_pos_w[:, self._body_idx]
+        ee_quat_w = self._asset.data.body_quat_w[:, self._body_idx]
+
+        # Target absolute pose in world frame = current + delta
+        target_pos_w = ee_pos_w + delta_pos
+        delta_quat = _rpy_to_quat(delta_roll, delta_pitch, delta_yaw)
+        target_quat_w = quat_mul(delta_quat, ee_quat_w)
 
         if self._arm_base_idx is not None:
             base_pos_w = self._asset.data.body_pos_w[:, self._arm_base_idx]
-            env_origins = self._env.scene.env_origins
-            pos = (pos + env_origins) - base_pos_w
+            base_quat_w = self._asset.data.body_quat_w[:, self._arm_base_idx]
+            base_quat_inv = base_quat_w.clone()
+            base_quat_inv[:, 1:] *= -1.0
 
-        quat = _rpy_to_quat(roll, pitch, yaw)
+            rel = target_pos_w - base_pos_w
+            pos = quat_apply(base_quat_inv, rel)
+            quat = quat_mul(base_quat_inv, target_quat_w)
+        else:
+            pos = target_pos_w
+            quat = target_quat_w
 
         goal_pose = Pose(
             position=pos.unsqueeze(1),
@@ -190,8 +212,7 @@ class CuroboInverseKinematicsAction(ActionTerm):
 class CuroboIKActionCfg(ActionTermCfg):
     """Configuration for cuRobo inverse kinematics action term.
 
-    The 6-D action is an absolute target pose (x, y, z, roll, pitch, yaw)
-    in the robot base frame.
+    The 6-D action is a relative delta (dx, dy, dz, droll, dpitch, dyaw).
     """
 
     class_type: type[ActionTerm] = CuroboInverseKinematicsAction

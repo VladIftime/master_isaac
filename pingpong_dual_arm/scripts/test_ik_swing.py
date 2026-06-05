@@ -53,7 +53,7 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from isaaclab.utils.math import compute_pose_error, euler_xyz_from_quat
+from isaaclab.utils.math import compute_pose_error
 
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 import isaaclab.sim as sim_utils
@@ -241,13 +241,14 @@ def run_indefinite(solver_name: str) -> dict:
             sin_a = math.sin(2.0 * math.pi * swing_step / args_cli.period)
             sin_b = math.sin(2.0 * math.pi * swing_step / args_cli.period + math.pi)
 
-            target_x_a = curr_a_pos[0, 0].item() + args_cli.amp * sin_a
-            target_y_a = curr_a_pos[0, 1].item() + args_cli.depth * (1.0 - sin_a ** 2)
-            target_x_b = curr_b_pos[0, 0].item() + args_cli.amp * sin_b
-            target_y_b = curr_b_pos[0, 1].item() - args_cli.depth * (1.0 - sin_b ** 2)
+            # Fixed arc path — targets relative to initial EE position
+            target_x_a = a_pos[0, 0].item() + args_cli.amp * sin_a
+            target_y_a = a_pos[0, 1].item() + args_cli.depth * (1.0 - sin_a ** 2)
+            target_x_b = b_pos[0, 0].item() + args_cli.amp * sin_b
+            target_y_b = b_pos[0, 1].item() - args_cli.depth * (1.0 - sin_b ** 2)
 
             target_a = torch.tensor(
-                [[target_x_a, target_y_a, curr_a_pos[0, 2].item()]],
+                [[target_x_a, target_y_a, a_pos[0, 2].item()]],
                 device=device,
             )
             pos_a_err, rot_a_err = compute_pose_error(
@@ -259,7 +260,7 @@ def run_indefinite(solver_name: str) -> dict:
             rot_errors_all.append(rot_a_err.norm(dim=-1).item())
 
             target_b = torch.tensor(
-                [[target_x_b, target_y_b, curr_b_pos[0, 2].item()]],
+                [[target_x_b, target_y_b, b_pos[0, 2].item()]],
                 device=device,
             )
             pos_b_err, rot_b_err = compute_pose_error(
@@ -269,14 +270,8 @@ def run_indefinite(solver_name: str) -> dict:
             )
 
             action = torch.zeros(1, env.action_space.shape[1], device=device)
-            if solver_name == "curobo":
-                rpy_a = torch.stack(euler_xyz_from_quat(curr_a_quat), dim=-1)
-                rpy_b = torch.stack(euler_xyz_from_quat(curr_b_quat), dim=-1)
-                action[0, 0:6] = torch.cat([target_a[0], rpy_a[0]], dim=-1)
-                action[0, 6:12] = torch.cat([target_b[0], rpy_b[0]], dim=-1)
-            else:
-                action[0, 0:6] = torch.cat([pos_a_err[0], rot_a_err[0]], dim=-1)
-                action[0, 6:12] = torch.cat([pos_b_err[0], rot_b_err[0]], dim=-1)
+            action[0, 0:6] = torch.cat([pos_a_err[0], rot_a_err[0]], dim=-1)
+            action[0, 6:12] = torch.cat([pos_b_err[0], rot_b_err[0]], dim=-1)
 
             if solver_name == "osc":
                 ra = env.scene["robot_A"]
