@@ -99,6 +99,10 @@ def main():
     parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
                         help="Append object-relative goal delta (dx, dy) to observation (28D→30D). "
                              "Gives the policy direct access to push direction without learning atan2.")
+    parser.add_argument("--rel-act", action="store_true", dest="rel_act",
+                        help="Decode push approach as object-relative (r, φ) instead of absolute (Xs, Ys). "
+                             "Guarantees the approach point is always near the object regardless of spawn position. "
+                             "Push direction θ stays world-frame. Requires object position in observation (always present).")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -138,6 +142,9 @@ def main():
     from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
     from asyncDualPlayPPO.tasks.utils.action_push import (
         decode_push_action, compute_push_waypoints, total_push_substeps,
+    )
+    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+        decode_push_action_relative,
     )
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
@@ -526,7 +533,16 @@ def main():
                     hidden_state[0] = new_h[0]
                     hidden_state[1] = new_h[1]
 
-            Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
+            if args.rel_act:
+                obj_x = obs[:, env.robot_dim]
+                obj_y = obs[:, env.robot_dim + 1]
+                obj_yaw = obs[:, env.robot_dim + 5]
+                obj_xy = torch.stack([obj_x, obj_y], dim=-1)
+                Xs, Ys, length, theta = decode_push_action_relative(
+                    actions, obj_xy, obj_yaw, num_bins=num_bins,
+                )
+            else:
+                Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
             Xf = Xs + length * torch.cos(theta)
             Yf = Ys + length * torch.sin(theta)
 
@@ -543,12 +559,20 @@ def main():
                 has_len = length.abs() > 0.001
                 for e in range(env.num_envs):
                     if has_len[e]:
-                        _pr(
-                            f"    env {e}: bins=({', '.join(f'{int(actions[e,i].item()):2d}' for i in range(4))})  "
-                            f"Xs={float(Xs[e]):+.3f} Ys={float(Ys[e]):+.3f} "
-                            f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°  "
-                            f"→ Xf={float(Xf[e]):+.3f} Yf={float(Yf[e]):+.3f}"
-                        )
+                        if args.rel_act:
+                            r_e = float(torch.sqrt((Xs[e] - obs_pre_push[e, env.robot_dim])**2 + (Ys[e] - obs_pre_push[e, env.robot_dim + 1])**2).item())
+                            _pr(
+                                f"    env {e}: bins=({', '.join(f'{int(actions[e,i].item()):2d}' for i in range(4))})  "
+                                f"r={r_e:.3f} len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°  "
+                                f"→ Xf={float(Xf[e]):+.3f} Yf={float(Yf[e]):+.3f}"
+                            )
+                        else:
+                            _pr(
+                                f"    env {e}: bins=({', '.join(f'{int(actions[e,i].item()):2d}' for i in range(4))})  "
+                                f"Xs={float(Xs[e]):+.3f} Ys={float(Ys[e]):+.3f} "
+                                f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°  "
+                                f"→ Xf={float(Xf[e]):+.3f} Yf={float(Yf[e]):+.3f}"
+                            )
 
             # ── Execute push trajectory (gripper always closed) ────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
@@ -622,7 +646,16 @@ def main():
                 ri = env._last_rot_imp.mean().item()
                 dp = env._last_penalty.mean().item()
                 cb = env._last_completion.mean().item()
-                if args.rel_obs:
+                if args.rel_act:
+                    r_avg = (torch.sqrt((Xs - (obs_pre_push[:, env.robot_dim]))**2 + (Ys - (obs_pre_push[:, env.robot_dim + 1]))**2)).mean().item()
+                    _pr(
+                        f"  [Push {push_step:3d}] "
+                        f"rew={reward.mean().item():+.3f}  (pos={pi:+.3f} rot={ri:+.3f} dist={dp:+.3f} bonus={cb:+.3f})  "
+                        f"pos_err={env._last_pos_err.mean().item():.3f}  rot_err={env._last_rot_err.mean().item():.3f}  "
+                        f"at_goal={cur_at_goal.sum().item():.0f}/{env.num_envs}  "
+                        f"r={r_avg:.2f} len={float(length.mean().item()):.2f} θ={math.degrees(float(theta.mean().item())):.0f}°"
+                    )
+                elif args.rel_obs:
                     rel_dx_avg = obs[:, 28].mean().item()
                     rel_dy_avg = obs[:, 29].mean().item()
                     _pr(
@@ -698,8 +731,13 @@ def main():
                 needs_reset = done
                 if needs_reset.any():
                     reset_ids = torch.where(needs_reset)[0]
-                    obs_dict_r, _ = env.env.reset(env_ids=reset_ids)
-                    obs_new = env._build_obs(obs_dict_r)
+                    env.env.reset(env_ids=reset_ids)
+                    env._randomize_object_spawn(reset_ids)
+                    env._sample_goals_filtered(reset_ids)
+                    env._update_goal_in_extras()
+                    env._move_goal_ghost(reset_ids)
+                    env._ep_started[reset_ids] = False
+                    obs_new = env._get_push_obs()
                     obs[needs_reset] = obs_new[needs_reset]
                     _update_goal_markers()
                 ee_pos_local[done] = _tcp_pos_local()[done]
@@ -754,7 +792,14 @@ def main():
         # Single compact iteration line — machine-parseable
         avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"
         trend = "↓" if loss_delta < -0.01 else ("↑" if loss_delta > 0.01 else "→")
-        _mode = "rel" if args.rel_obs else "abs"
+        if args.rel_act and args.rel_obs:
+            _mode = "rel_full"
+        elif args.rel_act:
+            _mode = "rel_act"
+        elif args.rel_obs:
+            _mode = "rel_obs"
+        else:
+            _mode = "abs"
         _pr(
             f"[Iter {iteration:5d}] "
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
