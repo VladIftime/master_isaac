@@ -88,9 +88,28 @@ class CuroboInverseKinematicsAction(ActionTerm):
             num_seeds=self.cfg.num_seeds,
             position_threshold=self.cfg.position_threshold,
             rotation_threshold=self.cfg.rotation_threshold,
-            use_cuda_graph=False,
+            use_cuda_graph=True,
         )
+        # Tune LBFGS: fewer iterations, same quality for step-by-step control
+        ik_cfg.solver.newton_optimizer.n_iters = 30
+        ik_cfg.solver.newton_optimizer.inner_iters = 10
         self._solver = IKSolver(ik_cfg)
+
+        # Warm-up: capture CUDA graph once for the fixed batch size
+        logger.info(
+            f"[cuRobo] Warming up CUDA graph for N={self.num_envs} envs, "
+            f"num_seeds={self.cfg.num_seeds}..."
+        )
+        _wup_pos = torch.zeros(self.num_envs, 3, device=self.device)
+        _wup_quat = torch.tensor(
+            [[0.0, 1.0, 0.0, 0.0]], device=self.device, dtype=torch.float32
+        ).expand(self.num_envs, 4)
+        self._solver.solve_batch(
+            Pose(position=_wup_pos.unsqueeze(1), quaternion=_wup_quat.unsqueeze(1)),
+            seed_config=torch.zeros(self.num_envs, 1, 6, device=self.device),
+            retract_config=torch.zeros(self.num_envs, 6, device=self.device),
+        )
+        logger.info("[cuRobo] Warm-up done.")
 
         self._raw_actions = torch.zeros(self.num_envs, self.action_dim, device=self.device)
 
@@ -127,6 +146,7 @@ class CuroboInverseKinematicsAction(ActionTerm):
         result = self._solver.solve_batch(
             goal_pose,
             seed_config=cur_joints.unsqueeze(1),
+            retract_config=cur_joints,
             use_nn_seed=False,
             num_seeds=1,
             newton_iters=30,
