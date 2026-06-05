@@ -2,6 +2,7 @@
 *.log
 *.pt
 *.out
+*.dat
 runs/
 asyncDualPlayPPO/logs/
 *.pyc
