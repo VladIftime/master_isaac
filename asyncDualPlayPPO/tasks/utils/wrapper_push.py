@@ -153,14 +153,14 @@ class PushEnvWrapper:
         self._gave_rot_bonus.zero_()
         self._ep_started.zero_()
 
-        obs_dict = self.env.reset()[0]
+        self.env.reset()
         all_ids = torch.arange(self.num_envs, device=self.device)
-        self._sample_goals(all_ids)
+        self._randomize_object_spawn(all_ids)
+        self._sample_goals_filtered(all_ids)
         self._update_goal_in_extras()
         self._move_goal_ghost(all_ids)
-        obs = self._build_obs(obs_dict)
+        obs = self._get_push_obs()
         self._capture_prev_obj(obs)
-
         return obs
 
     def step(self, action: torch.Tensor):
@@ -182,6 +182,38 @@ class PushEnvWrapper:
             rel_dy = (goal_pos[:, 1:2] - obj_pos[:, 1:2])
             obs = torch.cat([obs, rel_dx, rel_dy], dim=-1)
         return obs
+
+    def _get_push_obs(self) -> torch.Tensor:
+        """Recompute push observation from current sim state (after object moves).
+        
+        Calls observation_manager.compute() outside env.step() — safe because
+        the only observation group (push_policy) has no side effects
+        (no sensors, no cameras).  The low-volume print confirms call frequency."""
+        print("[P5 check] _get_push_obs: observation_manager.compute() called outside step()", flush=True)
+        self._update_goal_in_extras()
+        obs_dict = self.env.observation_manager.compute()
+        return self._build_obs(obs_dict)
+
+    def _randomize_object_spawn(self, env_ids: torch.Tensor):
+        """Teleport the target object to a random position within workspace.
+        X∈[-0.4,0.4] Y∈[0.3,0.7] Z=0.05 yaw∈[0,2π] — same ranges as goals.
+        Forces the policy to read the observation instead of memorizing (0, 0.5)."""
+        if len(env_ids) == 0:
+            return
+        N = len(env_ids)
+        ox = torch.empty(N, device=self.device).uniform_(*_GOAL_X_RANGE)
+        oy = torch.empty(N, device=self.device).uniform_(*_GOAL_Y_RANGE)
+        oz = torch.full((N,), 0.05, device=self.device)
+        oyaw = torch.empty(N, device=self.device).uniform_(0, 2 * torch.pi)
+        oeuler = torch.zeros(N, 3, device=self.device)
+        oeuler[:, 2] = oyaw
+
+        origins = self.env.scene.env_origins[env_ids]
+        pos_local = torch.stack([ox, oy, oz], dim=-1)
+        pos_world = pos_local + origins
+        quat = _euler_to_quat(oeuler)
+        pose_7d = torch.cat([pos_world, quat], dim=-1)
+        self.env.scene["target_object"].write_root_pose_to_sim(pose_7d, env_ids=env_ids)
 
     def capture_pre_push(self, obs: torch.Tensor):
         """Snapshot object pose before a push for improvement computation."""
@@ -298,7 +330,10 @@ class PushEnvWrapper:
         return terminated | max_pushes | at_goal_pos | launched | tipped | out_of_bounds
 
     def reset_done_envs(self, dones: torch.Tensor):
-        """Reset per-env state and resample goals for envs that finished an episode."""
+        """Reset per-env bookkeeping for envs that finished an episode.
+        Goal sampling and object randomisation happen in train_push.py's
+        reset block AFTER the base env reset (so the object position is known
+        before a goal is chosen — Fix P4 + P6)."""
         done_ids = torch.where(dones)[0]
         if len(done_ids) == 0:
             return
@@ -308,21 +343,55 @@ class PushEnvWrapper:
         self.at_goal[done_ids] = False
         self._gave_completion[done_ids] = False
         self._gave_rot_bonus[done_ids] = False
-        self._ep_started[done_ids] = False
-        self._sample_goals(done_ids)
-        self._update_goal_in_extras()
-        self._move_goal_ghost(done_ids)
 
     # ── Goal management ────────────────────────────────────────────────────────
 
     def _sample_goals(self, env_ids: torch.Tensor):
-        """Sample random goal positions (local frame) for the specified envs."""
+        """Sample random goal positions (local frame) for the specified envs.
+        No distance filter — use _sample_goals_filtered if object position is known."""
         N = len(env_ids)
         gx = torch.empty(N, device=self.device).uniform_(*_GOAL_X_RANGE)
         gy = torch.empty(N, device=self.device).uniform_(*_GOAL_Y_RANGE)
         gz = torch.full((N,), _GOAL_Z, device=self.device)
         geuler = torch.zeros(N, 3, device=self.device)
         geuler[:, 2] = torch.empty(N, device=self.device).uniform_(0, 2 * torch.pi)
+        self.goal_pos_euler[env_ids] = torch.cat([
+            gx.unsqueeze(-1), gy.unsqueeze(-1), gz.unsqueeze(-1), geuler,
+        ], dim=-1)
+
+    def _sample_goals_filtered(self, env_ids: torch.Tensor):
+        """Sample goals and reject those within success threshold of the object.
+        
+        Must be called AFTER object position is finalized (i.e. after
+        _randomize_object_spawn).  Reads the current object scene position
+        and resamples any goal that falls within 0.05 m of it — preventing
+        episodes that would terminate instantly with zero pushes (P4)."""
+        if len(env_ids) == 0:
+            return
+        N = len(env_ids)
+        obj = self.env.scene["target_object"]
+        obj_pos_w = obj.data.root_pos_w[env_ids]
+        obj_pos_local = obj_pos_w - self.env.scene.env_origins[env_ids]
+
+        gx = torch.empty(N, device=self.device).uniform_(*_GOAL_X_RANGE)
+        gy = torch.empty(N, device=self.device).uniform_(*_GOAL_Y_RANGE)
+        gz = torch.full((N,), _GOAL_Z, device=self.device)
+        geuler = torch.zeros(N, 3, device=self.device)
+        geuler[:, 2] = torch.empty(N, device=self.device).uniform_(0, 2 * torch.pi)
+
+        goal_xy = torch.stack([gx, gy], dim=-1)
+        obj_xy = obj_pos_local[:, :2]
+        dist = (goal_xy - obj_xy).norm(dim=-1)
+        too_close = dist < PUSH_SUCCESS_THRESHOLD_POS
+
+        if too_close.any():
+            tc_count = int(too_close.sum().item())
+            print(f"[P4 filter] {tc_count}/{N} goals too close to object spawn — resampling.",
+                  flush=True)
+            # Resample goals for too-close envs
+            gx[too_close] = torch.empty(tc_count, device=self.device).uniform_(*_GOAL_X_RANGE)
+            gy[too_close] = torch.empty(tc_count, device=self.device).uniform_(*_GOAL_Y_RANGE)
+
         self.goal_pos_euler[env_ids] = torch.cat([
             gx.unsqueeze(-1), gy.unsqueeze(-1), gz.unsqueeze(-1), geuler,
         ], dim=-1)
