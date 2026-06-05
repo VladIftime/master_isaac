@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-06 (Fix P62: object-relative action decode flag --rel-act for Push-PPO baseline)
+**Last updated**: 2026-06-06 (Fix P63: normalised fractional reward replaces separate position/rotation coefficients)
 
 ---
 
@@ -148,6 +148,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-06 | **Fix P60 (_get_push_obs compute check)**: `observation_manager.compute()` called outside `env.step()` cycle — diagnostic print `[P5 check] _get_push_obs` fires on every call to verify frequency (should only fire during reset, not polling in step loop) and confirm no side-effects. Push-PPO has one obs group with no sensors. Remove print after verification run. |
 | 2026-06-06 | **Fix P61 (_ep_started cleared after reset completes)**: `_ep_started` cleared in `reset_done_envs()` BEFORE the base reset — if anything threw between clear and reset, next `capture_pre_push` would snapshot a stale pose as "episode start." `_ep_started[ids]=False` moved to `train_push.py` reset block, only firing after the full reset+randomise+sample sequence succeeds. |
 | 2026-06-06 | **Fix P62 (object-relative action decode for Push-PPO)**: New `--rel-act` flag swaps `decode_push_action` for `decode_push_action_relative` (from Fix P48, `action_push_relative.py`). Instead of absolute Xs ∈ [-0.50,0.50], Ys ∈ [0.25,0.70], the same 4D × 21 bins parameterize `(r, φ, len, θ)` where `r ∈ [0.02,0.08]m` is radial offset from object center, `φ ∈ [-π,π]` is approach angle in object frame, `len ∈ [0,0.20]m`, and `θ ∈ [-π,π]` is push direction in world frame. `Xs = obj_x + r·cos(obj_yaw+φ)`, `Ys = obj_y + r·sin(obj_yaw+φ)`. Guarantees ~100% contact regardless of object spawn position. World-frame θ aligned with `--rel-obs` delta features for trivial direction learning. New HPC script: `hpc/train_push_rel_full.slurm` with both flags. Per-push log shows `r=` (effective approach offset) instead of `Xs=/Ys=` in rel_act mode. Iteration summary shows `rel_full` / `rel_act` / `rel_obs` / `abs`. |
+| 2026-06-06 | **Fix P63 (normalised fractional reward)**: `PUSH_DENSE_ALPHA=12` (position) and `PUSH_DENSE_ROT_ALPHA=1` (rotation) replaced by single `PUSH_DENSE_ALPHA=3.0` with normalised deltas: `pos_imp = α·(d_prev−d_now)/d_prev`, `rot_imp = α·(y_prev−y_now)/y_prev`. Both are unitless fractions of remaining error — a push that halves the distance earns α×0.5 regardless of whether the domain is position or rotation. Denominators clamped at 0.01 to prevent division by zero. One coefficient instead of two, no hand-tuning required. |
 
 ---
 
@@ -458,6 +459,7 @@ directly simulates camera measurement noise on the physical tracking system.
 | **Fix P60** | **Push-PPO compute check** — `observation_manager.compute()` called outside `env.step()` in `_get_push_obs()`. Diagnostic `[P5 check]` print confirms safe (push_policy group has no sensors/cameras). Remove print after verification run. | **Low (Push)** | ✅ Fixed | `wrapper_push.py` |
 | **Fix P61** | **Push-PPO _ep_started cleared after reset completes** — `_ep_started` was cleared in `reset_done_envs()` BEFORE the base reset. `_ep_started[ids]=False` moved to `train_push.py` reset block after reset succeeds. | **Medium (Push)** | ✅ Fixed | `wrapper_push.py`, `train_push.py` |
 | **Fix P62** | **Object-relative action decode (--rel-act) for Push-PPO** — New flag swaps `decode_push_action` for `decode_push_action_relative`. 4D×21 bins now parameterize `(r, φ, len, θ)` with `r∈[0.02,0.08]m` offset from object center, `φ∈[-π,π]` approach angle in object frame. `Xs = obj_x + r·cos(obj_yaw+φ)` — guaranteed ~100% contact. Works alone or with `--rel-obs`; combined as `--rel-obs --rel-act` gives full object-relative pipeline. World-frame θ aligned with rel-obs delta features. New HPC script: `hpc/train_push_rel_full.slurm`. Iteration summary shows `rel_full` / `rel_act` / `rel_obs` / `abs`. Per-push log shows `r=` instead of `Xs=/Ys=`. | **Critical (Push)** | ✅ Fixed | `train_push.py`, `hpc/train_push_rel_full.slurm` (new) |
+| **Fix P63** | **Normalised fractional reward** — `PUSH_DENSE_ALPHA=12` (position) and `PUSH_DENSE_ROT_ALPHA=1` (rotation) replaced by single `PUSH_DENSE_ALPHA=3.0` with normalised deltas: `pos_imp = α·(d_prev−d_now)/d_prev`, `rot_imp = α·(y_prev−y_now)/y_prev`. Both are unitless fractions of remaining error — halving the distance earns α×0.5 regardless of domain. Denominators clamped at 0.01. One hyperparameter, no domain-specific scaling. | **Medium (Push)** | ✅ Fixed | `wrapper_push.py:25-26,266-267` |
 
 **Proposed additional tests (not yet implemented):**
 
