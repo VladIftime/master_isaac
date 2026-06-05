@@ -78,6 +78,15 @@ class CuroboInverseKinematicsAction(ActionTerm):
             )
         self._body_idx = body_ids[0]
 
+        # Find arm base body for frame conversion (env-local → UR5e base frame)
+        _side = self._joint_names[0].split("_")[0]  # "right" or "left"
+        _arm_base_name = f"{_side}_base_link_inertia"
+        try:
+            _base_ids, _ = self._asset.find_bodies(_arm_base_name)
+        except ValueError:
+            _base_ids = []
+        self._arm_base_idx: int | None = _base_ids[0] if len(_base_ids) > 0 else None
+
         tensor_args = TensorDeviceType(device=self.device, dtype=torch.float32)
         ur_yaml = load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
         robot_cfg = RobotConfig.from_dict(ur_yaml["robot_cfg"], tensor_args)
@@ -108,6 +117,9 @@ class CuroboInverseKinematicsAction(ActionTerm):
             Pose(position=_wup_pos.unsqueeze(1), quaternion=_wup_quat.unsqueeze(1)),
             seed_config=torch.zeros(self.num_envs, 1, 6, device=self.device),
             retract_config=torch.zeros(self.num_envs, 6, device=self.device),
+            use_nn_seed=False,
+            num_seeds=1,
+            newton_iters=30,
         )
         logger.info("[cuRobo] Warm-up done.")
 
@@ -136,6 +148,12 @@ class CuroboInverseKinematicsAction(ActionTerm):
         roll = self._raw_actions[:, 3]
         pitch = self._raw_actions[:, 4]
         yaw = self._raw_actions[:, 5]
+
+        if self._arm_base_idx is not None:
+            base_pos_w = self._asset.data.body_pos_w[:, self._arm_base_idx]
+            env_origins = self._env.scene.env_origins
+            pos = (pos + env_origins) - base_pos_w
+
         quat = _rpy_to_quat(roll, pitch, yaw)
 
         goal_pose = Pose(
