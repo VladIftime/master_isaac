@@ -460,6 +460,26 @@ class PushASPEnvWrapper:
         prog_rew = torch.zeros(self.num_envs, device=self.device)
 
         if len(bob_done_ids) == 0:
+            return prog_rew
+
+        init_pos = self.bob_init_pos_err[bob_done_ids]
+        init_rot = self.bob_init_rot_err[bob_done_ids]
+
+        obs = self._get_push_obs()
+        cur_pos = self._get_obj_pos(obs)[bob_done_ids]
+        cur_euler = self._get_obj_euler(obs)[bob_done_ids]
+        goal_pos = self._get_goal_pos(obs)[bob_done_ids]
+        goal_euler = self._get_goal_euler(obs)[bob_done_ids]
+
+        final_pos = (cur_pos - goal_pos).norm(dim=-1)
+        final_rot = _rot_distance_rad(cur_euler, goal_euler)
+
+        pos_progress = (init_pos - final_pos) / (init_pos + 1e-6)
+        rot_progress = (init_rot - final_rot) / (init_rot + 1e-6)
+        r_prog = (w_pos * pos_progress + w_rot * rot_progress).clamp(-1.0, 1.0)
+        prog_rew[bob_done_ids] = r_prog
+        self._bob_progress_captured[bob_done_ids] = False
+
         return prog_rew
 
     # ── Dense push improvement reward for Bob (Fix P53) ─────────────────────
