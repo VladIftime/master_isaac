@@ -1,0 +1,7 @@
+[extension]
+name = "Throwing"
+version = "1.0.0"
+
+[dependencies]
+"omni.isaac.lab" = {}
+"omni.isaac.lab_tasks" = {}

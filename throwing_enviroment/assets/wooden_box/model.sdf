@@ -1,0 +1,95 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="wooden_box">
+    <pose>0 0 0.15 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>2</mass>
+        <inertia>
+          <ixx>0.041666667</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.056666667</iyy>
+          <iyz>0</iyz>
+          <izz>0.068333333</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision_right">
+      <pose>-0.153 0 0.08 0 0 0</pose>
+        <geometry>
+          <!-- <box>
+            <size>0.31 0.31 0.02</size>
+            <pose>0 0 0.0 0 0 0</pose>
+          </box> -->
+          
+          <box>
+            <size>0.015 0.31 0.16</size>
+          </box>
+        </geometry>
+        <!-- <geometry>
+        <pose>-0.140 0 0.0 0 0 0</pose>
+          <box>
+            <size>0.02 0.31 0.16</size>
+          </box>
+        </geometry>
+        <geometry>
+          <box>
+            <size>0.02 0.31 0.16</size>
+            <pose>+0.140 0 0.0 0 0 0</pose>
+          </box>
+          <box>
+            <size>0.31 0.02 0.16</size>
+            <pose>0 -0.140 0.0 0 0 0</pose>
+          </box>
+          <box>
+            <size>0.31 0.02 0.16</size>
+            <pose>0 +0.140 0.0 0 0 0</pose>
+          </box>
+        </geometry> -->
+        
+      </collision>
+      <collision name="collision_base">
+        <pose>0 0 0.0075 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.31 0.31 0.015</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_left">
+        <pose>+0.153 0 0.08 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.015 0.31 0.16</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_front">
+        <pose>+0.0 0.153 0.080 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.31 0.015 0.16</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_back">
+        <pose>+0.0 -0.153 0.08 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.31 0.015 0.16</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="visual">
+        <pose>0 0 0.0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://wooden_box/meshes/model.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

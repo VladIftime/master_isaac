@@ -23,8 +23,8 @@ import time
 
 import torch
 import torch._dynamo  # noqa: F401
-import torch._C       # noqa: F401
-import torch.optim    # noqa: F401
+import torch._C  # noqa: F401
+import torch.optim  # noqa: F401
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
@@ -34,17 +34,23 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Swing IK solver benchmark")
 parser.add_argument(
-    "--ik", type=str, default="diffik",
+    "--ik",
+    type=str,
+    default="diffik",
     choices=["diffik", "osc", "rmpflow", "curobo"],
     help="IK solver",
 )
 parser.add_argument(
-    "--compare", type=str, default=None,
+    "--compare",
+    type=str,
+    default=None,
     help="Run multiple solvers, e.g. --compare diffik:osc:rmpflow:curobo",
 )
 parser.add_argument("--output", type=str, default=None, help="CSV output path")
 parser.add_argument("--amp", type=float, default=0.15, help="Swing amplitude (m) on X")
-parser.add_argument("--depth", type=float, default=0.12, help="Swing arc depth (m) on Y")
+parser.add_argument(
+    "--depth", type=float, default=0.12, help="Swing arc depth (m) on Y"
+)
 parser.add_argument("--period", type=int, default=60, help="Swing steps per cycle")
 parser.add_argument("--step-delay", type=float, default=0.0, help="Sleep between steps")
 AppLauncher.add_app_launcher_args(parser)
@@ -182,12 +188,24 @@ def run_indefinite(solver_name: str) -> dict:
     b_pos, _ = _ee_local(env, "robot_B")
 
     path_a, quat_a = _compute_path_world(
-        a_pos[0, 0].item(), a_pos[0, 1].item(), a_pos[0, 2].item(),
-        origin_a, args_cli.amp, args_cli.depth, y_direction=1.0, device=device,
+        a_pos[0, 0].item(),
+        a_pos[0, 1].item(),
+        a_pos[0, 2].item(),
+        origin_a,
+        args_cli.amp,
+        args_cli.depth,
+        y_direction=1.0,
+        device=device,
     )
     path_b, quat_b = _compute_path_world(
-        b_pos[0, 0].item(), b_pos[0, 1].item(), b_pos[0, 2].item(),
-        origin_b, args_cli.amp, args_cli.depth, y_direction=-1.0, device=device,
+        b_pos[0, 0].item(),
+        b_pos[0, 1].item(),
+        b_pos[0, 2].item(),
+        origin_b,
+        args_cli.amp,
+        args_cli.depth,
+        y_direction=-1.0,
+        device=device,
     )
     markers_a.visualize(path_a, quat_a)
     markers_b.visualize(path_b, quat_b)
@@ -195,15 +213,23 @@ def run_indefinite(solver_name: str) -> dict:
         f"  Path markers: {NUM_PATH_MARKERS} blue spheres for A, "
         f"{NUM_PATH_MARKERS} red spheres for B"
     )
-    print(f"    A ee_y={a_pos[0,1]:.3f} ee_z={a_pos[0,2]:.3f} origin={origin_a.tolist()}")
-    print(f"    A path X range: [{path_a[:,0].min():.3f}, {path_a[:,0].max():.3f}]  "
-          f"Y range: [{path_a[:,1].min():.3f}, {path_a[:,1].max():.3f}]  "
-          f"Z range: [{path_a[:,2].min():.3f}, {path_a[:,2].max():.3f}]")
+    print(
+        f"    A ee_y={a_pos[0,1]:.3f} ee_z={a_pos[0,2]:.3f} origin={origin_a.tolist()}"
+    )
+    print(
+        f"    A path X range: [{path_a[:,0].min():.3f}, {path_a[:,0].max():.3f}]  "
+        f"Y range: [{path_a[:,1].min():.3f}, {path_a[:,1].max():.3f}]  "
+        f"Z range: [{path_a[:,2].min():.3f}, {path_a[:,2].max():.3f}]"
+    )
     print(f"    A first 5: {path_a[:5].tolist()}")
-    print(f"    B ee_y={b_pos[0,1]:.3f} ee_z={b_pos[0,2]:.3f} origin={origin_b.tolist()}")
-    print(f"    B path X range: [{path_b[:,0].min():.3f}, {path_b[:,0].max():.3f}]  "
-          f"Y range: [{path_b[:,1].min():.3f}, {path_b[:,1].max():.3f}]  "
-          f"Z range: [{path_b[:,2].min():.3f}, {path_b[:,2].max():.3f}]")
+    print(
+        f"    B ee_y={b_pos[0,1]:.3f} ee_z={b_pos[0,2]:.3f} origin={origin_b.tolist()}"
+    )
+    print(
+        f"    B path X range: [{path_b[:,0].min():.3f}, {path_b[:,0].max():.3f}]  "
+        f"Y range: [{path_b[:,1].min():.3f}, {path_b[:,1].max():.3f}]  "
+        f"Z range: [{path_b[:,2].min():.3f}, {path_b[:,2].max():.3f}]"
+    )
     print(f"    B first 5: {path_b[:5].tolist()}")
     print()
 
@@ -243,17 +269,19 @@ def run_indefinite(solver_name: str) -> dict:
 
             # Fixed arc path — targets relative to initial EE position
             target_x_a = a_pos[0, 0].item() + args_cli.amp * sin_a
-            target_y_a = a_pos[0, 1].item() + args_cli.depth * (1.0 - sin_a ** 2)
+            target_y_a = a_pos[0, 1].item() + args_cli.depth * (1.0 - sin_a**2)
             target_x_b = b_pos[0, 0].item() + args_cli.amp * sin_b
-            target_y_b = b_pos[0, 1].item() - args_cli.depth * (1.0 - sin_b ** 2)
+            target_y_b = b_pos[0, 1].item() - args_cli.depth * (1.0 - sin_b**2)
 
             target_a = torch.tensor(
                 [[target_x_a, target_y_a, a_pos[0, 2].item()]],
                 device=device,
             )
             pos_a_err, rot_a_err = compute_pose_error(
-                curr_a_pos, curr_a_quat,
-                target_a, curr_a_quat.clone(),
+                curr_a_pos,
+                curr_a_quat,
+                target_a,
+                curr_a_quat.clone(),
                 rot_error_type="axis_angle",
             )
             pos_errors_all.append(pos_a_err.norm(dim=-1).item())
@@ -264,8 +292,10 @@ def run_indefinite(solver_name: str) -> dict:
                 device=device,
             )
             pos_b_err, rot_b_err = compute_pose_error(
-                curr_b_pos, curr_b_quat,
-                target_b, curr_b_quat.clone(),
+                curr_b_pos,
+                curr_b_quat,
+                target_b,
+                curr_b_quat.clone(),
                 rot_error_type="axis_angle",
             )
 
@@ -277,10 +307,12 @@ def run_indefinite(solver_name: str) -> dict:
                 ra = env.scene["robot_A"]
                 rb = env.scene["robot_B"]
                 ra.set_joint_position_target(
-                    ra.data.joint_pos[:, jids_a].clone(), joint_ids=jids_a,
+                    ra.data.joint_pos[:, jids_a].clone(),
+                    joint_ids=jids_a,
                 )
                 rb.set_joint_position_target(
-                    rb.data.joint_pos[:, jids_b].clone(), joint_ids=jids_b,
+                    rb.data.joint_pos[:, jids_b].clone(),
+                    joint_ids=jids_b,
                 )
 
             env.step(action)
@@ -302,9 +334,7 @@ def run_indefinite(solver_name: str) -> dict:
             if step_count % (args_cli.period * 10) == 0:
                 n = len(pos_errors_all)
                 p_mean = sum(pos_errors_all[-1000:]) / min(1000, n) * 100
-                r_mean = (
-                    sum(rot_errors_all[-1000:]) / min(1000, n) * 180 / math.pi
-                )
+                r_mean = sum(rot_errors_all[-1000:]) / min(1000, n) * 180 / math.pi
                 print(
                     f"  step {step_count:<6}  "
                     f"pos_err={p_mean:.2f}cm  "

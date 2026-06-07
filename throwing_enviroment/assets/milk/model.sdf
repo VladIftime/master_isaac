@@ -1,0 +1,57 @@
+<?xml version="1.0" ?>
+<sdf version="1.5">
+  <model name="milk">
+    <link name="link">
+      <inertial>
+        <pose>0 0 0.07 0 0 0</pose>
+        <mass>0.390</mass>
+        <inertia>
+        <!-- bottle dimentions x=0.07 y=0.07 z=0.26 -->
+          <ixx>0.000746825</ixx> 
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000746825</iyy>
+          <iyz>0</iyz>
+          <izz>0.000157226</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <pose>0 0 0.06 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.06 0.06 0.12 </size>
+          </box> 
+          <!-- <mesh>
+            <uri>model://milk/meshes/model.dae</uri>
+            <scale>0.02 0.02 0.02</scale>
+          </mesh> -->
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
+            </ode>
+          </friction>
+          <contact>
+            <ode>
+              <kp>10000000.0</kp>
+              <kd>1.0</kd>
+              <min_depth>0.001</min_depth>
+              <max_vel>0.1</max_vel>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <pose>-0.03 -0.03 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://milk/meshes/model.dae</uri>
+            <scale>0.02 0.02 0.02</scale>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

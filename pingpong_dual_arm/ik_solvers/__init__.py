@@ -23,20 +23,26 @@ from isaaclab.envs.mdp.actions import DifferentialInverseKinematicsActionCfg
 IK_SOLVER_TYPE = Literal["diffik", "osc", "rmpflow", "curobo"]
 
 _DEFAULT_JOINT_PATTERNS = {
-    "left":  ["left_shoulder_.*",  "left_elbow_.*",  "left_wrist_.*"],
+    "left": ["left_shoulder_.*", "left_elbow_.*", "left_wrist_.*"],
     "right": ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"],
 }
 
 _DEFAULT_JOINT_NAMES = {
     "left": [
-        "left_shoulder_pan_joint", "left_shoulder_lift_joint",
+        "left_shoulder_pan_joint",
+        "left_shoulder_lift_joint",
         "left_elbow_joint",
-        "left_wrist_1_joint", "left_wrist_2_joint", "left_wrist_3_joint",
+        "left_wrist_1_joint",
+        "left_wrist_2_joint",
+        "left_wrist_3_joint",
     ],
     "right": [
-        "right_shoulder_pan_joint", "right_shoulder_lift_joint",
+        "right_shoulder_pan_joint",
+        "right_shoulder_lift_joint",
         "right_elbow_joint",
-        "right_wrist_1_joint", "right_wrist_2_joint", "right_wrist_3_joint",
+        "right_wrist_1_joint",
+        "right_wrist_2_joint",
+        "right_wrist_3_joint",
     ],
 }
 

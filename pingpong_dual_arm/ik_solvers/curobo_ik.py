@@ -39,6 +39,7 @@ try:
     from curobo.types.robot import RobotConfig
     from curobo.types.base import TensorDeviceType
     from curobo.util_file import get_robot_configs_path, join_path, load_yaml
+
     _CUROBO_AVAILABLE = True
 except ImportError:
     pass
@@ -69,6 +70,7 @@ def _rpy_to_quat(roll: torch.Tensor, pitch: torch.Tensor, yaw: torch.Tensor):
 def _arm_base_pose(asset_name: str, side: str, device: str, dtype=torch.float32):
     """Return (pos, quat) tensors (shape (1,3), (1,4)) for the arm base."""
     import math
+
     # Root = body_base_link world pose
     if "robot_A" in asset_name:
         root_pos = (0.0, -2.7, 0.6)
@@ -165,12 +167,18 @@ class CuroboInverseKinematicsAction(ActionTerm):
         )
 
         tensor_args = TensorDeviceType(device=self.device, dtype=torch.float32)
-        _custom_yaml = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ur5e_arm.yml")
+        _custom_yaml = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "ur5e_arm.yml"
+        )
         _content_dir = os.path.dirname(os.path.dirname(get_robot_configs_path()))
-        _urdf_path = os.path.join(_content_dir, "assets", "robot", "ur_description", "ur5e.urdf")
+        _urdf_path = os.path.join(
+            _content_dir, "assets", "robot", "ur_description", "ur5e.urdf"
+        )
         ur_yaml = load_yaml(_custom_yaml)
         ur_yaml["robot_cfg"]["kinematics"]["urdf_path"] = _urdf_path
-        ur_yaml["robot_cfg"]["kinematics"]["asset_root_path"] = os.path.dirname(_urdf_path)
+        ur_yaml["robot_cfg"]["kinematics"]["asset_root_path"] = os.path.dirname(
+            _urdf_path
+        )
         robot_cfg = RobotConfig.from_dict(ur_yaml["robot_cfg"], tensor_args)
         ik_cfg = IKSolverConfig.load_from_robot_config(
             robot_cfg,
@@ -196,7 +204,9 @@ class CuroboInverseKinematicsAction(ActionTerm):
             retract_config=torch.zeros(self.num_envs, 6, device=self.device),
         )
 
-        self._raw_actions = torch.zeros(self.num_envs, self.action_dim, device=self.device)
+        self._raw_actions = torch.zeros(
+            self.num_envs, self.action_dim, device=self.device
+        )
 
     @property
     def action_dim(self) -> int:
@@ -260,7 +270,7 @@ class CuroboInverseKinematicsAction(ActionTerm):
         joint_pos_des = cur_joints.clone()
         for i in range(N):
             if success[i]:
-                joint_pos_des[i] = solution[i, :self._num_joints]
+                joint_pos_des[i] = solution[i, : self._num_joints]
 
         self._asset.set_joint_position_target(joint_pos_des, joint_ids=self._joint_ids)
 

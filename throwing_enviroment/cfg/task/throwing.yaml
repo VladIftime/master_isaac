@@ -1,0 +1,15 @@
+name: Throwing
+
+physics_engine: physx
+pipeline: gpu
+sim_device: cuda:0
+rl_device: cuda:0
+graphics_device_id: 0
+
+num_envs: 1024
+env_spacing: 3.0
+episode_length: 600
+is_deterministic: false
+
+ik_solver: diffik
+playing_arm_side: right
