@@ -37,6 +37,7 @@ from .events import reset_objects_to_random_safe_pose, reset_robot_joints
 
 # Observation layout indices (matches push_task_curobo.py, Fix P39: no gripper):
 # [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 28D total
+# When rel_obs=True, goal_dist(2) is replaced with [rel_dx, rel_dy] (same dimension)
 _OBS_ROBOT_DIM = 6
 _OBS_OBJ_STATE_DIM = 14
 _OBS_GOAL_DIM = 6
@@ -83,6 +84,7 @@ class PushASPEnvWrapper:
         bob_pushes: int = 10,
         max_goals_per_episode: int = 3,
         num_objects: int = 1,
+        rel_obs: bool = False,
         device: str = "cuda",
     ):
         self.env = env
@@ -91,6 +93,7 @@ class PushASPEnvWrapper:
         self.alice_pushes = alice_pushes
         self.bob_pushes = bob_pushes
         self.max_goals_per_episode = max_goals_per_episode
+        self.rel_obs = rel_obs
 
         self.robot_dim = _OBS_ROBOT_DIM
         self.obj_state_dim = _OBS_OBJ_STATE_DIM
@@ -99,9 +102,9 @@ class PushASPEnvWrapper:
 
         # Alice obs: robot(6) + obj_state(14) = 20D (no goal info)
         self.alice_obs_dim = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM
-        # Bob obs: full 28D (robot + obj + goal + dist)
+        # Bob obs: 28D — when rel_obs, goal_dist(2) holds rel_dx/rel_dy instead
         self.bob_obs_dim = _OBS_DIM
-        self.push_obs_dim = _OBS_DIM
+        self.push_obs_dim = self.bob_obs_dim
 
         self.alice_observation_space = gym.spaces.Box(
             low=-np.inf, high=np.inf,
@@ -187,7 +190,8 @@ class PushASPEnvWrapper:
 
         print(f"[PushASP Wrapper] Initialized: Alice {alice_pushes} pushes, "
               f"Bob {bob_pushes} pushes, max_goals={max_goals_per_episode}")
-        print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D")
+        print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D"
+              + (" (rel_obs)" if rel_obs else ""))
 
         # Tight spawn bounds (10cm × 10cm box) + random yaw to limit OOB
         self.spawn_x_range = (-0.04, 0.04)
@@ -233,10 +237,22 @@ class PushASPEnvWrapper:
     # ------------------------------------------------------------------
 
     def _get_push_obs(self) -> torch.Tensor:
-        """Get the full push-policy observation (29D)."""
+        """Get the full push-policy observation. When rel_obs=True, replaces
+        goal_dist(2) with [rel_dx, rel_dy] — same dimension, different content.
+        This avoids breaking the structured slicing in module.py's _encode_obs."""
         self._update_goal_in_extras()
         obs_dict = self.env.observation_manager.compute()
-        return obs_dict["push_policy"]
+        obs = obs_dict["push_policy"]
+        if self.rel_obs:
+            obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
+            goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
+                           _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
+            rel_dx = goal_pos[:, 0:1] - obj_pos[:, 0:1]
+            rel_dy = goal_pos[:, 1:2] - obj_pos[:, 1:2]
+            dist_idx = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM
+            obs[:, dist_idx:dist_idx + 1] = rel_dx
+            obs[:, dist_idx + 1:dist_idx + 2] = rel_dy
+        return obs
 
     def _get_alice_obs(self, push_obs: torch.Tensor) -> torch.Tensor:
         """Alice sees robot state + object state only (no goal info)."""
@@ -482,21 +498,24 @@ class PushASPEnvWrapper:
 
         return prog_rew
 
-    # ── Dense push improvement reward for Bob (Fix P53) ─────────────────────
-    # Coefficients match wrapper_push.py (Fix P18, P47)
-    _PUSH_DENSE_ALPHA = 12.0
-    _PUSH_DENSE_ROT_ALPHA = 1.0
-    _PUSH_DENSE_BETA = 0.5
-    _PUSH_DENSE_ROT_BETA = 0.25
+    # ── Dense push improvement reward for Bob (Fix P53 + Fix P63) ──────────
+    # Normalised fractional reward: a push that halves the remaining error
+    # earns α×0.5 regardless of domain.  One coefficient instead of two.
+    _PUSH_DENSE_ALPHA = 3.0     # unitless fractional improvement gain
+    _PUSH_DENSE_BETA = 0.5      # distance penalty (urgency)
+    _PUSH_DENSE_ROT_BETA = 0.25 # continuous yaw penalty (mirror of positional urgency)
 
     def compute_bob_dense_push_reward(self, push_obs: torch.Tensor) -> torch.Tensor:
         """
         Dense per-push improvement reward for Bob only.
-        R = α·(d_prev−d_now) + α_rot·(y_prev−y_now) − β·d_now − β_rot·y_now
-        All components clamped to guard against PhysX glitches (Fix P30).
+        R = α·(d_prev−d_now)/d_prev           position improvement (fractional)
+          + α·(y_prev−y_now)/y_prev           rotation improvement (fractional)
+          − β·d_now                            distance penalty
+          − β_rot·y_now                        continuous yaw penalty
 
-        No completion bonus here — that comes from the sparse reward.
-        This avoids double-counting the +5 and prevents critic instability.
+        Denominators clamped at 0.01 to avoid division by zero.
+        All components clamped to guard against PhysX glitches (Fix P30).
+        No completion bonus — that comes from the sparse reward.
         """
         cur_obj_pos = self._get_obj_pos(push_obs)
         cur_obj_euler = self._get_obj_euler(push_obs)
@@ -508,32 +527,12 @@ class PushASPEnvWrapper:
         y_prev = _yaw_distance_rad(self.prev_obj_euler, goal_euler)
         y_now = _yaw_distance_rad(cur_obj_euler, goal_euler)
 
-        pos_imp = (self._PUSH_DENSE_ALPHA * (d_prev - d_now)).clamp(-5.0, 5.0)
-        rot_imp = (self._PUSH_DENSE_ROT_ALPHA * (y_prev - y_now)).clamp(-4.0, 4.0)
+        pos_imp = (self._PUSH_DENSE_ALPHA * (d_prev - d_now) / d_prev.clamp(min=0.01)).clamp(-5.0, 5.0)
+        rot_imp = (self._PUSH_DENSE_ALPHA * (y_prev - y_now) / y_prev.clamp(min=0.01)).clamp(-4.0, 4.0)
         penalty = (-self._PUSH_DENSE_BETA * d_now).clamp(-2.0, 0.0)
         rot_penalty = (-self._PUSH_DENSE_ROT_BETA * y_now).clamp(-1.0, 0.0)
 
         return pos_imp + rot_imp + penalty + rot_penalty
-
-        init_pos = self.bob_init_pos_err[bob_done_ids]
-        init_rot = self.bob_init_rot_err[bob_done_ids]
-
-        obs = self._get_push_obs()
-        cur_pos = self._get_obj_pos(obs)[bob_done_ids]
-        cur_euler = self._get_obj_euler(obs)[bob_done_ids]
-        goal_pos = self._get_goal_pos(obs)[bob_done_ids]
-        goal_euler = self._get_goal_euler(obs)[bob_done_ids]
-
-        final_pos = (cur_pos - goal_pos).norm(dim=-1)
-        final_rot = _rot_distance_rad(cur_euler, goal_euler)
-
-        pos_progress = (init_pos - final_pos) / (init_pos + 1e-6)
-        rot_progress = (init_rot - final_rot) / (init_rot + 1e-6)
-        r_prog = (w_pos * pos_progress + w_rot * rot_progress).clamp(-1.0, 1.0)
-        prog_rew[bob_done_ids] = r_prog
-        self._bob_progress_captured[bob_done_ids] = False
-
-        return prog_rew
 
     # ------------------------------------------------------------------
     # Phase transitions & goal validation

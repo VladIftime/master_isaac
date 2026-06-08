@@ -15,7 +15,7 @@ NUM_ENVS=2048
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=100
 ALICE_PUSHES=5
-BOB_PUSHES=10
+BOB_PUSHES=7
 MAX_GOALS=2
 EXP_NAME="hpc_push_asp_${NUM_ENVS}env"
 
@@ -108,6 +108,7 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bob_pushes          "$BOB_PUSHES" \
     --max_goals_per_episode "$MAX_GOALS" \
     --no_abc \
+    --rel-obs\
     --exp_name            "$EXP_NAME" \
     --headless \
     $RESUME_ARGS \

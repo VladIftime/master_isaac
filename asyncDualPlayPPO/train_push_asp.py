@@ -118,6 +118,10 @@ def main():
     parser.add_argument("--no_hist_pool", action="store_true",
                         help="Disable historical policy pool")
     parser.add_argument("--debug_rewards", action="store_true")
+    parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
+                        help="Replace goal_dist(2) with [rel_dx, rel_dy] = goal_xy - obj_xy in Bob's observation. "
+                             "Same 28D dimension — no architecture changes needed. "
+                             "Gives the policy direct access to push direction without learning atan2.")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     if args.num_envs < 50:
@@ -153,11 +157,6 @@ def main():
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
     from asyncDualPlayPPO.utils.historical_pool import HistoricalPolicyPool
-
-    from asyncDualPlayPPO.tasks.utils.rewards import (
-        ALICE_BOB_FAIL_REWARD,
-        ALICE_BOB_SUCCESS_REWARD,
-    )
 
     ppo_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
     ppo_cfg = load_cfg(ppo_cfg_path)
@@ -198,6 +197,7 @@ def main():
         bob_pushes=bob_pushes,
         max_goals_per_episode=max_goals_per_episode,
         num_objects=1,
+        rel_obs=args.rel_obs,
         device=base_env.device,
     )
     print("Environment ready.")
@@ -686,8 +686,6 @@ def main():
             env.reset_iter_stats()
 
         iter_sr_counts = [0, 0]
-        _iter_obj_lifted = 0
-        _iter_robot_table = 0
         _iter_terminated = 0
         _iter_ik_fails = 0
         _iter_ik_steps = 0
@@ -932,8 +930,6 @@ def main():
 
             # ── EXECUTE PUSH TRAJECTORY (gripper always closed) ───────────────────
             terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            obj_lifted = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-            robot_through_table = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
             for wp_idx, (wp_pos, wp_quat, _wp_grip) in enumerate(push_wps):
                 ik_target = wp_pos - _TOTAL_IK_ERROR
                 ik_target[:, 0].clamp_(_WS_X[0], _WS_X[1])
@@ -969,18 +965,6 @@ def main():
                 obs_ret, _, step_terminated, truncated, _ = env.step(env_full)
                 terminated |= step_terminated
 
-                _z_obs = env._get_push_obs()
-                obj_lifted |= (_z_obs[:, _OBS_ROBOT_DIM + 2] > 0.10)
-
-                _tcp_local = _tcp_pos_local()
-                robot_through_table |= (_tcp_local[:, 2] < 0.0) & ~terminated
-
-            # Merge into terminated
-            terminated |= obj_lifted | robot_through_table
-            _iter_obj_lifted += int(obj_lifted.sum().item())
-            _iter_robot_table += int(robot_through_table.sum().item())
-            _iter_terminated += int(terminated.sum().item())
-
             # Sync EE trackers to current physics state after push execution
             ee_pos_local = _tcp_pos_local()
             ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
@@ -998,10 +982,8 @@ def main():
                 bob_sparse = env.compute_bob_push_reward(full_push_obs)
                 bob_dense = env.compute_bob_dense_push_reward(full_push_obs)
             bob_rewards = bob_sparse + bob_dense
-            # Penalize Bob for object-lifted and robot-through-table (dead pushes)
-            bob_rewards[obj_lifted | robot_through_table] = -5.0
             # Zero reward for early-terminated envs (post-reset obs produces garbage)
-            bob_rewards[terminated & ~(obj_lifted | robot_through_table)] = 0.0
+            bob_rewards[terminated] = 0.0
 
             bob_achieved_completion = bob_sparse >= 4.0
 
@@ -1014,38 +996,6 @@ def main():
             bob_pos_err_now = torch.zeros(env.num_envs, device=env.device)
             bob_rot_err_now = torch.zeros(env.num_envs, device=env.device)
             bob_progress_rew = torch.zeros(env.num_envs, device=env.device)
-
-            # ── HANDLE OBJECT-LIFTED & ROBOT-THROUGH-TABLE ENVS ─────────────────
-            _abnormal = obj_lifted | robot_through_table
-            if _abnormal.any():
-                _lifted_alice = obj_lifted & is_alice
-                _lifted_bob = obj_lifted & is_bob
-                if _lifted_alice.any():
-                    _la_ids = torch.where(_lifted_alice)[0]
-                    alice_rewards_now[_la_ids] = -3.0
-                    alice_done_now[_la_ids] = True
-                    env.episode_manager.reset_episode(_la_ids, reason="Alice Object Lifted")
-                    env.hide_goal_ghost(_la_ids)
-                    _sp = reset_objects_to_random_safe_pose(env.env, _la_ids)
-                    reset_robot_joints(env.env, _la_ids)
-                    env.env.scene.write_data_to_sim()
-                    env.episode_manager.initial_states[_la_ids] = (
-                        env._initial_states_from_spawn(_sp, len(_la_ids))
-                    )
-                    env.set_table_color(_la_ids, (0.8, 0.1, 0.1))
-                if _lifted_bob.any():
-                    _lb_ids = torch.where(_lifted_bob)[0]
-                    alice_rewards_now[_lb_ids] += 5.0
-                    bob_done_now[_lb_ids] = True
-                    env.episode_manager.reset_episode(_lb_ids, reason="Bob Object Lifted")
-                    env.hide_goal_ghost(_lb_ids)
-                    _sp = reset_objects_to_random_safe_pose(env.env, _lb_ids)
-                    reset_robot_joints(env.env, _lb_ids)
-                    env.env.scene.write_data_to_sim()
-                    env.episode_manager.initial_states[_lb_ids] = (
-                        env._initial_states_from_spawn(_sp, len(_lb_ids))
-                    )
-                    env.set_table_color(_lb_ids, (0.8, 0.1, 0.1))
 
             # ── SNAPSHOT INITIAL STATS BEFORE PHASE TRANSITIONS ────────────────
             _prev_initial = env.episode_manager.initial_states.clone()
@@ -1192,7 +1142,7 @@ def main():
                     bob_hidden[1][done_b] = 0.0
 
             # Update EE trackers — only reset envs that had a phase transition or terminated
-            needs_ee_reset = alice_done_mask | bob_done_mask | obj_lifted | robot_through_table | terminated
+            needs_ee_reset = alice_done_mask | bob_done_mask | terminated
             if needs_ee_reset.any():
                 reset_eids = torch.where(needs_ee_reset)[0]
                 ee_pos_local[reset_eids] = _tcp_pos_local()[reset_eids]
@@ -1367,16 +1317,14 @@ def main():
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
         _ik_fail_rate = _iter_ik_fails / max(1, _iter_ik_steps)
         writer.add_scalar("Metrics/IKFailRate", _ik_fail_rate, bob_updates)
-        writer.add_scalar("Metrics/ObjLifted", _iter_obj_lifted, bob_updates)
-        writer.add_scalar("Metrics/RobotThroughTable", _iter_robot_table, bob_updates)
-        writer.add_scalar("Metrics/Terminated", _iter_terminated, bob_updates)
 
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | "
             f"Goals valid={_valid_goals} invalid={_invalid_goals} | "
             f"Bob succ={_bob_succ} fail={_bob_fail} | "
             f"IK_fail={_ik_fail_rate:.3f} | "
-            f"ObjLifted={_iter_obj_lifted} RobotTable={_iter_robot_table} Term={_iter_terminated}",
+            f"Term={_iter_terminated}"
+            + (" | rel_obs" if args.rel_obs else ""),
             flush=True,
         )
 
