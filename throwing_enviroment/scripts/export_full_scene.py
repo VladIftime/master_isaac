@@ -37,8 +37,16 @@ from isaaclab.app import AppLauncher
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--pose",
+    type=str,
+    default=None,
+    help="JSON file with joint position overrides "
+    "(e.g. '{\"right_elbow_joint\": 0.0, ...}')",
+)
 AppLauncher.add_app_launcher_args(parser)
-app = AppLauncher(parser.parse_args([]))
+args_cli, _ = parser.parse_known_args()
+app = AppLauncher(args_cli)
 simulation_app = app.app
 
 from pxr import Sdf, Usd, UsdGeom, UsdPhysics, Gf
@@ -54,6 +62,18 @@ BODY_OUT = os.path.join(OUTPUT_DIR, "body_poses.json")
 print("Launching throwing env...", flush=True)
 cfg = ThrowingEnvCfg()
 cfg.scene.num_envs = 1
+
+if args_cli.pose:
+    pose_overrides = json.loads(args_cli.pose) if args_cli.pose.startswith("{") else (
+        json.load(open(args_cli.pose)) if os.path.isfile(args_cli.pose) else {}
+    )
+    for jname, jval in pose_overrides.items():
+        if jname in cfg.scene.robot.init_state.joint_pos:
+            cfg.scene.robot.init_state.joint_pos[jname] = float(jval)
+        else:
+            print(f"WARNING: joint '{jname}' not in config, ignoring", flush=True)
+    print(f"Pose overrides applied: {list(pose_overrides.keys())}", flush=True)
+
 cfg.__post_init__()
 env = ThrowingEnv(cfg=cfg)
 env.reset()

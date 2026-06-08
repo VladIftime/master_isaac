@@ -42,7 +42,7 @@ throwing_enviroment/
 │   ├── prebake_physics.py                 # Apply CollisionAPI + PhysicsMaterial to USD meshes
 │   ├── prebake_drink.py                   # Pre-bake drink001: MassAPI, CollisionAPI, high friction
 │   ├── prebake_basket.py                  # Pre-bake shopping basket: single rigid body, handles removed
-│   ├── export_full_scene.py               # Export scene USD + joint pose script for Isaac Sim GUI
+│   ├── export_full_scene.py               # Export scene USD with FK-baked crane-pose transforms (--pose flag)
 │   ├── inspect_usd.py                     # Inspect USD file prim hierarchy
 │   └── inspect_usd_summary.py             # Inspect physics schemas + mesh extents
 ├── assets/
@@ -65,10 +65,11 @@ throwing_enviroment/
 │       └── trash can002/                  # Articulated trash can (not used — basket replaced it)
 ├── meshes/                                # Intermediate mesh files (legacy)
 ├── generated_usd/                         # Scene exports + legacy converter output
-│   ├── full_scene.usd                     # Reference-based full scene (robot + drink + basket + table + stand)
+│   ├── full_scene.usd                     # Reference-based full scene (robot FK-baked + drink + basket + table + stand)
 │   ├── joint_pose.json                    # 24 joint angles for crane home pose
-│   ├── pose_robot.py                      # Kit script: sets drive targets + auto-plays simulation
-│   ├── robot_crane_pose/                  # Robot USD cache copy (referenced by full_scene.usd)
+│   ├── body_poses.json                    # 25 body world positions/orientations (FK debug)
+│   ├── pose_robot.py                      # Kit script: sets drive targets + auto-plays simulation (optional — FK baking supersedes this)
+│   ├── robot_crane_pose/                  # Robot USD cache copy with FK-baked link + joint transforms
 │   ├── milk.usd, wooden_box.usd           # Legacy MeshConverter output
 │   └── config.yaml
 ├── cfg/
@@ -117,8 +118,14 @@ cd /home/vladi/IsaacLab/master_isaac/throwing_enviroment
 # Test environment (verify scene loads)
 python scripts/test_env.py --ik diffik --num_envs 4
 
-# Export full scene for Isaac Sim GUI
+# Export full scene for Isaac Sim GUI (default crane pose)
 python scripts/export_full_scene.py
+
+# Export with custom joint positions
+python scripts/export_full_scene.py --pose '{"right_elbow_joint": 0.0, "right_wrist_2_joint": 0.0}'
+
+# Export with a JSON pose file
+python scripts/export_full_scene.py --pose my_pose.json
 
 # Single throw test (visual mode)
 python scripts/test_throw.py --ik diffik --amp 0.3
@@ -629,29 +636,52 @@ These are **not currently used** — the Synthesis assets have replaced them.
 ### Scene Export (`scripts/export_full_scene.py`)
 
 Exports the complete throwing environment as a reference-based USD scene
-for inspection and editing in the Isaac Sim GUI:
+for inspection and editing in the Isaac Sim GUI. **Robot link transforms are
+baked from live simulation FK**, so the robot appears in the correct pose
+when opened — no Script Editor workflow required.
 
 ```bash
+# Default crane pose
 python scripts/export_full_scene.py
+
+# Custom pose via JSON string
+python scripts/export_full_scene.py \
+  --pose '{"right_elbow_joint": 0.0, "right_wrist_1_joint": 0.0}'
+
+# Custom pose via JSON file
+echo '{"right_shoulder_lift_joint": -2.0}' > my_pose.json
+python scripts/export_full_scene.py --pose my_pose.json
 ```
+
+**How FK baking works:**
+
+1. Launches a headless simulation, creates the environment, resets to the
+   configured pose, and steps 5 frames for physics to settle
+2. Reads all 25 body world transforms (`body_pos_w`, `body_quat_w`) from the
+   robot articulation's Fabric data buffers
+3. Computes each link's local transform in the `/ur` frame via FK:
+   `local_pos = quat_inverse(root_quat).rotate(body_pos - root_pos)`
+4. Overwrites `XformOp:translate` and `XformOp:orient` on each link prim
+   in the robot USD with the FK result
+5. Also sets `drive:angular:physics:targetPosition` on all 24 joint prims
+   to match the current joint angles
+6. Builds `full_scene.usd` referencing the modified robot + drink, basket,
+   table, stand, and ground plane
 
 **Output files in `generated_usd/`:**
 
 | File | Description |
 |------|-------------|
-| `full_scene.usd` | Reference-based scene with robot (URDF cache), drink, basket, table (box), stand (box), ground plane. All entities at live simulation positions. |
-| `joint_pose.json` | 24 joint angles captured from the crane home pose |
-| `pose_robot.py` | Kit script that sets joint drive targets and auto-plays simulation |
-| `robot_crane_pose/` | Copy of the URDF-converted robot USD with all `configuration/` sub-files |
+| `full_scene.usd` | Reference-based scene — robot appears in pose at open |
+| `joint_pose.json` | 24 joint angles captured from the simulation |
+| `body_poses.json` | 25 body world positions/orientations (FK debug data) |
+| `robot_crane_pose/` | Modified robot USD with FK-baked link transforms + joint targets |
 
-**To export a fully flattened, posed scene:**
+**To export a fully flattened, single-file USD** (no external references):
 
 1. Open Isaac Sim GUI
 2. File > Open > `full_scene.usd`
-3. Window > Script Editor > File > Open Script > `pose_robot.py` > Run
-4. The script sets all 24 joint drive targets then auto-plays the simulation.  
-   Joints animate to crane pose. Press Stop when settled.
-5. File > Export > USD (check **Flatten**) to save the posed single-file scene
+3. File > Export > USD (check **Flatten**) to save the self-contained scene
 
 **Editing finger grippers in the exported scene:**
 
@@ -662,6 +692,23 @@ python scripts/export_full_scene.py
 4. To add friction: Property > Physics Material:  
    `Static Friction = 5.0`, `Dynamic Friction = 5.0`, `Restitution = 0.1`
 5. File > Save As > `robotiq_gripper_modified.usd`
+
+**Adjusting the robot pose:**
+
+Three options to change the arm pose before export:
+
+1. **Edit config** — modify `DualArm_CFG.init_state.joint_pos` in
+   `throwing_env_cfg.py:118-134`, then re-run the export script.
+2. **`--pose` CLI** — pass JSON overrides for specific joints (see above).
+3. **`--pose` with file** — load joint overrides from a JSON file.
+
+Available joint names (24 total):
+
+| Group | Joint names |
+|-------|-------------|
+| Left arm | `left_shoulder_pan_joint`, `left_shoulder_lift_joint`, `left_elbow_joint`, `left_wrist_1_joint`, `left_wrist_2_joint`, `left_wrist_3_joint` |
+| Right arm | `right_shoulder_pan_joint`, `right_shoulder_lift_joint`, `right_elbow_joint`, `right_wrist_1_joint`, `right_wrist_2_joint`, `right_wrist_3_joint` |
+| Grippers | `lgripper_finger_joint`, `rgripper_finger_joint`, plus 8 knuckle/finger joints |
 
 ## Key Differences from PingPong
 
@@ -716,11 +763,11 @@ python scripts/export_full_scene.py
     requires CUDA ≥ 12.0 for graph resets. See pingpong implementation.md for
     full details on the cuRobo IK solver integration.
 
-9. **Robot joint baking is not direct**: The exported `full_scene.usd` references
-    the robot in its URDF default pose. Joint positions from the Fabric stage
-    cannot be physically baked into the USD without a full FK chain computation.
-    Use `pose_robot.py` in the Isaac Sim GUI to drive joints to the crane pose,
-    then export a flattened USD with the posed state.
+9. **Robot joint baking uses FK from simulation**: `export_full_scene.py` now
+    reads live body transforms from the Fabric stage, computes forward kinematics,
+    and bakes the resulting link transforms + joint targets directly into the robot
+    USD. The Scene Editor workflow is no longer needed. Programmatic flattening
+    (single-file USD) still requires the GUI's File > Export > Flatten option.
 
 10. **Fabric/USDRT stage cannot be exported programmatically**: `save_as_stage()`
     and `UsdUtils.FlattenLayerStack` both fail on Fabric-backed stages. The
