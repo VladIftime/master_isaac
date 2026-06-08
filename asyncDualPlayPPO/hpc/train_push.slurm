@@ -11,7 +11,7 @@ WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=512
+NUM_ENVS=2048
 MAX_ITERATIONS=100000
 SAVE_INTERVAL=10
 EXP_NAME="hpc_push_${NUM_ENVS}env"
