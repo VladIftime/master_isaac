@@ -22,8 +22,12 @@ PUSH_SUCCESS_THRESHOLD_POS = 0.05   # metres
 PUSH_SUCCESS_THRESHOLD_ROT = 0.2    # radians (~11°), matches ASP wrapper goal_tolerance
 PUSH_COMPLETION_BONUS = 5.0
 PUSH_ROTATION_SUB_BONUS = 2.0   # layered on top of position bonus when rotation also matched (Fix P14)
-PUSH_DENSE_ALPHA = 12.0      # position improvement gain (metres → reward)  — 1.2× scaled from original 10 (Fix P18)
-PUSH_DENSE_ROT_ALPHA = 1.0   # rotation improvement gain (radians → reward) — reduced from 5.0 (Fix P47)
+PUSH_DENSE_ALPHA = 3.0        # fractional improvement gain (unitless) — same for pos and rot
+# Normalised: pos_imp = α·(d_prev−d_now)/d_prev, rot_imp = α·(y_prev−y_now)/y_prev
+# At d_prev=0.25m→0.13m:  3×0.12/0.25 = 1.44
+# At y_prev=1.5rad→1.0rad: 3×0.50/1.50 = 1.00
+# Both produce comparable reward magnitudes from a single coefficient.
+# Replaces the old separate PUSH_DENSE_ALPHA=12 / PUSH_DENSE_ROT_ALPHA=1 (Fix P47).
 PUSH_DENSE_BETA = 0.5        # distance penalty (urgency)
 PUSH_DENSE_ROT_BETA = 0.25   # continuous rotation penalty — mirror of positional urgency (Fix P17)
 
@@ -230,13 +234,17 @@ class PushEnvWrapper:
         """
         Dense reward after a complete push macro-action.
 
-        R = α·(d_prev−d_now)                           position improvement
-          + γ·(y_prev−y_now)                           yaw-only rotation improvement (Fix P15)
-          − β·d_now                                    distance penalty
-          − β_rot·y_now                                continuous yaw penalty (Fix P17)
-          + completion_bonus                            +5 for pos<0.05 (position gate)
-          + rotation_sub_bonus                          +2 for pos<0.05 AND yaw<0.2 (Fix P14)
-          − tip_penalty                                −5 for tipped block (Fix P16)
+        R = α·(d_prev−d_now)/d_prev                      pos improvement (fractional)
+          + α·(y_prev−y_now)/y_prev                      rot improvement (fractional)
+          − β·d_now                                      distance penalty
+          − β_rot·y_now                                  continuous yaw penalty
+          + completion_bonus                              +5 for pos<0.05 (position gate)
+          + rotation_sub_bonus                            +2 for pos<0.05 AND yaw<0.2
+          − tip_penalty                                  −5 for tipped block
+
+        Normalised deltas use the same α coefficient — a push that halves the
+        remaining distance earns α×0.5 regardless of whether it's position or
+        rotation.  Denominators clamped to min=0.01 to avoid division by zero.
 
         Off-center pushes induce torque (Akella & Mason 1998).
         """
@@ -263,8 +271,8 @@ class PushEnvWrapper:
         at_goal = pos_err < PUSH_SUCCESS_THRESHOLD_POS
         rot_at_goal = rot_err < PUSH_SUCCESS_THRESHOLD_ROT
 
-        pos_imp  = PUSH_DENSE_ALPHA * (d_prev - d_now)
-        rot_imp  = PUSH_DENSE_ROT_ALPHA * (y_prev - y_now)          # yaw-only (Fix P15)
+        pos_imp  = PUSH_DENSE_ALPHA * (d_prev - d_now) / d_prev.clamp(min=0.01)
+        rot_imp  = PUSH_DENSE_ALPHA * (y_prev - y_now) / y_prev.clamp(min=0.01)
         penalty  = -PUSH_DENSE_BETA * d_now
         rot_penalty = -PUSH_DENSE_ROT_BETA * y_now                   # continuous yaw urgency (Fix P17)
 
