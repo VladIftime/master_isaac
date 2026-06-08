@@ -173,7 +173,7 @@ ROBOT_POS = (0.0, 0.0, STAND_Z)
 
 TABLE_Z = STAND_Z                        # table surface height
 TABLE_CENTER_POS = (0.0, 1.0, TABLE_Z)   # table center forward of robot
-TABLE_SIZE = (1.0, 1.2, 0.05)            # tabletop dimensions (x, y, z)
+TABLE_SIZE = (2.0, 1.2, 0.05)            # tabletop dimensions (x, y, z)
 
 ##
 # Scene definition

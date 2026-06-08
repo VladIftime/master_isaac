@@ -36,7 +36,7 @@ throwing_enviroment/
 │   │   ├── train.py                       # Training launcher (skrl PPO)
 │   │   └── play.py                        # Inference / playback
 │   ├── test_env.py                        # Launch & step environment
-│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → grasp → lift → wrist-snap throw)
+│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → grasp → lift → wrist-snap throw, --sweep for SNAP_RAD tuning)
 │   ├── test_throw.py                      # Single-throw test (kinematic hold → release → land, --loop flag)
 │   ├── convert_meshes.py                  # OBJ → USD with MeshConverter
 │   ├── prebake_physics.py                 # Apply CollisionAPI + PhysicsMaterial to USD meshes
@@ -140,6 +140,9 @@ python scripts/test_throw.py --ik diffik --loop
 # Multi-phase pick-and-throw IK benchmark
 python scripts/test_ik_throwing.py --ik diffik
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
+
+# Sweep SNAP_RAD to find best throw distance
+python scripts/test_ik_throwing.py --ik diffik --sweep "1.0:8.0:0.5"
 
 # Headless training
 python scripts/skrl/train.py --task=Throwing-Direct-v0 --headless --num_envs=1024
@@ -488,7 +491,7 @@ the drink's center, lifts, and throws via direct wrist_2 joint control.
 | Phase | Steps | Description |
 |-------|-------|-------------|
 | **APPROACH** | 60 | EE moves from crane pose to XY directly above the drink at crane Z height. Position-only IK (no orientation change). |
-| **DESCEND** | 100 | EE lowers to `GRASP_Z_OFFSET` above the drink center (default 5 cm above). IK scale 0.8 for fast convergence. |
+| **DESCEND** | 100 | EE lowers to `GRASP_Z_OFFSET` above the drink center (default 0.3 m above). IK scale 0.8 for fast convergence. |
 | **GRASP** | 20 | Gripper closes **gradually** (0.0 → 0.7 over 20 steps via ramped `_set_gripper_state`). |
 | **LIFT** | 60 | EE returns to crane pose (position-only, no orientation change). |
 | **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at LIFT-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at `THROW_RELEASE_PROGRESS`. |
@@ -550,10 +553,16 @@ Per-solver metrics (saved to CSV with `--output`):
 
 ```bash
 # Single solver
-python scripts/test_ik_throwing.py --ik curobo
+python scripts/test_ik_throwing.py --ik diffik
 
 # Compare all solvers
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
+
+# Sweep THROW_SNAP_RAD values (comma-separated)
+python scripts/test_ik_throwing.py --ik diffik --sweep "2.0,3.0,4.0,5.0,6.0"
+
+# Sweep with range (start:stop:step)
+python scripts/test_ik_throwing.py --ik diffik --sweep "1.0:8.0:1.0" --output sweep.csv
 ```
 
 ### Single-Throw Test (`scripts/test_throw.py`)

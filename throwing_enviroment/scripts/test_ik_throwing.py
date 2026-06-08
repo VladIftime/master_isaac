@@ -7,7 +7,8 @@ Phases:
   DESCEND  — EE lowers Z to grasp height
   GRASP    — close gripper, start kinematic attachment
   LIFT     — EE returns to crane pose (drink follows via attach)
-  THROW    — wrist_2 snap (position held, orientation-only delta),
+  EXTEND   — EE moves 10 cm toward target in XY (shoulder+elbow extend arm forward)
+  THROW    — wrist_2 snap from extended position,
               open gripper + cut attachment at peak snap
   FLIGHT   — watch drink fly/land, report distance to target, reset cycle
 
@@ -48,6 +49,10 @@ parser.add_argument(
 )
 parser.add_argument("--output", type=str, default=None, help="CSV output path")
 parser.add_argument("--step-delay", type=float, default=0.0, help="Sleep between steps")
+parser.add_argument(
+    "--sweep", type=str, default=None,
+    help="Sweep THROW_SNAP_RAD values: e.g. '2.0,4.0,6.0,8.0,10.0' or '2.0:10.0:1.0' (start:stop:step)",
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -65,7 +70,7 @@ PLAYING_SIDE = "right"
 EE_BODY = "right_wrist_3_link"
 GRIPPER_JOINT = "rgripper_finger_joint"
 
-DRINK_WORLD_X = 0.40
+DRINK_WORLD_X = 0.65
 DRINK_WORLD_Y = 0.50
 DRINK_WORLD_Z = 0.72
 
@@ -75,14 +80,16 @@ IK_DEFAULT_SCALE = 0.8
 
 GRASP_Z_OFFSET = 0.3
 
-THROW_SNAP_RAD = 6.0
+THROW_SNAP_RAD = 10.0
 THROW_RELEASE_PROGRESS = 0.55
+THROW_EXTEND_Z_OFFSET = 0.30
 
 PHASE_STEPS = {
     "APPROACH": 60,
     "DESCEND": 100,
     "GRASP": 20,
     "LIFT": 60,
+    "EXTEND": 40,
     "THROW": 40,
     "FLIGHT": 300,
 }
@@ -184,19 +191,326 @@ def _print_step(step, phase_name, ee_pos_local, drink_pos_local, grip, ik_err_cm
     )
 
 
-def run_benchmark(solver_name: str) -> dict:
+def run_sweep(solver_name: str, snap_values: list) -> dict:
     print(f"\n{'='*60}")
-    print(f"  IK Solver : {solver_name}")
-    print(f"  Drink at  : ({DRINK_WORLD_X:.2f}, {DRINK_WORLD_Y:.2f}, {DRINK_WORLD_Z:.2f})")
-    print(f"  Phases    : APPROACH({PHASE_STEPS['APPROACH']}) DESCEND({PHASE_STEPS['DESCEND']})"
-          f" GRASP({PHASE_STEPS['GRASP']}) LIFT({PHASE_STEPS['LIFT']}) THROW({PHASE_STEPS['THROW']})")
+    print(f"  SWEEP mode: {len(snap_values)} SNAP_RAD values")
+    print(f"  IK Solver  : {solver_name}")
+    print(f"  Values     : {snap_values}")
     print(f"{'='*60}\n")
 
     cfg = ThrowingEnvCfg()
     cfg.scene.num_envs = 1
     cfg.ik_solver = solver_name
     cfg.playing_arm_side = PLAYING_SIDE
-    cfg.randomize_target = False
+    cfg.randomize_target = True
+    cfg.target_x_range = (-0.3, 0.3)
+    cfg.target_y_range = (1.1, 1.7) 
+    cfg.release_at_step = 0
+    cfg.release_vel_threshold = float("inf")
+    cfg.disable_attachment = True
+    cfg.__post_init__()
+
+    if hasattr(cfg.actions.arm, "scale"):
+        cfg.actions.arm.scale = IK_DEFAULT_SCALE
+    if hasattr(cfg.actions.arm, "position_scale"):
+        cfg.actions.arm.position_scale = IK_DEFAULT_SCALE
+        cfg.actions.arm.orientation_scale = IK_DEFAULT_SCALE
+
+    env = ThrowingEnv(cfg=cfg)
+    device = env.device
+    env_ids = torch.tensor([0], device=device)
+    env.reset()
+
+    robot = env.scene["robot"]
+    milk = env.scene["milk"]
+    target = env.scene["target"]
+    origin = env.scene.env_origins[0].to(device)
+
+    env._holding[:] = False
+    env._released[:] = False
+
+    results = []
+    best_dist = float("inf")
+    best_snap = None
+
+    try:
+        for snap_idx, snap_rad in enumerate(snap_values):
+            if not simulation_app.is_running():
+                break
+
+            print(f"\n{'='*60}")
+            print(f"  SNAP_RAD = {snap_rad}  ({snap_idx + 1}/{len(snap_values)})")
+            print(f"{'='*60}\n")
+
+            # Reset: place drink on table, open gripper, settle
+            env.reset()
+            env._holding[:] = False
+            env._released[:] = False
+            _drink_pos_to_table(env)
+            _set_gripper_state(robot, 0.0, env_ids)
+            for _ in range(30):
+                env.step(torch.zeros(1, 6, device=device))
+
+            drink_actual_w = milk.data.root_pos_w[0, :3].clone()
+            drink_actual_local = drink_actual_w - origin
+            dx, dy, dz = drink_actual_local[0].item(), drink_actual_local[1].item(), drink_actual_local[2].item()
+            crane_pos, crane_quat = _ee_state(env)
+            crane_pos_local = crane_pos[0] - origin
+            cx, cy, cz = crane_pos_local[0].item(), crane_pos_local[1].item(), crane_pos_local[2].item()
+            ex, ey, ez = dx, dy, dz
+
+            if snap_idx == 0:
+                print(f"  Crane EE  : ({cx:.3f}, {cy:.3f}, {cz:.3f})")
+                print(f"  Grasp @   : ({ex:.3f}, {ey:.3f}, {ez + GRASP_Z_OFFSET:.3f})")
+                print(f"  Target    : {target.data.root_pos_w[0, :3].tolist()}")
+                print(f"  Drink @   : ({dx:.3f}, {dy:.3f}, {dz:.3f})")
+                print()
+                ee_marker, target_marker = _setup_markers()
+
+            total_steps = 0
+            released = False
+            _print_header()
+
+            # ---- APPROACH ----
+            phase_name = "APPROACH"
+            target_approach = torch.tensor([[ex, ey, cz]], device=device)
+            for i in range(PHASE_STEPS["APPROACH"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, _rot_err = compute_pose_error(
+                    ee_pos, ee_quat,
+                    target_approach + origin.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] - target_approach[0] - origin).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+            # ---- DESCEND ----
+            phase_name = "DESCEND"
+            target_descend = torch.tensor([[ex, ey, ez + GRASP_Z_OFFSET]], device=device)
+            for i in range(PHASE_STEPS["DESCEND"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, _rot_err = compute_pose_error(
+                    ee_pos, ee_quat,
+                    target_descend + origin.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] - target_descend[0] - origin).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+            # ---- GRASP ----
+            phase_name = "GRASP"
+            print(f"  >>> CLOSING GRIPPER at step {total_steps} <<<", flush=True)
+            grasp_steps = PHASE_STEPS["GRASP"]
+            for i in range(grasp_steps):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
+                _set_gripper_state(robot, 0.7 * progress, env_ids)
+                action = torch.zeros(1, 6, device=device)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_pos, _ = _ee_state(env)
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), 0.0)
+
+            # ---- LIFT ----
+            phase_name = "LIFT"
+            target_lift = torch.tensor([[cx, cy, cz]], device=device)
+            for i in range(PHASE_STEPS["LIFT"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, _rot_err = compute_pose_error(
+                    ee_pos, ee_quat,
+                    target_lift + origin.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] - target_lift[0] - origin).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+            # ---- EXTEND (move EE toward target in XY, raise Z) ----
+            phase_name = "EXTEND"
+            print(f"  >>> EXTEND at step {total_steps} <<<", flush=True)
+            ee_pos_before, ee_quat = _ee_state(env)
+            ee_local_before = ee_pos_before[0] - origin
+            tgt_w = target.data.root_pos_w[0, :3]
+            tgt_local = tgt_w - origin
+            extend_xy = tgt_local[:2]  # go directly to target XY
+            extend_z = ee_local_before[2] + THROW_EXTEND_Z_OFFSET
+            extend_target_local = torch.tensor(
+                [extend_xy[0].item(), extend_xy[1].item(), extend_z.item()],
+                device=device,
+            )
+            extend_target_w = extend_target_local + origin
+
+            for i in range(PHASE_STEPS["EXTEND"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, _ = compute_pose_error(
+                    ee_pos, ee_quat,
+                    extend_target_w.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] - extend_target_w).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+            # ---- THROW (wrist_2 snap from extended position) ----
+            phase_name = "THROW"
+            print(f"  >>> THROW at step {total_steps} <<<", flush=True)
+
+            arm_ids, arm_names = robot.find_joints(
+                ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"])
+            wrist2_ids, _ = robot.find_joints(["right_wrist_2_joint"])
+            wrist2_global = wrist2_ids[0]
+            wrist2_local = next(i for i, g in enumerate(arm_ids) if g == wrist2_global)
+
+            extend_end_joints = robot.data.joint_pos[0, arm_ids].clone().cpu()
+            wrist2_start = extend_end_joints[wrist2_local].item()
+
+            throw_phase_steps = PHASE_STEPS["THROW"]
+            for i in range(throw_phase_steps):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                progress = i / (throw_phase_steps - 1) if throw_phase_steps > 1 else 1.0
+                raw_angle = snap_rad * progress
+                target_wrist2 = wrist2_start + raw_angle
+
+                targets = extend_end_joints.clone()
+                targets[wrist2_local] = target_wrist2
+                robot.set_joint_position_target(targets.unsqueeze(0).to(device),
+                                                joint_ids=arm_ids, env_ids=env_ids)
+                robot.write_data_to_sim()
+                env.sim.step(render=not args_cli.headless if hasattr(args_cli, 'headless') else True)
+
+                if progress >= THROW_RELEASE_PROGRESS and not released:
+                    _set_gripper_state(robot, 0.0, env_ids)
+                    released = True
+                    print(f"  >>> RELEASED at step {total_steps} (progress {progress:.2f}) <<<", flush=True)
+
+                if total_steps % 10 == 0:
+                    ee_pos, _ = _ee_state(env)
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), 0.0)
+
+            env.step(torch.zeros(1, 6, device=device))
+
+            # ---- FLIGHT ----
+            phase_name = "FLIGHT"
+            flight_plan_steps = PHASE_STEPS["FLIGHT"]
+            milk_settled = False
+            settle_steps = 0
+            distance = float("inf")
+
+            for i in range(flight_plan_steps):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                action = torch.zeros(1, 6, device=device)
+                env.step(action)
+
+                milk_vel = milk.data.root_lin_vel_w[0]
+                milk_vel_norm = torch.norm(milk_vel).item()
+
+                if not milk_settled:
+                    if milk_vel_norm < 0.05:
+                        settle_steps += 1
+                    else:
+                        settle_steps = 0
+
+                    if settle_steps >= 30:
+                        milk_settled = True
+                        milk_final = milk.data.root_pos_w[0, :3]
+                        tgt_final = target.data.root_pos_w[0, :3]
+                        distance = torch.norm(milk_final - tgt_final).item()
+                        print(f"\n  >>> LANDED at step {total_steps}: 3D dist to target = {distance:.3f}m <<<\n", flush=True)
+
+                if total_steps % 10 == 0:
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ee_pos, _ = _ee_state(env)
+                    ee_local = ee_pos[0] - origin
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), 0.0)
+
+                if milk_settled and i >= 60:
+                    break
+
+            results.append({"snap_rad": snap_rad, "distance": distance})
+            print(f"  >>> SNAP={snap_rad}: best_throw_dist = {distance:.3f}m", flush=True)
+
+            if distance < best_dist:
+                best_dist = distance
+                best_snap = snap_rad
+
+    except KeyboardInterrupt:
+        print(f"\n[Interrupted]", flush=True)
+
+    env.close()
+
+    # Summary
+    print(f"\n{'='*60}")
+    print(f"  SWEEP RESULTS")
+    print(f"  {'SNAP_RAD':>10}  {'Dist(m)':>10}")
+    print(f"  {'-'*10}  {'-'*10}")
+    for r in results:
+        print(f"  {r['snap_rad']:>10.1f}  {r['distance']:>10.3f}")
+    print(f"\n  BEST: SNAP_RAD={best_snap} -> {best_dist:.3f}m")
+    print(f"{'='*60}")
+
+    return {"results": results, "best_snap": best_snap, "best_dist": best_dist}
+
+
+def run_benchmark(solver_name: str, snap_rad: float = None, num_throws: int = None) -> dict:
+    _snap = snap_rad if snap_rad is not None else THROW_SNAP_RAD
+    print(f"\n{'='*60}")
+    print(f"  IK Solver  : {solver_name}")
+    print(f"  Snap rad   : {_snap}")
+    print(f"  Drink at   : ({DRINK_WORLD_X:.2f}, {DRINK_WORLD_Y:.2f}, {DRINK_WORLD_Z:.2f})")
+    print(f"  Phases     : APPROACH({PHASE_STEPS['APPROACH']}) DESCEND({PHASE_STEPS['DESCEND']})"
+          f" GRASP({PHASE_STEPS['GRASP']}) LIFT({PHASE_STEPS['LIFT']})"
+          f" EXTEND({PHASE_STEPS['EXTEND']}) THROW({PHASE_STEPS['THROW']})")
+    print(f"{'='*60}\n")
+
+    cfg = ThrowingEnvCfg()
+    cfg.scene.num_envs = 1
+    cfg.ik_solver = solver_name
+    cfg.playing_arm_side = PLAYING_SIDE
+    cfg.randomize_target = True
+    cfg.target_x_range = (-0.25, 0.25)
+    cfg.target_y_range = (0.65, 1.0)  # on table, clear of robot body
     cfg.release_at_step = 0
     cfg.release_vel_threshold = float("inf")
     cfg.disable_attachment = True
@@ -398,7 +712,43 @@ def run_benchmark(solver_name: str) -> dict:
                 if args_cli.step_delay > 0:
                     time.sleep(args_cli.step_delay)
 
-            # ---- THROW ----
+            # ---- EXTEND (move EE toward target in XY, raise Z) ----
+            # Re-sync IK controller after LIFT before EXTEND
+            phase_name = "EXTEND"
+            print(f"  >>> EXTEND at step {total_steps} <<<", flush=True)
+            ee_pos_before, ee_quat = _ee_state(env)
+            ee_local_before = ee_pos_before[0] - origin
+            tgt_w = target.data.root_pos_w[0, :3]
+            tgt_local = tgt_w - origin
+            extend_xy = tgt_local[:2]  # go directly to target XY
+            extend_z = ee_local_before[2] + THROW_EXTEND_Z_OFFSET
+            extend_target_local = torch.tensor(
+                [extend_xy[0].item(), extend_xy[1].item(), extend_z.item()],
+                device=device,
+            )
+            extend_target_w = extend_target_local + origin
+
+            for i in range(PHASE_STEPS["EXTEND"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, _ = compute_pose_error(
+                    ee_pos, ee_quat,
+                    extend_target_w.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] - extend_target_w).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # ---- THROW (wrist_2 snap from extended position) ----
             # Direct wrist_2 joint control: bypass IK, write joint targets directly
             phase_name = "THROW"
             print(f"  >>> THROW at step {total_steps} <<<", flush=True)
@@ -409,8 +759,8 @@ def run_benchmark(solver_name: str) -> dict:
             wrist2_global = wrist2_ids[0]
             wrist2_local = next(i for i, g in enumerate(arm_ids) if g == wrist2_global)
 
-            lift_end_joints = robot.data.joint_pos[0, arm_ids].clone().cpu()
-            wrist2_start = lift_end_joints[wrist2_local].item()
+            extend_end_joints = robot.data.joint_pos[0, arm_ids].clone().cpu()
+            wrist2_start = extend_end_joints[wrist2_local].item()
 
             throw_phase_steps = PHASE_STEPS["THROW"]
             for i in range(throw_phase_steps):
@@ -419,10 +769,10 @@ def run_benchmark(solver_name: str) -> dict:
                     break
 
                 progress = i / (throw_phase_steps - 1) if throw_phase_steps > 1 else 1.0
-                raw_angle = _throw_angle(progress)
+                raw_angle = _snap * progress
                 target_wrist2 = wrist2_start + raw_angle
 
-                targets = lift_end_joints.clone()
+                targets = extend_end_joints.clone()
                 targets[wrist2_local] = target_wrist2
                 robot.set_joint_position_target(targets.unsqueeze(0).to(device),
                                                 joint_ids=arm_ids, env_ids=env_ids)
@@ -490,6 +840,8 @@ def run_benchmark(solver_name: str) -> dict:
                     break
 
             # Cycle ends — go back to SETUP for next throw
+            if num_throws is not None and throw_number >= num_throws:
+                break
 
     except KeyboardInterrupt:
         print(f"\n[Interrupted after {throw_number} throws]", flush=True)
@@ -499,6 +851,7 @@ def run_benchmark(solver_name: str) -> dict:
     n = max(len(pos_errors_all), 1)
     return {
         "solver": solver_name,
+        "snap_rad": _snap,
         "total_steps": total_steps,
         "throws": throw_number,
         "mean_pos_error_cm": sum(pos_errors_all) / n * 100,
@@ -520,7 +873,34 @@ def print_metrics(metrics: dict):
             print(f"  {k:<30} {v}")
 
 
-if args_cli.compare:
+def _parse_sweep(sweep_str):
+    if ":" in sweep_str:
+        parts = sweep_str.split(":")
+        start, stop = float(parts[0]), float(parts[1])
+        step = float(parts[2]) if len(parts) > 2 else 1.0
+        vals = []
+        v = start
+        while v <= stop + 1e-9:
+            vals.append(round(v, 8))
+            v += step
+        return vals
+    else:
+        return [float(x.strip()) for x in sweep_str.split(",")]
+
+
+if args_cli.sweep:
+    snap_values = _parse_sweep(args_cli.sweep)
+    sweep_result = run_sweep(args_cli.ik, snap_values)
+
+    if args_cli.output:
+        with open(args_cli.output, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["snap_rad", "distance"])
+            writer.writeheader()
+            for r in sweep_result["results"]:
+                writer.writerow(r)
+        print(f"\n[Metrics] Saved to {args_cli.output}")
+
+elif args_cli.compare:
     solvers = args_cli.compare.split(":")
     all_metrics = []
     for solver in solvers:
