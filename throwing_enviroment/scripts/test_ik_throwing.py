@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""Throwing trajectory benchmark — compare IK solvers on throwing motions.
+"""Multi-phase pick-and-throw IK benchmark.
 
-Generates three benchmark trajectories (arc, linear punch, sinusoidal lob)
-anchored at the initial EE position. Only the throwing arm moves.
+Phases:
+  SETUP    — spawn drink on table, arm at crane pose, gripper open
+  APPROACH — EE moves XY above drink (Z stays at crane height)
+  DESCEND  — EE lowers Z to grasp height
+  GRASP    — close gripper, start kinematic attachment
+  LIFT     — EE returns to crane pose (drink follows via attach)
+  THROW    — wrist_2 snap (position held, orientation-only delta),
+              open gripper + cut attachment at peak snap
+  FLIGHT   — watch drink fly/land, report distance to target, reset cycle
 
 Usage:
-    source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
-    cd throwing_enviroment
-    python scripts/test_ik_throwing.py --ik diffik
-    python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
+  source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
+  cd throwing_enviroment
+  python scripts/test_ik_throwing.py --ik diffik
+  python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
 """
 
 import argparse
@@ -29,26 +36,17 @@ if _PROJECT_ROOT not in sys.path:
 
 from isaaclab.app import AppLauncher
 
-parser = argparse.ArgumentParser(description="Throwing IK solver benchmark")
+parser = argparse.ArgumentParser(description="Multi-phase pick-and-throw IK benchmark")
 parser.add_argument(
-    "--ik",
-    type=str,
-    default="diffik",
+    "--ik", type=str, default="diffik",
     choices=["diffik", "osc", "rmpflow", "curobo"],
     help="IK solver",
 )
 parser.add_argument(
-    "--compare",
-    type=str,
-    default=None,
+    "--compare", type=str, default=None,
     help="Run multiple solvers, e.g. --compare diffik:osc:curobo",
 )
 parser.add_argument("--output", type=str, default=None, help="CSV output path")
-parser.add_argument("--trajectory", type=str, default="arc",
-                    choices=["arc", "linear", "lob"],
-                    help="Benchmark trajectory type")
-parser.add_argument("--amp", type=float, default=0.15, help="Amplitude (m)")
-parser.add_argument("--period", type=int, default=60, help="Steps per cycle")
 parser.add_argument("--step-delay", type=float, default=0.0, help="Sleep between steps")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -56,36 +54,43 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from isaaclab.utils.math import compute_pose_error
+from isaaclab.utils.math import compute_pose_error, quat_rotate
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 import isaaclab.sim as sim_utils
 from tasks.throwing_env_cfg import ThrowingEnvCfg
 from tasks.throwing_env import ThrowingEnv
+from tasks.events import _set_gripper_state
 
 PLAYING_SIDE = "right"
-BODY_TRACK = f"{PLAYING_SIDE}_wrist_3_link"
-NUM_PATH_MARKERS = 31
+EE_BODY = "right_wrist_3_link"
+GRIPPER_JOINT = "rgripper_finger_joint"
+
+DRINK_WORLD_X = 0.40
+DRINK_WORLD_Y = 0.50
+DRINK_WORLD_Z = 0.72
+
+BOTTLE_OFFSET_LOCAL = torch.tensor([-0.012, 0.065, -0.176])
+
+IK_DEFAULT_SCALE = 0.8
+
+PHASE_STEPS = {
+    "APPROACH": 60,
+    "DESCEND": 100,
+    "GRASP": 20,
+    "LIFT": 60,
+    "THROW": 40,
+    "FLIGHT": 300,
+}
 
 
 def _setup_markers():
-    path_cfg = VisualizationMarkersCfg(
-        prim_path="/Visuals/throwPath",
+    ee_cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/eeCurrent",
         markers={
-            "sphere_path": sim_utils.SphereCfg(
-                radius=0.008,
+            "sphere_ee": sim_utils.SphereCfg(
+                radius=0.015,
                 visual_material=sim_utils.PreviewSurfaceCfg(
-                    diffuse_color=(0.0, 0.8, 1.0),
-                ),
-            ),
-        },
-    )
-    release_cfg = VisualizationMarkersCfg(
-        prim_path="/Visuals/releasePoint",
-        markers={
-            "sphere_release": sim_utils.SphereCfg(
-                radius=0.03,
-                visual_material=sim_utils.PreviewSurfaceCfg(
-                    diffuse_color=(1.0, 0.0, 0.0),
+                    diffuse_color=(1.0, 1.0, 0.0),
                 ),
             ),
         },
@@ -101,233 +106,417 @@ def _setup_markers():
             ),
         },
     )
-    ee_cfg = VisualizationMarkersCfg(
-        prim_path="/Visuals/eeCurrent",
-        markers={
-            "sphere_ee": sim_utils.SphereCfg(
-                radius=0.015,
-                visual_material=sim_utils.PreviewSurfaceCfg(
-                    diffuse_color=(1.0, 1.0, 0.0),
-                ),
-            ),
-        },
-    )
-    desired_cfg = VisualizationMarkersCfg(
-        prim_path="/Visuals/desiredEE",
-        markers={
-            "sphere_desired": sim_utils.SphereCfg(
-                radius=0.012,
-                visual_material=sim_utils.PreviewSurfaceCfg(
-                    diffuse_color=(1.0, 0.5, 0.0),
-                ),
-            ),
-        },
-    )
     return (
-        VisualizationMarkers(path_cfg),
-        VisualizationMarkers(release_cfg),
-        VisualizationMarkers(target_cfg),
         VisualizationMarkers(ee_cfg),
-        VisualizationMarkers(desired_cfg),
+        VisualizationMarkers(target_cfg),
     )
 
 
-def _compute_path_world(initial_pos, origin, traj_type, amp, period, device):
-    x0, y0, z0 = initial_pos[0, 0].item(), initial_pos[0, 1].item(), initial_pos[0, 2].item()
-    half = NUM_PATH_MARKERS // 2
-    if traj_type == "arc":
-        t = torch.linspace(0, period, NUM_PATH_MARKERS, device=device)
-        x = torch.full((NUM_PATH_MARKERS,), x0, device=device)
-        y = y0 + 0.15 * (t / period)
-        sin_vals = torch.sin(math.pi * t / period)
-        z = z0 + amp * sin_vals
-    elif traj_type == "linear":
-        t = torch.linspace(0, 1, NUM_PATH_MARKERS, device=device)
-        x = torch.full((NUM_PATH_MARKERS,), x0, device=device)
-        y = y0 + 0.25 * t
-        z = z0 + 0.12 * t * (1.0 - t) * 4.0
-    elif traj_type == "lob":
-        t = torch.linspace(0, 1, NUM_PATH_MARKERS, device=device)
-        x = torch.full((NUM_PATH_MARKERS,), x0, device=device)
-        y = y0 + 0.2 * t
-        phase = torch.linspace(0, math.pi, NUM_PATH_MARKERS, device=device)
-        z = z0 + amp * torch.sin(phase)
-    local = torch.stack([x, y, z], dim=-1)
-    world = local + origin.unsqueeze(0)
-    quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=device).repeat(NUM_PATH_MARKERS, 1)
-    return world, quat
-
-
-def _ee_local(env, robot_name):
-    robot = env.scene[robot_name]
-    body_ids, _ = robot.find_bodies([BODY_TRACK])
-    pos = robot.data.body_pos_w[:, body_ids[0]] - env.scene.env_origins
+def _ee_state(env):
+    robot = env.scene["robot"]
+    body_ids, _ = robot.find_bodies([EE_BODY])
+    pos = robot.data.body_pos_w[:, body_ids[0]]
     quat = robot.data.body_quat_w[:, body_ids[0]]
     return pos, quat
 
 
-def _trajectory_target(step, initial_pos, traj_type, amp, period):
-    """Return (x, y, z) target position for the given step.  Arc is in YZ plane."""
-    progress = (step % period) / period
-    x0, y0, z0 = initial_pos[0, 0].item(), initial_pos[0, 1].item(), initial_pos[0, 2].item()
-
-    if traj_type == "arc":
-        x = x0
-        y = y0 + 0.15 * progress
-        z = z0 + amp * math.sin(math.pi * progress)
-    elif traj_type == "linear":
-        x = x0
-        y = y0 + 0.25 * progress
-        z = z0 + 0.12 * progress * (1.0 - progress) * 4.0
-    elif traj_type == "lob":
-        x = x0
-        y = y0 + 0.2 * progress
-        z = z0 + amp * math.sin(math.pi * progress)
-    return x, y, z
+def _drink_pos_to_table(env):
+    """Reposition the drink bottle onto the table at the fixed spawn location."""
+    milk = env.scene["milk"]
+    origin = env.scene.env_origins[0].to(env.device)
+    drink_pos_w = torch.tensor(
+        [[DRINK_WORLD_X, DRINK_WORLD_Y, DRINK_WORLD_Z]], device=env.device,
+    ) + origin
+    drink_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=env.device)
+    milk.write_root_pose_to_sim(
+        torch.cat([drink_pos_w, drink_quat], dim=-1),
+        env_ids=torch.tensor([0], device=env.device),
+    )
+    milk.write_root_velocity_to_sim(
+        torch.zeros(1, 6, device=env.device),
+        env_ids=torch.tensor([0], device=env.device),
+    )
 
 
-def _gripper_joint_name(side):
-    return f"{'l' if side == 'left' else 'r'}gripper_finger_joint"
+def _gripper_pos(env):
+    robot = env.scene["robot"]
+    ids, _ = robot.find_joints([GRIPPER_JOINT])
+    return robot.data.joint_pos[0, ids[0]].item()
+
+
+def _throw_angle(progress):
+    """Wrist_2 angle (rad) for throw: wind-up (-0.5) -> snap (+1.5) -> follow-through (0)."""
+    if progress < 0.3:
+        t = progress / 0.3
+        return -0.5 * t * t
+    elif progress < 0.5:
+        t = (progress - 0.3) / 0.2
+        return -0.5 + 2.0 * t
+    else:
+        t = (progress - 0.5) / 0.5
+        return 1.5 * (1.0 - t * t)
+
+
+def _print_header():
+    hdr = (
+        f"  {'step':>5}  {'phase':>8}"
+        f"  {'ee_x':>7} {'ee_y':>7} {'ee_z':>7}"
+        f"  {'obj_x':>7} {'obj_y':>7} {'obj_z':>7}"
+        f"  {'grip':>6}  {'ik_cm':>5}"
+    )
+    sep = (
+        f"  {'-----':>5}  {'--------':>8}"
+        f"  {'-----':>7} {'-----':>7} {'-----':>7}"
+        f"  {'-----':>7} {'-----':>7} {'-----':>7}"
+        f"  {'-----':>6}  {'-----':>5}"
+    )
+    print(hdr, flush=True)
+    print(sep, flush=True)
+
+
+def _print_step(step, phase_name, ee_pos_local, drink_pos_local, grip, ik_err_cm):
+    print(
+        f"  {step:<5}  {phase_name:>8}"
+        f"  {ee_pos_local[0]:+7.3f} {ee_pos_local[1]:+7.3f} {ee_pos_local[2]:+7.3f}"
+        f"  {drink_pos_local[0]:+7.3f} {drink_pos_local[1]:+7.3f} {drink_pos_local[2]:+7.3f}"
+        f"  {grip:+6.3f}  {ik_err_cm:5.1f}",
+        flush=True,
+    )
 
 
 def run_benchmark(solver_name: str) -> dict:
     print(f"\n{'='*60}")
     print(f"  IK Solver : {solver_name}")
-    print(f"  Trajectory: {args_cli.trajectory}")
-    print(f"  Amplitude : {args_cli.amp:.2f} m")
-    print(f"  Period    : {args_cli.period} steps")
-    print(f"  Loop mode : repeating indefinitely, Ctrl+C to stop")
+    print(f"  Drink at  : ({DRINK_WORLD_X:.2f}, {DRINK_WORLD_Y:.2f}, {DRINK_WORLD_Z:.2f})")
+    print(f"  Phases    : APPROACH({PHASE_STEPS['APPROACH']}) DESCEND({PHASE_STEPS['DESCEND']})"
+          f" GRASP({PHASE_STEPS['GRASP']}) LIFT({PHASE_STEPS['LIFT']}) THROW({PHASE_STEPS['THROW']})")
     print(f"{'='*60}\n")
 
     cfg = ThrowingEnvCfg()
     cfg.scene.num_envs = 1
     cfg.ik_solver = solver_name
     cfg.playing_arm_side = PLAYING_SIDE
+    cfg.randomize_target = False
+    cfg.release_at_step = 0
+    cfg.release_vel_threshold = float("inf")
+    cfg.disable_attachment = True
     cfg.__post_init__()
+
     if hasattr(cfg.actions.arm, "scale"):
-        cfg.actions.arm.scale = 1.0
+        cfg.actions.arm.scale = IK_DEFAULT_SCALE
     if hasattr(cfg.actions.arm, "position_scale"):
-        cfg.actions.arm.position_scale = 1.0
-        cfg.actions.arm.orientation_scale = 1.0
+        cfg.actions.arm.position_scale = IK_DEFAULT_SCALE
+        cfg.actions.arm.orientation_scale = IK_DEFAULT_SCALE
 
     env = ThrowingEnv(cfg=cfg)
     device = env.device
+    env_ids = torch.tensor([0], device=device)
     env.reset()
 
+    robot = env.scene["robot"]
+    milk = env.scene["milk"]
+    target = env.scene["target"]
     origin = env.scene.env_origins[0].to(device)
 
-    init_pos, init_quat = _ee_local(env, "robot")
-    print(f"  EE start pos (local): x={init_pos[0,0]:.3f} y={init_pos[0,1]:.3f} z={init_pos[0,2]:.3f}\n")
+    # Disable env's built-in attachment/release — script manages it manually
+    env._holding[:] = False
+    env._released[:] = False
 
-    path_markers, release_marker, target_marker, ee_marker, desired_marker = _setup_markers()
+    # Place drink on table, open gripper, let it settle
+    _drink_pos_to_table(env)
+    _set_gripper_state(robot, 0.0, env_ids)
+    for _ in range(60):
+        env.step(torch.zeros(1, 6, device=device))
 
-    path_world, path_quat = _compute_path_world(
-        init_pos, origin, args_cli.trajectory, args_cli.amp, args_cli.period, device,
-    )
-    path_markers.visualize(path_world, path_quat)
-    print("  [Markers] Path spheres (cyan), release (red), target (green), EE (yellow), desired (orange)", flush=True)
+    # Read ACTUAL settled drink position on the table (not hardcoded Z)
+    drink_actual_w = milk.data.root_pos_w[0, :3].clone()
+    drink_actual_local = drink_actual_w - origin
+    dx, dy, dz = drink_actual_local[0].item(), drink_actual_local[1].item(), drink_actual_local[2].item()
 
-    release_idx = NUM_PATH_MARKERS // 2
-    release_pos = path_world[release_idx : release_idx + 1]
-    release_quat = path_quat[release_idx : release_idx + 1]
-    release_marker.visualize(release_pos, release_quat)
+    # Read crane-pose EE position and orientation
+    crane_pos, crane_quat = _ee_state(env)
+    crane_pos_local = crane_pos[0] - origin
+    cx, cy, cz = crane_pos_local[0].item(), crane_pos_local[1].item(), crane_pos_local[2].item()
+
+    # Compute world-frame offset from EE to bottle pinch point (at crane orientation)
+    offset_world = quat_rotate(
+        crane_quat, BOTTLE_OFFSET_LOCAL.to(device).unsqueeze(0),
+    ).squeeze(0)
+    # EE position that places the pinch point exactly at the settled drink
+    ee_at_drink_w = drink_actual_w - offset_world
+    ee_at_drink_local = ee_at_drink_w - origin
+    ex, ey, ez = ee_at_drink_local[0].item(), ee_at_drink_local[1].item(), ee_at_drink_local[2].item()
+
+    print(f"  Crane EE  : ({cx:.3f}, {cy:.3f}, {cz:.3f})")
+    print(f"  EE@drink  : ({ex:.3f}, {ey:.3f}, {ez:.3f})")
+    print(f"  Target    : {target.data.root_pos_w[0, :3].tolist()}")
+    print(f"  Drink @   : ({dx:.3f}, {dy:.3f}, {dz:.3f})")
+    print(f"  Offset W  : ({offset_world[0]:.3f}, {offset_world[1]:.3f}, {offset_world[2]:.3f})")
+    print()
+
+    ee_marker, target_marker = _setup_markers()
 
     pos_errors_all = []
     rot_errors_all = []
-    joint_jerks_all = []
-    ee_positions = []
-    gripper_states = []
-
-    gripper_joint = _gripper_joint_name(PLAYING_SIDE)
-
-    prev_joint_vel = None
-    prev_joint_accel = None
     total_steps = 0
-    t_last = time.time()
+    throw_distances = []
 
-    COL_HDR = f"  {'step':>5}  {'ee_x':>7} {'ee_y':>7} {'ee_z':>7}  {'obj_x':>7} {'obj_y':>7} {'obj_z':>7}  {'grip':>6}  ik_cm"
-    print(COL_HDR, flush=True)
-    print(f"  {'-'*5}  {'-'*7} {'-'*7} {'-'*7}  {'-'*7} {'-'*7} {'-'*7}  {'-'*6}  {'-'*4}", flush=True)
+    released = False
+    throw_number = 0
 
     try:
         while simulation_app.is_running():
-            total_steps += 1
+            total_steps = 0
+            released = False
+            throw_number += 1
 
-            curr_pos, curr_quat = _ee_local(env, "robot")
-            milk_pos = env.scene["milk"].data.root_pos_w[0, :3] - origin
+            if throw_number > 1:
+                env.reset()
+                env._holding[:] = False
+                env._released[:] = False
+                _drink_pos_to_table(env)
+                _set_gripper_state(robot, 0.0, env_ids)
+                for _ in range(30):
+                    env.step(torch.zeros(1, 6, device=device))
+                drink_actual_w = milk.data.root_pos_w[0, :3].clone()
+                drink_actual_local = drink_actual_w - origin
+                dx, dy, dz = drink_actual_local[0].item(), drink_actual_local[1].item(), drink_actual_local[2].item()
+                crane_pos, crane_quat = _ee_state(env)
+                crane_pos_local = crane_pos[0] - origin
+                cx, cy, cz = crane_pos_local[0].item(), crane_pos_local[1].item(), crane_pos_local[2].item()
+                offset_world = quat_rotate(crane_quat, BOTTLE_OFFSET_LOCAL.to(device).unsqueeze(0)).squeeze(0)
+                ee_at_drink_w = drink_actual_w - offset_world
+                ee_at_drink_local = ee_at_drink_w - origin
+                ex, ey, ez = ee_at_drink_local[0].item(), ee_at_drink_local[1].item(), ee_at_drink_local[2].item()
+                print(f"\n--- Throw #{throw_number} ---\n", flush=True)
+                print(f"  Drink settled @ ({dx:.3f}, {dy:.3f}, {dz:.3f})", flush=True)
 
-            target_x, target_y, target_z = _trajectory_target(
-                total_steps, init_pos, args_cli.trajectory, args_cli.amp, args_cli.period
+            _print_header()
+            # ---- APPROACH ----
+            phase_name = "APPROACH"
+            target_approach = torch.tensor(
+                [[ex, ey, cz]], device=device,
             )
+            for i in range(PHASE_STEPS["APPROACH"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
 
-            target_pos_t = torch.tensor(
-                [[target_x, target_y, target_z]], device=device,
-            )
-            pos_err, rot_err = compute_pose_error(
-                curr_pos, curr_quat,
-                target_pos_t, curr_quat.clone(),
-                rot_error_type="axis_angle",
-            )
-            pos_errors_all.append(pos_err.norm(dim=-1).item())
-            rot_errors_all.append(rot_err.norm(dim=-1).item())
-
-            action = torch.cat([pos_err[0], rot_err[0]], dim=-1).unsqueeze(0)
-            env.step(action)
-
-            robot = env.scene["robot"]
-            gripper_ids, _ = robot.find_joints([gripper_joint])
-            gripper_pos = robot.data.joint_pos[0, gripper_ids[0]].item()
-
-            ee_positions.append((curr_pos[0, 0].item(), curr_pos[0, 1].item(), curr_pos[0, 2].item()))
-            gripper_states.append(gripper_pos)
-
-            joint_vel = robot.data.joint_vel[0, :6]
-            if prev_joint_vel is not None and prev_joint_accel is not None:
-                joint_accel = (joint_vel - prev_joint_vel) / env.dt
-                joint_jerk = (joint_accel - prev_joint_accel) / env.dt
-                joint_jerks_all.append(joint_jerk.abs().sum().item())
-                prev_joint_accel = joint_accel
-            elif prev_joint_vel is not None:
-                prev_joint_accel = (joint_vel - prev_joint_vel) / env.dt
-            prev_joint_vel = joint_vel
-
-            if total_steps % 10 == 0:
-                target_pos_t = torch.tensor(
-                    [[target_x, target_y, target_z]], device=device,
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, rot_err = compute_pose_error(
+                    ee_pos, ee_quat,
+                    target_approach + origin.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
                 )
-                world_ee = curr_pos + origin.unsqueeze(0)
-                world_desired = target_pos_t + origin.unsqueeze(0)
-                ee_marker.visualize(world_ee, curr_quat)
-                desired_marker.visualize(world_desired, curr_quat)
+                pos_errors_all.append(pos_err.norm(dim=-1).item())
+                rot_errors_all.append(rot_err.norm(dim=-1).item())
 
-            if total_steps % 50 == 0:
-                cp = curr_pos[0]
-                mp = milk_pos
-                ik_err_cm = torch.norm(curr_pos[0] - target_pos_t[0]).item() * 100
-                print(
-                    f"  {total_steps:<5}  "
-                    f"{cp[0]:+7.3f} {cp[1]:+7.3f} {cp[2]:+7.3f}  "
-                    f"{mp[0]:+7.3f} {mp[1]:+7.3f} {mp[2]:+7.3f}  "
-                    f"{gripper_pos:+6.3f}  {ik_err_cm:4.1f}",
-                    flush=True,
+                action = torch.cat([pos_err[0], rot_err[0] * 0.0], dim=-1).unsqueeze(0)
+                env.step(action)
+
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] + origin - target_approach - origin).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # ---- DESCEND ----
+            phase_name = "DESCEND"
+            target_descend = torch.tensor(
+                [[ex, ey, ez]], device=device,
+            )
+            for i in range(PHASE_STEPS["DESCEND"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, rot_err = compute_pose_error(
+                    ee_pos, ee_quat,
+                    target_descend + origin.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
                 )
+                pos_errors_all.append(pos_err.norm(dim=-1).item())
+                rot_errors_all.append(rot_err.norm(dim=-1).item())
+
+                action = torch.cat([pos_err[0], rot_err[0] * 0.0], dim=-1).unsqueeze(0)
+                env.step(action)
+
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] + origin - target_descend - origin).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # ---- GRASP ----
+            phase_name = "GRASP"
+            print(f"  >>> CLOSING GRIPPER at step {total_steps} <<<", flush=True)
+            grasp_steps = PHASE_STEPS["GRASP"]
+            for i in range(grasp_steps):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
+                grip_target = 0.7 * progress
+                _set_gripper_state(robot, grip_target, env_ids)
+
+                action = torch.zeros(1, 6, device=device)
+                env.step(action)
+
+                if total_steps % 10 == 0:
+                    ee_pos, ee_quat = _ee_state(env)
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), 0.0)
+
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # ---- LIFT ----
+            phase_name = "LIFT"
+            target_lift = torch.tensor([[cx, cy, cz]], device=device)
+            for i in range(PHASE_STEPS["LIFT"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, rot_err = compute_pose_error(
+                    ee_pos, ee_quat,
+                    target_lift + origin.unsqueeze(0), ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                pos_errors_all.append(pos_err.norm(dim=-1).item())
+                rot_errors_all.append(rot_err.norm(dim=-1).item())
+
+                action = torch.cat([pos_err[0], rot_err[0] * 0.0], dim=-1).unsqueeze(0)
+                env.step(action)
+
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] + origin - target_lift - origin).item() * 100
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), ik_err)
+
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # ---- THROW ----
+            # Direct wrist_2 joint control: bypass IK, write joint targets directly
+            phase_name = "THROW"
+            print(f"  >>> THROW at step {total_steps} <<<", flush=True)
+
+            arm_ids, arm_names = robot.find_joints(
+                ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"])
+            wrist2_ids, _ = robot.find_joints(["right_wrist_2_joint"])
+            wrist2_global = wrist2_ids[0]
+            wrist2_local = next(i for i, g in enumerate(arm_ids) if g == wrist2_global)
+
+            lift_end_joints = robot.data.joint_pos[0, arm_ids].clone().cpu()
+            wrist2_start = lift_end_joints[wrist2_local].item()
+
+            throw_phase_steps = PHASE_STEPS["THROW"]
+            for i in range(throw_phase_steps):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                progress = i / (throw_phase_steps - 1) if throw_phase_steps > 1 else 1.0
+                raw_angle = _throw_angle(progress)
+                target_wrist2 = wrist2_start + raw_angle
+
+                targets = lift_end_joints.clone()
+                targets[wrist2_local] = target_wrist2
+                robot.set_joint_position_target(targets.unsqueeze(0).to(device),
+                                                joint_ids=arm_ids, env_ids=env_ids)
+                robot.write_data_to_sim()
+                env.sim.step(render=not args_cli.headless if hasattr(args_cli, 'headless') else True)
+
+                if progress >= 0.55 and not released:
+                    _set_gripper_state(robot, 0.0, env_ids)
+                    released = True
+                    print(f"  >>> RELEASED at step {total_steps} (progress {progress:.2f}) <<<", flush=True)
+
+                if total_steps % 10 == 0:
+                    ee_pos, ee_quat = _ee_state(env)
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), 0.0)
+
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # Re-sync IK controller after manual THROW stepping
+            env.step(torch.zeros(1, 6, device=device))
+
+            # ---- FLIGHT ----
+            phase_name = "FLIGHT"
+            flight_plan_steps = PHASE_STEPS["FLIGHT"]
+            milk_settled = False
+            settle_steps = 0
+
+            for i in range(flight_plan_steps):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+
+                action = torch.zeros(1, 6, device=device)
+                env.step(action)
+
+                milk_vel = milk.data.root_lin_vel_w[0]
+                milk_vel_norm = torch.norm(milk_vel).item()
+
+                if not milk_settled:
+                    if milk_vel_norm < 0.05:
+                        settle_steps += 1
+                    else:
+                        settle_steps = 0
+
+                    if settle_steps >= 30:
+                        milk_settled = True
+                        milk_final = milk.data.root_pos_w[0, :3]
+                        tgt_final = target.data.root_pos_w[0, :3]
+                        dist3d = torch.norm(milk_final - tgt_final).item()
+                        throw_distances.append(dist3d)
+                        print(f"\n  >>> LANDED at step {total_steps}: 3D dist to target = {dist3d:.3f}m <<<\n", flush=True)
+
+                if total_steps % 10 == 0:
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ee_pos, _ = _ee_state(env)
+                    ee_local = ee_pos[0] - origin
+                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env), 0.0)
+
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+                if milk_settled and i >= 60:
+                    break
+
+            # Cycle ends — go back to SETUP for next throw
 
     except KeyboardInterrupt:
-        print("\n[Interrupted by user]", flush=True)
+        print(f"\n[Interrupted after {throw_number} throws]", flush=True)
 
     env.close()
 
     n = max(len(pos_errors_all), 1)
     return {
         "solver": solver_name,
-        "trajectory": args_cli.trajectory,
-        "steps": total_steps,
+        "total_steps": total_steps,
+        "throws": throw_number,
         "mean_pos_error_cm": sum(pos_errors_all) / n * 100,
-        "max_pos_error_cm": max(pos_errors_all) * 100,
+        "max_pos_error_cm": max(pos_errors_all) * 100 if pos_errors_all else 0.0,
         "mean_rot_error_deg": math.degrees(sum(rot_errors_all) / n),
-        "max_rot_error_deg": math.degrees(max(rot_errors_all)),
-        "mean_joint_jerk": sum(joint_jerks_all) / max(len(joint_jerks_all), 1),
-        "total_steps": n,
+        "max_rot_error_deg": math.degrees(max(rot_errors_all)) if rot_errors_all else 0.0,
+        "mean_throw_dist_m": sum(throw_distances) / max(len(throw_distances), 1),
+        "best_throw_dist_m": min(throw_distances) if throw_distances else float("inf"),
     }
 
 
@@ -365,6 +554,7 @@ elif args_cli.output:
         writer.writerow(metrics)
     print(f"\n[Metrics] Saved to {args_cli.output}")
 else:
-    run_benchmark(args_cli.ik)
+    metrics = run_benchmark(args_cli.ik)
+    print_metrics(metrics)
 
 simulation_app.close()

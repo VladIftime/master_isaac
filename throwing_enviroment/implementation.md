@@ -36,7 +36,7 @@ throwing_enviroment/
 │   │   ├── train.py                       # Training launcher (skrl PPO)
 │   │   └── play.py                        # Inference / playback
 │   ├── test_env.py                        # Launch & step environment
-│   ├── test_ik_throwing.py                # IK benchmark (YZ arc trajectories, visual markers, indefinite loop)
+│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → grasp → lift → wrist-snap throw)
 │   ├── test_throw.py                      # Single-throw test (kinematic hold → release → land, --loop flag)
 │   ├── convert_meshes.py                  # OBJ → USD with MeshConverter
 │   ├── prebake_physics.py                 # Apply CollisionAPI + PhysicsMaterial to USD meshes
@@ -105,7 +105,8 @@ throwing_enviroment/
 - **Robot position**: global constant `ROBOT_POS = (0, 0, 0.6)` — body base at z=0.6 atop a kinematic stand
 - **Stand**: Box cuboid (0.5×0.5×0.6 m) beneath the robot, kinematic, centered at half height (z=0.3)
 - **Table**: Box cuboid (1.0×1.2×0.05 m) at `(0, 1.0, 0.575)`, kinematic, surface at z=0.6. Same height as the robot stand — the robot and table share a common work surface.
-- **Drink object**: Spawned at the right wrist_3_link at episode reset, kinematically attached until release via `write_root_pose_to_sim`. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/drink001/drink_target.usd` (Synthesis drink bottle with pre-baked MassAPI, CollisionAPI, and high-friction PhysxMaterial). Dynamic, mass 0.5 kg. Bottle root offset `(-0.012, 0.129, -0.176)` from wrist positions the bottle center between the finger pads.
+- **Drink object**: Dynamic rigid body, mass 0.5 kg. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/drink001/drink_target.usd` (Synthesis drink bottle with pre-baked MassAPI, CollisionAPI, and high-friction PhysxMaterial). In RL training mode, spawned at `right_wrist_3_link` at episode reset and kinematically attached via `write_root_pose_to_sim`. In the standalone IK benchmark (`test_ik_throwing.py`), spawned on the table at a fixed position `(0.40, 0.50, 0.72)` and interacts purely through physics — no kinematic attachment.
+  Bottle root offset `(-0.012, 0.129, -0.176)` in EE-local frame positions the bottle center between the finger pads.
 - **Target (shopping basket)**: Kinematic shopping basket, randomized in XY on the table surface. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/shopping basket002/basket_target.usd` (Synthesis basket with handles removed, single rigid body). Mass 2.0 kg. Size ~0.52×0.38×0.26 m.
 - **Arm initial pose**: Right arm starts at a home pose (`shoulder_lift=-1.57, elbow=1.57, wrist_1=-1.57, wrist_2=-1.57, wrist_3=0.0`). Left arm is idle. Gripper starts **open** (`finger_joint=0.0`).
 
@@ -136,10 +137,8 @@ python scripts/test_throw.py --ik diffik --headless --amp 0.3
 # Indefinite throws (Ctrl+C to stop)
 python scripts/test_throw.py --ik diffik --loop
 
-# IK solver benchmark with visual path markers
-python scripts/test_ik_throwing.py --ik diffik --trajectory arc
-
-# Compare all 4 IK solvers, save to CSV
+# Multi-phase pick-and-throw IK benchmark
+python scripts/test_ik_throwing.py --ik diffik
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
 
 # Headless training
@@ -164,31 +163,46 @@ before releasing it. Three approaches were considered, in order of preference:
 
 At each physics step while `_holding[env_ids] == True`, the object's root pose is
 overwritten to match the end-effector's world pose with a fixed offset placing the
-bottle center between the finger pads:
+bottle center between the finger pads. The offset `(-0.012, 0.129, -0.176)` is
+defined in the **EE's local frame** and rotated into world coordinates via
+`quat_rotate(ee_quat, offset_local)` so it stays correct regardless of arm orientation:
 
 ```python
-bottle_root_offset = torch.tensor([-0.012, 0.129, -0.176], device=ee_pos.device)
-bottle_root = ee_pos[still_holding] + bottle_root_offset.unsqueeze(0)
+bottle_offset_local = torch.tensor([-0.012, 0.129, -0.176], device=ee_pos.device)
+bottle_offset_world = quat_rotate(ee_quat[still_holding], bottle_offset_local)
+bottle_root = ee_pos[still_holding] + bottle_offset_world
 ee_pose = torch.cat([bottle_root, ee_quat[still_holding]], dim=-1)
 milk.write_root_pose_to_sim(ee_pose, env_ids=still_ids)
 ```
 
-The bottle appears between the gripper fingers visually. When the release
-condition is met, the pose write stops. The object inherits its last-frame
-velocity from PhysX's position-derivative velocity computation and flies free.
+**Disabling attachment**: Setting `cfg.disable_attachment = True` causes
+`_update_attachment()` to return immediately, giving the test script full
+manual control over the object and gripper. The `test_ik_throwing.py` benchmark
+uses this mode for pure physics-based pick-and-throw.
 
-**Release condition**: After `release_min_steps` warmup steps (default 10) AND
-when EE linear velocity magnitude exceeds `release_vel_threshold` (default 2.0 m/s):
+**Release condition — two modes**, selected by `cfg.release_at_step`:
 
-```python
-release_mask = (
-    self._holding & ~self._released
-    & (self._steps_in_episode > self.cfg.release_min_steps)
-    & (vel_norm > self.cfg.release_vel_threshold)
-)
-```
+1. **Step-count mode** (`release_at_step > 0`): Object is released at the
+   exact specified step, regardless of velocity:
+   ```python
+   release_mask = (
+       self._holding & ~self._released
+       & (self._steps_in_episode >= self.cfg.release_at_step)
+   )
+   ```
 
-On release, the gripper opens (`finger_joint = 0.0`) for visual feedback.
+2. **Velocity mode** (`release_at_step = 0`, default for RL): After
+   `release_min_steps` warmup steps (default 10) AND when EE linear velocity
+   magnitude exceeds `release_vel_threshold` (default 2.0 m/s):
+   ```python
+   release_mask = (
+       self._holding & ~self._released
+       & (self._steps_in_episode > self.cfg.release_min_steps)
+       & (vel_norm > self.cfg.release_vel_threshold)
+   )
+   ```
+
+On release, the gripper opens (all 6 revolute joints → 0.0) for visual feedback.
 
 **Pros**: Deterministic, works at any speed, object velocity is always smooth,
 no physics tuning required. **Cons**: Not "true" physics grasping — no contact
@@ -287,6 +301,8 @@ cuboid. Stand is centered at half height (z=0.3), extending from z=0 to z=0.6.
 
 Actuators: position-controlled implicit (stiffness=8000, damping=500).
 Four groups: `arm_left`, `arm_right`, `gripper_left`, `gripper_right`.
+Gripper actuators cover all 6 revolute joints per side (main `finger_joint`
++ 5 mimic joints) to explicitly handle PhysX mimic constraint propagation.
 
 ### Arm Initial Joint Positions (Home Pose)
 
@@ -307,7 +323,9 @@ Left arm (idle):
   wrist_2:        1.57
   wrist_3:        0.0
 
-Grippers: finger_joint = 0.0 (open) at reset, closed to 0.7 during attach
+Grippers: finger_joint = 0.0 (open) at reset. Gripper actuator covers all
+6 revolute joints per side (`rgripper_finger_joint`, `rgripper_.*_knuckle_joint$`,
+`rgripper_.*_inner_finger_joint$`) to handle PhysX mimic joints explicitly.
 ```
 
 ### Physics
@@ -461,35 +479,46 @@ cfg.playing_arm_side = "left"
 
 ### IK Solver Testing (`scripts/test_ik_throwing.py`)
 
-Three benchmark trajectories in the **YZ plane** (forward + upward throwing motion):
+Multi-phase pick-and-throw benchmark: the drink is spawned on the table at
+`(0.40, 0.50, 0.72)` and the right arm executes a full pick-and-throw sequence
+using pure physics interaction (no kinematic attachment):
 
-| Trajectory | Description | Parameters |
-|-----------|-------------|-----------|
-| **Arc** | YZ parabolic arc: Y sweeps forward, Z peaks mid-arc | `amp=0.15` m, `period=60` steps |
-| **Linear punch** | Straight line forward-upward with parabolic Z | `amp=0.15` m, `period=60` steps |
-| **Sinusoidal lob** | Y linear forward, Z sine arc | `amp=0.15` m, `period=60` steps |
+| Phase | Steps | Description |
+|-------|-------|-------------|
+| **APPROACH** | 60 | EE moves from crane pose to XY above the drink (Z at crane height) |
+| **DESCEND** | 40 | EE lowers to position where pinch point aligns with drink on table |
+| **GRASP** | 20 | Gripper closes around the drink (all 6 joints → 0.7) |
+| **LIFT** | 60 | EE returns to crane pose (drink may follow via friction if gripped) |
+| **THROW** | 40 | Wrist_2 orientation-only snap: wind-up → snap forward → follow-through; gripper opens at peak snap |
+| **FLIGHT** | ~300 | Drink flies, auto-detect landing, report 3D distance to target; cycle repeats |
 
-X stays at initial EE position (no lateral swing). Visual markers:
-- **Path spheres** (cyan, 31 markers): Full planned EE trajectory
-- **Release point** (red, r=0.03): Midpoint of trajectory
-- **Target marker** (green, r=0.04): Current target position from scene
-- **EE current** (yellow, r=0.015): Actual EE position (updates every 10 steps)
-- **Desired EE** (orange, r=0.012): Target EE position (updates every 10 steps)
+EE approach/descend targets are computed from the desired pinch point:
+`ee_at_drink = drink_world - quat_rotate(crane_quat, bottle_offset_local)`,
+ensuring the gripper fingers align with the drink position on the table.
 
-Markers use `isaaclab.markers.VisualizationMarkers` (same pattern as pingpong's `test_ik_swing.py`).
+**Config overrides**: `disable_attachment=True`, `randomize_target=False`,
+`release_vel_threshold=inf`, `release_at_step=0`. The script manually controls
+the gripper via `_set_gripper_state()` and the drink is never kinematically
+attached — all movement is from physics contact.
+
+The wrist_2 throw produces an angle-axis delta about the EE local Y axis:
+- Wind-up (0–0.4): 0 → −0.3 rad
+- Snap (0.4–0.6): −0.3 → +0.8 rad
+- Follow-through (0.6–1.0): +0.8 → 0 rad
+- Gripper opens at progress 0.55 (peak snap) to release the drink
 
 Per-solver metrics (saved to CSV with `--output`):
-- Mean/max position error (cm)
+- Mean/max position error (cm) during APPROACH/DESCEND/LIFT
 - Mean/max orientation error (deg)
-- Mean joint jerk (rad/s³) — smoothness proxy
-- Total steps completed
+- Mean throw distance (m) — 3D distance from drink landing to target
+- Best throw distance per solver
 
 ```bash
+# Single solver
+python scripts/test_ik_throwing.py --ik curobo
+
 # Compare all solvers
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
-
-# Single solver with visual markers
-python scripts/test_ik_throwing.py --ik curobo --trajectory lob --period 40
 ```
 
 ### Single-Throw Test (`scripts/test_throw.py`)
@@ -739,16 +768,20 @@ Available joint names (24 total):
 3. **Object attachment is non-physical (Option A)**: Kinematic pose write means the
    object doesn't interact with the gripper through contact forces. Physics grip
    (Option B) was attempted but failed due to finger pad collision geometry being
-   too thin (7.5mm) and getting merged through the URDF importer.
+   too thin (7.5mm). The `disable_attachment` config flag allows scripts to take
+   full manual control and bypass the kinematic attachment system entirely.
 
-4. **Bottle root offset is world-frame**: The offset `(-0.012, 0.129, -0.176)`
-   placing the bottle between the finger pads is computed in world coordinates at
-   the home pose. If the arm pose changes significantly, this offset would need to
-   be recomputed in the EE's local frame using quaternion rotation.
+4. **Robotiq 2F-140 mimic joints require explicit handling**: PhysX mimic constraints
+   do not resolve instantly on `write_joint_state_to_sim`. All 6 revolute gripper
+   joints per side must be explicitly set — not just `rgripper_finger_joint`.
+   The `_set_gripper_state()` helper in `events.py` handles this by matching
+   all joints via regex patterns and computing positions from the URDF mimic
+   multipliers. The gripper actuator config in `DualArm_CFG` also covers all
+   6 joints.
 
-5. **Table is kinematic**: The table is a kinematic cuboid at the same height as
-   the robot stand (z=0.6). The basket target sits on the table surface. The
-   drink bottle can land on or bounce off the table surface.
+5. **Table requires explicit collision properties**: The table cuboid had
+   `kinematic_enabled=True` but no `collision_props`, causing dynamic objects to
+   pass through. Fixed by adding `collision_props=CollisionPropertiesCfg(collision_enabled=True)`.
 
 6. **Observation side hardcoded**: Observation terms currently reference
    `right_wrist_3_link` and `ARM_JOINTS_RIGHT`. Switching `playing_arm_side`
@@ -756,18 +789,17 @@ Available joint names (24 total):
 
 7. **`write_root_velocity_to_sim` unreliable**: Attempts to set explicit release
    velocity on the bottle had limited/no effect. The object's post-release velocity
-   is dominated by the pose-teleport artifacts from the holding phase. The
-   `test_throw.py` script has been stripped of all velocity writes.
+   is dominated by the pose-teleport artifacts from the holding phase.
 
 8. **cuRobo CUDA graph**: The cuRobo solver uses `use_cuda_graph=True` which
     requires CUDA ≥ 12.0 for graph resets. See pingpong implementation.md for
     full details on the cuRobo IK solver integration.
 
 9. **Robot joint baking uses FK from simulation**: `export_full_scene.py` now
-    reads live body transforms from the Fabric stage, computes forward kinematics,
-    and bakes the resulting link transforms + joint targets directly into the robot
-    USD. The Scene Editor workflow is no longer needed. Programmatic flattening
-    (single-file USD) still requires the GUI's File > Export > Flatten option.
+   reads live body transforms from the Fabric stage, computes forward kinematics,
+   and bakes the resulting link transforms + joint targets directly into the robot
+   USD. The Scene Editor workflow is no longer needed. Programmatic flattening
+   (single-file USD) still requires the GUI's File > Export > Flatten option.
 
 10. **Fabric/USDRT stage cannot be exported programmatically**: `save_as_stage()`
     and `UsdUtils.FlattenLayerStack` both fail on Fabric-backed stages. The

@@ -11,6 +11,9 @@ from __future__ import annotations
 import torch
 
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.utils.math import quat_rotate
+
+from .events import _set_gripper_state
 
 
 class ThrowingEnv(ManagerBasedRLEnv):
@@ -45,7 +48,9 @@ class ThrowingEnv(ManagerBasedRLEnv):
         return obs, reward, terminated, truncated, info
 
     def _update_attachment(self):
-        """Attach object to EE while holding; release when velocity threshold met."""
+        """Attach object to EE while holding; release by step count or velocity."""
+        if self.cfg.disable_attachment:
+            return
         robot = self.scene["robot"]
         milk = self.scene["milk"]
 
@@ -57,33 +62,38 @@ class ThrowingEnv(ManagerBasedRLEnv):
 
         self._steps_in_episode += 1
 
-        vel_norm = torch.norm(ee_vel, dim=-1)
-        release_mask = (
-            self._holding
-            & ~self._released
-            & (self._steps_in_episode > self.cfg.release_min_steps)
-            & (vel_norm > self.cfg.release_vel_threshold)
-        )
+        if self.cfg.release_at_step > 0:
+            release_mask = (
+                self._holding
+                & ~self._released
+                & (self._steps_in_episode >= self.cfg.release_at_step)
+            )
+        else:
+            vel_norm = torch.norm(ee_vel, dim=-1)
+            release_mask = (
+                self._holding
+                & ~self._released
+                & (self._steps_in_episode > self.cfg.release_min_steps)
+                & (vel_norm > self.cfg.release_vel_threshold)
+            )
         self._released[release_mask] = True
         self._holding[release_mask] = False
 
         still_holding = self._holding & ~self._released
         if still_holding.any():
-            # Kinematic pose write: object follows EE between the finger pads
-            bottle_root_offset = torch.tensor(
-                [-0.129, -0.012, -0.176], device=ee_pos.device,
-            )
-            bottle_root = ee_pos[still_holding] + bottle_root_offset.unsqueeze(0)
+            n_hold = still_holding.sum().item()
+            bottle_offset_local = torch.tensor(
+                [-0.012, 0.129, -0.176], device=ee_pos.device,
+            ).unsqueeze(0).expand(n_hold, -1)
+            bottle_offset_world = quat_rotate(ee_quat[still_holding], bottle_offset_local)
+            bottle_root = ee_pos[still_holding] + bottle_offset_world
             ee_pose = torch.cat([bottle_root, ee_quat[still_holding]], dim=-1)
             still_ids = still_holding.nonzero(as_tuple=True)[0]
             milk.write_root_pose_to_sim(ee_pose, env_ids=still_ids)
 
         if release_mask.any():
             env_ids = release_mask.nonzero(as_tuple=True)[0]
-            gripper_ids, _ = robot.find_joints([self._gripper_joint])
-            gripper_pos = robot.data.joint_pos[:, gripper_ids].clone()
-            gripper_pos[env_ids] = 0.0
-            robot.set_joint_position_target(gripper_pos, joint_ids=gripper_ids)
+            _set_gripper_state(robot, 0.0, env_ids)
 
     def _compute_rewards(self):
         """Compute reward tensors from current physics state."""

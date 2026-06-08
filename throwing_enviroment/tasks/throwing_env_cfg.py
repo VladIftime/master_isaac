@@ -150,7 +150,11 @@ DualArm_CFG = UR5e_SINGLE_CFG.replace(
             damping=500.0,
         ),
         "gripper_right": ImplicitActuatorCfg(
-            joint_names_expr=["rgripper_finger_joint"],
+            joint_names_expr=[
+                "rgripper_finger_joint",
+                "rgripper_.*_knuckle_joint$",
+                "rgripper_.*_inner_finger_joint$",
+            ],
             stiffness=5000.0,
             damping=500.0,
         ),
@@ -226,6 +230,9 @@ class ThrowingSceneCfg(InteractiveSceneCfg):
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
+            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
             ),
         ),
     )
@@ -396,6 +403,9 @@ class ThrowingEnvCfg(ManagerBasedRLEnvCfg):
 
     release_min_steps: int = 10
     release_vel_threshold: float = 2.0
+    release_at_step: int = 0
+    randomize_target: bool = True
+    disable_attachment: bool = False
 
     grip_settle_steps: int = 40
 
