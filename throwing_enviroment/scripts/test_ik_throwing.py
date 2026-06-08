@@ -75,6 +75,10 @@ IK_DEFAULT_SCALE = 0.8
 
 GRASP_Z_OFFSET = 0.3
 
+THROW_WINDUP_RAD = -3.0
+THROW_SNAP_RAD = 6.0
+THROW_RELEASE_PROGRESS = 0.55
+
 PHASE_STEPS = {
     "APPROACH": 60,
     "DESCEND": 100,
@@ -147,16 +151,17 @@ def _gripper_pos(env):
 
 
 def _throw_angle(progress):
-    """Wrist_2 angle (rad) for throw: wind-up (-0.5) -> snap (+1.5) -> follow-through (0)."""
-    if progress < 0.3:
-        t = progress / 0.3
-        return -0.5 * t * t
-    elif progress < 0.5:
-        t = (progress - 0.3) / 0.2
-        return -0.5 + 2.0 * t
+    """Wrist_2 angle (rad) for throw: wind-up (first half) -> snap (second half).
+
+    Tuned by THROW_WINDUP_RAD and THROW_SNAP_RAD.
+    The entire second half is the snap — linear ramp gives constant angular velocity.
+    """
+    if progress < 0.5:
+        t = progress / 0.5
+        return THROW_WINDUP_RAD * t
     else:
         t = (progress - 0.5) / 0.5
-        return 1.5 * (1.0 - t * t)
+        return THROW_WINDUP_RAD + (THROW_SNAP_RAD - THROW_WINDUP_RAD) * t
 
 
 def _print_header():
@@ -431,7 +436,7 @@ def run_benchmark(solver_name: str) -> dict:
                 robot.write_data_to_sim()
                 env.sim.step(render=not args_cli.headless if hasattr(args_cli, 'headless') else True)
 
-                if progress >= 0.55 and not released:
+                if progress >= THROW_RELEASE_PROGRESS and not released:
                     _set_gripper_state(robot, 0.0, env_ids)
                     released = True
                     print(f"  >>> RELEASED at step {total_steps} (progress {progress:.2f}) <<<", flush=True)

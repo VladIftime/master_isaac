@@ -480,45 +480,65 @@ cfg.playing_arm_side = "left"
 ### IK Solver Testing (`scripts/test_ik_throwing.py`)
 
 Multi-phase pick-and-throw benchmark: the drink is spawned on the table at
-`(0.40, 0.40, 0.72)` (settles to z≈0.60) and the right arm executes a full
+`(0.40, 0.50, 0.72)` (settles to z≈0.60) and the right arm executes a full
 pick-and-throw sequence using pure physics interaction (no kinematic
-attachment). The gripper approaches **horizontally from the side** (negative Y
-toward positive Y) with a target orientation defined by an explicit rotation
-matrix (`R_grasp`), then grasps, lifts, and throws via direct wrist_2 joint
-control.
+attachment). The gripper approaches **from above** (top-down), grasps above
+the drink's center, lifts, and throws via direct wrist_2 joint control.
 
 | Phase | Steps | Description |
 |-------|-------|-------------|
-| **APPROACH** | 60 | EE moves from crane pose to a standoff point 15 cm behind the drink at drink height, while rotating to side-grasp orientation (gripper horizontal, pointing toward +Y). Both position and orientation errors are sent to the IK. |
-| **DESCEND** | 100 | EE advances from standoff to the drink position, maintaining side-grasp orientation. IK scale 0.8 for fast convergence. |
+| **APPROACH** | 60 | EE moves from crane pose to XY directly above the drink at crane Z height. Position-only IK (no orientation change). |
+| **DESCEND** | 100 | EE lowers to `GRASP_Z_OFFSET` above the drink center (default 5 cm above). IK scale 0.8 for fast convergence. |
 | **GRASP** | 20 | Gripper closes **gradually** (0.0 → 0.7 over 20 steps via ramped `_set_gripper_state`). |
-| **LIFT** | 60 | EE returns to crane pose (position **and** orientation back to crane quat). |
-| **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at LIFT-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at progress 0.55. |
+| **LIFT** | 60 | EE returns to crane pose (position-only, no orientation change). |
+| **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at LIFT-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at `THROW_RELEASE_PROGRESS`. |
 | **FLIGHT** | ~300 | Drink flies, auto-detect landing (velocity < 0.05 m/s for 30 steps), report 3D distance to target; cycle repeats. |
 
-**Side-grasp orientation** (`R_grasp`): The target EE orientation is defined by
-an explicit rotation matrix specifying the EE body-frame axes in world
-coordinates. The current default is identity (`R = I`), which the user should
-tune to match the specific wrist_3_link frame convention of their URDF. The
-orientation is applied during APPROACH and DESCEND via full 6-D IK commands
-(position + orientation error).
-
 **Drink position**: The drink is placed at `(DRINK_WORLD_X, DRINK_WORLD_Y,
-DRINK_WORLD_Z)` = `(0.40, 0.40, 0.72)`. After physics settling (60 steps),
+DRINK_WORLD_Z)` = `(0.40, 0.50, 0.72)`. After physics settling (60 steps),
 the **actual** root position is read from `milk.data.root_pos_w` and used
-for all subsequent target computations. The bottle offset (`BOTTLE_OFFSET_LOCAL`)
-is set to zero — the EE targets the drink's root position directly.
+for all subsequent target computations. `BOTTLE_OFFSET_LOCAL` is set to zero
+— the EE targets the drink's root position directly. `GRASP_Z_OFFSET`
+(default 0.05 m) raises the grasp point above the drink center so fingers
+wrap around the upper portion.
 
-**Approach standoff**: `approach_standoff = -0.15` places the approach target
-15 cm behind the drink in the −Y direction. During DESCEND the EE advances
-from this standoff point to the drink, approaching from negative Y toward
-positive Y.
+**Throw power tuning** — three constants at the top of the script control the
+throw velocity. The drink's release speed comes **entirely** from the angular
+velocity of wrist_2 at the moment the gripper opens × the lever arm (no
+artificial velocity injection):
 
-**Throw trajectory** (`_throw_angle`): Wrist_2 angle profile (radians):
-- Wind-up (0–0.3): 0 → −0.5 rad
-- Snap (0.3–0.5): −0.5 → +1.5 rad (86°)
-- Follow-through (0.5–1.0): +1.5 → 0 rad
-- Gripper opens at progress 0.55 (peak snap) to release the drink
+```python
+THROW_WINDUP_RAD = -3.0       # wind-up angle (negative = backward)
+THROW_SNAP_RAD = 6.0          # peak forward snap angle
+THROW_RELEASE_PROGRESS = 0.55 # when gripper opens (should be mid-snap)
+```
+
+| Parameter | Effect on release velocity |
+|-----------|---------------------------|
+| `THROW_SNAP_RAD` | Larger → more total rotation → higher peak ω |
+| `THROW_WINDUP_RAD` | More negative → longer backswing, more total angle change |
+| `PHASE_STEPS["THROW"]` | Fewer → same angle in less time → higher ω |
+| `THROW_RELEASE_PROGRESS` | Must align with peak ω (mid-snap ≈ 0.55) |
+
+Approximate angular velocity during snap (constant, linear ramp):
+```
+ω_snap = (SNAP_RAD - WINDUP_RAD) / (0.5 × THROW_STEPS × dt)
+v_release = ω_snap × lever_arm
+```
+
+Default: `(6.0−(−3.0)) / (0.5 × 40 × 1/120) = 54 rad/s`. With ~15 cm lever
+arm: `54 × 0.15 = 8.1 m/s`.
+
+To increase throw power (pick one or combine):
+- Increase snap angle: `THROW_SNAP_RAD = 10.0`
+- Increase windup: `THROW_WINDUP_RAD = -5.0`
+- Halve throw steps: `PHASE_STEPS["THROW"] = 20`
+
+**Throw trajectory** (`_throw_angle`): Simple two-phase linear wrist_2 angle
+profile (radians):
+- Wind-up (0 → 0.5): linear from 0 to THROW_WINDUP_RAD (arm winds back)
+- Snap (0.5 → 1.0): linear from THROW_WINDUP_RAD to THROW_SNAP_RAD (arm snaps forward, constant ω)
+- Gripper opens at THROW_RELEASE_PROGRESS (default 0.55, early in snap phase)
 
 **Config overrides**: `disable_attachment=True`, `randomize_target=False`,
 `release_vel_threshold=inf`, `release_at_step=0`. The script sets
