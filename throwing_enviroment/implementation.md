@@ -502,43 +502,38 @@ for all subsequent target computations. `BOTTLE_OFFSET_LOCAL` is set to zero
 (default 0.05 m) raises the grasp point above the drink center so fingers
 wrap around the upper portion.
 
-**Throw power tuning** — three constants at the top of the script control the
+**Throw power tuning** — two constants at the top of the script control the
 throw velocity. The drink's release speed comes **entirely** from the angular
 velocity of wrist_2 at the moment the gripper opens × the lever arm (no
 artificial velocity injection):
 
 ```python
-THROW_WINDUP_RAD = -3.0       # wind-up angle (negative = backward)
-THROW_SNAP_RAD = 6.0          # peak forward snap angle
-THROW_RELEASE_PROGRESS = 0.55 # when gripper opens (should be mid-snap)
+THROW_SNAP_RAD = 6.0          # forward snap angle (radians)
+THROW_RELEASE_PROGRESS = 0.55 # when gripper opens (fraction through throw)
 ```
 
 | Parameter | Effect on release velocity |
 |-----------|---------------------------|
-| `THROW_SNAP_RAD` | Larger → more total rotation → higher peak ω |
-| `THROW_WINDUP_RAD` | More negative → longer backswing, more total angle change |
+| `THROW_SNAP_RAD` | Larger → more total rotation → higher ω |
 | `PHASE_STEPS["THROW"]` | Fewer → same angle in less time → higher ω |
-| `THROW_RELEASE_PROGRESS` | Must align with peak ω (mid-snap ≈ 0.55) |
+| `THROW_RELEASE_PROGRESS` | Determines launch angle (velocity is constant throughout ramp) |
 
-Approximate angular velocity during snap (constant, linear ramp):
+Approximate angular velocity (constant, linear ramp):
 ```
-ω_snap = (SNAP_RAD - WINDUP_RAD) / (0.5 × THROW_STEPS × dt)
-v_release = ω_snap × lever_arm
+ω = SNAP_RAD / (THROW_STEPS × dt)
+v_release = ω × lever_arm
 ```
 
-Default: `(6.0−(−3.0)) / (0.5 × 40 × 1/120) = 54 rad/s`. With ~15 cm lever
-arm: `54 × 0.15 = 8.1 m/s`.
+Default: `6.0 / (40 × 1/120) = 18 rad/s`. With ~15 cm lever
+arm: `18 × 0.15 = 2.7 m/s`.
 
 To increase throw power (pick one or combine):
 - Increase snap angle: `THROW_SNAP_RAD = 10.0`
-- Increase windup: `THROW_WINDUP_RAD = -5.0`
 - Halve throw steps: `PHASE_STEPS["THROW"] = 20`
 
-**Throw trajectory** (`_throw_angle`): Simple two-phase linear wrist_2 angle
-profile (radians):
-- Wind-up (0 → 0.5): linear from 0 to THROW_WINDUP_RAD (arm winds back)
-- Snap (0.5 → 1.0): linear from THROW_WINDUP_RAD to THROW_SNAP_RAD (arm snaps forward, constant ω)
-- Gripper opens at THROW_RELEASE_PROGRESS (default 0.55, early in snap phase)
+**Throw trajectory** (`_throw_angle`): Linear wrist_2 angle ramp (radians):
+- 0 → 1.0: linear from 0 to THROW_SNAP_RAD (constant angular velocity)
+- Gripper opens at THROW_RELEASE_PROGRESS (default 0.55)
 
 **Config overrides**: `disable_attachment=True`, `randomize_target=False`,
 `release_vel_threshold=inf`, `release_at_step=0`. The script sets

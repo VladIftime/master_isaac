@@ -75,7 +75,6 @@ IK_DEFAULT_SCALE = 0.8
 
 GRASP_Z_OFFSET = 0.3
 
-THROW_WINDUP_RAD = -3.0
 THROW_SNAP_RAD = 6.0
 THROW_RELEASE_PROGRESS = 0.55
 
@@ -151,17 +150,11 @@ def _gripper_pos(env):
 
 
 def _throw_angle(progress):
-    """Wrist_2 angle (rad) for throw: wind-up (first half) -> snap (second half).
+    """Wrist_2 angle (rad) for throw: forward-only linear ramp.
 
-    Tuned by THROW_WINDUP_RAD and THROW_SNAP_RAD.
-    The entire second half is the snap — linear ramp gives constant angular velocity.
+    Tuned by THROW_SNAP_RAD. Constant angular velocity throughout.
     """
-    if progress < 0.5:
-        t = progress / 0.5
-        return THROW_WINDUP_RAD * t
-    else:
-        t = (progress - 0.5) / 0.5
-        return THROW_WINDUP_RAD + (THROW_SNAP_RAD - THROW_WINDUP_RAD) * t
+    return THROW_SNAP_RAD * progress
 
 
 def _print_header():
