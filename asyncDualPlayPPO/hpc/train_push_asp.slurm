@@ -108,7 +108,7 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bob_pushes          "$BOB_PUSHES" \
     --max_goals_per_episode "$MAX_GOALS" \
     --no_abc \
-    --rel-obs\
+    --rel-obs \
     --exp_name            "$EXP_NAME" \
     --headless \
     $RESUME_ARGS \
