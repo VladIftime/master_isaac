@@ -105,8 +105,8 @@ throwing_enviroment/
 - **Robot position**: global constant `ROBOT_POS = (0, 0, 0.6)` — body base at z=0.6 atop a kinematic stand
 - **Stand**: Box cuboid (0.5×0.5×0.6 m) beneath the robot, kinematic, centered at half height (z=0.3)
 - **Table**: Box cuboid (1.0×1.2×0.05 m) at `(0, 1.0, 0.575)`, kinematic, surface at z=0.6. Same height as the robot stand — the robot and table share a common work surface.
-- **Drink object**: Dynamic rigid body, mass 0.5 kg. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/drink001/drink_target.usd` (Synthesis drink bottle with pre-baked MassAPI, CollisionAPI, and high-friction PhysxMaterial). In RL training mode, spawned at `right_wrist_3_link` at episode reset and kinematically attached via `write_root_pose_to_sim`. In the standalone IK benchmark (`test_ik_throwing.py`), spawned on the table at a fixed position `(0.40, 0.50, 0.72)` and interacts purely through physics — no kinematic attachment.
-  Bottle root offset `(-0.012, 0.129, -0.176)` in EE-local frame positions the bottle center between the finger pads.
+- **Drink object**: Dynamic rigid body, mass 0.5 kg. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/drink001/drink_target.usd` (Synthesis drink bottle with pre-baked MassAPI, CollisionAPI, and high-friction PhysxMaterial). In RL training mode, spawned at `right_wrist_3_link` at episode reset and kinematically attached via `write_root_pose_to_sim`. In the standalone IK benchmark (`test_ik_throwing.py`), spawned on the table at a fixed position `(0.40, 0.40, 0.72)` (settles to z≈0.60) and interacts purely through physics — no kinematic attachment. The EE targets the drink root position directly (zero offset).
+  Bottle root offset `(-0.012, 0.129, -0.176)` in EE-local frame is used only for RL kinematic attachment (Option A).
 - **Target (shopping basket)**: Kinematic shopping basket, randomized in XY on the table surface. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/shopping basket002/basket_target.usd` (Synthesis basket with handles removed, single rigid body). Mass 2.0 kg. Size ~0.52×0.38×0.26 m.
 - **Arm initial pose**: Right arm starts at a home pose (`shoulder_lift=-1.57, elbow=1.57, wrist_1=-1.57, wrist_2=-1.57, wrist_3=0.0`). Left arm is idle. Gripper starts **open** (`finger_joint=0.0`).
 
@@ -480,32 +480,52 @@ cfg.playing_arm_side = "left"
 ### IK Solver Testing (`scripts/test_ik_throwing.py`)
 
 Multi-phase pick-and-throw benchmark: the drink is spawned on the table at
-`(0.40, 0.50, 0.72)` and the right arm executes a full pick-and-throw sequence
-using pure physics interaction (no kinematic attachment):
+`(0.40, 0.40, 0.72)` (settles to z≈0.60) and the right arm executes a full
+pick-and-throw sequence using pure physics interaction (no kinematic
+attachment). The gripper approaches **horizontally from the side** (negative Y
+toward positive Y) with a target orientation defined by an explicit rotation
+matrix (`R_grasp`), then grasps, lifts, and throws via direct wrist_2 joint
+control.
 
 | Phase | Steps | Description |
 |-------|-------|-------------|
-| **APPROACH** | 60 | EE moves from crane pose to XY above the drink (Z at crane height) |
-| **DESCEND** | 40 | EE lowers to position where pinch point aligns with drink on table |
-| **GRASP** | 20 | Gripper closes around the drink (all 6 joints → 0.7) |
-| **LIFT** | 60 | EE returns to crane pose (drink may follow via friction if gripped) |
-| **THROW** | 40 | Wrist_2 orientation-only snap: wind-up → snap forward → follow-through; gripper opens at peak snap |
-| **FLIGHT** | ~300 | Drink flies, auto-detect landing, report 3D distance to target; cycle repeats |
+| **APPROACH** | 60 | EE moves from crane pose to a standoff point 15 cm behind the drink at drink height, while rotating to side-grasp orientation (gripper horizontal, pointing toward +Y). Both position and orientation errors are sent to the IK. |
+| **DESCEND** | 100 | EE advances from standoff to the drink position, maintaining side-grasp orientation. IK scale 0.8 for fast convergence. |
+| **GRASP** | 20 | Gripper closes **gradually** (0.0 → 0.7 over 20 steps via ramped `_set_gripper_state`). |
+| **LIFT** | 60 | EE returns to crane pose (position **and** orientation back to crane quat). |
+| **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at LIFT-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at progress 0.55. |
+| **FLIGHT** | ~300 | Drink flies, auto-detect landing (velocity < 0.05 m/s for 30 steps), report 3D distance to target; cycle repeats. |
 
-EE approach/descend targets are computed from the desired pinch point:
-`ee_at_drink = drink_world - quat_rotate(crane_quat, bottle_offset_local)`,
-ensuring the gripper fingers align with the drink position on the table.
+**Side-grasp orientation** (`R_grasp`): The target EE orientation is defined by
+an explicit rotation matrix specifying the EE body-frame axes in world
+coordinates. The current default is identity (`R = I`), which the user should
+tune to match the specific wrist_3_link frame convention of their URDF. The
+orientation is applied during APPROACH and DESCEND via full 6-D IK commands
+(position + orientation error).
+
+**Drink position**: The drink is placed at `(DRINK_WORLD_X, DRINK_WORLD_Y,
+DRINK_WORLD_Z)` = `(0.40, 0.40, 0.72)`. After physics settling (60 steps),
+the **actual** root position is read from `milk.data.root_pos_w` and used
+for all subsequent target computations. The bottle offset (`BOTTLE_OFFSET_LOCAL`)
+is set to zero — the EE targets the drink's root position directly.
+
+**Approach standoff**: `approach_standoff = -0.15` places the approach target
+15 cm behind the drink in the −Y direction. During DESCEND the EE advances
+from this standoff point to the drink, approaching from negative Y toward
+positive Y.
+
+**Throw trajectory** (`_throw_angle`): Wrist_2 angle profile (radians):
+- Wind-up (0–0.3): 0 → −0.5 rad
+- Snap (0.3–0.5): −0.5 → +1.5 rad (86°)
+- Follow-through (0.5–1.0): +1.5 → 0 rad
+- Gripper opens at progress 0.55 (peak snap) to release the drink
 
 **Config overrides**: `disable_attachment=True`, `randomize_target=False`,
-`release_vel_threshold=inf`, `release_at_step=0`. The script manually controls
-the gripper via `_set_gripper_state()` and the drink is never kinematically
-attached — all movement is from physics contact.
-
-The wrist_2 throw produces an angle-axis delta about the EE local Y axis:
-- Wind-up (0–0.4): 0 → −0.3 rad
-- Snap (0.4–0.6): −0.3 → +0.8 rad
-- Follow-through (0.6–1.0): +0.8 → 0 rad
-- Gripper opens at progress 0.55 (peak snap) to release the drink
+`release_vel_threshold=inf`, `release_at_step=0`. The script sets
+`_holding=False` and `_released=False` to prevent the env's built-in
+`object_settled` termination from triggering an unwanted auto-reset during
+the approach/settle phases. The `attach_milk_to_gripper` reset event is
+also skipped when `disable_attachment=True`.
 
 Per-solver metrics (saved to CSV with `--output`):
 - Mean/max position error (cm) during APPROACH/DESCEND/LIFT
@@ -802,9 +822,36 @@ Available joint names (24 total):
    (single-file USD) still requires the GUI's File > Export > Flatten option.
 
 10. **Fabric/USDRT stage cannot be exported programmatically**: `save_as_stage()`
-    and `UsdUtils.FlattenLayerStack` both fail on Fabric-backed stages. The
-    scene export works around this by building a reference-based USD from
-    Isaac Lab data buffers (positions) and cached USD files (robot, assets).
+     and `UsdUtils.FlattenLayerStack` both fail on Fabric-backed stages. The
+     scene export works around this by building a reference-based USD from
+     Isaac Lab data buffers (positions) and cached USD files (robot, assets).
+
+11. **`object_settled` termination triggers unwanted auto-reset in test scripts**:
+    Setting `env._released=True` (needed to disable kinematic attachment) also
+    enables the `object_settled` termination condition. If the drink sits still on
+    the table for 30 steps, the env auto-resets mid-approach. **Fix**: set
+    `env._released=False` in test scripts — `disable_attachment=True` already
+    prevents attachment without needing the `_released` flag.
+
+12. **`attach_milk_to_gripper` closes gripper on every reset**: The reset event
+    unconditionally closes the gripper to 0.7 and teleports the drink to the EE.
+    This interfered with the IK benchmark where the drink should stay on the table.
+    **Fix**: `attach_milk_to_gripper` now returns immediately when
+    `cfg.disable_attachment=True`.
+
+13. **DiffIK singularity jumps at workspace boundary**: The DLS method with λ=0.1
+    amplifies motion in near-singular directions by 1/λ²=100×. When the EE
+    approaches the workspace edge, the IK produces catastrophic joint-space jumps.
+    The test script mitigates this by using `IK_DEFAULT_SCALE=0.8` and sufficient
+    phase step counts. The auto-reset fix (#11) was the primary cause of the
+    observed "teleport" behavior.
+
+14. **`set_joint_position_target` only writes to buffer**: The function does NOT
+    sync to PhysX immediately — it only fills `_data.joint_pos_target`.
+    `write_data_to_sim()` must be called to sync targets to the simulation.
+    During `env.step()`, this sync happens automatically after `apply_actions()`.
+    For manual joint control (e.g. THROW phase), call
+    `robot.write_data_to_sim()` + `env.sim.step()` explicitly.
 
 ## Stack
 

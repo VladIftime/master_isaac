@@ -54,7 +54,7 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-from isaaclab.utils.math import compute_pose_error, quat_rotate
+from isaaclab.utils.math import compute_pose_error, quat_from_euler_xyz, quat_from_matrix, quat_mul, quat_rotate
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 import isaaclab.sim as sim_utils
 from tasks.throwing_env_cfg import ThrowingEnvCfg
@@ -69,9 +69,11 @@ DRINK_WORLD_X = 0.40
 DRINK_WORLD_Y = 0.50
 DRINK_WORLD_Z = 0.72
 
-BOTTLE_OFFSET_LOCAL = torch.tensor([-0.012, 0.065, -0.176])
+BOTTLE_OFFSET_LOCAL = torch.tensor([0.0, 0.0, 0.0])
 
 IK_DEFAULT_SCALE = 0.8
+
+GRASP_Z_OFFSET = 0.3
 
 PHASE_STEPS = {
     "APPROACH": 60,
@@ -238,20 +240,13 @@ def run_benchmark(solver_name: str) -> dict:
     crane_pos_local = crane_pos[0] - origin
     cx, cy, cz = crane_pos_local[0].item(), crane_pos_local[1].item(), crane_pos_local[2].item()
 
-    # Compute world-frame offset from EE to bottle pinch point (at crane orientation)
-    offset_world = quat_rotate(
-        crane_quat, BOTTLE_OFFSET_LOCAL.to(device).unsqueeze(0),
-    ).squeeze(0)
-    # EE position that places the pinch point exactly at the settled drink
-    ee_at_drink_w = drink_actual_w - offset_world
-    ee_at_drink_local = ee_at_drink_w - origin
-    ex, ey, ez = ee_at_drink_local[0].item(), ee_at_drink_local[1].item(), ee_at_drink_local[2].item()
+    # EE targets directly above the drink, grasping above center
+    ex, ey, ez = dx, dy, dz
 
     print(f"  Crane EE  : ({cx:.3f}, {cy:.3f}, {cz:.3f})")
-    print(f"  EE@drink  : ({ex:.3f}, {ey:.3f}, {ez:.3f})")
+    print(f"  Grasp @   : ({ex:.3f}, {ey:.3f}, {ez + GRASP_Z_OFFSET:.3f})")
     print(f"  Target    : {target.data.root_pos_w[0, :3].tolist()}")
     print(f"  Drink @   : ({dx:.3f}, {dy:.3f}, {dz:.3f})")
-    print(f"  Offset W  : ({offset_world[0]:.3f}, {offset_world[1]:.3f}, {offset_world[2]:.3f})")
     print()
 
     ee_marker, target_marker = _setup_markers()
@@ -284,15 +279,12 @@ def run_benchmark(solver_name: str) -> dict:
                 crane_pos, crane_quat = _ee_state(env)
                 crane_pos_local = crane_pos[0] - origin
                 cx, cy, cz = crane_pos_local[0].item(), crane_pos_local[1].item(), crane_pos_local[2].item()
-                offset_world = quat_rotate(crane_quat, BOTTLE_OFFSET_LOCAL.to(device).unsqueeze(0)).squeeze(0)
-                ee_at_drink_w = drink_actual_w - offset_world
-                ee_at_drink_local = ee_at_drink_w - origin
-                ex, ey, ez = ee_at_drink_local[0].item(), ee_at_drink_local[1].item(), ee_at_drink_local[2].item()
+                ex, ey, ez = dx, dy, dz
                 print(f"\n--- Throw #{throw_number} ---\n", flush=True)
                 print(f"  Drink settled @ ({dx:.3f}, {dy:.3f}, {dz:.3f})", flush=True)
 
             _print_header()
-            # ---- APPROACH ----
+            # ---- APPROACH (top-down: XY above drink at crane height) ----
             phase_name = "APPROACH"
             target_approach = torch.tensor(
                 [[ex, ey, cz]], device=device,
@@ -323,10 +315,10 @@ def run_benchmark(solver_name: str) -> dict:
                 if args_cli.step_delay > 0:
                     time.sleep(args_cli.step_delay)
 
-            # ---- DESCEND ----
+            # ---- DESCEND (top-down: lower to above drink center) ----
             phase_name = "DESCEND"
             target_descend = torch.tensor(
-                [[ex, ey, ez]], device=device,
+                [[ex, ey, ez + GRASP_Z_OFFSET]], device=device,
             )
             for i in range(PHASE_STEPS["DESCEND"]):
                 total_steps += 1
@@ -379,7 +371,7 @@ def run_benchmark(solver_name: str) -> dict:
                 if args_cli.step_delay > 0:
                     time.sleep(args_cli.step_delay)
 
-            # ---- LIFT ----
+            # ---- LIFT (return to crane pose) ----
             phase_name = "LIFT"
             target_lift = torch.tensor([[cx, cy, cz]], device=device)
             for i in range(PHASE_STEPS["LIFT"]):
