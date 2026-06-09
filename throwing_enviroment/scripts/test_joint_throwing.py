@@ -301,7 +301,7 @@ def run(num_throws: int = 0):
                 )
                 action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
                 env.step(action)
-                if total_steps % 10 == 0:
+                if total_steps % 5 == 0:
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin
                     _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env))
@@ -323,7 +323,7 @@ def run(num_throws: int = 0):
                 )
                 action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
                 env.step(action)
-                if total_steps % 10 == 0:
+                if total_steps % 5 == 0:
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin
                     _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env))
@@ -341,7 +341,7 @@ def run(num_throws: int = 0):
                 progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
                 _set_gripper_state(robot, 0.7 * progress, env_ids)
                 env.step(torch.zeros(1, 6, device=device))
-                if total_steps % 10 == 0:
+                if total_steps % 5 == 0:
                     ee_pos, _ = _ee_state(env)
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin
@@ -364,7 +364,7 @@ def run(num_throws: int = 0):
                 )
                 action = torch.cat([pos_err[0], torch.zeros(3, device=device)], dim=-1).unsqueeze(0)
                 env.step(action)
-                if total_steps % 10 == 0:
+                if total_steps % 5 == 0:
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin
                     _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env))
@@ -402,7 +402,7 @@ def run(num_throws: int = 0):
                     released = True
                     print(f"      >>> RELEASED at step {i}/{throw_phase_steps} <<<", flush=True)
 
-                if total_steps % 10 == 0:
+                if total_steps % 5 == 0:
                     ee_pos, _ = _ee_state(env)
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin
@@ -447,7 +447,7 @@ def run(num_throws: int = 0):
                         distance = torch.norm(milk_final - tgt_final).item()
                         print(f"\n  >>> LANDED at step {total_steps}: 3D dist = {distance:.3f}m <<<\n", flush=True)
 
-                if total_steps % 20 == 0:
+                if total_steps % 5 == 0:
                     ee_pos, _ = _ee_state(env)
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin

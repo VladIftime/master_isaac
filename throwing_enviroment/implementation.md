@@ -36,11 +36,12 @@ throwing_enviroment/
 │   │   ├── train.py                       # Training launcher (skrl PPO)
 │   │   └── play.py                        # Inference / playback
 │   ├── test_env.py                        # Launch & step environment
-│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → descend → grasp → lift → extend → settle → wrist-snap throw)
+│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → descend → grasp → lift → raise → extend → settle → wrist-snap throw)
+│   ├── test_joint_throwing.py             # Gazebo-style joint-space throw (IK reach → bang-bang all-joint catapult)
 │   ├── test_throw.py                      # Single-throw test (kinematic hold → release → land, --loop flag)
 │   ├── convert_meshes.py                  # OBJ → USD with MeshConverter
 │   ├── prebake_physics.py                 # Apply CollisionAPI + PhysicsMaterial to USD meshes
-│   ├── prebake_drink.py                   # Pre-bake drink001: MassAPI, CollisionAPI, high friction
+│   ├── prebake_drink.py                   # Pre-bake drink001: MassAPI, CollisionAPI, high-friction physics material (properly bound)
 │   ├── prebake_basket.py                  # Pre-bake shopping basket: single rigid body, handles removed
 │   ├── export_full_scene.py               # Export scene USD with FK-baked crane-pose transforms (--pose flag)
 │   ├── inspect_usd.py                     # Inspect USD file prim hierarchy
@@ -141,7 +142,13 @@ python scripts/test_throw.py --ik diffik --loop
 python scripts/test_ik_throwing.py --ik diffik
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
 
+# Gazebo-style joint-space throw (bang-bang all-joint catapult)
+python scripts/test_joint_throwing.py
+python scripts/test_joint_throwing.py --headless --num_throws 10
+python scripts/test_joint_throwing.py --target_x 0.0 --target_y 1.0 --throw_steps 60
 
+# Re-bake drink friction (run after modifying prebake_drink.py)
+python scripts/prebake_drink.py
 
 # Headless training
 python scripts/skrl/train.py --task=Throwing-Direct-v0 --headless --num_envs=1024
@@ -223,12 +230,21 @@ surfaces and the bottle mesh was unreliable. Even with high friction
 (`static_friction=5.0, dynamic_friction=5.0`) baked into the bottle's
 PhysxMaterial, the object slipped through under gravity.
 
-### Option C: PhysX Fixed Joint Constraint (Last Resort)
+### Option C: PhysX Fixed Joint Constraint (Attempted — Failed with Fabric)
 
 Create a physics fixed joint between the gripper pad and object root at reset,
 delete it at release. Equivalent to Gazebo's `graspObjectInGazebo()`. Requires
-raw `omni.physx` interface calls. Use this only if both A and B fail for
-acceptable throwing dynamics.
+`UsdPhysics.FixedJoint.Define()` + `stage.RemovePrim()` at runtime.
+
+**Attempted in `test_joint_throwing.py`** but failed: PhysX with Fabric-backed
+simulation does not pick up USD-level topology changes (new joints) at runtime.
+The joint is created on the USD stage but the GPU physics cache ignores it.
+PhysX warns "disjointed body transforms" and the constraint has no effect.
+Would require a full scene rebuild or a non-Fabric physics pipeline to work.
+
+**Current recommendation**: Use physics gripper friction (Option B) with
+high-friction material (5.0/5.0) properly bound via `UsdShade.MaterialBindingAPI`.
+This holds reliably for moderate accelerations.
 
 ## Throwing Logic
 
@@ -485,8 +501,13 @@ Multi-phase pick-and-throw benchmark: the drink is spawned on the table at
 `(0.65, 0.50, 0.72)` (settles to z≈0.60) and the right arm executes a full
 pick-and-throw sequence using pure physics interaction (no kinematic
 attachment). The gripper approaches **from above** (top-down), grasps above
-the drink's center, lifts, extends toward the target, pauses to settle, and
-throws via direct wrist_2 joint control.
+the drink's center, lifts, raises Z to throw height, extends toward the
+target, pauses to settle, and throws via direct wrist_2 joint control.
+
+Orientation preservation is achieved by splitting the old EXTEND phase (XY+Z
+simultaneously) into separate Z-only and XY-only phases. Each phase
+constrains the IK solver to fewer DOFs, preventing it from finding joint
+configurations that sacrifice orientation to reach the position target.
 
 | Phase | Steps | Description |
 |-------|-------|-------------|
@@ -494,7 +515,8 @@ throws via direct wrist_2 joint control.
 | **DESCEND** | 100 | EE lowers to `GRASP_Z_OFFSET` above the drink center (default 0.3 m above). IK scale 0.8 for fast convergence. |
 | **GRASP** | 20 | Gripper closes **gradually** (0.0 → 0.7 over 20 steps via ramped `_set_gripper_state`). |
 | **LIFT** | 60 | EE returns to crane pose (position-only, no orientation change). |
-| **EXTEND** | 70 | EE moves toward target XY and raises Z by `THROW_EXTEND_Z_OFFSET` (0.30 m) to build momentum and aim. |
+| **RAISE** | 40 | Z-only lift by `THROW_EXTEND_Z_OFFSET` from crane height. Preserves orientation by constraining IK to a single DOF. |
+| **EXTEND** | 65 | XY-only reach toward the target at raised height, moving `EXTEND_RATIO` of the EE-to-target distance (default 0.5 = 50%). Preserves orientation by constraining IK to XY only. |
 | **SETTLE** | 15 | Pause with zero action to let the object settle in the gripper before the rapid wrist snap. |
 | **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at EXTEND-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at `THROW_RELEASE_PROGRESS`. |
 | **FLIGHT** | ~300 | Drink flies, auto-detect landing (velocity < 0.05 m/s for 30 steps), report 3D distance to target; cycle repeats. |
@@ -515,7 +537,8 @@ artificial velocity injection):
 ```python
 THROW_SNAP_RAD = 10.0         # forward snap angle (radians)
 THROW_RELEASE_PROGRESS = 0.55 # when gripper opens (fraction through throw)
-THROW_EXTEND_Z_OFFSET = 0.30  # Z raise during EXTEND for extra height
+THROW_EXTEND_Z_OFFSET = 0.20  # Z raise during RAISE phase for extra height
+EXTEND_RATIO = 0.5             # fraction of EE-to-target distance to extend (0.5 = 50%)
 ```
 
 Target dimensions for the shopping basket (used by spawn area visualization):
@@ -531,6 +554,7 @@ TARGET_HEIGHT = 0.27
 | `THROW_SNAP_RAD` | Larger → more total rotation → higher ω |
 | `PHASE_STEPS["THROW"]` | Fewer → same angle in less time → higher ω |
 | `THROW_RELEASE_PROGRESS` | Determines launch angle (velocity is constant throughout ramp) |
+| `EXTEND_RATIO` | Larger → EE closer to target at release → better aim, but may strain IK |
 
 Approximate angular velocity (constant, linear ramp):
 ```
@@ -544,7 +568,8 @@ arm: `30 × 0.15 = 4.5 m/s`.
 To increase throw power (pick one or combine):
 - Increase snap angle: `THROW_SNAP_RAD = 12.0`
 - Halve throw steps: `PHASE_STEPS["THROW"] = 20`
-- Increase EXTEND Z raise: `THROW_EXTEND_Z_OFFSET = 0.50` (more height for downward arc)
+- Increase Z raise: `THROW_EXTEND_Z_OFFSET = 0.35` (more height for downward arc)
+- Increase EXTEND reach: `EXTEND_RATIO = 0.7` (arm reaches further forward)
 - Increase EXTEND steps: `PHASE_STEPS["EXTEND"] = 100` (more build-up time)
 
 **Throw trajectory** (`_throw_angle`): Linear wrist_2 angle ramp (radians):
@@ -576,6 +601,128 @@ python scripts/test_ik_throwing.py --ik diffik
 
 # Compare all solvers
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
+```
+
+### Joint-Space Throwing (`scripts/test_joint_throwing.py`)
+
+Gazebo-style joint-space pick-and-throw benchmark. Inspired directly by the
+`gazebo_impl/primitive_design.cpp` and `behaviour_change.cpp` patterns:
+pre-defined joint waypoints, `directlySetAllJoints`-style interpolation, and
+timed gripper release. Object held by physics gripper friction (high-friction
+material on drink, combine_mode="max").
+
+**Architecture — hybrid approach:**
+- **APPROACH/DESCEND/LIFT**: Task-space IK via `env.step(action)` with
+  `compute_pose_error()` — proven reliable for reaching the drink.
+- **THROW**: Pure joint-space bang-bang control — all 6 arm joints target
+  `throw_end_joints` from step 0, PD controller drives maximum acceleration.
+  Gripper opens at `RELEASE_PROGRESS` fraction.
+
+This hybrid is necessary because:
+1. Standalone `DifferentialIKController.compute()` fails with the dual-arm
+   robot (Jacobian indexing issue — see Known Issue #16).
+2. Direct `robot.set_joint_position_target()` + `env.sim.step()` only works
+   AFTER `env.step()` has been called (to initialize the actuator PD
+   controller state). The IK phases provide this initialization.
+3. PhysX FixedJoint creation via USD API is unreliable with Fabric-backed
+   simulation (see Known Issue #17).
+
+| Phase | Steps | Method | Description |
+|-------|-------|--------|-------------|
+| **SETTLE** | 60 | `env.step(zeros)` | Spawn drink on table, settle physics |
+| **APPROACH** | 60 | `env.step(pos_err)` | EE moves XY above drink at crane Z |
+| **DESCEND** | 100 | `env.step(pos_err)` | EE lowers to `GRASP_Z_OFFSET` above drink |
+| **GRASP** | 20 | `env.step(zeros)` + gripper ramp | Gripper closes 0.0 → 0.7 |
+| **LIFT** | 60 | `env.step(pos_err)` | EE returns to crane pose |
+| **THROW** | 40 | `set_joint_position_target` (bang-bang) | All 6 joints target throw_end simultaneously |
+| **FLIGHT** | ~300 | `env.step(zeros)` | Detect landing, report distance |
+| **RETURN** | 60 | `env.step(pos_err)` | EE returns to crane pose |
+
+**Bang-bang control** (Gazebo's `directlySetAllJoints` equivalent):
+Instead of linearly interpolating targets (which gives the PD controller only
+small errors to track → slow motion), the THROW phase sets `throw_end_joints`
+as the target from step 0 every step. The full position error drives maximum
+PD force, accelerating the arm as fast as actuator stiffness/damping allows.
+Release happens at peak velocity (before the arm decelerates approaching the
+target).
+
+**Throw waypoint computation** (aim at target):
+```python
+aim_angle = atan2(target_x, target_y)
+throw_end[0] = aim_angle - ARM_THROW_DIRECTION_OFFSET  # shoulder_pan aims throw
+throw_end[1] = start[1] + SHOULDER_LIFT_DELTA * power  # catapult UP
+throw_end[2] = start[2] + ELBOW_DELTA * power          # extend FORWARD
+throw_end[3:6] = start[3:6]                            # wrists hold steady
+```
+
+Where:
+- `ARM_THROW_DIRECTION_OFFSET` accounts for the UR5e arm's natural throw-plane
+  orientation relative to shoulder_pan (empirically tuned, starts at ±π/2)
+- `SHOULDER_LIFT_DELTA = 0.44` and `ELBOW_DELTA = -1.47` from Gazebo's
+  `primitive_design.cpp` (init→end joint differences)
+- `power = clamp(dist / NOMINAL_DIST, 0.6, 1.5)` scales throw intensity by
+  target distance
+
+**Key constants:**
+```python
+GRASP_Z_OFFSET = 0.12          # EE height above drink (must be ≤ finger length!)
+RELEASE_PROGRESS = 0.40        # release at 40% through throw (peak velocity)
+ARM_THROW_DIRECTION_OFFSET = -math.pi / 2  # aim correction for arm kinematics
+SHOULDER_LIFT_DELTA = 0.44     # from Gazebo primitive_design.cpp
+ELBOW_DELTA = -1.47            # from Gazebo primitive_design.cpp
+NOMINAL_DIST = 1.0             # reference distance for power scaling
+```
+
+**Lessons learned during development:**
+
+1. **Standalone `DifferentialIKController` fails with dual-arm**: The Jacobian
+   from `robot.root_physx_view.get_jacobians()` indexed by `arm_ids` does not
+   produce correct IK solutions for the UR5e in dual-arm configuration. The
+   `compute()` function returns the input joint positions unchanged (zero delta).
+   Root cause unresolved — likely a body/joint index mapping issue.
+
+2. **PhysX FixedJoint unreliable with Fabric**: Creating a `UsdPhysics.FixedJoint`
+   via USD API at runtime does not reliably constrain bodies when Fabric is
+   enabled. PhysX warns "disjointed body transforms" and the constraint has no
+   effect on simulation.
+
+3. **PD controller cannot generate fast catapult motion**: With implicit actuator
+   stiffness=8000 and damping=500, shoulder and elbow joints (high inertia)
+   cannot accelerate fast enough for a Gazebo-style catapult in 40 steps (0.33s).
+   Linear interpolation of targets makes this worse (small error → small force).
+   Bang-bang partially mitigates but the arm still moves slowly. The wrist_2-only
+   snap in `test_ik_throwing.py` works because wrist inertia is much lower.
+
+4. **GRASP_Z_OFFSET must be ≤ gripper finger reach**: With offset=0.3m, the EE
+   is 30cm above the drink but Robotiq 2F-140 fingers are only ~14cm long. The
+   gripper closes around air, not the drink. Reducing to 0.10-0.12m places the
+   finger pads at drink height.
+
+5. **Aim direction requires empirical offset**: The catapult throw direction is
+   NOT simply determined by `shoulder_pan`. The full arm kinematic chain, crane
+   pose orientation, and which joints change all affect the release velocity
+   vector. An `ARM_THROW_DIRECTION_OFFSET` constant (±π/2) rotates the aim to
+   compensate.
+
+6. **Drink friction was not properly baked**: The original `prebake_drink.py`
+   applied `PhysxSchema.PhysxMaterialAPI` directly on mesh prims, but this does
+   not create a valid physics material binding. The drink retained its source
+   friction of 0.5/0.4 instead of the intended 5.0/5.0. Fixed by creating a
+   proper `UsdShade.Material` + `UsdPhysics.MaterialAPI` prim and binding it via
+   `UsdShade.MaterialBindingAPI`.
+
+```bash
+# Basic usage
+python scripts/test_joint_throwing.py
+
+# Headless with fixed target
+python scripts/test_joint_throwing.py --headless --target_x 0.0 --target_y 1.0
+
+# Tune throw parameters
+python scripts/test_joint_throwing.py --throw_steps 60 --release_progress 0.4
+
+# Multiple throws
+python scripts/test_joint_throwing.py --num_throws 10
 ```
 
 ### Single-Throw Test (`scripts/test_throw.py`)
@@ -680,7 +827,11 @@ repository as pre-built USD files designed for Isaac Sim:
 **`scripts/prebake_drink.py`** — applies to the drink bottle:
 - `MassAPI` to root prim (enables mass property overrides at spawn time)
 - `CollisionAPI` + `PhysxCollisionAPI` with `convexDecomposition` to all 2 meshes
-- `PhysxMaterialAPI` with `static_friction=5.0`, `dynamic_friction=5.0`, `restitution=0.1` on all collision meshes
+- Creates a `UsdShade.Material` prim (`/root/HighFrictionMaterial`) with
+  `UsdPhysics.MaterialAPI` (`static_friction=5.0`, `dynamic_friction=5.0`,
+  `restitution=0.1`) and binds it to all meshes via `UsdShade.MaterialBindingAPI`
+  with purpose `"physics"`. This is the correct USD pattern for physics materials
+  — applying `PhysxSchema.PhysxMaterialAPI` directly on mesh prims does NOT work.
 
 **`scripts/prebake_basket.py`** — applies to the shopping basket:
 - Removes `RigidBodyAPI` from handle prims (handles become static visual children)
@@ -894,6 +1045,45 @@ Available joint names (24 total):
     `_parse_sweep()` and the sweep dispatch block were removed from
     `test_ik_throwing.py`. Use manual parameter tuning or the `--compare`
     multi-solver benchmark instead.
+
+16. **Standalone `DifferentialIKController` fails with dual-arm robot**: Using
+    `robot.root_physx_view.get_jacobians()[:, ee_jac_idx, :, arm_ids]` and
+    calling `DifferentialIKController.compute()` returns zero-delta joint
+    positions (output == input). The Jacobian column indexing likely doesn't
+    correctly map to the right arm's DOFs in the full 24-DOF articulation.
+    **Workaround**: Use the env's built-in DiffIK action term via `env.step()`
+    which handles the Jacobian mapping internally.
+
+17. **PhysX FixedJoint cannot be created at runtime with Fabric**: Calling
+    `UsdPhysics.FixedJoint.Define(stage, path)` and setting body targets via
+    `GetBody0Rel().SetTargets(...)` during an active simulation produces a
+    PhysX warning "disjointed body transforms" and the constraint has no
+    physical effect. The Fabric backend caches physics state in GPU memory
+    and does not pick up USD-level topology changes (new joints/bodies)
+    without a full scene reset. **Workaround**: Use physics gripper friction
+    (with high-friction material) or kinematic pose write instead of fixed
+    joints.
+
+18. **PD actuators cannot generate catapult-speed motion for high-inertia
+    joints**: With implicit actuator stiffness=8000 and damping=500, the
+    shoulder_lift and elbow joints (which drive heavy links) have PD response
+    times of ~0.5-1.0s. A Gazebo-style catapult (0.44 rad shoulder + 1.47 rad
+    elbow in 0.33s) is physically unreachable — the arm barely moves. The
+    wrist_2 snap in `test_ik_throwing.py` works because wrist inertia is
+    orders of magnitude lower. Options: (a) increase stiffness to 50000+ for
+    throw phase, (b) use effort/velocity control mode during throw, (c) accept
+    longer throw durations (200+ steps), (d) use wrist-only snap with arm
+    pre-positioning (proven approach).
+
+19. **Drink friction requires proper USD material binding**: Applying
+    `PhysxSchema.PhysxMaterialAPI` directly to mesh prims does NOT set
+    effective contact friction. PhysX requires a `UsdShade.Material` prim
+    with `UsdPhysics.MaterialAPI` attributes, bound to the mesh via
+    `UsdShade.MaterialBindingAPI` with purpose `"physics"`. Without this,
+    the drink retains its source model's low friction (0.5/0.4) despite the
+    prebake script appearing to set 5.0/5.0. The scene's
+    `friction_combine_mode="max"` then yields only `max(1.0, 0.5) = 1.0`
+    effective friction — insufficient for reliable grip during fast motions.
 
 ## Stack
 

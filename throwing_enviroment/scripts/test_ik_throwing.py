@@ -93,9 +93,10 @@ IK_DEFAULT_SCALE = 0.8
 
 GRASP_Z_OFFSET = 0.3
 
-THROW_SNAP_RAD = 10.0
-THROW_RELEASE_PROGRESS = 0.55
+THROW_SNAP_RAD = 12.0
+THROW_RELEASE_PROGRESS = 0.60
 THROW_EXTEND_Z_OFFSET = 0.20
+EXTEND_RATIO = 0.6
 
 PHASE_STEPS = {
     "APPROACH": 60,
@@ -476,7 +477,7 @@ def run_benchmark(
                     break
 
                 progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
-                grip_target = 0.75 * progress
+                grip_target = 0.7 * progress
                 _set_gripper_state(robot, grip_target, env_ids)
 
                 action = torch.zeros(1, 6, device=device)
@@ -589,7 +590,7 @@ def run_benchmark(
             ee_local_before = ee_pos_before[0] - origin
             tgt_w = target.data.root_pos_w[0, :3]
             tgt_local = tgt_w - origin
-            extend_xy = tgt_local[:2]
+            extend_xy = ee_local_before[:2] + (tgt_local[:2] - ee_local_before[:2]) * EXTEND_RATIO
             extend_z = ee_local_before[2]
             extend_target_local = torch.tensor(
                 [extend_xy[0].item(), extend_xy[1].item(), extend_z.item()],

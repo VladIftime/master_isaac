@@ -27,7 +27,7 @@ AppLauncher.add_app_launcher_args(parser)
 app = AppLauncher(parser.parse_args([]))
 simulation_app = app.app
 
-from pxr import Usd, UsdGeom, UsdPhysics, PhysxSchema
+from pxr import Usd, UsdGeom, UsdPhysics, UsdShade, PhysxSchema, Sdf
 import shutil
 
 NEW_USDS = os.path.join(_PROJECT_ROOT, "assets", "new_usds")
@@ -47,7 +47,16 @@ mass_api = UsdPhysics.MassAPI.Apply(root)
 if mass_api:
     print(f"  MassAPI applied to root", flush=True)
 
-# Apply CollisionAPI to all meshes
+# Create a high-friction physics material prim
+mat_path = root.GetPath().AppendChild("HighFrictionMaterial")
+mat_prim = UsdShade.Material.Define(stage, mat_path)
+phys_mat = UsdPhysics.MaterialAPI.Apply(mat_prim.GetPrim())
+phys_mat.GetStaticFrictionAttr().Set(5.0)
+phys_mat.GetDynamicFrictionAttr().Set(5.0)
+phys_mat.GetRestitutionAttr().Set(0.1)
+print(f"  Physics material created: static=5.0 dynamic=5.0 restitution=0.1", flush=True)
+
+# Apply CollisionAPI to all meshes and bind the high-friction material
 mesh_count = 0
 for prim in stage.TraverseAll():
     if prim.IsA(UsdGeom.Mesh):
@@ -61,17 +70,11 @@ for prim in stage.TraverseAll():
                 physx_coll.GetApproximationAttr().Set("convexDecomposition")
         except Exception:
             pass
-        # Apply high-friction material for physics grip
-        try:
-            physx_mat = PhysxSchema.PhysxMaterialAPI.Apply(prim)
-            if physx_mat:
-                physx_mat.GetStaticFrictionAttr().Set(5.0)
-                physx_mat.GetDynamicFrictionAttr().Set(5.0)
-                physx_mat.GetRestitutionAttr().Set(0.1)
-        except Exception:
-            pass
+        # Bind the high-friction material to this mesh
+        binding_api = UsdShade.MaterialBindingAPI.Apply(prim)
+        binding_api.Bind(mat_prim, UsdShade.Tokens.weakerThanDescendants, "physics")
 
-print(f"  CollisionAPI applied to {mesh_count} meshes", flush=True)
+print(f"  CollisionAPI + friction material bound to {mesh_count} meshes", flush=True)
 
 stage.GetRootLayer().Save()
 print(f"Saved: {DST}", flush=True)
