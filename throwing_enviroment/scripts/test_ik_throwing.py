@@ -7,7 +7,8 @@ Phases:
   DESCEND  — EE lowers Z to grasp height
   GRASP    — close gripper, start kinematic attachment
   LIFT     — EE returns to crane pose (drink follows via attach)
-  EXTEND   — EE moves 10 cm toward target in XY (shoulder+elbow extend arm forward)
+  RAISE    — EE lifts Z-only by THROW_EXTEND_Z_OFFSET (preserves orientation)
+  EXTEND   — EE moves to target XY at raised height (preserves orientation)
   SETTLE   — pause for object to settle in gripper after EXTEND
   THROW    — wrist_2 snap from extended position,
               open gripper + cut attachment at peak snap
@@ -94,13 +95,14 @@ GRASP_Z_OFFSET = 0.3
 
 THROW_SNAP_RAD = 10.0
 THROW_RELEASE_PROGRESS = 0.55
-THROW_EXTEND_Z_OFFSET = 0.30
+THROW_EXTEND_Z_OFFSET = 0.20
 
 PHASE_STEPS = {
     "APPROACH": 60,
     "DESCEND": 100,
     "GRASP": 20,
     "LIFT": 60,
+    "RAISE": 40,
     "EXTEND": 65,
     "SETTLE": 15,
     "THROW": 40,
@@ -263,6 +265,7 @@ def run_benchmark(
     print(
         f"  Phases     : APPROACH({PHASE_STEPS['APPROACH']}) DESCEND({PHASE_STEPS['DESCEND']})"
         f" GRASP({PHASE_STEPS['GRASP']}) LIFT({PHASE_STEPS['LIFT']})"
+        f" RAISE({PHASE_STEPS['RAISE']})"
         f" EXTEND({PHASE_STEPS['EXTEND']}) SETTLE({PHASE_STEPS['SETTLE']})"
         f" THROW({PHASE_STEPS['THROW']})"
     )
@@ -473,7 +476,7 @@ def run_benchmark(
                     break
 
                 progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
-                grip_target = 0.7 * progress
+                grip_target = 0.75 * progress
                 _set_gripper_state(robot, grip_target, env_ids)
 
                 action = torch.zeros(1, 6, device=device)
@@ -536,16 +539,58 @@ def run_benchmark(
                 if args_cli.step_delay > 0:
                     time.sleep(args_cli.step_delay)
 
-            # ---- EXTEND (move EE toward target in XY, raise Z) ----
-            # Re-sync IK controller after LIFT before EXTEND
+            # ---- RAISE (Z-only lift to throw height) ----
+            phase_name = "RAISE"
+            print(f"  >>> RAISE at step {total_steps} <<<", flush=True)
+            ee_pos_before, ee_quat = _ee_state(env)
+            ee_local_before = ee_pos_before[0] - origin
+            raise_target_local = torch.tensor(
+                [ee_local_before[0].item(), ee_local_before[1].item(),
+                 ee_local_before[2].item() + THROW_EXTEND_Z_OFFSET],
+                device=device,
+            )
+            raise_target_w = raise_target_local + origin
+
+            for i in range(PHASE_STEPS["RAISE"]):
+                total_steps += 1
+                if not simulation_app.is_running():
+                    break
+                ee_pos, ee_quat = _ee_state(env)
+                pos_err, _ = compute_pose_error(
+                    ee_pos,
+                    ee_quat,
+                    raise_target_w.unsqueeze(0),
+                    ee_quat.clone(),
+                    rot_error_type="axis_angle",
+                )
+                action = torch.cat(
+                    [pos_err[0], torch.zeros(3, device=device)], dim=-1
+                ).unsqueeze(0)
+                env.step(action)
+                if total_steps % 10 == 0:
+                    ee_local = ee_pos[0] - origin
+                    milk_local = milk.data.root_pos_w[0, :3] - origin
+                    ik_err = torch.norm(ee_pos[0] - raise_target_w).item() * 100
+                    _print_step(
+                        total_steps,
+                        phase_name,
+                        ee_local,
+                        milk_local,
+                        _gripper_pos(env),
+                        ik_err,
+                    )
+                if args_cli.step_delay > 0:
+                    time.sleep(args_cli.step_delay)
+
+            # ---- EXTEND (move EE toward target in XY at raised height) ----
             phase_name = "EXTEND"
             print(f"  >>> EXTEND at step {total_steps} <<<", flush=True)
             ee_pos_before, ee_quat = _ee_state(env)
             ee_local_before = ee_pos_before[0] - origin
             tgt_w = target.data.root_pos_w[0, :3]
             tgt_local = tgt_w - origin
-            extend_xy = tgt_local[:2]  # go directly to target XY
-            extend_z = ee_local_before[2] + THROW_EXTEND_Z_OFFSET
+            extend_xy = tgt_local[:2]
+            extend_z = ee_local_before[2]
             extend_target_local = torch.tensor(
                 [extend_xy[0].item(), extend_xy[1].item(), extend_z.item()],
                 device=device,
