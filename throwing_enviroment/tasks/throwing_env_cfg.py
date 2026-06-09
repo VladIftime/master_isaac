@@ -171,9 +171,9 @@ ARM_JOINTS_RIGHT = ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"]
 STAND_Z = 0.6
 ROBOT_POS = (0.0, 0.0, STAND_Z)
 
-TABLE_Z = STAND_Z                        # table surface height
-TABLE_CENTER_POS = (0.0, 1.0, TABLE_Z)   # table center forward of robot
-TABLE_SIZE = (2.0, 1.2, 0.05)            # tabletop dimensions (x, y, z)
+TABLE_Z = STAND_Z  # table surface height
+TABLE_CENTER_POS = (0.0, 1.0, TABLE_Z)  # table center forward of robot
+TABLE_SIZE = (2.0, 1.2, 0.05)  # tabletop dimensions (x, y, z)
 
 ##
 # Scene definition
@@ -220,7 +220,11 @@ class ThrowingSceneCfg(InteractiveSceneCfg):
     table = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[TABLE_CENTER_POS[0], TABLE_CENTER_POS[1], TABLE_Z - TABLE_SIZE[2] / 2.0],
+            pos=[
+                TABLE_CENTER_POS[0],
+                TABLE_CENTER_POS[1],
+                TABLE_Z - TABLE_SIZE[2] / 2.0,
+            ],
         ),
         spawn=sim_utils.CuboidCfg(
             size=TABLE_SIZE,
@@ -313,19 +317,11 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         joint_pos = ObsTerm(
             func=obs_mod.robot_joint_positions,
-            params={
-                "robot_cfg": SceneEntityCfg(
-                    "robot", joint_names=ARM_JOINTS_RIGHT
-                )
-            },
+            params={"robot_cfg": SceneEntityCfg("robot", joint_names=ARM_JOINTS_RIGHT)},
         )
         joint_vel = ObsTerm(
             func=obs_mod.robot_joint_velocities,
-            params={
-                "robot_cfg": SceneEntityCfg(
-                    "robot", joint_names=ARM_JOINTS_RIGHT
-                )
-            },
+            params={"robot_cfg": SceneEntityCfg("robot", joint_names=ARM_JOINTS_RIGHT)},
         )
         ee_pose = ObsTerm(
             func=obs_mod.ee_pose,
@@ -333,8 +329,12 @@ class ObservationsCfg:
                 "ee_cfg": SceneEntityCfg("robot", body_names=["right_wrist_3_link"])
             },
         )
-        object_pos = ObsTerm(func=obs_mod.object_position, params={"object_name": "milk"})
-        target_pos = ObsTerm(func=obs_mod.object_position, params={"object_name": "target"})
+        object_pos = ObsTerm(
+            func=obs_mod.object_position, params={"object_name": "milk"}
+        )
+        target_pos = ObsTerm(
+            func=obs_mod.object_position, params={"object_name": "target"}
+        )
         dist_to_target = ObsTerm(func=obs_mod.dist_to_target)
 
         def __post_init__(self):
@@ -384,9 +384,7 @@ class TerminationsCfg:
     object_out_of_bounds = DoneTerm(
         func=term_mod.object_out_of_bounds, time_out="terminated"
     )
-    object_settled = DoneTerm(
-        func=term_mod.object_settled, time_out="terminated"
-    )
+    object_settled = DoneTerm(func=term_mod.object_settled, time_out="terminated")
 
 
 ##
@@ -409,8 +407,8 @@ class ThrowingEnvCfg(ManagerBasedRLEnvCfg):
 
     grip_settle_steps: int = 40
 
-    target_x_range: tuple = (-0.45, 0.45)
-    target_y_range: tuple = (0.7, 1.3)
+    target_x_range: tuple = (0, 0.45)
+    target_y_range: tuple = (1.0, 1.4)
     target_z: float = TABLE_Z + 0.1
 
     contact_threshold: float = 0.06

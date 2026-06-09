@@ -23,7 +23,9 @@ import torch.optim  # noqa: F401
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Test throwing environment.")
-parser.add_argument("--num_envs", type=int, default=4, help="Number of parallel environments.")
+parser.add_argument(
+    "--num_envs", type=int, default=4, help="Number of parallel environments."
+)
 parser.add_argument("--steps", type=int, default=2000, help="Number of steps to run.")
 parser.add_argument(
     "--ik",
@@ -32,7 +34,13 @@ parser.add_argument(
     choices=["diffik", "osc", "rmpflow", "curobo"],
     help="IK solver to use.",
 )
-parser.add_argument("--arm", type=str, default="right", choices=["left", "right"], help="Arm to control.")
+parser.add_argument(
+    "--arm",
+    type=str,
+    default="right",
+    choices=["left", "right"],
+    help="Arm to control.",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -85,7 +93,9 @@ for step in range(args_cli.steps):
         )
 
     if terminated.any():
-        print(f"  Step {step:4d}: {terminated.sum().item()} envs terminated, resetting...")
+        print(
+            f"  Step {step:4d}: {terminated.sum().item()} envs terminated, resetting..."
+        )
 
 print("\n=== Test complete ===")
 env.close()

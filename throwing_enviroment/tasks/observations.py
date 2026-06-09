@@ -49,9 +49,7 @@ def robot_joint_velocities(
 
 def ee_pose(
     env: ManagerBasedRLEnv,
-    ee_cfg: SceneEntityCfg = SceneEntityCfg(
-        "robot", body_names=["right_wrist_3_link"]
-    ),
+    ee_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=["right_wrist_3_link"]),
 ) -> torch.Tensor:
     robot = env.scene[ee_cfg.name]
     body_ids, _ = robot.find_bodies(ee_cfg.body_names)

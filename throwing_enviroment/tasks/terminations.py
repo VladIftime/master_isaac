@@ -43,6 +43,8 @@ def object_settled(
 
     is_settling = (vel_norm < vel_threshold) & env._released
     env._object_settled_count = torch.where(
-        is_settling, env._object_settled_count + 1, torch.zeros_like(env._object_settled_count)
+        is_settling,
+        env._object_settled_count + 1,
+        torch.zeros_like(env._object_settled_count),
     )
     return env._object_settled_count >= settle_steps

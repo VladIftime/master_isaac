@@ -1,6 +1,7 @@
 import json, omni.timeline, omni.usd
 from pxr import UsdPhysics, Sdf
-joints = json.loads('''{
+
+joints = json.loads("""{
   "left_shoulder_pan_joint": 0.0,
   "right_shoulder_pan_joint": 7.473566256521735e-06,
   "left_shoulder_lift_joint": -1.5700000524520874,
@@ -25,26 +26,28 @@ joints = json.loads('''{
   "lgripper_right_inner_finger_joint": 0.0,
   "rgripper_left_inner_finger_joint": -1.5684626930578816e-07,
   "rgripper_right_inner_finger_joint": -3.6735949834110215e-05
-}''')
+}""")
 stage = omni.usd.get_context().get_stage()
 count = 0
 # Debug: print first few prim paths
 all_paths = [str(p.GetPath()) for p in stage.TraverseAll()]
-print(f'Stage has {len(all_paths)} prims')
+print(f"Stage has {len(all_paths)} prims")
 for p in all_paths[:10]:
-    print(f'  {p}')
+    print(f"  {p}")
 for prim in stage.TraverseAll():
     path = str(prim.GetPath())
     for jname, angle in joints.items():
         if jname in path:
-            attr = prim.GetAttribute('drive:angular:physics:targetPosition')
+            attr = prim.GetAttribute("drive:angular:physics:targetPosition")
             if not attr or not attr.IsValid():
-                attr = prim.CreateAttribute('drive:angular:physics:targetPosition', Sdf.ValueTypeNames.Float)
+                attr = prim.CreateAttribute(
+                    "drive:angular:physics:targetPosition", Sdf.ValueTypeNames.Float
+                )
             attr.Set(float(angle))
             count += 1
-            print(f'Set {jname} = {angle:.3f}')
+            print(f"Set {jname} = {angle:.3f}")
             break
-print(f'Set {count} joints')
+print(f"Set {count} joints")
 # Auto-play simulation so joints settle
 tl = omni.timeline.get_timeline_interface()
 tl.play()

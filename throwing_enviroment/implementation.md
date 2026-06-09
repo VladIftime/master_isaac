@@ -36,7 +36,7 @@ throwing_enviroment/
 │   │   ├── train.py                       # Training launcher (skrl PPO)
 │   │   └── play.py                        # Inference / playback
 │   ├── test_env.py                        # Launch & step environment
-│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → grasp → lift → wrist-snap throw, --sweep for SNAP_RAD tuning)
+│   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → descend → grasp → lift → extend → settle → wrist-snap throw)
 │   ├── test_throw.py                      # Single-throw test (kinematic hold → release → land, --loop flag)
 │   ├── convert_meshes.py                  # OBJ → USD with MeshConverter
 │   ├── prebake_physics.py                 # Apply CollisionAPI + PhysicsMaterial to USD meshes
@@ -141,8 +141,7 @@ python scripts/test_throw.py --ik diffik --loop
 python scripts/test_ik_throwing.py --ik diffik
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
 
-# Sweep SNAP_RAD to find best throw distance
-python scripts/test_ik_throwing.py --ik diffik --sweep "1.0:8.0:0.5"
+
 
 # Headless training
 python scripts/skrl/train.py --task=Throwing-Direct-v0 --headless --num_envs=1024
@@ -483,10 +482,11 @@ cfg.playing_arm_side = "left"
 ### IK Solver Testing (`scripts/test_ik_throwing.py`)
 
 Multi-phase pick-and-throw benchmark: the drink is spawned on the table at
-`(0.40, 0.50, 0.72)` (settles to z≈0.60) and the right arm executes a full
+`(0.65, 0.50, 0.72)` (settles to z≈0.60) and the right arm executes a full
 pick-and-throw sequence using pure physics interaction (no kinematic
 attachment). The gripper approaches **from above** (top-down), grasps above
-the drink's center, lifts, and throws via direct wrist_2 joint control.
+the drink's center, lifts, extends toward the target, pauses to settle, and
+throws via direct wrist_2 joint control.
 
 | Phase | Steps | Description |
 |-------|-------|-------------|
@@ -494,25 +494,36 @@ the drink's center, lifts, and throws via direct wrist_2 joint control.
 | **DESCEND** | 100 | EE lowers to `GRASP_Z_OFFSET` above the drink center (default 0.3 m above). IK scale 0.8 for fast convergence. |
 | **GRASP** | 20 | Gripper closes **gradually** (0.0 → 0.7 over 20 steps via ramped `_set_gripper_state`). |
 | **LIFT** | 60 | EE returns to crane pose (position-only, no orientation change). |
-| **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at LIFT-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at `THROW_RELEASE_PROGRESS`. |
+| **EXTEND** | 70 | EE moves toward target XY and raises Z by `THROW_EXTEND_Z_OFFSET` (0.30 m) to build momentum and aim. |
+| **SETTLE** | 15 | Pause with zero action to let the object settle in the gripper before the rapid wrist snap. |
+| **THROW** | 40 | **Direct wrist_2 joint control** — bypasses IK entirely. All arm joint targets are held at EXTEND-end positions; only `right_wrist_2_joint` follows the throw trajectory. Uses `robot.set_joint_position_target()` + `robot.write_data_to_sim()` + `env.sim.step()`. Gripper opens at `THROW_RELEASE_PROGRESS`. |
 | **FLIGHT** | ~300 | Drink flies, auto-detect landing (velocity < 0.05 m/s for 30 steps), report 3D distance to target; cycle repeats. |
 
 **Drink position**: The drink is placed at `(DRINK_WORLD_X, DRINK_WORLD_Y,
-DRINK_WORLD_Z)` = `(0.40, 0.50, 0.72)`. After physics settling (60 steps),
+DRINK_WORLD_Z)` = `(0.65, 0.50, 0.72)`. After physics settling (60 steps),
 the **actual** root position is read from `milk.data.root_pos_w` and used
 for all subsequent target computations. `BOTTLE_OFFSET_LOCAL` is set to zero
 — the EE targets the drink's root position directly. `GRASP_Z_OFFSET`
-(default 0.05 m) raises the grasp point above the drink center so fingers
+(default 0.30 m) raises the grasp point above the drink center so fingers
 wrap around the upper portion.
 
-**Throw power tuning** — two constants at the top of the script control the
+**Throw power tuning** — three constants at the top of the script control the
 throw velocity. The drink's release speed comes **entirely** from the angular
 velocity of wrist_2 at the moment the gripper opens × the lever arm (no
 artificial velocity injection):
 
 ```python
-THROW_SNAP_RAD = 6.0          # forward snap angle (radians)
+THROW_SNAP_RAD = 10.0         # forward snap angle (radians)
 THROW_RELEASE_PROGRESS = 0.55 # when gripper opens (fraction through throw)
+THROW_EXTEND_Z_OFFSET = 0.30  # Z raise during EXTEND for extra height
+```
+
+Target dimensions for the shopping basket (used by spawn area visualization):
+
+```python
+TARGET_WIDTH = 0.38
+TARGET_LENGTH = 0.51
+TARGET_HEIGHT = 0.27
 ```
 
 | Parameter | Effect on release velocity |
@@ -527,18 +538,26 @@ Approximate angular velocity (constant, linear ramp):
 v_release = ω × lever_arm
 ```
 
-Default: `6.0 / (40 × 1/120) = 18 rad/s`. With ~15 cm lever
-arm: `18 × 0.15 = 2.7 m/s`.
+Default: `10.0 / (40 × 1/120) = 30 rad/s`. With ~15 cm lever
+arm: `30 × 0.15 = 4.5 m/s`.
 
 To increase throw power (pick one or combine):
-- Increase snap angle: `THROW_SNAP_RAD = 10.0`
+- Increase snap angle: `THROW_SNAP_RAD = 12.0`
 - Halve throw steps: `PHASE_STEPS["THROW"] = 20`
+- Increase EXTEND Z raise: `THROW_EXTEND_Z_OFFSET = 0.50` (more height for downward arc)
+- Increase EXTEND steps: `PHASE_STEPS["EXTEND"] = 100` (more build-up time)
 
 **Throw trajectory** (`_throw_angle`): Linear wrist_2 angle ramp (radians):
 - 0 → 1.0: linear from 0 to THROW_SNAP_RAD (constant angular velocity)
 - Gripper opens at THROW_RELEASE_PROGRESS (default 0.55)
 
-**Config overrides**: `disable_attachment=True`, `randomize_target=False`,
+**Spawn area visualization**: On startup, a semi-transparent blue cuboid
+(`opacity=0.3`) and four bright-blue corner spheres are drawn on the table
+surface at `TABLE_Z + 0.1`, covering the XY range defined by
+`cfg.target_x_range` × `cfg.target_y_range`. This shows the region where
+target baskets will be randomized.
+
+**Config overrides**: `disable_attachment=True`, `randomize_target=True`,
 `release_vel_threshold=inf`, `release_at_step=0`. The script sets
 `_holding=False` and `_released=False` to prevent the env's built-in
 `object_settled` termination from triggering an unwanted auto-reset during
@@ -557,12 +576,6 @@ python scripts/test_ik_throwing.py --ik diffik
 
 # Compare all solvers
 python scripts/test_ik_throwing.py --compare diffik:osc:rmpflow:curobo --output metrics.csv
-
-# Sweep THROW_SNAP_RAD values (comma-separated)
-python scripts/test_ik_throwing.py --ik diffik --sweep "2.0,3.0,4.0,5.0,6.0"
-
-# Sweep with range (start:stop:step)
-python scripts/test_ik_throwing.py --ik diffik --sweep "1.0:8.0:1.0" --output sweep.csv
 ```
 
 ### Single-Throw Test (`scripts/test_throw.py`)
@@ -876,6 +889,11 @@ Available joint names (24 total):
     During `env.step()`, this sync happens automatically after `apply_actions()`.
     For manual joint control (e.g. THROW phase), call
     `robot.write_data_to_sim()` + `env.sim.step()` explicitly.
+
+15. **Sweep functionality removed**: The `--sweep` CLI argument, `run_sweep()`,
+    `_parse_sweep()` and the sweep dispatch block were removed from
+    `test_ik_throwing.py`. Use manual parameter tuning or the `--compare`
+    multi-solver benchmark instead.
 
 ## Stack
 

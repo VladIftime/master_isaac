@@ -25,11 +25,19 @@ if _PROJECT_ROOT not in sys.path:
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Single throw test.")
-parser.add_argument("--ik", type=str, default="diffik", choices=["diffik", "osc", "rmpflow", "curobo"])
+parser.add_argument(
+    "--ik", type=str, default="diffik", choices=["diffik", "osc", "rmpflow", "curobo"]
+)
 parser.add_argument("--amp", type=float, default=0.3, help="Throwing arc amplitude (m)")
-parser.add_argument("--period", type=int, default=60, help="Steps for full throwing arc")
-parser.add_argument("--release-at", type=int, default=30, help="Step to release (0=auto: period/2)")
-parser.add_argument("--loop", action="store_true", help="Run throws indefinitely, resetting after each")
+parser.add_argument(
+    "--period", type=int, default=60, help="Steps for full throwing arc"
+)
+parser.add_argument(
+    "--release-at", type=int, default=30, help="Step to release (0=auto: period/2)"
+)
+parser.add_argument(
+    "--loop", action="store_true", help="Run throws indefinitely, resetting after each"
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -77,10 +85,15 @@ print()
 
 release_step = args_cli.release_at if args_cli.release_at > 0 else args_cli.period // 2
 
-print(f"{'step':>5}  {'ee_y':>7} {'ee_z':>7}  {'obj_y':>7} {'obj_z':>7}  {'v_obj':>6}  {'dist3d':>7}  state")
-print(f"{'-----':>5}  {'-----':>7} {'-----':>7}  {'-----':>7} {'-----':>7}  {'-----':>6}  {'-----':>7}  -----")
+print(
+    f"{'step':>5}  {'ee_y':>7} {'ee_z':>7}  {'obj_y':>7} {'obj_z':>7}  {'v_obj':>6}  {'dist3d':>7}  state"
+)
+print(
+    f"{'-----':>5}  {'-----':>7} {'-----':>7}  {'-----':>7} {'-----':>7}  {'-----':>6}  {'-----':>7}  -----"
+)
 
 throw_number = 0
+
 
 def run_single_throw():
     global step, released, throw_number
@@ -101,7 +114,11 @@ def run_single_throw():
 
         target_pos_t = torch.tensor([[target_x, target_y, target_z]], device=device)
         pos_err, rot_err = compute_pose_error(
-            curr_pos, curr_quat, target_pos_t, curr_quat.clone(), rot_error_type="axis_angle",
+            curr_pos,
+            curr_quat,
+            target_pos_t,
+            curr_quat.clone(),
+            rot_error_type="axis_angle",
         )
         action = torch.cat([pos_err[0], rot_err[0]], dim=-1).unsqueeze(0)
         obs, reward, terminated, truncated, info = env.step(action)
@@ -110,7 +127,10 @@ def run_single_throw():
             milk_final = milk.data.root_pos_w[0, :3]
             tgt_final = target.data.root_pos_w[0, :3]
             dist_3d = torch.norm(milk_final - tgt_final).item()
-            print(f"\n  Throw #{throw_number} complete. 3D distance: {dist_3d:.3f}m\n", flush=True)
+            print(
+                f"\n  Throw #{throw_number} complete. 3D distance: {dist_3d:.3f}m\n",
+                flush=True,
+            )
             if args_cli.loop:
                 env.reset()
                 return True
@@ -122,7 +142,8 @@ def run_single_throw():
             env._released[0] = True
             gripper_ids, _ = robot.find_joints(["rgripper_finger_joint"])
             robot.set_joint_position_target(
-                torch.zeros(1, 1, device=device), joint_ids=gripper_ids,
+                torch.zeros(1, 1, device=device),
+                joint_ids=gripper_ids,
             )
             released = True
             print("  >>> RELEASED <<<", flush=True)
@@ -130,7 +151,9 @@ def run_single_throw():
         # Read state
         milk_pos = milk.data.root_pos_w[0, :3] - origin
         milk_vel = milk.data.root_lin_vel_w[0]
-        dist_3d = torch.norm(milk.data.root_pos_w[0, :3] - target.data.root_pos_w[0, :3]).item()
+        dist_3d = torch.norm(
+            milk.data.root_pos_w[0, :3] - target.data.root_pos_w[0, :3]
+        ).item()
         ee_pos = curr_pos[0]
         obj_speed = torch.norm(milk_vel).item()
 
@@ -147,6 +170,7 @@ def run_single_throw():
         if step > 2000:
             print("\n  Timeout.", flush=True)
             return False
+
 
 try:
     if args_cli.loop:

@@ -63,15 +63,20 @@ for name, path in usd_files.items():
 
         is_mesh = bool(UsdGeom.Mesh(prim))
 
-        if is_mesh or depth == 0 or any(
-            k in str(s)
-            for k in ["RigidBody", "Collision", "Mass", "Physics"]
-            for s in applied_schemas
+        if (
+            is_mesh
+            or depth == 0
+            or any(
+                k in str(s)
+                for k in ["RigidBody", "Collision", "Mass", "Physics"]
+                for s in applied_schemas
+            )
         ):
             print(f"{indent}Prim: {prim_path_str}  (type={ptype})", flush=True)
 
         physics_schemas = [
-            s for s in applied_schemas
+            s
+            for s in applied_schemas
             if any(k in s for k in ["RigidBody", "Collision", "Mass", "Physics"])
         ]
         if physics_schemas:

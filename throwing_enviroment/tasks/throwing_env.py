@@ -26,7 +26,9 @@ class ThrowingEnv(ManagerBasedRLEnv):
 
         self._side = self.cfg.playing_arm_side
         self._ee_body = f"{self._side}_wrist_3_link"
-        self._gripper_joint = f"{'l' if self._side == 'left' else 'r'}gripper_finger_joint"
+        self._gripper_joint = (
+            f"{'l' if self._side == 'left' else 'r'}gripper_finger_joint"
+        )
 
         self._holding = torch.ones(self.num_envs, device=self.device).bool()
         self._released = torch.zeros(self.num_envs, device=self.device).bool()
@@ -82,10 +84,17 @@ class ThrowingEnv(ManagerBasedRLEnv):
         still_holding = self._holding & ~self._released
         if still_holding.any():
             n_hold = still_holding.sum().item()
-            bottle_offset_local = torch.tensor(
-                [-0.012, 0.129, -0.176], device=ee_pos.device,
-            ).unsqueeze(0).expand(n_hold, -1)
-            bottle_offset_world = quat_rotate(ee_quat[still_holding], bottle_offset_local)
+            bottle_offset_local = (
+                torch.tensor(
+                    [-0.012, 0.129, -0.176],
+                    device=ee_pos.device,
+                )
+                .unsqueeze(0)
+                .expand(n_hold, -1)
+            )
+            bottle_offset_world = quat_rotate(
+                ee_quat[still_holding], bottle_offset_local
+            )
             bottle_root = ee_pos[still_holding] + bottle_offset_world
             ee_pose = torch.cat([bottle_root, ee_quat[still_holding]], dim=-1)
             still_ids = still_holding.nonzero(as_tuple=True)[0]

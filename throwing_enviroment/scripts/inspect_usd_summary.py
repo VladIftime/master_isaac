@@ -58,7 +58,9 @@ for name, path in usd_files.items():
                 max_pt = [max(p[i] for p in pts_list) for i in range(3)]
                 ext = [max_pt[i] - min_pt[i] for i in range(3)]
                 purpose = prim.GetAttribute("purpose").Get() or "default"
-                all_meshes.append((str(prim.GetPath()), len(pts_list), ext, min_pt, purpose))
+                all_meshes.append(
+                    (str(prim.GetPath()), len(pts_list), ext, min_pt, purpose)
+                )
         for child in prim.GetChildren():
             walk(child, depth + 1)
 
@@ -74,10 +76,19 @@ for name, path in usd_files.items():
         all_min = [min(m[3][i] for m in all_meshes) for i in range(3)]
         all_max = [max(m[3][i] + m[2][i] for m in all_meshes) for i in range(3)]
         global_extent = [all_max[i] - all_min[i] for i in range(3)]
-        print(f"  Combined extent: [{global_extent[0]:.2f}, {global_extent[1]:.2f}, {global_extent[2]:.2f}]", flush=True)
-        print(f"  Combined bbox: min=[{all_min[0]:.2f}, {all_min[1]:.2f}, {all_min[2]:.2f}] max=[{all_max[0]:.2f}, {all_max[1]:.2f}, {all_max[2]:.2f}]", flush=True)
+        print(
+            f"  Combined extent: [{global_extent[0]:.2f}, {global_extent[1]:.2f}, {global_extent[2]:.2f}]",
+            flush=True,
+        )
+        print(
+            f"  Combined bbox: min=[{all_min[0]:.2f}, {all_min[1]:.2f}, {all_min[2]:.2f}] max=[{all_max[0]:.2f}, {all_max[1]:.2f}, {all_max[2]:.2f}]",
+            flush=True,
+        )
         for mpath, nverts, ext, min_pt, purpose in all_meshes[:3]:
-            print(f"    {mpath}: {nverts}v, extent={[f'{e:.2f}' for e in ext]}, purpose={purpose}", flush=True)
+            print(
+                f"    {mpath}: {nverts}v, extent={[f'{e:.2f}' for e in ext]}, purpose={purpose}",
+                flush=True,
+            )
         if len(all_meshes) > 3:
             print(f"    ... +{len(all_meshes)-3} more meshes", flush=True)
 
@@ -93,7 +104,10 @@ for name, path in usd_files.items():
             cops = cxf.GetOrderedXformOps()
             if cops:
                 for op in cops:
-                    print(f"    Child {child.GetPath()} xform op: {op.GetName()}", flush=True)
+                    print(
+                        f"    Child {child.GetPath()} xform op: {op.GetName()}",
+                        flush=True,
+                    )
 
 print("\nDone.", flush=True)
 simulation_app.close()

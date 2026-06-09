@@ -73,7 +73,10 @@ for prim in stage.TraverseAll():
         pedal_prim = prim
 
 if not all([lid_prim, body_prim, pedal_prim]):
-    print(f"ERROR: Missing prims: lid={lid_prim}, body={body_prim}, pedal={pedal_prim}", flush=True)
+    print(
+        f"ERROR: Missing prims: lid={lid_prim}, body={body_prim}, pedal={pedal_prim}",
+        flush=True,
+    )
     simulation_app.close()
     exit(1)
 
@@ -123,6 +126,7 @@ for prim in stage.TraverseAll():
             mass_api.GetMassAttr().Set(mass_values[basename])
             print(f"  Mass {basename}: {mass_values[basename]} kg", flush=True)
 
+
 def rotate_around_x(prim, angle_deg, op_suffix):
     """Rotate a prim around its local X axis by composing with existing transform."""
     xf = UsdGeom.Xformable(prim)
@@ -131,6 +135,7 @@ def rotate_around_x(prim, angle_deg, op_suffix):
     if len(ops) == 1 and "transform" in ops[0].GetName():
         existing_mat = Gf.Matrix4d(ops[0].Get())
         import math
+
         angle_rad = angle_deg * math.pi / 180.0
         rotation = Gf.Rotation(Gf.Vec3d.XAxis(), angle_rad)
         new_mat = existing_mat * Gf.Matrix4d(rotation, Gf.Vec3d(0))
@@ -140,6 +145,7 @@ def rotate_around_x(prim, angle_deg, op_suffix):
     else:
         rot_op = xf.AddRotateXOp(UsdGeom.XformOp.PrecisionDouble, op_suffix)
         rot_op.Set(angle_deg)
+
 
 rotate_around_x(lid_prim, -90.0, "open_lid")
 print(f"Lid rotated -90° around X (open)", flush=True)

@@ -64,8 +64,10 @@ cfg = ThrowingEnvCfg()
 cfg.scene.num_envs = 1
 
 if args_cli.pose:
-    pose_overrides = json.loads(args_cli.pose) if args_cli.pose.startswith("{") else (
-        json.load(open(args_cli.pose)) if os.path.isfile(args_cli.pose) else {}
+    pose_overrides = (
+        json.loads(args_cli.pose)
+        if args_cli.pose.startswith("{")
+        else (json.load(open(args_cli.pose)) if os.path.isfile(args_cli.pose) else {})
     )
     for jname, jval in pose_overrides.items():
         if jname in cfg.scene.robot.init_state.joint_pos:
@@ -87,10 +89,14 @@ target = env.scene["target"]
 root_pos = robot.data.root_pos_w[0]
 root_quat = robot.data.root_quat_w[0]
 
-print(f"Robot root world pos:  ({root_pos[0]:.3f}, {root_pos[1]:.3f}, {root_pos[2]:.3f})",
-      flush=True)
-print(f"Robot root world quat: ({root_quat[0]:.4f}, {root_quat[1]:.4f}, {root_quat[2]:.4f}, {root_quat[3]:.4f})",
-      flush=True)
+print(
+    f"Robot root world pos:  ({root_pos[0]:.3f}, {root_pos[1]:.3f}, {root_pos[2]:.3f})",
+    flush=True,
+)
+print(
+    f"Robot root world quat: ({root_quat[0]:.4f}, {root_quat[1]:.4f}, {root_quat[2]:.4f}, {root_quat[3]:.4f})",
+    flush=True,
+)
 
 joint_map = {}
 for i, name in enumerate(robot.joint_names):
@@ -148,9 +154,12 @@ if robot_ref:
         t9 = qy * qz
         t10 = -qz * qz
         return [
-            (2.0 * (t8 + t10) * v[0] + 2.0 * (t6 - t4) * v[1] + 2.0 * (t3 + t7) * v[2]) + v[0],
-            (2.0 * (t4 + t6) * v[0] + 2.0 * (t5 + t10) * v[1] + 2.0 * (t9 - t2) * v[2]) + v[1],
-            (2.0 * (t7 - t3) * v[0] + 2.0 * (t2 + t9) * v[1] + 2.0 * (t5 + t8) * v[2]) + v[2],
+            (2.0 * (t8 + t10) * v[0] + 2.0 * (t6 - t4) * v[1] + 2.0 * (t3 + t7) * v[2])
+            + v[0],
+            (2.0 * (t4 + t6) * v[0] + 2.0 * (t5 + t10) * v[1] + 2.0 * (t9 - t2) * v[2])
+            + v[1],
+            (2.0 * (t7 - t3) * v[0] + 2.0 * (t2 + t9) * v[1] + 2.0 * (t5 + t8) * v[2])
+            + v[2],
         ]
 
     def _quat_conjugate(q):
@@ -161,14 +170,19 @@ if robot_ref:
 
     def _quat_multiply(a, b):
         return [
-            a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3],
-            a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2],
-            a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1],
-            a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0],
+            a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+            a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+            a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+            a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
         ]
 
     rp3 = [root_pos[0].item(), root_pos[1].item(), root_pos[2].item()]
-    rq4 = [root_quat[0].item(), root_quat[1].item(), root_quat[2].item(), root_quat[3].item()]
+    rq4 = [
+        root_quat[0].item(),
+        root_quat[1].item(),
+        root_quat[2].item(),
+        root_quat[3].item(),
+    ]
     rq4_inv = _quat_conjugate(rq4)
 
     updated_links = 0
@@ -194,7 +208,9 @@ if robot_ref:
         translate_op = xf.AddTranslateOp(UsdGeom.XformOp.PrecisionFloat, "translate")
         translate_op.Set(Gf.Vec3f(*local_pos))
         orient_op = xf.AddOrientOp(UsdGeom.XformOp.PrecisionFloat, "orient")
-        orient_op.Set(Gf.Quatf(local_quat[0], local_quat[1], local_quat[2], local_quat[3]))
+        orient_op.Set(
+            Gf.Quatf(local_quat[0], local_quat[1], local_quat[2], local_quat[3])
+        )
         scale_op = xf.AddScaleOp(UsdGeom.XformOp.PrecisionFloat, "scale")
         scale_op.Set(Gf.Vec3f(1.0, 1.0, 1.0))
         updated_links += 1
@@ -314,9 +330,7 @@ def _add_material_binding(prim, color):
     path = str(prim.GetPath())
     mat = stage_out.DefinePrim(f"{path}/material", "Material")
     shader = stage_out.DefinePrim(f"{path}/material/shader", "Shader")
-    shader.CreateAttribute("info:id", Sdf.ValueTypeNames.Token).Set(
-        "UsdPreviewSurface"
-    )
+    shader.CreateAttribute("info:id", Sdf.ValueTypeNames.Token).Set("UsdPreviewSurface")
     shader.CreateAttribute("inputs:diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
         Gf.Vec3f(*color)
     )
@@ -345,9 +359,7 @@ for name, ent in entities.items():
         if mesh and mesh.IsValid():
             mxf = UsdGeom.Xformable(mesh)
             s2 = [s[0] / 2, s[1] / 2, s[2] / 2]
-            mxf.AddScaleOp(UsdGeom.XformOp.PrecisionFloat, "scale").Set(
-                Gf.Vec3f(*s2)
-            )
+            mxf.AddScaleOp(UsdGeom.XformOp.PrecisionFloat, "scale").Set(Gf.Vec3f(*s2))
             _add_material_binding(mesh, ent.get("color", (0.5, 0.5, 0.5)))
     if ent["type"] == "plane":
         mesh = stage_out.GetPrimAtPath(f"/World/{name}/PlaneGeometry")
