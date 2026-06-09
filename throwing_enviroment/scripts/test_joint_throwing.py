@@ -56,9 +56,11 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import numpy as np
 from isaaclab.utils.math import compute_pose_error
+from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 import isaaclab.sim as sim_utils
-from tasks.throwing_env_cfg import ThrowingEnvCfg
+from tasks.throwing_env_cfg import ThrowingEnvCfg, TABLE_Z
 from tasks.throwing_env import ThrowingEnv
 from tasks.events import _set_gripper_state
 
@@ -96,7 +98,7 @@ PHASE_STEPS = {
 
 RELEASE_PROGRESS = 0.40
 
-ARM_THROW_DIRECTION_OFFSET = math.pi / 2
+ARM_THROW_DIRECTION_OFFSET = -math.pi / 2
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPERS
@@ -151,6 +153,77 @@ def compute_throw_waypoints(throw_start_joints, target_local, robot_local, devic
     throw_end[2] = throw_start_joints[2] + ELBOW_DELTA * power
 
     return throw_end, aim_angle, power
+
+
+def _setup_markers():
+    ee_cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/eeCurrent",
+        markers={
+            "sphere_ee": sim_utils.SphereCfg(
+                radius=0.015,
+                visual_material=sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(1.0, 1.0, 0.0),
+                ),
+            ),
+        },
+    )
+    target_cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/targetMarker",
+        markers={
+            "sphere_target": sim_utils.SphereCfg(
+                radius=0.04,
+                visual_material=sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(0.0, 1.0, 0.0),
+                ),
+            ),
+        },
+    )
+    return (
+        VisualizationMarkers(ee_cfg),
+        VisualizationMarkers(target_cfg),
+    )
+
+
+def _setup_spawn_area(origin, x_range: tuple, y_range: tuple):
+    x_min, x_max = x_range
+    y_min, y_max = y_range
+    x_center = (x_min + x_max) / 2.0
+    y_center = (y_min + y_max) / 2.0
+    x_width = x_max - x_min
+    y_width = y_max - y_min
+    z_surface = TABLE_Z + 0.001
+
+    spawn_cfg = VisualizationMarkersCfg(
+        prim_path="/Visuals/spawnArea",
+        markers={
+            "area_floor": sim_utils.CuboidCfg(
+                size=(x_width, y_width, 0.005),
+                visual_material=sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(0.2, 0.4, 1.0),
+                    opacity=0.3,
+                ),
+            ),
+            "corner": sim_utils.SphereCfg(
+                radius=0.02,
+                visual_material=sim_utils.PreviewSurfaceCfg(
+                    diffuse_color=(0.2, 0.8, 1.0),
+                ),
+            ),
+        },
+    )
+    spawn_marker = VisualizationMarkers(spawn_cfg)
+
+    translations = np.array([
+        [x_center, y_center, z_surface + 0.003],
+        [x_min, y_min, z_surface],
+        [x_min, y_max, z_surface],
+        [x_max, y_min, z_surface],
+        [x_max, y_max, z_surface],
+    ]) + origin.unsqueeze(0).cpu().numpy()
+    marker_indices = [0, 1, 1, 1, 1]
+
+    spawn_marker.visualize(translations=translations, marker_indices=marker_indices)
+    return spawn_marker
 
 
 def _print_header():
@@ -212,8 +285,6 @@ def run(num_throws: int = 0):
         cfg.target_y_range = (args_cli.target_y, args_cli.target_y)
     else:
         cfg.randomize_target = True
-        cfg.target_x_range = (-0.25, 0.25)
-        cfg.target_y_range = (0.7, 1.2)
 
     cfg.__post_init__()
 
@@ -237,6 +308,9 @@ def run(num_throws: int = 0):
     env._released[:] = False
 
     arm_ids, arm_names = robot.find_joints(ARM_JOINT_PATTERNS)
+
+    ee_marker, target_marker = _setup_markers()
+    spawn_marker = _setup_spawn_area(origin, cfg.target_x_range, cfg.target_y_range)
 
     throw_distances = []
     throw_number = 0

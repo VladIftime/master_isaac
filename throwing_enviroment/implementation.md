@@ -656,8 +656,12 @@ throw_end[3:6] = start[3:6]                            # wrists hold steady
 ```
 
 Where:
-- `ARM_THROW_DIRECTION_OFFSET` accounts for the UR5e arm's natural throw-plane
-  orientation relative to shoulder_pan (empirically tuned, starts at ±π/2)
+- `ARM_THROW_DIRECTION_OFFSET = -π/2` compensates for the arm's tangential
+  velocity direction. In crane pose the arm points in +X; a positive
+  shoulder_pan rotation (counter-clockwise from above) produces +Y tangential
+  velocity at the EE. The offset converts the target aim angle into the
+  correct shoulder_pan value so the tangent of the arm's rotation arc points
+  toward the target.
 - `SHOULDER_LIFT_DELTA = 0.44` and `ELBOW_DELTA = -1.47` from Gazebo's
   `primitive_design.cpp` (init→end joint differences)
 - `power = clamp(dist / NOMINAL_DIST, 0.6, 1.5)` scales throw intensity by
@@ -698,11 +702,15 @@ NOMINAL_DIST = 1.0             # reference distance for power scaling
    gripper closes around air, not the drink. Reducing to 0.10-0.12m places the
    finger pads at drink height.
 
-5. **Aim direction requires empirical offset**: The catapult throw direction is
-   NOT simply determined by `shoulder_pan`. The full arm kinematic chain, crane
-   pose orientation, and which joints change all affect the release velocity
-   vector. An `ARM_THROW_DIRECTION_OFFSET` constant (±π/2) rotates the aim to
-   compensate.
+5. **Aim direction is determined by tangential velocity, not radial**: The
+   drink's release velocity comes from the **tangent** to the shoulder_pan
+   rotation circle at the arm's current position — NOT from the direction the
+   arm points. In crane pose the EE is at (+X, +0.18Y) relative to the base.
+   A positive (counter-clockwise) shoulder_pan rotation produces +Y tangential
+   velocity; negative (clockwise) produces -Y. Initial attempts with
+   `ARM_THROW_DIRECTION_OFFSET = +π/2` threw backward (-Y); correcting to
+   `-π/2` flipped the rotation direction and now throws toward the target (+Y).
+   This is the correct kinematic reasoning — not a numerical hack.
 
 6. **Drink friction was not properly baked**: The original `prebake_drink.py`
    applied `PhysxSchema.PhysxMaterialAPI` directly on mesh prims, but this does
@@ -710,6 +718,16 @@ NOMINAL_DIST = 1.0             # reference distance for power scaling
    friction of 0.5/0.4 instead of the intended 5.0/5.0. Fixed by creating a
    proper `UsdShade.Material` + `UsdPhysics.MaterialAPI` prim and binding it via
    `UsdShade.MaterialBindingAPI`.
+
+**Visual markers** (identical to `test_ik_throwing.py`):
+- Yellow sphere at EE position (radius 0.015)
+- Green sphere at target basket (radius 0.04)
+- Blue semi-transparent cuboid showing the target spawn area on the table
+- Blue corner spheres at spawn area extents
+
+**Target randomization** uses the same `ThrowingEnvCfg` default ranges as
+`test_ik_throwing.py` (no custom overrides). When `--target_x` / `--target_y`
+CLI args are provided, the target is fixed at that position instead.
 
 ```bash
 # Basic usage

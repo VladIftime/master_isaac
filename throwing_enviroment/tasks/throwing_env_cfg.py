@@ -288,7 +288,7 @@ class ThrowingSceneCfg(InteractiveSceneCfg):
             ),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(TABLE_CENTER_POS[0], TABLE_CENTER_POS[1], TABLE_Z + 0.1),
+            pos=(TABLE_CENTER_POS[0], TABLE_CENTER_POS[1], TABLE_Z + 0.001),
         ),
     )
 
@@ -409,7 +409,7 @@ class ThrowingEnvCfg(ManagerBasedRLEnvCfg):
 
     target_x_range: tuple = (0, 0.45)
     target_y_range: tuple = (1.0, 1.4)
-    target_z: float = TABLE_Z + 0.1
+    target_z: float = TABLE_Z + 0.001
 
     contact_threshold: float = 0.06
 
