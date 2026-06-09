@@ -10,7 +10,6 @@ Phases:
   RAISE    — EE lifts Z-only by THROW_EXTEND_Z_OFFSET (preserves orientation)
   EXTEND   — EE moves to target XY at raised height (preserves orientation)
   SETTLE   — pause for object to settle in gripper after EXTEND
-  ORIENT   — rotate gripper to aim at target (yaw-only), then lock orientation
   THROW    — wrist_2 snap from extended position,
               open gripper + cut attachment at peak snap
   FLIGHT   — watch drink fly/land, report distance to target, reset cycle
@@ -107,7 +106,6 @@ PHASE_STEPS = {
     "RAISE": 40,
     "EXTEND": 65,
     "SETTLE": 15,
-    "ORIENT": 40,
     "THROW": 40,
     "FLIGHT": 300,
 }
@@ -149,7 +147,7 @@ def _setup_spawn_area(origin, x_range: tuple, y_range: tuple):
     y_center = (y_min + y_max) / 2.0
     x_width = x_max - x_min
     y_width = y_max - y_min
-    z_surface = TABLE_Z + 0.001
+    z_surface = TABLE_Z + 0.1
 
     spawn_cfg = VisualizationMarkersCfg(
         prim_path="/Visuals/spawnArea",
@@ -270,7 +268,6 @@ def run_benchmark(
         f" GRASP({PHASE_STEPS['GRASP']}) LIFT({PHASE_STEPS['LIFT']})"
         f" RAISE({PHASE_STEPS['RAISE']})"
         f" EXTEND({PHASE_STEPS['EXTEND']}) SETTLE({PHASE_STEPS['SETTLE']})"
-        f" ORIENT({PHASE_STEPS['ORIENT']})"
         f" THROW({PHASE_STEPS['THROW']})"
     )
     print(f"{'='*60}\n")
@@ -322,7 +319,6 @@ def run_benchmark(
 
     # Read crane-pose EE position and orientation
     crane_pos, crane_quat = _ee_state(env)
-    crane_quat = crane_quat.clone()
     crane_pos_local = crane_pos[0] - origin
     cx, cy, cz = (
         crane_pos_local[0].item(),
@@ -372,7 +368,6 @@ def run_benchmark(
                     drink_actual_local[2].item(),
                 )
                 crane_pos, crane_quat = _ee_state(env)
-                crane_quat = crane_quat.clone()
                 crane_pos_local = crane_pos[0] - origin
                 cx, cy, cz = (
                     crane_pos_local[0].item(),
@@ -644,53 +639,6 @@ def run_benchmark(
                 env.step(torch.zeros(1, 6, device=device))
                 if total_steps % 10 == 0:
                     ee_pos, _ = _ee_state(env)
-                    ee_local = ee_pos[0] - origin
-                    milk_local = milk.data.root_pos_w[0, :3] - origin
-                    _print_step(
-                        total_steps,
-                        phase_name,
-                        ee_local,
-                        milk_local,
-                        _gripper_pos(env),
-                        0.0,
-                    )
-                if args_cli.step_delay > 0:
-                    time.sleep(args_cli.step_delay)
-
-            # ---- ORIENT (aim gripper at target and lock orientation) ----
-            phase_name = "ORIENT"
-            print(f"  >>> ORIENT at step {total_steps} <<<", flush=True)
-            ee_orient_pos, _ = _ee_state(env)
-            orient_target_pos = ee_orient_pos.clone()
-            ee_orient_local = ee_orient_pos[0] - origin
-            tgt_w = target.data.root_pos_w[0, :3]
-            tgt_local = tgt_w - origin
-            aim_yaw = torch.atan2(
-                tgt_local[1] - ee_orient_local[1],
-                tgt_local[0] - ee_orient_local[0],
-            ) - math.pi / 2
-            z_rot_quat = quat_from_euler_xyz(
-                torch.tensor([0.0], device=device),
-                torch.tensor([0.0], device=device),
-                aim_yaw.unsqueeze(0),
-            )
-            orient_target_quat = quat_mul(z_rot_quat, crane_quat)
-
-            for i in range(PHASE_STEPS["ORIENT"]):
-                total_steps += 1
-                if not simulation_app.is_running():
-                    break
-                ee_pos, ee_quat = _ee_state(env)
-                pos_err, rot_err = compute_pose_error(
-                    ee_pos,
-                    ee_quat,
-                    orient_target_pos,
-                    orient_target_quat,
-                    rot_error_type="axis_angle",
-                )
-                action = torch.cat([pos_err[0], rot_err[0]], dim=-1).unsqueeze(0)
-                env.step(action)
-                if total_steps % 10 == 0:
                     ee_local = ee_pos[0] - origin
                     milk_local = milk.data.root_pos_w[0, :3] - origin
                     _print_step(
