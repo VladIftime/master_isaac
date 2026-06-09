@@ -5,7 +5,7 @@ Uses task-space IK (via env.step) for reaching the drink, then switches to
 Gazebo-style all-6-joints simultaneous interpolation for the throw. Object
 is held by physics gripper friction (proven reliable).
 
-Phases:
+Phases (default IK-pickup mode):
   SETTLE    — spawn drink on table, arm at crane pose, gripper open
   APPROACH  — EE moves XY above drink (task-space IK via env.step)
   DESCEND   — EE lowers Z to grasp height (task-space IK via env.step)
@@ -17,6 +17,12 @@ Phases:
   FLIGHT    — watch drink fly/land, report distance to target
   RETURN    — arm returns to crane pose
 
+With --primitive flag (Gazebo-style throw primitive):
+  Uses ThrowPrimitiveExecutor from tasks/throw_primitive.py. Drink is
+  spawned on the table, picked up via IK (approach/descend/grasp/lift),
+  then thrown using the 4 learnable macro parameters (initial_joint_value,
+  final_joint_value, releasing_time, duration).
+
 Usage:
   source ~/env_isaaclab/bin/activate
   cd throwing_enviroment
@@ -24,6 +30,7 @@ Usage:
   python scripts/test_joint_throwing.py --headless --num_throws 5
   python scripts/test_joint_throwing.py --throw_steps 30 --release_progress 0.5
   python scripts/test_joint_throwing.py --target_x 0.0 --target_y 1.0
+  python scripts/test_joint_throwing.py --primitive --initial_jv 1.6 --final_jv 1.6 --duration 0.5 --releasing_time 0.4
 """
 
 import argparse
@@ -50,6 +57,12 @@ parser.add_argument("--release_progress", type=float, default=0.55, help="Fracti
 parser.add_argument("--target_x", type=float, default=None, help="Fixed target X (None=randomize)")
 parser.add_argument("--target_y", type=float, default=None, help="Fixed target Y (None=randomize)")
 parser.add_argument("--step-delay", type=float, default=0.0, help="Sleep between steps")
+parser.add_argument("--primitive", action="store_true", default=False,
+                    help="Use Gazebo-style throw primitive (IK pickup from table + joint-space throw)")
+parser.add_argument("--initial_jv", type=float, default=1.6, help="Primitive: initial shoulder_pan joint value")
+parser.add_argument("--final_jv", type=float, default=1.6, help="Primitive: final shoulder_pan joint value")
+parser.add_argument("--duration", type=float, default=0.5, help="Primitive: throw duration in seconds")
+parser.add_argument("--releasing_time", type=float, default=0.4, help="Primitive: release fraction [0-1]")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -63,6 +76,15 @@ import isaaclab.sim as sim_utils
 from tasks.throwing_env_cfg import ThrowingEnvCfg, TABLE_Z
 from tasks.throwing_env import ThrowingEnv
 from tasks.events import _set_gripper_state
+from tasks.throw_primitive import (
+    ThrowPrimitiveExecutor,
+    ThrowPrimitiveParams,
+    RIGHT_INIT_JOINTS,
+    RIGHT_END_JOINTS,
+    PHASE_GO_TO_INIT,
+    PHASE_GRASP,
+    PHASE_GO_TO_INITIAL,
+)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS
@@ -574,5 +596,123 @@ def run(num_throws: int = 0):
     print(f"{'='*60}")
 
 
-run(num_throws=args_cli.num_throws)
+def run_primitive(num_throws: int = 0):
+    """Run throws using the Gazebo-style throw primitive (with IK grasping)."""
+    headless = args_cli.headless
+
+    params = ThrowPrimitiveParams(
+        initial_joint_value=args_cli.initial_jv,
+        final_joint_value=args_cli.final_jv,
+        releasing_time=args_cli.releasing_time,
+        duration=args_cli.duration,
+    )
+
+    print(f"\n{'='*60}")
+    print(f"  Throw Primitive Mode (Gazebo-style + IK grasping)")
+    print(f"  initial_joint_value : {params.initial_joint_value}")
+    print(f"  final_joint_value   : {params.final_joint_value}")
+    print(f"  releasing_time      : {params.releasing_time}")
+    print(f"  duration            : {params.duration}s")
+    print(f"{'='*60}\n")
+
+    cfg = ThrowingEnvCfg()
+    cfg.scene.num_envs = 1
+    cfg.ik_solver = "diffik"
+    cfg.playing_arm_side = PLAYING_SIDE
+    cfg.release_at_step = 0
+    cfg.release_vel_threshold = float("inf")
+    cfg.disable_attachment = True
+
+    if args_cli.target_x is not None and args_cli.target_y is not None:
+        cfg.randomize_target = False
+        cfg.target_x_range = (args_cli.target_x, args_cli.target_x)
+        cfg.target_y_range = (args_cli.target_y, args_cli.target_y)
+    else:
+        cfg.randomize_target = True
+
+    cfg.__post_init__()
+
+    if hasattr(cfg.actions.arm, "scale"):
+        cfg.actions.arm.scale = IK_DEFAULT_SCALE
+    if hasattr(cfg.actions.arm, "position_scale"):
+        cfg.actions.arm.position_scale = IK_DEFAULT_SCALE
+        cfg.actions.arm.orientation_scale = IK_DEFAULT_SCALE
+
+    env = ThrowingEnv(cfg=cfg)
+    device = env.device
+    env.reset()
+
+    robot = env.scene["robot"]
+    milk = env.scene["milk"]
+    target_obj = env.scene["target"]
+    origin = env.scene.env_origins[0].to(device)
+
+    env._holding[:] = False
+    env._released[:] = False
+
+    arm_ids, _ = robot.find_joints(ARM_JOINT_PATTERNS)
+
+    executor = ThrowPrimitiveExecutor(
+        robot=robot,
+        milk=milk,
+        arm_joint_ids=arm_ids,
+        gripper_set_fn=_set_gripper_state,
+        ee_body_name=EE_BODY,
+        side=PLAYING_SIDE,
+        sim_dt=1.0 / 120.0,
+        device=device,
+    )
+
+    throw_distances = []
+    throw_number = 0
+
+    try:
+        while simulation_app.is_running():
+            throw_number += 1
+            if num_throws > 0 and throw_number > num_throws:
+                break
+
+            print(f"\n{'─'*60}")
+            print(f"  Primitive Throw #{throw_number}")
+            print(f"{'─'*60}")
+
+            if throw_number > 1:
+                env.reset()
+                env._holding[:] = False
+                env._released[:] = False
+
+            tgt_w = target_obj.data.root_pos_w[0, :3]
+            tgt_local = tgt_w - origin
+            print(f"  Target: ({tgt_local[0]:.3f}, {tgt_local[1]:.3f}, {tgt_local[2]:.3f})")
+
+            distance = executor.execute_single(env, params, env_id=0, headless=headless)
+            throw_distances.append(distance)
+            print(f"  >>> Distance: {distance:.3f}m <<<")
+
+            if num_throws > 0 and throw_number >= num_throws:
+                break
+
+    except KeyboardInterrupt:
+        print(f"\n[Interrupted after {throw_number} throws]")
+
+    env.close()
+
+    print(f"\n{'='*60}")
+    print(f"  RESULTS ({len(throw_distances)} throws)")
+    print(f"  {'Throw':>6}  {'Dist(m)':>10}")
+    print(f"  {'-'*6}  {'-'*10}")
+    for i, d in enumerate(throw_distances):
+        print(f"  {i+1:>6}  {d:>10.3f}")
+    if throw_distances:
+        valid = [d for d in throw_distances if d != float("inf")]
+        if valid:
+            print(f"\n  Mean: {sum(valid)/len(valid):.3f}m")
+            print(f"  Best: {min(valid):.3f}m")
+    print(f"{'='*60}")
+
+
+if args_cli.primitive:
+    run_primitive(num_throws=args_cli.num_throws)
+else:
+    run(num_throws=args_cli.num_throws)
 simulation_app.close()

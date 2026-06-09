@@ -14,3 +14,14 @@ gym.register(
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
     },
 )
+
+gym.register(
+    id="Throwing-Primitive-v0",
+    entry_point="tasks.throwing_primitive_env:ThrowingPrimitiveEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": "tasks.throwing_primitive_env_cfg:ThrowingPrimitiveEnvCfg",
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
+        "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
+    },
+)

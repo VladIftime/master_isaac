@@ -171,7 +171,7 @@ ARM_JOINTS_RIGHT = ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"]
 STAND_Z = 0.6
 ROBOT_POS = (0.0, 0.0, STAND_Z)
 
-TABLE_Z = STAND_Z  # table surface height
+TABLE_Z = STAND_Z - 0.1  # table surface height (10cm below robot base for throw clearance)
 TABLE_CENTER_POS = (0.0, 1.0, TABLE_Z)  # table center forward of robot
 TABLE_SIZE = (2.0, 1.2, 0.05)  # tabletop dimensions (x, y, z)
 
