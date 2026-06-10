@@ -122,13 +122,13 @@ DualArm_CFG = UR5e_SINGLE_CFG.replace(
             "left_elbow_joint": -1.57,
             "left_wrist_1_joint": -1.57,
             "left_wrist_2_joint": 1.57,
-            "left_wrist_3_joint": 0.0,
+            "left_wrist_3_joint": 1.5708,
             "right_shoulder_pan_joint": 0.0,
             "right_shoulder_lift_joint": -1.57,
             "right_elbow_joint": 1.57,
             "right_wrist_1_joint": -1.57,
             "right_wrist_2_joint": -1.57,
-            "right_wrist_3_joint": 0.0,
+            "right_wrist_3_joint": 1.5708,
             "lgripper_finger_joint": 0.0,
             "rgripper_finger_joint": 0.0,
         },
@@ -173,7 +173,7 @@ ROBOT_POS = (0.0, 0.0, STAND_Z)
 
 TABLE_Z = STAND_Z - 0.1  # table surface height (10cm below robot base for throw clearance)
 TABLE_CENTER_POS = (0.0, 1.0, TABLE_Z)  # table center forward of robot
-TABLE_SIZE = (2.0, 1.2, 0.05)  # tabletop dimensions (x, y, z)
+TABLE_SIZE = (2.0, 1.7, 0.05)  # tabletop dimensions (x, y, z)
 
 ##
 # Scene definition
@@ -275,7 +275,8 @@ class ThrowingSceneCfg(InteractiveSceneCfg):
     target = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Target",
         spawn=UsdFileCfg(
-            usd_path=f"{_PKG_ROOT}/assets/new_usds/shopping basket002/basket_target.usd",
+            usd_path=f"{_PKG_ROOT}/assets/new_usds/basket_02/model_basket1.usd",
+            scale=(0.4, 0.4, 0.4),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
@@ -285,6 +286,9 @@ class ThrowingSceneCfg(InteractiveSceneCfg):
             ),
             mass_props=sim_utils.MassPropertiesCfg(
                 mass=2.0,
+            ),
+            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                articulation_enabled=False,
             ),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
@@ -407,8 +411,8 @@ class ThrowingEnvCfg(ManagerBasedRLEnvCfg):
 
     grip_settle_steps: int = 40
 
-    target_x_range: tuple = (0, 0.45)
-    target_y_range: tuple = (1.0, 1.4)
+    target_x_range: tuple = (0, 0.5)
+    target_y_range: tuple = (1.0, 1.6)
     target_z: float = TABLE_Z + 0.001
 
     contact_threshold: float = 0.06

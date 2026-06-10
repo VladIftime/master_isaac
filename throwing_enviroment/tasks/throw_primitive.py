@@ -60,6 +60,8 @@ DRINK_WORLD_X = 0.65
 DRINK_WORLD_Y = 0.50
 DRINK_WORLD_Z = 0.62
 
+EE_YAW_OFFSET = math.pi / 2
+
 TOTAL_PRIMITIVE_STEPS = (
     PHASE_SETTLE + PHASE_APPROACH + PHASE_DESCEND + PHASE_GRASP + PHASE_LIFT
     + PHASE_GO_TO_INIT + PHASE_GO_TO_INITIAL + PHASE_THROW_MAX + PHASE_FLIGHT
@@ -122,14 +124,25 @@ def build_joint_targets(
     initial_joint_value: torch.Tensor,
     end_joints: torch.Tensor,
     final_joint_value: torch.Tensor,
+    side: str = "right",
+    joint_pos_limits: torch.Tensor | None = None,
 ):
     """Build the initial_joints_pose and end_joints_pose per-env.
+
+    Matches Gazebo new_impl.cpp: when initial_joint_value is set (non-zero),
+    the left arm also overrides joint[1] to -1.3 (hardcoded in Gazebo).
+
+    Joint targets are clamped to hardware limits (matching Gazebo's implicit
+    clamping by the ROS trajectory controller).
 
     Args:
         init_joints: (6,) base init joints pose
         initial_joint_value: (N,) shoulder_pan override for initial pose
         end_joints: (6,) base end joints pose
         final_joint_value: (N,) shoulder_pan override for end pose
+        side: "right" or "left"
+        joint_pos_limits: (N, 6, 2) or (6, 2) joint position limits [lower, upper].
+            If provided, targets are clamped to these limits.
 
     Returns:
         initial_joints_pose: (N, 6) - init with shoulder_pan overridden
@@ -140,9 +153,22 @@ def build_joint_targets(
 
     initial_joints_pose = init_joints.unsqueeze(0).expand(N, -1).clone().to(device)
     initial_joints_pose[:, 0] = initial_joint_value
+    if side == "left":
+        initial_joints_pose[:, 1] = -1.3
 
     end_joints_pose = end_joints.unsqueeze(0).expand(N, -1).clone().to(device)
     end_joints_pose[:, 0] = final_joint_value
+
+    if joint_pos_limits is not None:
+        limits = joint_pos_limits.to(device)
+        if limits.dim() == 2:
+            lower = limits[:, 0].unsqueeze(0).expand(N, -1)
+            upper = limits[:, 1].unsqueeze(0).expand(N, -1)
+        else:
+            lower = limits[..., 0]
+            upper = limits[..., 1]
+        initial_joints_pose = torch.clamp(initial_joints_pose, min=lower, max=upper)
+        end_joints_pose = torch.clamp(end_joints_pose, min=lower, max=upper)
 
     return initial_joints_pose, end_joints_pose
 
@@ -287,7 +313,7 @@ class ThrowPrimitiveExecutor:
         # ── GRASP: close gripper gradually ──────────────────────────────
         for i in range(PHASE_GRASP):
             progress = i / (PHASE_GRASP - 1) if PHASE_GRASP > 1 else 1.0
-            self.gripper_set_fn(self.robot, 0.7 * progress, env_ids)
+            self.gripper_set_fn(self.robot, 0.48 * progress, env_ids)
             env.step(torch.zeros(1, 6, device=device))
             _log("GRASP")
 
@@ -314,8 +340,10 @@ class ThrowPrimitiveExecutor:
             _log("LIFT")
 
         # ── GO_TO_INIT ──────────────────────────────────────────────────
+        init_joints_rotated = self.init_joints.clone()
+        init_joints_rotated[5] += EE_YAW_OFFSET
         self.robot.set_joint_position_target(
-            self.init_joints.unsqueeze(0), joint_ids=self.arm_joint_ids, env_ids=env_ids
+            init_joints_rotated.unsqueeze(0), joint_ids=self.arm_joint_ids, env_ids=env_ids
         )
         for _ in range(PHASE_GO_TO_INIT):
             self.gripper_set_fn(self.robot, 0.7, env_ids)
@@ -328,9 +356,13 @@ class ThrowPrimitiveExecutor:
         # ── GO_TO_INITIAL ───────────────────────────────────────────────
         initial_jv = torch.tensor([params.initial_joint_value], device=device)
         final_jv = torch.tensor([params.final_joint_value], device=device)
+        arm_limits = self.robot.data.joint_pos_limits[0, self.arm_joint_ids, :]
         initial_joints_pose, end_joints_pose = build_joint_targets(
-            self.init_joints, initial_jv, self.end_joints_base, final_jv
+            self.init_joints, initial_jv, self.end_joints_base, final_jv,
+            side=self.side, joint_pos_limits=arm_limits,
         )
+        initial_joints_pose[:, 5] += EE_YAW_OFFSET
+        end_joints_pose[:, 5] += EE_YAW_OFFSET
         self.robot.set_joint_position_target(
             initial_joints_pose, joint_ids=self.arm_joint_ids, env_ids=env_ids
         )
@@ -449,9 +481,13 @@ def execute_primitive_batched(
     duration = params[:, 3]
 
     boundaries = compute_phase_boundaries(duration, releasing_time, sim_dt)
+    arm_limits = robot.data.joint_pos_limits[0, arm_joint_ids, :]
     initial_joints_pose, end_joints_pose = build_joint_targets(
-        init_joints, initial_jv, end_joints_base, final_jv
+        init_joints, initial_jv, end_joints_base, final_jv,
+        side=side, joint_pos_limits=arm_limits,
     )
+    initial_joints_pose[:, 5] += EE_YAW_OFFSET
+    end_joints_pose[:, 5] += EE_YAW_OFFSET
     throw_steps_per_env = boundaries["throw_steps"]
     release_step_per_env = boundaries["release_step"]
     max_throw_steps = throw_steps_per_env.max().item()
@@ -499,7 +535,7 @@ def execute_primitive_batched(
     # ── GRASP: close gripper gradually ──────────────────────────────────
     for i in range(PHASE_GRASP):
         progress = i / (PHASE_GRASP - 1) if PHASE_GRASP > 1 else 1.0
-        gripper_set_fn(robot, 0.7 * progress, all_ids)
+        gripper_set_fn(robot, 0.48 * progress, all_ids)
         env.step(torch.zeros(N, 6, device=device))
 
     # ── Kinematic hold from here until release ─────────────────────────
@@ -524,8 +560,10 @@ def execute_primitive_batched(
         _hold_batched()
 
     # ── GO_TO_INIT ──────────────────────────────────────────────────────
+    init_joints_rotated = init_joints.clone()
+    init_joints_rotated[5] += EE_YAW_OFFSET
     robot.set_joint_position_target(
-        init_joints.unsqueeze(0).expand(N, -1), joint_ids=arm_joint_ids
+        init_joints_rotated.unsqueeze(0).expand(N, -1), joint_ids=arm_joint_ids
     )
     for _ in range(PHASE_GO_TO_INIT):
         gripper_set_fn(robot, 0.7, all_ids)

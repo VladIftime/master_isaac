@@ -336,7 +336,7 @@ Right arm (throwing, default):
   elbow:          1.57
   wrist_1:       -1.57
   wrist_2:       -1.57
-  wrist_3:        0.0
+  wrist_3:        1.5708  (π/2 — EE rotated 90° for grasp alignment)
 
 Left arm (idle):
   shoulder_pan:   0.0
@@ -344,7 +344,7 @@ Left arm (idle):
   elbow:         -1.57
   wrist_1:       -1.57
   wrist_2:        1.57
-  wrist_3:        0.0
+  wrist_3:        1.5708  (π/2 — EE rotated 90° for grasp alignment)
 
 Grippers: finger_joint = 0.0 (open) at reset. Gripper actuator covers all
 6 revolute joints per side (`rgripper_finger_joint`, `rgripper_.*_knuckle_joint$`,
@@ -946,9 +946,57 @@ LEFT_INIT_JOINTS = [-1.6, -1.435, -2.3313, -1.0, 1.5987, 0.0]
 LEFT_END_JOINTS  = [-1.6, -1.881, -0.8647, -0.9, 1.5744, 0.0]
 ```
 
-The SAC agent overrides only `shoulder_pan` (index 0) via `initial_joint_value`
-and `final_joint_value`. All other joints follow the Gazebo presets, which
-encode the catapult motion (shoulder lift up + elbow extend).
+The SAC agent overrides `shoulder_pan` (index 0) via `initial_joint_value`
+and `final_joint_value`. For the left arm, `initial_joints_pose[1]` is also
+overridden to `-1.3` (matching Gazebo's `new_impl.cpp` hardcoded value).
+All other joints follow the Gazebo presets, which encode the catapult motion
+(shoulder lift up + elbow extend).
+
+#### EE 90° Rotation (Both Arms)
+
+Both arms' end-effectors are rotated 90° around the EE's local Z-axis
+(wrist_3 rotation) throughout all phases. This aligns the gripper fingers
+perpendicular to the drink bottle for reliable grasping.
+
+**Initial config** (`throwing_env_cfg.py`): Both arms start with
+`wrist_3_joint = 1.5708` (π/2) in the robot's `init_state.joint_pos`.
+The robot resets to this pose every episode, so the EE is already rotated
+from the start. The IK phases use position-only control (zero orientation
+delta), which naturally preserves the initial orientation.
+
+**Joint-space phases** (GO_TO_INIT, GO_TO_INITIAL, THROW): The Gazebo joint
+presets have `wrist_3 = 0.0`. The constant `EE_YAW_OFFSET = π/2` is added
+to `wrist_3` (index 5) in all joint targets to maintain the rotation:
+
+```python
+EE_YAW_OFFSET = math.pi / 2
+init_joints_rotated[5] += EE_YAW_OFFSET
+initial_joints_pose[:, 5] += EE_YAW_OFFSET
+end_joints_pose[:, 5] += EE_YAW_OFFSET
+```
+
+This ensures the gripper maintains the 90° rotation continuously from
+approach through throw and return.
+
+#### Joint Limit Clamping
+
+Joint targets are clamped to hardware position limits before execution,
+matching Gazebo's implicit clamping by the ROS trajectory controller.
+`build_joint_targets()` accepts an optional `joint_pos_limits` tensor
+(shape `(6, 2)` or `(N, 6, 2)`) and applies `torch.clamp(targets, lower, upper)`
+to both `initial_joints_pose` and `end_joints_pose`:
+
+```python
+arm_limits = robot.data.joint_pos_limits[0, arm_joint_ids, :]  # (6, 2)
+initial_joints_pose, end_joints_pose = build_joint_targets(
+    init_joints, initial_jv, end_joints_base, final_jv,
+    side=side, joint_pos_limits=arm_limits,
+)
+```
+
+This ensures that RL-generated shoulder_pan values outside the UR5e's
+physical range (typically ±2π) are silently clamped rather than producing
+undefined behavior in the PD controller.
 
 ### ThrowingPrimitiveEnv (`tasks/throwing_primitive_env.py`)
 

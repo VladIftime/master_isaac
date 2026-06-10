@@ -57,6 +57,8 @@ parser.add_argument("--release_progress", type=float, default=0.55, help="Fracti
 parser.add_argument("--target_x", type=float, default=None, help="Fixed target X (None=randomize)")
 parser.add_argument("--target_y", type=float, default=None, help="Fixed target Y (None=randomize)")
 parser.add_argument("--step-delay", type=float, default=0.0, help="Sleep between steps")
+parser.add_argument("--force_grasp", action="store_true", default=False,
+                    help="Use force-feedback grasping (read joint wrench, stop when threshold met)")
 parser.add_argument("--primitive", action="store_true", default=False,
                     help="Use Gazebo-style throw primitive (IK pickup from table + joint-space throw)")
 parser.add_argument("--initial_jv", type=float, default=1.6, help="Primitive: initial shoulder_pan joint value")
@@ -100,7 +102,12 @@ DRINK_WORLD_Y = 0.50
 DRINK_WORLD_Z = 0.72
 
 IK_DEFAULT_SCALE = 0.8
-GRASP_Z_OFFSET = 0.3
+GRASP_Z_OFFSET = 0.33
+GRASP_STR = 0.48
+GRASP_FORCE_THRESHOLD = 65.0
+GRASP_INCREMENT = 0.02
+GRASP_MAX_POS = 0.70
+
 
 NOMINAL_DIST = 1.0
 
@@ -110,7 +117,7 @@ ELBOW_DELTA = -1.47
 PHASE_STEPS = {
     "SETTLE": 60,
     "APPROACH": 60,
-    "DESCEND": 100,
+    "DESCEND": 85,
     "GRASP": 20,
     "LIFT": 60,
     "THROW": 40,
@@ -426,24 +433,68 @@ def run(num_throws: int = 0):
                 if args_cli.step_delay > 0:
                     time.sleep(args_cli.step_delay)
 
-            # ── GRASP (close gripper gradually) ─────────────────────────
+            # ── GRASP ───────────────────────────────────────────────────
             phase_name = "GRASP"
-            print(f"  >>> GRASP at step {total_steps} <<<", flush=True)
-            grasp_steps = PHASE_STEPS["GRASP"]
-            for i in range(grasp_steps):
-                total_steps += 1
-                if not simulation_app.is_running():
-                    break
-                progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
-                _set_gripper_state(robot, 0.7 * progress, env_ids)
-                env.step(torch.zeros(1, 6, device=device))
-                if total_steps % 5 == 0:
-                    ee_pos, _ = _ee_state(env)
-                    ee_local = ee_pos[0] - origin
-                    milk_local = milk.data.root_pos_w[0, :3] - origin
-                    _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env))
-                if args_cli.step_delay > 0:
-                    time.sleep(args_cli.step_delay)
+            if args_cli.force_grasp:
+                print(f"  >>> GRASP at step {total_steps} (force threshold={GRASP_FORCE_THRESHOLD}N) <<<", flush=True)
+                finger_body_ids, finger_body_names = robot.find_bodies(
+                    ["rgripper_left_inner_finger", "rgripper_right_inner_finger"]
+                )
+                grasp_pos = 0.0
+                grasped = False
+                max_grasp_steps = int(GRASP_MAX_POS / GRASP_INCREMENT) + PHASE_STEPS["GRASP"]
+                for i in range(max_grasp_steps):
+                    total_steps += 1
+                    if not simulation_app.is_running():
+                        break
+                    if not grasped:
+                        grasp_pos = min(grasp_pos + GRASP_INCREMENT, GRASP_MAX_POS)
+                    _set_gripper_state(robot, grasp_pos, env_ids)
+                    env.step(torch.zeros(1, 6, device=device))
+
+                    wrenches = robot.data.body_incoming_joint_wrench_b[:, finger_body_ids, :]
+                    grip_force = wrenches[0, :, :3].norm(dim=-1).max().item()
+
+                    if not grasped and grip_force > GRASP_FORCE_THRESHOLD:
+                        grasped = True
+                        print(f"      >>> GRASPED at grip_pos={grasp_pos:.3f}, force={grip_force:.2f}N <<<", flush=True)
+
+                    if total_steps % 2 == 0:
+                        left_f = wrenches[0, 0, :3].norm().item()
+                        right_f = wrenches[0, 1, :3].norm().item() if len(finger_body_ids) > 1 else 0.0
+                        print(
+                            f"      grip={grasp_pos:.3f}  L={left_f:.3f}N  R={right_f:.3f}N  max={grip_force:.3f}N",
+                            flush=True,
+                        )
+
+                    if total_steps % 5 == 0:
+                        ee_pos, _ = _ee_state(env)
+                        ee_local = ee_pos[0] - origin
+                        milk_local = milk.data.root_pos_w[0, :3] - origin
+                        _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env))
+                    if args_cli.step_delay > 0:
+                        time.sleep(args_cli.step_delay)
+                    if grasped:
+                        break
+                if not grasped:
+                    print(f"      >>> MAX GRIP ({grasp_pos:.3f}) reached without force threshold <<<", flush=True)
+            else:
+                print(f"  >>> GRASP at step {total_steps} (fixed ramp to {GRASP_STR}) <<<", flush=True)
+                grasp_steps = PHASE_STEPS["GRASP"]
+                for i in range(grasp_steps):
+                    total_steps += 1
+                    if not simulation_app.is_running():
+                        break
+                    progress = i / (grasp_steps - 1) if grasp_steps > 1 else 1.0
+                    _set_gripper_state(robot, GRASP_STR * progress, env_ids)
+                    env.step(torch.zeros(1, 6, device=device))
+                    if total_steps % 5 == 0:
+                        ee_pos, _ = _ee_state(env)
+                        ee_local = ee_pos[0] - origin
+                        milk_local = milk.data.root_pos_w[0, :3] - origin
+                        _print_step(total_steps, phase_name, ee_local, milk_local, _gripper_pos(env))
+                    if args_cli.step_delay > 0:
+                        time.sleep(args_cli.step_delay)
 
             # ── LIFT (task-space IK: return to crane pose) ──────────────
             phase_name = "LIFT"
