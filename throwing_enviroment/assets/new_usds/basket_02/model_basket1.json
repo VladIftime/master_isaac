@@ -1,0 +1,29 @@
+{
+    "models": {
+        "cap_0": {
+            "name": "cap_0",
+            "parentPath": "/World",
+            "server": "/home/extwin/usd",
+            "vaultID": "mv",
+            "modelID": "fedsfsdfd",
+            "view_dict": {
+                "0": "/World/cap_0/v_0"
+            },
+            "offset": [
+                0,
+                0,
+                0
+            ],
+            "rotation": [
+                0,
+                0,
+                0
+            ],
+            "scale": [
+                1,
+                1,
+                1
+            ]
+        }
+    }
+}
