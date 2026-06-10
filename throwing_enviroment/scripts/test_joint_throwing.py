@@ -685,7 +685,7 @@ def run_primitive(num_throws: int = 0):
             tgt_local = tgt_w - origin
             print(f"  Target: ({tgt_local[0]:.3f}, {tgt_local[1]:.3f}, {tgt_local[2]:.3f})")
 
-            distance = executor.execute_single(env, params, env_id=0, headless=headless)
+            distance = executor.execute_single(env, params, env_id=0, headless=headless, verbose=True)
             throw_distances.append(distance)
             print(f"  >>> Distance: {distance:.3f}m <<<")
 

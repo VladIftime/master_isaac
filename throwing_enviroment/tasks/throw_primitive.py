@@ -208,15 +208,45 @@ class ThrowPrimitiveExecutor:
         drink_x: float = DRINK_WORLD_X,
         drink_y: float = DRINK_WORLD_Y,
         drink_z: float = DRINK_WORLD_Z,
+        verbose: bool = False,
     ) -> float:
         """Execute full throw primitive with IK grasping. Returns landing distance.
 
         Phases: SETTLE → APPROACH → DESCEND → GRASP → LIFT →
                 GO_TO_INIT → GO_TO_INITIAL → THROW → FLIGHT
+
+        If verbose=True, logs EE pos/quat, drink pos, and distance to target every 5 steps.
         """
         device = self.device
         env_ids = torch.tensor([env_id], device=device)
         origin = env.scene.env_origins[env_id].to(device)
+        target_obj = env.scene["target"]
+        _step = [0]
+
+        def _log(phase):
+            _step[0] += 1
+            if not verbose or _step[0] % 5 != 0:
+                return
+            ee_p, ee_q = self._ee_state()
+            ee_local = ee_p[env_id] - origin
+            milk_local = self.milk.data.root_pos_w[env_id, :3] - origin
+            tgt_local = target_obj.data.root_pos_w[env_id, :3] - origin
+            dist = torch.norm(self.milk.data.root_pos_w[env_id, :3] - target_obj.data.root_pos_w[env_id, :3]).item()
+            print(
+                f"  {_step[0]:>5} {phase:>10}  "
+                f"ee=({ee_local[0]:+.3f},{ee_local[1]:+.3f},{ee_local[2]:+.3f}) "
+                f"q=({ee_q[env_id,0]:.2f},{ee_q[env_id,1]:.2f},{ee_q[env_id,2]:.2f},{ee_q[env_id,3]:.2f}) "
+                f"obj=({milk_local[0]:+.3f},{milk_local[1]:+.3f},{milk_local[2]:+.3f}) "
+                f"dist={dist:.3f}",
+                flush=True,
+            )
+
+        if verbose:
+            print(
+                f"  {'step':>5} {'phase':>10}  "
+                f"{'ee_pos':^21} {'ee_quat':^23} {'obj_pos':^21} {'dist':>6}",
+                flush=True,
+            )
 
         # ── SETTLE: spawn drink on table ────────────────────────────────
         drink_pos_w = torch.tensor(
@@ -230,6 +260,7 @@ class ThrowPrimitiveExecutor:
         self.gripper_set_fn(self.robot, 0.0, env_ids)
         for _ in range(PHASE_SETTLE):
             env.step(torch.zeros(1, 6, device=device))
+            _log("SETTLE")
 
         drink_actual_w = self.milk.data.root_pos_w[env_id, :3].clone()
         drink_local = drink_actual_w - origin
@@ -244,33 +275,45 @@ class ThrowPrimitiveExecutor:
         for _ in range(PHASE_APPROACH):
             action = self._compute_ik_action(env, target_approach, origin)
             env.step(action)
+            _log("APPROACH")
 
         # ── DESCEND: IK lower to grasp height ───────────────────────────
         target_descend = torch.tensor([[dx, dy, dz + GRASP_Z_OFFSET]], device=device)
         for _ in range(PHASE_DESCEND):
             action = self._compute_ik_action(env, target_descend, origin)
             env.step(action)
+            _log("DESCEND")
 
         # ── GRASP: close gripper gradually ──────────────────────────────
         for i in range(PHASE_GRASP):
             progress = i / (PHASE_GRASP - 1) if PHASE_GRASP > 1 else 1.0
             self.gripper_set_fn(self.robot, 0.7 * progress, env_ids)
             env.step(torch.zeros(1, 6, device=device))
+            _log("GRASP")
+
+        # ── Kinematic hold from here until release ──────────────────────
+        # Record drink world pos relative to EE at grasp moment
+        ee_p_g, _ = self._ee_state()
+        milk_p_g = self.milk.data.root_pos_w[env_id, :3].clone()
+        _grasp_offset = milk_p_g - ee_p_g[env_id]
+        _grasp_quat = self.milk.data.root_quat_w[env_id].clone()
+
+        def _hold():
+            ee_p, _ = self._ee_state()
+            pos = (ee_p[env_id] + _grasp_offset).unsqueeze(0)
+            pose = torch.cat([pos, _grasp_quat.unsqueeze(0)], dim=-1)
+            self.milk.write_root_pose_to_sim(pose, env_ids=env_ids)
+            self.milk.write_root_velocity_to_sim(torch.zeros(1, 6, device=device), env_ids=env_ids)
 
         # ── LIFT: IK return to crane pose ───────────────────────────────
         target_lift = torch.tensor([[cx, cy, cz]], device=device)
         for _ in range(PHASE_LIFT):
             action = self._compute_ik_action(env, target_lift, origin)
             env.step(action)
+            _hold()
+            _log("LIFT")
 
-        # ── Check drop after LIFT ───────────────────────────────────────
-        ee_pos, _ = self._ee_state()
-        milk_pos = self.milk.data.root_pos_w[env_id, :3]
-        if (torch.norm(ee_pos[0] - milk_pos).item() > DROP_DISTANCE_THRESHOLD
-                or milk_pos[2].item() < DRINK_BELOW_TABLE_Z):
-            return DROP_PENALTY_DISTANCE
-
-        # ── GO_TO_INIT: move arm to Gazebo init_joints_pose ─────────────
+        # ── GO_TO_INIT ──────────────────────────────────────────────────
         self.robot.set_joint_position_target(
             self.init_joints.unsqueeze(0), joint_ids=self.arm_joint_ids, env_ids=env_ids
         )
@@ -279,15 +322,10 @@ class ThrowPrimitiveExecutor:
             self.robot.write_data_to_sim()
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
+            _hold()
+            _log("GO_TO_INIT")
 
-        # ── Check drop after GO_TO_INIT ─────────────────────────────────
-        ee_pos, _ = self._ee_state()
-        milk_pos = self.milk.data.root_pos_w[env_id, :3]
-        if (torch.norm(ee_pos[0] - milk_pos).item() > DROP_DISTANCE_THRESHOLD
-                or milk_pos[2].item() < DRINK_BELOW_TABLE_Z):
-            return DROP_PENALTY_DISTANCE
-
-        # ── GO_TO_INITIAL: move to initial_joints_pose ──────────────────
+        # ── GO_TO_INITIAL ───────────────────────────────────────────────
         initial_jv = torch.tensor([params.initial_joint_value], device=device)
         final_jv = torch.tensor([params.final_joint_value], device=device)
         initial_joints_pose, end_joints_pose = build_joint_targets(
@@ -301,13 +339,8 @@ class ThrowPrimitiveExecutor:
             self.robot.write_data_to_sim()
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
-
-        # ── Check drop after GO_TO_INITIAL ──────────────────────────────
-        ee_pos, _ = self._ee_state()
-        milk_pos = self.milk.data.root_pos_w[env_id, :3]
-        if (torch.norm(ee_pos[0] - milk_pos).item() > DROP_DISTANCE_THRESHOLD
-                or milk_pos[2].item() < DRINK_BELOW_TABLE_Z):
-            return DROP_PENALTY_DISTANCE
+            _hold()
+            _log("GO_INITIAL")
 
         # ── THROW: interpolate from initial to end joints ───────────────
         duration_t = torch.tensor([params.duration], device=device)
@@ -331,6 +364,9 @@ class ThrowPrimitiveExecutor:
             self.robot.write_data_to_sim()
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
+            if not released:
+                _hold()
+            _log("THROW")
 
         if not released:
             self.gripper_set_fn(self.robot, 0.0, env_ids)
@@ -340,6 +376,7 @@ class ThrowPrimitiveExecutor:
         for _ in range(PHASE_FLIGHT):
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
+            _log("FLIGHT")
             vel = self.milk.data.root_lin_vel_w[env_id]
             if torch.norm(vel).item() < 0.05:
                 settle_count += 1
@@ -465,18 +502,28 @@ def execute_primitive_batched(
         gripper_set_fn(robot, 0.7 * progress, all_ids)
         env.step(torch.zeros(N, 6, device=device))
 
+    # ── Kinematic hold from here until release ─────────────────────────
+    ee_p_g, _ = _ee_state()
+    milk_p_g = milk.data.root_pos_w[:, :3].clone()
+    _grasp_offset = milk_p_g - ee_p_g
+    _grasp_quat = milk.data.root_quat_w.clone()
+
+    def _hold_batched(env_ids_hold=None):
+        if env_ids_hold is None:
+            env_ids_hold = all_ids
+        ee_p, _ = _ee_state()
+        pos = ee_p[env_ids_hold] + _grasp_offset[env_ids_hold]
+        pose = torch.cat([pos, _grasp_quat[env_ids_hold]], dim=-1)
+        milk.write_root_pose_to_sim(pose, env_ids=env_ids_hold)
+        milk.write_root_velocity_to_sim(
+            torch.zeros(len(env_ids_hold), 6, device=device), env_ids=env_ids_hold)
+
     # ── LIFT: IK return to crane pose ───────────────────────────────────
     for _ in range(PHASE_LIFT):
         env.step(_ik_action_toward(crane_local))
+        _hold_batched()
 
-    # ── Check drop after LIFT ───────────────────────────────────────────
-    dropped = torch.zeros(N, device=device, dtype=torch.bool)
-    ee_pos, _ = _ee_state()
-    milk_pos_w = milk.data.root_pos_w[:, :3]
-    drop_dist = torch.norm(ee_pos - milk_pos_w, dim=-1)
-    dropped |= (drop_dist > DROP_DISTANCE_THRESHOLD) | (milk_pos_w[:, 2] < DRINK_BELOW_TABLE_Z)
-
-    # ── GO_TO_INIT: move arm to Gazebo init_joints_pose ─────────────────
+    # ── GO_TO_INIT ──────────────────────────────────────────────────────
     robot.set_joint_position_target(
         init_joints.unsqueeze(0).expand(N, -1), joint_ids=arm_joint_ids
     )
@@ -485,26 +532,18 @@ def execute_primitive_batched(
         robot.write_data_to_sim()
         env.sim.step(render=False)
         env.scene.update(sim_dt)
+        _hold_batched()
 
-    # ── Check drop after GO_TO_INIT ─────────────────────────────────────
-    ee_pos, _ = _ee_state()
-    milk_pos_w = milk.data.root_pos_w[:, :3]
-    drop_dist = torch.norm(ee_pos - milk_pos_w, dim=-1)
-    dropped |= (drop_dist > DROP_DISTANCE_THRESHOLD) | (milk_pos_w[:, 2] < DRINK_BELOW_TABLE_Z)
-
-    # ── GO_TO_INITIAL: move to initial_joints_pose ──────────────────────
+    # ── GO_TO_INITIAL ───────────────────────────────────────────────────
     robot.set_joint_position_target(initial_joints_pose, joint_ids=arm_joint_ids)
     for _ in range(PHASE_GO_TO_INITIAL):
         gripper_set_fn(robot, 0.7, all_ids)
         robot.write_data_to_sim()
         env.sim.step(render=False)
         env.scene.update(sim_dt)
+        _hold_batched()
 
-    # ── Check drop after GO_TO_INITIAL ──────────────────────────────────
-    ee_pos, _ = _ee_state()
-    milk_pos_w = milk.data.root_pos_w[:, :3]
-    drop_dist = torch.norm(ee_pos - milk_pos_w, dim=-1)
-    dropped |= (drop_dist > DROP_DISTANCE_THRESHOLD) | (milk_pos_w[:, 2] < DRINK_BELOW_TABLE_Z)
+    dropped = torch.zeros(N, device=device, dtype=torch.bool)
 
     # ── THROW: interpolate from initial to end joints ───────────────────
     released = torch.zeros(N, device=device, dtype=torch.bool)
@@ -528,7 +567,8 @@ def execute_primitive_batched(
         env.sim.step(render=False)
         env.scene.update(sim_dt)
 
-
+        if still_closed.any():
+            _hold_batched(still_closed.nonzero(as_tuple=True)[0])
 
     still_holding = ~released
     if still_holding.any():

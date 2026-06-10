@@ -182,6 +182,7 @@ class ThrowingPrimitiveEnv(gym.Env):
         if action_t.dim() == 1:
             action_t = action_t.unsqueeze(0)
 
+        self._env.reset()
         self._env._holding[:] = False
         self._env._released[:] = False
 
