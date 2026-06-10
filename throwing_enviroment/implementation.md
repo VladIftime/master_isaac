@@ -22,16 +22,21 @@ throwing_enviroment/
 │           └── throwing/
 │               ├── __init__.py            # gym.register("Throwing-Direct-v0")
 │               └── agents/
-│                   └── skrl_ppo_cfg.yaml  # PPO agent configuration
+│                   ├── skrl_ppo_cfg.yaml  # PPO agent configuration
+│                   └── skrl_sac_cfg.yaml  # SAC agent configuration (macro-action)
 ├── tasks/                                 # Environment implementation
 │   ├── __init__.py
 │   ├── throwing_env_cfg.py                # Scene + MDP config
 │   ├── throwing_env.py                    # Environment class (attachment, reward logic)
+│   ├── throwing_primitive_env_cfg.py      # SAC macro-action env config (dataclass)
+│   ├── throwing_primitive_env.py          # SAC one-shot gymnasium.Env wrapper
+│   ├── throw_primitive.py                 # Throw primitive execution (batched + single)
 │   ├── observations.py                    # Observation functions (joints, EE, objects)
 │   ├── rewards.py                         # Reward functions (distance, success, velocity)
 │   ├── events.py                          # Reset events (robot reset, randomize target, attach)
 │   └── terminations.py                    # Boundary + settled checks
 ├── scripts/
+│   ├── train_sac.py                       # SAC training launcher (skrl, macro-action)
 │   ├── skrl/
 │   │   ├── train.py                       # Training launcher (skrl PPO)
 │   │   └── play.py                        # Inference / playback
@@ -810,6 +815,257 @@ python scripts/skrl/train.py \
     --ik_solver=diffik \
     --playing_arm_side=right \
     --max_iterations=500
+```
+
+## SAC Training Pipeline — Throw Primitive
+
+### Overview
+
+The SAC (Soft Actor-Critic) pipeline learns a **macro-action** throwing policy.
+Instead of outputting per-step EE deltas (like PPO), the SAC agent outputs 4
+scalar parameters that define an entire throw trajectory. Each RL "step"
+executes the full multi-phase throw primitive (IK grasping + joint-space throw +
+flight + landing measurement). The episode is **one-shot**: 1 outer step = 1
+complete throw attempt, always terminated after.
+
+This architecture directly mirrors the Gazebo RL implementation in
+`gazebo_impl/RL_tossing_object_with_obstacle_avoidance_v3.py`, adapted to
+Isaac Lab with skrl as the RL framework.
+
+### Code Structure
+
+```
+throwing_enviroment/
+├── tasks/
+│   ├── throwing_primitive_env.py       # gymnasium.Env wrapper (one-shot episodic)
+│   ├── throwing_primitive_env_cfg.py   # Simple dataclass config
+│   └── throw_primitive.py             # Core throw execution logic (batched + single)
+├── scripts/
+│   └── train_sac.py                   # SAC training launcher (skrl Runner)
+└── source/Throwing/Throwing/tasks/throwing/agents/
+    └── skrl_sac_cfg.yaml              # SAC agent hyperparameters
+```
+
+### Action Space (4D Macro-Action)
+
+The agent outputs 4 continuous parameters per throw:
+
+| Index | Parameter | Range | Description |
+|-------|-----------|-------|-------------|
+| 0 | `initial_joint_value` | [-1, 1] | Shoulder_pan angle for wind-up pose (mapped to [0.001, 2.401] rad for right arm) |
+| 1 | `final_joint_value` | [-1, 1] | Shoulder_pan angle for throw end pose (mapped to [0.001, 2.401] rad for right arm) |
+| 2 | `releasing_time` | [0.05, 1.0] | Fraction of throw duration at which gripper opens |
+| 3 | `duration` | [0.1, 1.0] | Total throw trajectory time in seconds |
+
+Action mapping (`map_action_to_params`):
+```python
+initial_jv = (0.5 * (1 + action[0]) * 2.4) + 0.001   # right arm
+final_jv   = (0.5 * (1 + action[1]) * 2.4) + 0.001   # right arm
+releasing_time = action[2]                              # direct
+duration       = action[3]                              # direct
+```
+
+For the left arm, the joint values are negated.
+
+### Observation Space (8D)
+
+| Index | Dimension | Description |
+|-------|-----------|-------------|
+| 0 | robot_indicator | +1.0 (right arm) or -1.0 (left arm) |
+| 1 | basket_x | Target X position / 3.0 (normalized) |
+| 2 | basket_y | Target Y position / 3.0 (normalized) |
+| 3 | obj_x | Drink X position / 3.0 (normalized) |
+| 4 | obj_y | Drink Y position / 3.0 (normalized) |
+| 5 | dist | 3D distance (object → target) / 3.0 |
+| 6 | dist_x | |X distance| / 3.0 |
+| 7 | dist_y | |Y distance| / 3.0 |
+
+All positions are in environment-local coordinates.
+
+### Reward Function
+
+Gazebo-style exponential distance reward:
+
+```python
+reward = 0.9 * exp(-d² / 0.01) + 0.1 * exp(-d² / 0.05)
+if d < 0.15:
+    reward = 1.0  # success override
+```
+
+| Distance (m) | Reward |
+|--------------|--------|
+| 0.0 | 1.0 |
+| 0.10 | ~0.37 |
+| 0.15 | 1.0 (success) |
+| 0.30 | ~0.0001 |
+| 0.50 | ~0.0 |
+
+If the drink is dropped before release (detected by falling below table height),
+a penalty distance of 10.0 m is assigned.
+
+### Throw Primitive Execution (`tasks/throw_primitive.py`)
+
+Each SAC step internally executes 10 phases using the underlying `ThrowingEnv`:
+
+| Phase | Steps | Method | Description |
+|-------|-------|--------|-------------|
+| **SETTLE** | 60 | `env.step(zeros)` | Spawn drink on table at `(0.65, 0.50, 0.62)`, settle physics |
+| **APPROACH** | 60 | `env.step(ik_action)` | EE moves XY above drink at crane Z height |
+| **DESCEND** | 100 | `env.step(ik_action)` | EE lowers to `GRASP_Z_OFFSET=0.30` above drink center |
+| **GRASP** | 20 | `env.step(zeros)` + gripper ramp | Gripper closes 0.0 → 0.7 over 20 steps |
+| **LIFT** | 60 | `env.step(ik_action)` | EE returns to crane pose (kinematic hold active) |
+| **GO_TO_INIT** | 40 | `set_joint_position_target` | Move arm to Gazebo `init_joints_pose` preset |
+| **GO_TO_INITIAL** | 40 | `set_joint_position_target` | Move to wind-up pose (`shoulder_pan = initial_joint_value`) |
+| **THROW** | 12–120 | Joint interpolation | Linear interpolation from initial→end joints over `duration` |
+| **RELEASE** | (within THROW) | Gripper open | Gripper opens at `releasing_time` fraction of throw |
+| **FLIGHT** | ≤300 | `env.sim.step()` | Wait for drink to settle (velocity < 0.05 m/s for 30 steps) |
+
+Total inner simulation steps per outer RL step: ~400–800 (varies with `duration`).
+
+#### Kinematic Hold During Throw
+
+From GRASP through THROW (until release), the drink is kinematically attached
+to the EE via pose write. The offset between EE and drink is recorded at the
+moment of grasping and maintained until the gripper opens:
+
+```python
+_grasp_offset = milk_pos - ee_pos  # recorded at grasp moment
+# Each step while holding:
+milk.write_root_pose_to_sim(ee_pos + _grasp_offset, ...)
+```
+
+#### Joint Presets (from Gazebo)
+
+```python
+# Right arm
+RIGHT_INIT_JOINTS = [1.6, -1.7236, 2.3313, -2.0629, -1.5987, 0.0]
+RIGHT_END_JOINTS  = [1.6, -1.2774, 0.8647, -2.1966, -1.5744, 0.0]
+
+# Left arm (mirrored)
+LEFT_INIT_JOINTS = [-1.6, -1.435, -2.3313, -1.0, 1.5987, 0.0]
+LEFT_END_JOINTS  = [-1.6, -1.881, -0.8647, -0.9, 1.5744, 0.0]
+```
+
+The SAC agent overrides only `shoulder_pan` (index 0) via `initial_joint_value`
+and `final_joint_value`. All other joints follow the Gazebo presets, which
+encode the catapult motion (shoulder lift up + elbow extend).
+
+### ThrowingPrimitiveEnv (`tasks/throwing_primitive_env.py`)
+
+A `gymnasium.Env` subclass that wraps `ThrowingEnv`:
+
+- **Action space**: `Box(4)` — 4 macro throw parameters
+- **Observation space**: `Box(8)` — target/object positions + distances
+- **Episode**: Always 1 step (terminated=True after every `step()`)
+- **Internal env**: `ThrowingEnv` with `disable_attachment=True`, DiffIK solver,
+  60s timeout, no terminations except time_limit
+
+Key design choices:
+- `release_vel_threshold=inf` prevents the base env's auto-release logic
+- `_holding=False` and `_released=False` prevent unwanted settled termination
+- IK scale set to 0.8 for faster convergence during approach phases
+- Target randomization: X ∈ [0.0, 0.45], Y ∈ [1.0, 1.4] (right-side forward)
+
+### Batched Execution (`execute_primitive_batched`)
+
+All N environments execute the same phase simultaneously. The throw phase handles
+per-env variations in `duration` and `releasing_time`:
+
+- `throw_steps = clamp(duration / sim_dt, 12, 120)` — per-env throw step count
+- `release_step = releasing_time × throw_steps` — per-env release timing
+- The loop runs for `max(throw_steps)` across all envs
+- Envs that finish their throw early hold their final joint targets
+- Release is per-env: `should_release = (step >= release_step) & active & ~released`
+
+### SAC Agent Configuration (`skrl_sac_cfg.yaml`)
+
+| Component | Architecture |
+|-----------|-------------|
+| **Policy** | GaussianMixin, MLP [256, 256], ReLU, clipped log_std ∈ [-20, 2] |
+| **Critic 1 & 2** | DeterministicMixin, MLP [256, 256], ReLU, input = [STATES, ACTIONS] |
+| **Target Critic 1 & 2** | Same architecture as critics, Polyak-averaged |
+
+| Hyperparameter | Value |
+|----------------|-------|
+| Replay buffer | RandomMemory, size 100,000 |
+| Batch size | 256 |
+| Discount (γ) | 0.99 |
+| Polyak (τ) | 0.005 |
+| Learning rate | 3.0e-4 |
+| Random timesteps | 200 (pure exploration before learning) |
+| Learning starts | 200 |
+| Gradient norm clip | 1.0 |
+| Learn entropy (α) | True (auto-tuned) |
+| Initial entropy | 0.2 |
+| Observation preprocessor | RunningStandardScaler |
+| Total timesteps | 35,000 |
+| Trainer | SequentialTrainer |
+| Checkpoint interval | 1,000 steps |
+
+### SAC vs PPO Comparison
+
+| Aspect | PPO (per-step) | SAC (macro-action) |
+|--------|----------------|-------------------|
+| Action dim | 6 (EE deltas) | 4 (throw params) |
+| Obs dim | 27 | 8 |
+| Episode length | 600 steps (5s) | 1 outer step |
+| Inner sim steps/action | 1 | ~400–800 |
+| Release mechanism | Velocity threshold | Explicit `releasing_time` parameter |
+| Agent controls | Continuous EE trajectory | Throw shape (wind-up, release, power) |
+| Training timesteps | 300,000 | 35,000 |
+| Network size | [512, 256, 128] | [256, 256] |
+| Off-policy | No | Yes (replay buffer) |
+| Exploration | PPO clipping | Entropy-regularized (auto α) |
+
+### Why SAC for This Task
+
+1. **Sample efficiency**: SAC is off-policy — each throw experience is stored
+   in a replay buffer and reused many times. With only 35K timesteps (throws),
+   the agent can learn an effective policy. PPO would discard experiences after
+   each update.
+
+2. **Low-dimensional structured action**: The 4-parameter action space is small
+   and continuous — ideal for SAC's Gaussian policy. The agent doesn't need to
+   discover the throw trajectory shape (that's hardcoded from Gazebo); it only
+   learns the optimal shoulder_pan angles, timing, and power.
+
+3. **One-shot episodes**: Each episode is a single throw. There's no sequential
+   decision-making or temporal credit assignment — the reward is immediate.
+   SAC's Q-function only needs to learn Q(state, throw_params) → expected reward.
+
+4. **Entropy regularization**: The auto-tuned entropy coefficient encourages
+   exploration of different throw parameters early in training, then gradually
+   exploits the best combinations as learning progresses.
+
+### Training CLI
+
+```bash
+source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
+cd /home/vladi/IsaacLab/master_isaac/throwing_enviroment
+
+# Basic SAC training (64 parallel envs)
+python scripts/train_sac.py --headless --num_envs=64
+
+# More envs, full training
+python scripts/train_sac.py --headless --num_envs=128 --max_iterations=35000
+
+# Resume from checkpoint
+python scripts/train_sac.py --headless --num_envs=64 \
+    --checkpoint=logs/skrl/throwing_primitive/.../agent_5000.pt
+
+# Custom seed
+python scripts/train_sac.py --headless --num_envs=64 --seed=123
+```
+
+Logs are saved to `logs/skrl/throwing_primitive/<timestamp>_sac_torch/` with
+TensorBoard events and agent checkpoints every 1000 steps.
+
+### Training Log Output
+
+Each outer step (= one throw per env) prints:
+```
+[Ep    128] reward=0.0312  dist=0.847m  success=0/64  dropped=3/64
+  env[0]: target=(0.221,1.156,0.700) action=[ijv=1.423 fjv=0.891 rel=0.450 dur=0.532] obj=(0.412,0.823,0.600) dist=0.391 rew=0.0001
 ```
 
 ## Plugging in RL
