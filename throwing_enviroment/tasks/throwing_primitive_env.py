@@ -130,8 +130,8 @@ class ThrowingPrimitiveEnv(gym.Env):
     def num_observations(self):
         return 8
 
-    def _get_obs(self) -> dict:
-        """Compute 8D observation for all envs. Returns dict for skrl compatibility."""
+    def _get_obs(self) -> torch.Tensor:
+        """Compute 8D observation for all envs. Returns (N, 8) tensor."""
         milk = self._env.scene["milk"]
         target = self._env.scene["target"]
         origins = self._env.scene.env_origins.to(self.device)
@@ -159,7 +159,7 @@ class ThrowingPrimitiveEnv(gym.Env):
             dist_y / OBS_MAX_NORM,
         ], dim=-1)
 
-        return {"policy": obs}
+        return obs
 
     def _compute_reward(self, distances: torch.Tensor) -> torch.Tensor:
         """Gazebo-style reward from landing distance."""
@@ -233,21 +233,36 @@ class ThrowingPrimitiveEnv(gym.Env):
             f"success={n_success}/{self.num_envs}  dropped={n_dropped}/{self.num_envs}"
         )
 
-        log_idx = 0
-        tgt = target_pos[log_idx]
-        obj = milk_final_pos[log_idx]
-        act = params[log_idx]
-        d = distances[log_idx].item()
-        r = rewards[log_idx].item()
-        early = dropped[log_idx].item()
-
-        print(
-            f"  env[0]: target=({tgt[0]:.3f},{tgt[1]:.3f},{tgt[2]:.3f}) "
-            f"action=[ijv={act[0]:.3f} fjv={act[1]:.3f} rel={act[2]:.3f} dur={act[3]:.3f}] "
-            f"obj=({obj[0]:.3f},{obj[1]:.3f},{obj[2]:.3f}) "
-            f"dist={d:.3f} rew={r:.4f}"
-            f"{' [EARLY_END]' if early else ''}"
-        )
+        if self.num_envs <= 10:
+            for idx in range(self.num_envs):
+                tgt = target_pos[idx]
+                obj = milk_final_pos[idx]
+                act = params[idx]
+                d = distances[idx].item()
+                r = rewards[idx].item()
+                early = dropped[idx].item()
+                print(
+                    f"  env[{idx}]: target=({tgt[0]:.3f},{tgt[1]:.3f},{tgt[2]:.3f}) "
+                    f"action=[ijv={act[0]:.3f} fjv={act[1]:.3f} rel={act[2]:.3f} dur={act[3]:.3f}] "
+                    f"obj=({obj[0]:.3f},{obj[1]:.3f},{obj[2]:.3f}) "
+                    f"dist={d:.3f} rew={r:.4f}"
+                    f"{' [EARLY_END]' if early else ''}"
+                )
+        else:
+            log_idx = 0
+            tgt = target_pos[log_idx]
+            obj = milk_final_pos[log_idx]
+            act = params[log_idx]
+            d = distances[log_idx].item()
+            r = rewards[log_idx].item()
+            early = dropped[log_idx].item()
+            print(
+                f"  env[0]: target=({tgt[0]:.3f},{tgt[1]:.3f},{tgt[2]:.3f}) "
+                f"action=[ijv={act[0]:.3f} fjv={act[1]:.3f} rel={act[2]:.3f} dur={act[3]:.3f}] "
+                f"obj=({obj[0]:.3f},{obj[1]:.3f},{obj[2]:.3f}) "
+                f"dist={d:.3f} rew={r:.4f}"
+                f"{' [EARLY_END]' if early else ''}"
+            )
 
     def reset(self, seed=None, options=None):
         """Reset environment: randomize target, return fresh observation."""

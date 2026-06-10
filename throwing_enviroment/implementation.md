@@ -102,7 +102,7 @@ throwing_enviroment/
            |
            |  [Drink]  (attached to right gripper, offset between fingers)
            |
-           |  ====[Table]====  (y=1.0, z=0.6, kinematic, 1.0×1.2 m)
+            |  ====[Table]====  (y=1.0, z=0.5, kinematic, 2.0×1.7 m)
            |
            |       [Basket]    (x=±0.45, y=0.7–1.3, on table)
            |
@@ -110,10 +110,10 @@ throwing_enviroment/
 
 - **Robot position**: global constant `ROBOT_POS = (0, 0, 0.6)` — body base at z=0.6 atop a kinematic stand
 - **Stand**: Box cuboid (0.5×0.5×0.6 m) beneath the robot, kinematic, centered at half height (z=0.3)
-- **Table**: Box cuboid (1.0×1.2×0.05 m) at `(0, 1.0, 0.575)`, kinematic, surface at z=0.6. Same height as the robot stand — the robot and table share a common work surface.
+- **Table**: Box cuboid (2.0×1.7×0.05 m) at `(0, 1.0, TABLE_Z - 0.025)`, kinematic, surface at TABLE_Z. Same height as the robot stand — the robot and table share a common work surface.
 - **Drink object**: Dynamic rigid body, mass 0.5 kg. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/drink001/drink_target.usd` (Synthesis drink bottle with pre-baked MassAPI, CollisionAPI, and high-friction PhysxMaterial). In RL training mode, spawned at `right_wrist_3_link` at episode reset and kinematically attached via `write_root_pose_to_sim`. In the standalone IK benchmark (`test_ik_throwing.py`), spawned on the table at a fixed position `(0.40, 0.40, 0.72)` (settles to z≈0.60) and interacts purely through physics — no kinematic attachment. The EE targets the drink root position directly (zero offset).
   Bottle root offset `(-0.012, 0.129, -0.176)` in EE-local frame is used only for RL kinematic attachment (Option A).
-- **Target (shopping basket)**: Kinematic shopping basket, randomized in XY on the table surface. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/shopping basket002/basket_target.usd` (Synthesis basket with handles removed, single rigid body). Mass 2.0 kg. Size ~0.52×0.38×0.26 m.
+- **Target (basket)**: Kinematic basket, randomized in XY on the table surface. Visual mesh loaded via `UsdFileCfg` from `assets/new_usds/basket_02/model_basket1.usd` with `scale=(0.4, 0.4, 0.4)` (raw USD is ~0.92×1.28×0.40 m, scaled to ~0.37×0.51×0.16 m). ArticulationRoot disabled via `articulation_enabled=False`. Mass 2.0 kg.
 - **Arm initial pose**: Right arm starts at a home pose (`shoulder_lift=-1.57, elbow=1.57, wrist_1=-1.57, wrist_2=-1.57, wrist_3=0.0`). Left arm is idle. Gripper starts **open** (`finger_joint=0.0`).
 
 ## Running
@@ -316,7 +316,7 @@ ROBOT_POS = (0, 0, STAND_Z)  # Robot at origin on stand
 
 TABLE_Z = STAND_Z                  # table surface height (0.6)
 TABLE_CENTER_POS = (0.0, 1.0, TABLE_Z)  # table center forward of robot
-TABLE_SIZE = (1.0, 1.2, 0.05)      # tabletop dimensions (x, y, z)
+TABLE_SIZE = (2.0, 1.7, 0.05)      # tabletop dimensions (x, y, z)
 ```
 
 Robot body base positioned at z=0.6 on top of a 0.5×0.5×0.6 m kinematic stand
@@ -637,7 +637,7 @@ This hybrid is necessary because:
 | **SETTLE** | 60 | `env.step(zeros)` | Spawn drink on table, settle physics |
 | **APPROACH** | 60 | `env.step(pos_err)` | EE moves XY above drink at crane Z |
 | **DESCEND** | 100 | `env.step(pos_err)` | EE lowers to `GRASP_Z_OFFSET` above drink |
-| **GRASP** | 20 | `env.step(zeros)` + gripper ramp | Gripper closes 0.0 → 0.7 |
+| **GRASP** | 20 | `env.step(zeros)` + gripper ramp | Gripper closes 0.0 → 0.48 (or force-feedback with `--force_grasp`) |
 | **LIFT** | 60 | `env.step(pos_err)` | EE returns to crane pose |
 | **THROW** | 40 | `set_joint_position_target` (bang-bang) | All 6 joints target throw_end simultaneously |
 | **FLIGHT** | ~300 | `env.step(zeros)` | Detect landing, report distance |
@@ -674,13 +674,29 @@ Where:
 
 **Key constants:**
 ```python
-GRASP_Z_OFFSET = 0.12          # EE height above drink (must be ≤ finger length!)
+GRASP_Z_OFFSET = 0.33          # EE height above drink
+GRASP_STR = 0.48               # fixed grip position (empirically determined via force feedback)
 RELEASE_PROGRESS = 0.40        # release at 40% through throw (peak velocity)
 ARM_THROW_DIRECTION_OFFSET = -math.pi / 2  # aim correction for arm kinematics
 SHOULDER_LIFT_DELTA = 0.44     # from Gazebo primitive_design.cpp
 ELBOW_DELTA = -1.47            # from Gazebo primitive_design.cpp
 NOMINAL_DIST = 1.0             # reference distance for power scaling
 ```
+
+**Gripper control — two modes** (selected by `--force_grasp` flag):
+
+1. **Fixed ramp** (default): Linearly ramps gripper from 0 → `GRASP_STR=0.48`
+   over `PHASE_STEPS["GRASP"]` steps. Empirically calibrated via force-feedback
+   experiments — 0.48 is the position where the finger force first exceeds 65N
+   on the drink bottle (deterministic across all tested throws).
+
+2. **Force feedback** (`--force_grasp`): Incrementally closes by `GRASP_INCREMENT=0.02`
+   per step, reading `robot.data.body_incoming_joint_wrench_b` on the inner finger
+   bodies. Stops when max force exceeds `GRASP_FORCE_THRESHOLD=65.0N`. Logs per-finger
+   forces every 2 steps. Used for calibration/debugging only.
+
+Training (`throw_primitive.py`) always uses the fixed ramp to 0.48 — no force
+sensing overhead in the batched training loop.
 
 **Lessons learned during development:**
 
@@ -735,8 +751,11 @@ NOMINAL_DIST = 1.0             # reference distance for power scaling
 CLI args are provided, the target is fixed at that position instead.
 
 ```bash
-# Basic usage
+# Basic usage (fixed-ramp grasp)
 python scripts/test_joint_throwing.py
+
+# Force-feedback grasp (with per-finger force logging)
+python scripts/test_joint_throwing.py --force_grasp
 
 # Headless with fixed target
 python scripts/test_joint_throwing.py --headless --target_x 0.0 --target_y 1.0
@@ -912,7 +931,7 @@ Each SAC step internally executes 10 phases using the underlying `ThrowingEnv`:
 | **SETTLE** | 60 | `env.step(zeros)` | Spawn drink on table at `(0.65, 0.50, 0.62)`, settle physics |
 | **APPROACH** | 60 | `env.step(ik_action)` | EE moves XY above drink at crane Z height |
 | **DESCEND** | 100 | `env.step(ik_action)` | EE lowers to `GRASP_Z_OFFSET=0.30` above drink center |
-| **GRASP** | 20 | `env.step(zeros)` + gripper ramp | Gripper closes 0.0 → 0.7 over 20 steps |
+| **GRASP** | 20 | `env.step(zeros)` + gripper ramp | Gripper closes 0.0 → 0.48 over 20 steps |
 | **LIFT** | 60 | `env.step(ik_action)` | EE returns to crane pose (kinematic hold active) |
 | **GO_TO_INIT** | 40 | `set_joint_position_target` | Move arm to Gazebo `init_joints_pose` preset |
 | **GO_TO_INITIAL** | 40 | `set_joint_position_target` | Move to wind-up pose (`shoulder_pan = initial_joint_value`) |
@@ -1173,8 +1192,8 @@ python scripts/prebake_basket.py
 | Object | Spawner | USD Path | Mass | Kinematic |
 |--------|---------|----------|------|-----------|
 | drink | `UsdFileCfg` | `assets/new_usds/drink001/drink_target.usd` | 0.5 kg | No |
-| basket | `UsdFileCfg` | `assets/new_usds/shopping basket002/basket_target.usd` | 2.0 kg | Yes |
-| table | `CuboidCfg` | — (procedural) | — | Yes |
+| basket | `UsdFileCfg` | `assets/new_usds/basket_02/model_basket1.usd` (scale 0.4) | 2.0 kg | Yes |
+| table | `CuboidCfg` | — (procedural, 2.0×1.7×0.05 m) | — | Yes |
 | stand | `CuboidCfg` | — (procedural) | — | Yes |
 
 ### Legacy Mesh Conversion Pipeline

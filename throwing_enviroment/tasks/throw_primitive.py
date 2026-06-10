@@ -455,6 +455,7 @@ def execute_primitive_batched(
         gripper_set_fn: function to set gripper state
         side: "right" or "left"
     """
+    render = env.sim.has_gui()
     from isaaclab.utils.math import compute_pose_error
 
     device = env.device
@@ -568,7 +569,7 @@ def execute_primitive_batched(
     for _ in range(PHASE_GO_TO_INIT):
         gripper_set_fn(robot, 0.7, all_ids)
         robot.write_data_to_sim()
-        env.sim.step(render=False)
+        env.sim.step(render=render)
         env.scene.update(sim_dt)
         _hold_batched()
 
@@ -577,7 +578,7 @@ def execute_primitive_batched(
     for _ in range(PHASE_GO_TO_INITIAL):
         gripper_set_fn(robot, 0.7, all_ids)
         robot.write_data_to_sim()
-        env.sim.step(render=False)
+        env.sim.step(render=render)
         env.scene.update(sim_dt)
         _hold_batched()
 
@@ -602,7 +603,7 @@ def execute_primitive_batched(
             gripper_set_fn(robot, 0.7, still_closed.nonzero(as_tuple=True)[0])
 
         robot.write_data_to_sim()
-        env.sim.step(render=False)
+        env.sim.step(render=render)
         env.scene.update(sim_dt)
 
         if still_closed.any():
@@ -616,7 +617,7 @@ def execute_primitive_batched(
     settle_counts = torch.zeros(N, device=device, dtype=torch.long)
     settled = torch.zeros(N, device=device, dtype=torch.bool)
     for _ in range(PHASE_FLIGHT):
-        env.sim.step(render=False)
+        env.sim.step(render=render)
         env.scene.update(sim_dt)
         vel_norm = torch.norm(milk.data.root_lin_vel_w[:, :3], dim=-1)
         low_vel = vel_norm < 0.05

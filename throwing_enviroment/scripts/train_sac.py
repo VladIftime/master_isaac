@@ -95,7 +95,7 @@ def main():
     log_dir = os.path.join(log_root_path, log_dir)
     os.makedirs(os.path.join(log_dir, "params"), exist_ok=True)
 
-    env_wrapped = wrap_env(env, wrapper="isaaclab")
+    env_wrapped = wrap_env(env, wrapper="gymnasium")
 
     runner = Runner(env_wrapped, agent_cfg)
 
