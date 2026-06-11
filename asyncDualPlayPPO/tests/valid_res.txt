@@ -1,0 +1,381 @@
+er::initializePointInstancer mismatched prototypes on point instancer: /Visuals/GoalMarkers.
+[Setup] IK error = (-0.001, +0.000, -0.139)
+[Eval] Initialising environment...
+
+======================================================================
+MODEL 1/3: Push-PPO (abs)
+  type=push_ppo  rel_act=False  checkpoint=/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/runs/26.06.09/hpc_push_2048env/agent/model_best.pt
+======================================================================
+[Eval] Model loaded. obs_dim=28, LSTM=256
+
+  [Test  1] short_translation (10 episodes)
+2026-06-11T13:56:42Z [28,950ms] [Warning] [omni.physx.fabric.plugin] FabricManager::initializePointInstancer mismatched prototypes on point instancer: /Visuals/GoalMarkers.
+2026-06-11T13:56:44Z [31,046ms] [Warning] [carb] Client gpu.foundation.plugin has acquired [gpu::unstable::IMemoryBudgetManagerFactory v0.1] 100 times. Consider accessing this interface with carb::getCachedInterface() (Performance warning)
+    ep   1/10  FAIL     pushes=10  start=(+0.040,+0.515) yaw= +10.6°  goal=(-0.007,+0.580) yaw= +10.6°  final=(+0.040,+0.515) yaw= +10.7°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.025,+0.504) yaw= -22.7°  goal=(-0.104,+0.518) yaw= -22.7°  final=(-0.025,+0.504) yaw= -22.7°  pos_err=0.0801m  rot_err=0.0002rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.014,+0.507) yaw=  -5.4°  goal=(+0.006,+0.427) yaw=  -5.4°  final=(+0.014,+0.507) yaw=  -5.3°  pos_err=0.0800m  rot_err=0.0009rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.014,+0.512) yaw=  -1.2°  goal=(-0.060,+0.483) yaw=  -1.2°  final=(+0.014,+0.512) yaw=  -1.1°  pos_err=0.0801m  rot_err=0.0010rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(-0.024,+0.523) yaw=  +2.9°  goal=(-0.046,+0.600) yaw=  +2.9°  final=(-0.024,+0.523) yaw=  +3.0°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.026,+0.487) yaw=  -5.6°  goal=(-0.078,+0.426) yaw=  -5.6°  final=(-0.026,+0.487) yaw=  -5.6°  pos_err=0.0800m  rot_err=0.0009rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(-0.011,+0.484) yaw=  -5.6°  goal=(-0.077,+0.440) yaw=  -5.6°  final=(-0.011,+0.484) yaw=  -5.5°  pos_err=0.0801m  rot_err=0.0009rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(-0.010,+0.515) yaw=  +8.2°  goal=(-0.084,+0.486) yaw=  +8.2°  final=(-0.010,+0.515) yaw=  +8.2°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.003,+0.504) yaw=  +6.8°  goal=(-0.017,+0.581) yaw=  +6.8°  final=(+0.003,+0.504) yaw=  +6.9°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep  10/10  FAIL     pushes= 7  start=(-0.001,+0.504) yaw=  -7.2°  goal=(-0.074,+0.471) yaw=  -7.2°  final=(-0.168,+0.504) yaw=  -1.8°  pos_err=0.1305m  rot_err=0.1654rad  end=terminated
+    RESULT: SR=0.0%  PosErr=0.0851m  RotErr=0.0174rad  AvgPushes=9.7
+
+  [Test  2] long_translation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(-0.006,+0.476) yaw=  +3.4°  goal=(-0.154,+0.300) yaw=  +3.4°  final=(-0.006,+0.476) yaw=  +3.5°  pos_err=0.2304m  rot_err=0.0011rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.009,+0.489) yaw=  +0.4°  goal=(-0.222,+0.358) yaw=  +0.4°  final=(-0.009,+0.489) yaw=  +0.5°  pos_err=0.2501m  rot_err=0.0011rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(-0.003,+0.494) yaw=  -0.3°  goal=(-0.164,+0.303) yaw=  -0.3°  final=(-0.003,+0.494) yaw=  -0.2°  pos_err=0.2500m  rot_err=0.0011rad  end=max_pushes
+    ep   4/10  FAIL     pushes= 5  start=(+0.015,+0.504) yaw=  +1.3°  goal=(+0.226,+0.370) yaw=  +1.3°  final=(+0.015,+0.504) yaw=  +1.4°  pos_err=0.2499m  rot_err=0.0011rad  end=terminated
+    ep   5/10  FAIL     pushes=10  start=(+0.018,+0.486) yaw=  +3.4°  goal=(+0.225,+0.625) yaw=  +3.4°  final=(+0.018,+0.486) yaw=  +3.5°  pos_err=0.2499m  rot_err=0.0011rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.011,+0.484) yaw=  +4.8°  goal=(-0.260,+0.460) yaw=  +4.8°  final=(-0.011,+0.484) yaw=  +4.8°  pos_err=0.2501m  rot_err=0.0011rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(+0.008,+0.499) yaw=  +1.8°  goal=(+0.258,+0.498) yaw=  +1.8°  final=(+0.009,+0.499) yaw=  +1.8°  pos_err=0.2499m  rot_err=0.0011rad  end=max_pushes
+    ep   8/10  FAIL     pushes= 7  start=(+0.012,+0.501) yaw=  +1.3°  goal=(-0.216,+0.399) yaw=  +1.3°  final=(+0.012,+0.501) yaw=  +1.4°  pos_err=0.2501m  rot_err=0.0011rad  end=terminated
+    ep   9/10  FAIL     pushes=10  start=(+0.014,+0.478) yaw=  -7.3°  goal=(+0.042,+0.650) yaw=  -7.3°  final=(+0.014,+0.478) yaw=  -7.3°  pos_err=0.1747m  rot_err=0.0009rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(-0.012,+0.465) yaw= -12.9°  goal=(+0.238,+0.465) yaw= -12.9°  final=(-0.012,+0.465) yaw= -12.9°  pos_err=0.2499m  rot_err=0.0006rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.2405m  RotErr=0.0010rad  AvgPushes=9.2
+
+  [Test  3] small_rotation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(-0.026,+0.502) yaw=  +5.0°  goal=(-0.026,+0.502) yaw= +35.0°  final=(-0.026,+0.502) yaw=  +5.0°  pos_err=0.0001m  rot_err=0.5225rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(+0.045,+0.474) yaw=  -3.6°  goal=(+0.045,+0.474) yaw= +26.4°  final=(+0.045,+0.474) yaw=  -3.5°  pos_err=0.0001m  rot_err=0.5226rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.012,+0.522) yaw=  +3.0°  goal=(+0.012,+0.522) yaw= +33.0°  final=(+0.012,+0.522) yaw=  +3.1°  pos_err=0.0001m  rot_err=0.5225rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.028,+0.486) yaw= +10.6°  goal=(+0.028,+0.486) yaw= +40.6°  final=(+0.028,+0.486) yaw= +10.7°  pos_err=0.0001m  rot_err=0.5225rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.020,+0.478) yaw=  +8.2°  goal=(+0.020,+0.478) yaw= +38.2°  final=(+0.020,+0.478) yaw=  +8.2°  pos_err=0.0001m  rot_err=0.5225rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(+0.034,+0.533) yaw=  +0.3°  goal=(+0.034,+0.533) yaw= +30.3°  final=(+0.025,+0.532) yaw=  -5.2°  pos_err=0.0090m  rot_err=0.6201rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(-0.021,+0.498) yaw= +16.2°  goal=(-0.021,+0.498) yaw= +46.2°  final=(-0.021,+0.497) yaw= +16.3°  pos_err=0.0001m  rot_err=0.5227rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(+0.020,+0.486) yaw=  -1.5°  goal=(+0.020,+0.486) yaw= +28.5°  final=(+0.020,+0.486) yaw=  -1.4°  pos_err=0.0001m  rot_err=0.5226rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.006,+0.485) yaw=  +9.9°  goal=(+0.006,+0.485) yaw= +39.9°  final=(+0.006,+0.485) yaw=  +9.9°  pos_err=0.0001m  rot_err=0.5225rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.007,+0.493) yaw=  -3.8°  goal=(+0.007,+0.493) yaw= -33.8°  final=(+0.007,+0.493) yaw=  -3.7°  pos_err=0.0001m  rot_err=0.5246rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.0010m  RotErr=0.5325rad  AvgPushes=10.0
+
+  [Test  4] large_rotation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.028,+0.482) yaw=  -2.0°  goal=(+0.028,+0.482) yaw= +88.0°  final=(+0.028,+0.482) yaw=  -1.9°  pos_err=0.0001m  rot_err=1.5698rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.015,+0.498) yaw= -18.7°  goal=(-0.015,+0.498) yaw=-108.7°  final=(-0.015,+0.498) yaw= -18.7°  pos_err=0.0001m  rot_err=1.5712rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.015,+0.458) yaw= +14.9°  goal=(+0.015,+0.458) yaw=+104.9°  final=(+0.011,+0.454) yaw=  +5.9°  pos_err=0.0049m  rot_err=1.7291rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(-0.044,+0.520) yaw=  -4.3°  goal=(-0.044,+0.520) yaw= +85.7°  final=(-0.044,+0.520) yaw=  -4.2°  pos_err=0.0001m  rot_err=1.5698rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.005,+0.455) yaw=  +1.2°  goal=(+0.005,+0.455) yaw= -88.8°  final=(+0.005,+0.455) yaw=  +1.3°  pos_err=0.0001m  rot_err=1.5719rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.024,+0.495) yaw=  +7.0°  goal=(-0.024,+0.495) yaw= +97.0°  final=(-0.024,+0.495) yaw=  +7.1°  pos_err=0.0001m  rot_err=1.5697rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(-0.011,+0.514) yaw=  -4.4°  goal=(-0.011,+0.514) yaw= +85.6°  final=(-0.011,+0.514) yaw=  -4.3°  pos_err=0.0001m  rot_err=1.5698rad  end=max_pushes
+    ep   8/10  FAIL     pushes= 7  start=(+0.030,+0.503) yaw= -20.3°  goal=(+0.030,+0.503) yaw= +69.7°  final=(+0.030,+0.503) yaw= -20.3°  pos_err=0.0001m  rot_err=1.5705rad  end=terminated
+    ep   9/10  FAIL     pushes=10  start=(+0.009,+0.494) yaw=  +6.0°  goal=(+0.009,+0.494) yaw= -84.0°  final=(+0.009,+0.494) yaw=  +6.1°  pos_err=0.0001m  rot_err=1.5719rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.024,+0.499) yaw=  +3.7°  goal=(+0.024,+0.499) yaw= -86.3°  final=(+0.024,+0.499) yaw=  +3.8°  pos_err=0.0001m  rot_err=1.5719rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.0006m  RotErr=1.5866rad  AvgPushes=9.7
+
+  [Test  5] combined_easy (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(-0.020,+0.507) yaw= +11.8°  goal=(-0.002,+0.606) yaw= +41.8°  final=(-0.019,+0.507) yaw= +11.8°  pos_err=0.1000m  rot_err=0.5226rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(+0.006,+0.528) yaw=  -0.8°  goal=(+0.105,+0.515) yaw= -30.8°  final=(+0.006,+0.528) yaw=  -0.7°  pos_err=0.0999m  rot_err=0.5247rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.003,+0.494) yaw=  -2.6°  goal=(-0.009,+0.593) yaw= +27.4°  final=(+0.003,+0.494) yaw=  -2.6°  pos_err=0.1001m  rot_err=0.5226rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(-0.013,+0.512) yaw=  +0.8°  goal=(+0.055,+0.584) yaw= +30.8°  final=(-0.013,+0.511) yaw=  +0.9°  pos_err=0.1000m  rot_err=0.5225rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.024,+0.494) yaw= -23.4°  goal=(-0.075,+0.510) yaw= -53.4°  final=(+0.024,+0.494) yaw= -23.4°  pos_err=0.1001m  rot_err=0.5238rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(+0.003,+0.519) yaw= -10.4°  goal=(+0.092,+0.565) yaw= +19.6°  final=(+0.003,+0.519) yaw= -10.4°  pos_err=0.0999m  rot_err=0.5229rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(-0.041,+0.527) yaw=  +1.7°  goal=(+0.044,+0.580) yaw= -28.3°  final=(-0.040,+0.527) yaw=  +1.8°  pos_err=0.0999m  rot_err=0.5247rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(+0.014,+0.538) yaw= +10.8°  goal=(-0.039,+0.453) yaw= -19.2°  final=(+0.014,+0.538) yaw= +10.9°  pos_err=0.1000m  rot_err=0.5246rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.017,+0.500) yaw= +10.1°  goal=(+0.111,+0.536) yaw= -19.9°  final=(+0.017,+0.500) yaw= +10.1°  pos_err=0.0999m  rot_err=0.5247rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.027,+0.483) yaw=  +5.2°  goal=(-0.031,+0.402) yaw= -24.8°  final=(+0.027,+0.483) yaw=  +5.3°  pos_err=0.1000m  rot_err=0.5247rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.1000m  RotErr=0.5238rad  AvgPushes=10.0
+
+  [Test  6] combined_hard (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.051,+0.489) yaw=  -2.3°  goal=(-0.048,+0.300) yaw= -92.3°  final=(+0.051,+0.489) yaw=  -2.2°  pos_err=0.2132m  rot_err=1.5718rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.017,+0.515) yaw= -20.7°  goal=(+0.217,+0.601) yaw= +69.3°  final=(-0.017,+0.515) yaw= -20.7°  pos_err=0.2499m  rot_err=1.5705rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(-0.026,+0.532) yaw=  -4.6°  goal=(-0.276,+0.528) yaw= -94.6°  final=(-0.026,+0.532) yaw=  -4.5°  pos_err=0.2501m  rot_err=1.5718rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(-0.035,+0.475) yaw=  -9.3°  goal=(-0.273,+0.551) yaw= -99.3°  final=(-0.035,+0.475) yaw=  -9.2°  pos_err=0.2501m  rot_err=1.5716rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(-0.016,+0.487) yaw= +13.0°  goal=(+0.211,+0.593) yaw=+103.0°  final=(-0.016,+0.487) yaw= +13.0°  pos_err=0.2499m  rot_err=1.5698rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(+0.032,+0.480) yaw=  -9.4°  goal=(-0.138,+0.650) yaw= +80.6°  final=(+0.028,+0.480) yaw= -11.4°  pos_err=0.2377m  rot_err=1.6054rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(+0.023,+0.481) yaw=  +4.2°  goal=(+0.224,+0.629) yaw= +94.2°  final=(-0.025,+0.566) yaw= -75.8°  pos_err=0.2573m  rot_err=2.9677rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(+0.009,+0.483) yaw=  -4.8°  goal=(+0.256,+0.445) yaw= -94.8°  final=(+0.009,+0.483) yaw=  -4.8°  pos_err=0.2499m  rot_err=1.5718rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(-0.017,+0.510) yaw=  -5.0°  goal=(-0.258,+0.573) yaw= +85.0°  final=(-0.042,+0.502) yaw=  +6.0°  pos_err=0.2276m  rot_err=1.3802rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(-0.009,+0.527) yaw=  -7.9°  goal=(+0.223,+0.434) yaw= -97.9°  final=(-0.009,+0.527) yaw=  -7.8°  pos_err=0.2499m  rot_err=1.5716rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.2436m  RotErr=1.6952rad  AvgPushes=10.0
+
+  [Test  7] precision (10 episodes)
+    ep   1/10  SUCCESS  pushes= 1  start=(-0.014,+0.500) yaw=  -3.4°  goal=(-0.019,+0.471) yaw=  +6.6°  final=(-0.014,+0.500) yaw=  -3.3°  pos_err=0.0300m  rot_err=0.1735rad  end=success
+    ep   2/10  SUCCESS  pushes= 1  start=(+0.008,+0.511) yaw=  -8.0°  goal=(-0.017,+0.528) yaw= -18.0°  final=(+0.008,+0.511) yaw=  -7.9°  pos_err=0.0301m  rot_err=0.1754rad  end=success
+    ep   3/10  SUCCESS  pushes= 1  start=(-0.000,+0.476) yaw= -11.9°  goal=(+0.030,+0.478) yaw=  -1.9°  final=(-0.000,+0.476) yaw= -11.8°  pos_err=0.0299m  rot_err=0.1739rad  end=success
+    ep   4/10  SUCCESS  pushes= 1  start=(+0.004,+0.505) yaw=  -1.9°  goal=(+0.026,+0.525) yaw=  +8.1°  final=(+0.004,+0.505) yaw=  -1.8°  pos_err=0.0300m  rot_err=0.1735rad  end=success
+    ep   5/10  SUCCESS  pushes= 1  start=(+0.007,+0.521) yaw=  -3.7°  goal=(+0.036,+0.514) yaw=  +6.3°  final=(+0.007,+0.521) yaw=  -3.7°  pos_err=0.0299m  rot_err=0.1735rad  end=success
+    ep   6/10  SUCCESS  pushes= 1  start=(+0.000,+0.495) yaw=  -3.5°  goal=(-0.030,+0.497) yaw=  +6.5°  final=(+0.001,+0.495) yaw=  -3.4°  pos_err=0.0301m  rot_err=0.1735rad  end=success
+    ep   7/10  SUCCESS  pushes= 1  start=(-0.005,+0.490) yaw=  +1.1°  goal=(-0.015,+0.518) yaw=  -8.9°  final=(-0.004,+0.490) yaw=  +1.2°  pos_err=0.0301m  rot_err=0.1756rad  end=success
+    ep   8/10  SUCCESS  pushes= 1  start=(-0.006,+0.492) yaw=  -2.7°  goal=(+0.007,+0.519) yaw= -12.7°  final=(-0.005,+0.492) yaw=  -2.6°  pos_err=0.0300m  rot_err=0.1755rad  end=success
+    ep   9/10  SUCCESS  pushes= 1  start=(-0.017,+0.503) yaw=  +0.7°  goal=(-0.037,+0.526) yaw=  -9.3°  final=(-0.017,+0.503) yaw=  +0.7°  pos_err=0.0301m  rot_err=0.1756rad  end=success
+    ep  10/10  SUCCESS  pushes= 1  start=(-0.014,+0.508) yaw=  +3.2°  goal=(-0.038,+0.491) yaw= +13.2°  final=(-0.014,+0.508) yaw=  +3.3°  pos_err=0.0301m  rot_err=0.1734rad  end=success
+    RESULT: SR=100.0%  PosErr=0.0300m  RotErr=0.1744rad  AvgPushes=1.0
+
+  [Test  8] boundary_push (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.019,+0.426) yaw=  +8.3°  goal=(+0.268,+0.339) yaw= -36.7°  final=(+0.019,+0.426) yaw=  +8.3°  pos_err=0.2634m  rot_err=0.7865rad  end=max_pushes
+    ep   2/10  FAIL     pushes= 5  start=(+0.001,+0.430) yaw= -11.2°  goal=(+0.264,+0.502) yaw= -56.2°  final=(+0.001,+0.430) yaw= -11.1°  pos_err=0.2723m  rot_err=0.7861rad  end=terminated
+    ep   3/10  FAIL     pushes=10  start=(+0.000,+0.440) yaw=  -7.5°  goal=(+0.160,+0.344) yaw= -52.5°  final=(+0.004,+0.449) yaw=  -0.9°  pos_err=0.1890m  rot_err=0.9002rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.007,+0.486) yaw=  +3.6°  goal=(-0.123,+0.353) yaw= +48.6°  final=(+0.007,+0.486) yaw=  +4.0°  pos_err=0.1857m  rot_err=0.7779rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(-0.008,+0.408) yaw= -16.4°  goal=(+0.262,+0.300) yaw= -61.4°  final=(-0.110,+0.484) yaw= -86.6°  pos_err=0.4155m  rot_err=0.4389rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(+0.011,+0.463) yaw=  -9.2°  goal=(-0.073,+0.597) yaw= +35.8°  final=(+0.011,+0.463) yaw=  -9.1°  pos_err=0.1578m  rot_err=0.7846rad  end=max_pushes
+    ep   7/10  FAIL     pushes= 8  start=(-0.008,+0.453) yaw=  +6.2°  goal=(-0.146,+0.595) yaw= +51.2°  final=(-0.008,+0.453) yaw=  +6.2°  pos_err=0.1978m  rot_err=0.7843rad  end=terminated
+    ep   8/10  FAIL     pushes=10  start=(-0.016,+0.473) yaw=  +4.9°  goal=(+0.261,+0.366) yaw= +49.9°  final=(+0.082,+0.363) yaw= +47.8°  pos_err=0.1792m  rot_err=0.0368rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(-0.001,+0.479) yaw= +21.1°  goal=(+0.264,+0.322) yaw= -23.9°  final=(-0.001,+0.479) yaw= +21.1°  pos_err=0.3077m  rot_err=0.7861rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.006,+0.499) yaw=  -1.0°  goal=(-0.092,+0.604) yaw= +44.0°  final=(+0.006,+0.499) yaw=  -1.0°  pos_err=0.1433m  rot_err=0.7843rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.2312m  RotErr=0.6866rad  AvgPushes=9.3
+
+  [Test  9] random_easy (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.207,+0.534) yaw= -10.0°  goal=(+0.145,+0.526) yaw= -15.0°  final=(+0.207,+0.534) yaw=  -9.9°  pos_err=0.0620m  rot_err=0.0877rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(+0.238,+0.421) yaw=+176.0°  goal=(+0.221,+0.560) yaw=-161.5°  final=(+0.168,+0.418) yaw=+176.7°  pos_err=0.1518m  rot_err=0.3805rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(-0.347,+0.459) yaw=  +5.6°  goal=(-0.286,+0.512) yaw= +26.9°  final=(-0.347,+0.459) yaw=  +5.7°  pos_err=0.0810m  rot_err=0.3711rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(-0.187,+0.598) yaw= -24.9°  goal=(-0.086,+0.504) yaw= -12.2°  final=(-0.187,+0.598) yaw= -24.9°  pos_err=0.1381m  rot_err=0.2229rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(-0.244,+0.313) yaw=-122.8°  goal=(-0.185,+0.447) yaw=-108.1°  final=(-0.244,+0.313) yaw=-122.8°  pos_err=0.1469m  rot_err=0.2577rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.079,+0.558) yaw= +69.2°  goal=(-0.061,+0.639) yaw= +60.5°  final=(-0.078,+0.558) yaw= +69.2°  pos_err=0.0828m  rot_err=0.1518rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(+0.156,+0.461) yaw=+157.1°  goal=(+0.050,+0.538) yaw=+137.5°  final=(+0.156,+0.461) yaw=+157.1°  pos_err=0.1310m  rot_err=0.3426rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(+0.106,+0.319) yaw=-121.6°  goal=(+0.169,+0.329) yaw=-144.4°  final=(+0.106,+0.319) yaw=-121.6°  pos_err=0.0639m  rot_err=0.3978rad  end=max_pushes
+    ep   9/10  FAIL     pushes= 7  start=(+0.114,+0.364) yaw=+151.9°  goal=(+0.234,+0.444) yaw=+162.2°  final=(+0.114,+0.364) yaw=+151.9°  pos_err=0.1443m  rot_err=0.1790rad  end=terminated
+    ep  10/10  FAIL     pushes=10  start=(-0.174,+0.364) yaw= +19.7°  goal=(-0.285,+0.356) yaw= +12.2°  final=(-0.174,+0.364) yaw= +19.8°  pos_err=0.1116m  rot_err=0.1322rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.1113m  RotErr=0.2523rad  AvgPushes=9.7
+
+  [Test 10] random_hard (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(-0.184,+0.302) yaw= -79.0°  goal=(-0.306,+0.300) yaw=+155.8°  final=(-0.184,+0.302) yaw= -78.9°  pos_err=0.1218m  rot_err=2.1866rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.178,+0.562) yaw=-172.1°  goal=(-0.002,+0.612) yaw= -59.3°  final=(-0.178,+0.562) yaw=-172.0°  pos_err=0.1827m  rot_err=1.9682rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.020,+0.544) yaw= -22.2°  goal=(-0.135,+0.464) yaw= +87.8°  final=(-0.019,+0.545) yaw=  +0.0°  pos_err=0.1413m  rot_err=1.5322rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.019,+0.448) yaw= +66.7°  goal=(-0.183,+0.300) yaw= -26.8°  final=(+0.019,+0.448) yaw= +66.7°  pos_err=0.2502m  rot_err=1.6320rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.233,+0.594) yaw=-143.3°  goal=(-0.017,+0.650) yaw= -21.4°  final=(+0.150,+0.641) yaw=-156.9°  pos_err=0.1675m  rot_err=2.3636rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.001,+0.368) yaw=  -5.6°  goal=(+0.103,+0.300) yaw= -88.3°  final=(-0.001,+0.367) yaw=  -5.6°  pos_err=0.1235m  rot_err=1.4449rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(+0.003,+0.448) yaw=+126.8°  goal=(+0.128,+0.650) yaw= +62.7°  final=(+0.003,+0.448) yaw=+126.8°  pos_err=0.2376m  rot_err=1.1192rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(-0.000,+0.485) yaw= -43.8°  goal=(-0.108,+0.650) yaw= -76.1°  final=(-0.000,+0.485) yaw= -43.8°  pos_err=0.1969m  rot_err=0.5641rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.123,+0.431) yaw=-113.5°  goal=(+0.183,+0.300) yaw=+169.8°  final=(+0.123,+0.431) yaw=-113.4°  pos_err=0.1442m  rot_err=1.3404rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.246,+0.492) yaw= -56.3°  goal=(+0.037,+0.323) yaw= +48.3°  final=(+0.135,+0.529) yaw= -10.4°  pos_err=0.2286m  rot_err=1.0252rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.1794m  RotErr=1.5176rad  AvgPushes=10.0
+
+  ────────────────────────────────────────────────────────────
+  SUMMARY: Push-PPO (abs)
+  ────────────────────────────────────────────────────────────
+  Test                         SR%   PosErr   RotErr  Pushes
+  short_translation           0.0%   0.0851   0.0174    9.7
+  long_translation            0.0%   0.2405   0.0010    9.2
+  small_rotation              0.0%   0.0010   0.5325   10.0
+  large_rotation              0.0%   0.0006   1.5866    9.7
+  combined_easy               0.0%   0.1000   0.5238   10.0
+  combined_hard               0.0%   0.2436   1.6952   10.0
+  precision                 100.0%   0.0300   0.1744    1.0
+  boundary_push               0.0%   0.2312   0.6866    9.3
+  random_easy                 0.0%   0.1113   0.2523    9.7
+  random_hard                 0.0%   0.1794   1.5176   10.0
+  OVERALL                    10.0%   0.1223   0.6987    8.9
+
+======================================================================
+MODEL 2/3: Push-PPO (rel_full)
+  type=push_ppo  rel_act=True  checkpoint=/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/runs/26.06.09/hpc_push_2048env_rel_full/agent/model_best.pt
+======================================================================
+[Eval] Model loaded. obs_dim=30, LSTM=256
+
+  [Test  1] short_translation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.040,+0.515) yaw= +10.6°  goal=(-0.007,+0.580) yaw= +10.6°  final=(+0.040,+0.515) yaw= +10.7°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.025,+0.504) yaw= -22.7°  goal=(-0.104,+0.518) yaw= -22.7°  final=(-0.025,+0.504) yaw= -22.7°  pos_err=0.0801m  rot_err=0.0002rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.014,+0.507) yaw=  -5.4°  goal=(+0.006,+0.427) yaw=  -5.4°  final=(+0.014,+0.507) yaw=  -5.3°  pos_err=0.0800m  rot_err=0.0009rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.014,+0.512) yaw=  -1.2°  goal=(-0.060,+0.483) yaw=  -1.2°  final=(+0.014,+0.512) yaw=  -1.1°  pos_err=0.0801m  rot_err=0.0010rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(-0.024,+0.523) yaw=  +2.9°  goal=(-0.046,+0.600) yaw=  +2.9°  final=(-0.024,+0.523) yaw=  +3.0°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.026,+0.487) yaw=  -5.6°  goal=(-0.078,+0.426) yaw=  -5.6°  final=(-0.026,+0.487) yaw=  -5.6°  pos_err=0.0800m  rot_err=0.0009rad  end=max_pushes
+    ep   7/10  FAIL     pushes=10  start=(-0.011,+0.484) yaw=  -5.6°  goal=(-0.077,+0.440) yaw=  -5.6°  final=(-0.011,+0.484) yaw=  -5.5°  pos_err=0.0801m  rot_err=0.0009rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(-0.010,+0.515) yaw=  +8.2°  goal=(-0.084,+0.486) yaw=  +8.2°  final=(-0.010,+0.515) yaw=  +8.2°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.003,+0.504) yaw=  +6.8°  goal=(-0.017,+0.581) yaw=  +6.8°  final=(+0.003,+0.504) yaw=  +6.9°  pos_err=0.0801m  rot_err=0.0011rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(-0.001,+0.504) yaw=  -7.2°  goal=(-0.074,+0.471) yaw=  -7.2°  final=(-0.001,+0.504) yaw=  -7.2°  pos_err=0.0801m  rot_err=0.0009rad  end=max_pushes
+    RESULT: SR=0.0%  PosErr=0.0801m  RotErr=0.0009rad  AvgPushes=10.0
+
+  [Test  2] long_translation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(-0.006,+0.476) yaw=  +3.4°  goal=(-0.154,+0.300) yaw=  +3.4°  final=(-0.006,+0.476) yaw=  +3.5°  pos_err=0.2304m  rot_err=0.0011rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.009,+0.489) yaw=  +0.4°  goal=(-0.222,+0.358) yaw=  +0.4°  final=(-0.009,+0.489) yaw=  +0.5°  pos_err=0.2501m  rot_err=0.0011rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(-0.003,+0.494) yaw=  -0.3°  goal=(-0.164,+0.303) yaw=  -0.3°  final=(-0.003,+0.494) yaw=  -0.2°  pos_err=0.2500m  rot_err=0.0011rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.015,+0.504) yaw=  +1.3°  goal=(+0.226,+0.370) yaw=  +1.3°  final=(+0.118,+0.428) yaw=  +3.2°  pos_err=0.1226m  rot_err=0.0332rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.018,+0.486) yaw=  +3.4°  goal=(+0.225,+0.625) yaw=  +3.4°  final=(+0.201,+0.565) yaw=  +4.1°  pos_err=0.0653m  rot_err=0.0127rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.011,+0.484) yaw=  +4.8°  goal=(-0.260,+0.460) yaw=  +4.8°  final=(-0.155,+0.529) yaw=  +5.7°  pos_err=0.1255m  rot_err=0.0163rad  end=max_pushes
+    ep   7/10  SUCCESS  pushes= 3  start=(+0.008,+0.499) yaw=  +1.8°  goal=(+0.258,+0.498) yaw=  +1.8°  final=(+0.220,+0.483) yaw=  -4.2°  pos_err=0.0412m  rot_err=0.1048rad  end=success
+    ep   8/10  FAIL     pushes=10  start=(+0.012,+0.501) yaw=  +1.3°  goal=(-0.216,+0.399) yaw=  +1.3°  final=(-0.149,+0.508) yaw=  +0.7°  pos_err=0.1276m  rot_err=0.0104rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.014,+0.478) yaw=  -7.3°  goal=(+0.042,+0.650) yaw=  -7.3°  final=(+0.014,+0.478) yaw=  -7.3°  pos_err=0.1747m  rot_err=0.0009rad  end=max_pushes
+    ep  10/10  SUCCESS  pushes= 4  start=(-0.012,+0.465) yaw= -12.9°  goal=(+0.238,+0.465) yaw= -12.9°  final=(+0.221,+0.440) yaw= -13.0°  pos_err=0.0295m  rot_err=0.0015rad  end=success
+    RESULT: SR=20.0%  PosErr=0.1417m  RotErr=0.0183rad  AvgPushes=8.7
+
+  [Test  3] small_rotation (10 episodes)
+    ep   1/10  FAIL     pushes= 1  start=(-0.026,+0.502) yaw=  +5.0°  goal=(-0.026,+0.502) yaw= +35.0°  final=(+0.018,+0.495) yaw=  +6.1°  pos_err=0.1124m  rot_err=0.5039rad  end=terminated
+    ep   2/10  FAIL     pushes= 1  start=(+0.045,+0.474) yaw=  -3.6°  goal=(+0.045,+0.474) yaw= +26.4°  final=(+0.079,+0.464) yaw=  +3.6°  pos_err=0.0888m  rot_err=0.3977rad  end=terminated
+    ep   3/10  FAIL     pushes= 1  start=(+0.012,+0.522) yaw=  +3.0°  goal=(+0.012,+0.522) yaw= +33.0°  final=(+0.053,+0.515) yaw=  +5.6°  pos_err=0.1120m  rot_err=0.4777rad  end=terminated
+    ep   4/10  FAIL     pushes= 1  start=(+0.028,+0.486) yaw= +10.6°  goal=(+0.028,+0.486) yaw= +40.6°  final=(+0.069,+0.471) yaw= +10.2°  pos_err=0.0917m  rot_err=0.5320rad  end=terminated
+    ep   5/10  SUCCESS  pushes= 2  start=(+0.020,+0.478) yaw=  +8.2°  goal=(+0.020,+0.478) yaw= +38.2°  final=(+0.041,+0.488) yaw= +29.3°  pos_err=0.0232m  rot_err=0.1552rad  end=success
+    ep   6/10  FAIL     pushes= 1  start=(+0.034,+0.533) yaw=  +0.3°  goal=(+0.034,+0.533) yaw= +30.3°  final=(+0.068,+0.517) yaw=  +5.1°  pos_err=0.1086m  rot_err=0.4404rad  end=terminated
+    ep   7/10  FAIL     pushes= 1  start=(-0.021,+0.498) yaw= +16.2°  goal=(-0.021,+0.498) yaw= +46.2°  final=(+0.030,+0.513) yaw= +10.3°  pos_err=0.0992m  rot_err=0.6277rad  end=terminated
+    ep   8/10  FAIL     pushes= 1  start=(+0.020,+0.486) yaw=  -1.5°  goal=(+0.020,+0.486) yaw= +28.5°  final=(+0.053,+0.469) yaw=  +4.4°  pos_err=0.0884m  rot_err=0.4216rad  end=terminated
+    ep   9/10  SUCCESS  pushes= 3  start=(+0.006,+0.485) yaw=  +9.9°  goal=(+0.006,+0.485) yaw= +39.9°  final=(+0.015,+0.492) yaw= +36.1°  pos_err=0.0120m  rot_err=0.0650rad  end=success
+    ep  10/10  SUCCESS  pushes= 3  start=(+0.007,+0.493) yaw=  -3.8°  goal=(+0.007,+0.493) yaw= -33.8°  final=(+0.008,+0.533) yaw= -27.5°  pos_err=0.0397m  rot_err=0.1089rad  end=success
+    RESULT: SR=30.0%  PosErr=0.0776m  RotErr=0.3730rad  AvgPushes=1.5
+
+  [Test  4] large_rotation (10 episodes)
+    ep   1/10  FAIL     pushes= 1  start=(+0.028,+0.482) yaw=  -2.0°  goal=(+0.028,+0.482) yaw= +88.0°  final=(+0.162,+0.448) yaw=  +2.0°  pos_err=0.1610m  rot_err=1.5014rad  end=terminated
+    ep   2/10  FAIL     pushes=10  start=(-0.015,+0.498) yaw= -18.7°  goal=(-0.015,+0.498) yaw=-108.7°  final=(+0.106,+0.533) yaw= -99.7°  pos_err=0.1262m  rot_err=0.1583rad  end=max_pushes
+    ep   3/10  SUCCESS  pushes= 2  start=(+0.015,+0.458) yaw= +14.9°  goal=(+0.015,+0.458) yaw=+104.9°  final=(+0.016,+0.463) yaw= +95.4°  pos_err=0.0056m  rot_err=0.1657rad  end=success
+    ep   4/10  FAIL     pushes= 1  start=(-0.044,+0.520) yaw=  -4.3°  goal=(-0.044,+0.520) yaw= +85.7°  final=(+0.046,+0.494) yaw=  +1.7°  pos_err=0.1270m  rot_err=1.4661rad  end=terminated
+    ep   5/10  FAIL     pushes=10  start=(+0.005,+0.455) yaw=  +1.2°  goal=(+0.005,+0.455) yaw= -88.8°  final=(+0.115,+0.494) yaw= -57.1°  pos_err=0.1162m  rot_err=0.5536rad  end=max_pushes
+    ep   6/10  FAIL     pushes= 1  start=(-0.024,+0.495) yaw=  +7.0°  goal=(-0.024,+0.495) yaw= +97.0°  final=(+0.118,+0.535) yaw=  +3.9°  pos_err=0.1682m  rot_err=1.6254rad  end=terminated
+    ep   7/10  FAIL     pushes= 1  start=(-0.011,+0.514) yaw=  -4.4°  goal=(-0.011,+0.514) yaw= +85.6°  final=(+0.154,+0.465) yaw=  +5.0°  pos_err=0.1903m  rot_err=1.4067rad  end=terminated
+    ep   8/10  SUCCESS  pushes= 3  start=(+0.030,+0.503) yaw= -20.3°  goal=(+0.030,+0.503) yaw= +69.7°  final=(+0.060,+0.520) yaw= +60.4°  pos_err=0.0351m  rot_err=0.1625rad  end=success
+    ep   9/10  FAIL     pushes=10  start=(+0.009,+0.494) yaw=  +6.0°  goal=(+0.009,+0.494) yaw= -84.0°  final=(+0.005,+0.584) yaw= -40.5°  pos_err=0.0895m  rot_err=0.7597rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.024,+0.499) yaw=  +3.7°  goal=(+0.024,+0.499) yaw= -86.3°  final=(+0.039,+0.560) yaw= -28.3°  pos_err=0.0622m  rot_err=1.0108rad  end=max_pushes
+    RESULT: SR=20.0%  PosErr=0.1081m  RotErr=0.8810rad  AvgPushes=4.9
+
+  [Test  5] combined_easy (10 episodes)
+    ep   1/10  SUCCESS  pushes= 1  start=(-0.020,+0.507) yaw= +11.8°  goal=(-0.002,+0.606) yaw= +41.8°  final=(-0.013,+0.578) yaw= +53.1°  pos_err=0.0301m  rot_err=0.1982rad  end=success
+    ep   2/10  FAIL     pushes=10  start=(+0.006,+0.528) yaw=  -0.8°  goal=(+0.105,+0.515) yaw= -30.8°  final=(+0.041,+0.579) yaw= -30.7°  pos_err=0.0909m  rot_err=0.0017rad  end=max_pushes
+    ep   3/10  SUCCESS  pushes= 3  start=(+0.003,+0.494) yaw=  -2.6°  goal=(-0.009,+0.593) yaw= +27.4°  final=(+0.003,+0.589) yaw= +36.0°  pos_err=0.0132m  rot_err=0.1505rad  end=success
+    ep   4/10  SUCCESS  pushes= 3  start=(-0.013,+0.512) yaw=  +0.8°  goal=(+0.055,+0.584) yaw= +30.8°  final=(+0.072,+0.564) yaw= +39.8°  pos_err=0.0263m  rot_err=0.1570rad  end=success
+    ep   5/10  FAIL     pushes=10  start=(+0.024,+0.494) yaw= -23.4°  goal=(-0.075,+0.510) yaw= -53.4°  final=(+0.046,+0.569) yaw= -66.1°  pos_err=0.1350m  rot_err=0.2205rad  end=max_pushes
+    ep   6/10  SUCCESS  pushes= 1  start=(+0.003,+0.519) yaw= -10.4°  goal=(+0.092,+0.565) yaw= +19.6°  final=(+0.080,+0.540) yaw=  +9.3°  pos_err=0.0282m  rot_err=0.1801rad  end=success
+    ep   7/10  FAIL     pushes=10  start=(-0.041,+0.527) yaw=  +1.7°  goal=(+0.044,+0.580) yaw= -28.3°  final=(-0.030,+0.585) yaw= -29.2°  pos_err=0.0745m  rot_err=0.0165rad  end=max_pushes
+    ep   8/10  FAIL     pushes=10  start=(+0.014,+0.538) yaw= +10.8°  goal=(-0.039,+0.453) yaw= -19.2°  final=(+0.010,+0.607) yaw= -31.5°  pos_err=0.1617m  rot_err=0.2150rad  end=max_pushes
+    ep   9/10  FAIL     pushes=10  start=(+0.017,+0.500) yaw= +10.1°  goal=(+0.111,+0.536) yaw= -19.9°  final=(+0.002,+0.553) yaw= -22.5°  pos_err=0.1103m  rot_err=0.0450rad  end=max_pushes
+    ep  10/10  FAIL     pushes=10  start=(+0.027,+0.483) yaw=  +5.2°  goal=(-0.031,+0.402) yaw= -24.8°  final=(+0.016,+0.603) yaw= -48.1°  pos_err=0.2067m  rot_err=0.4077rad  end=max_pushes
+    RESULT: SR=40.0%  PosErr=0.0877m  RotErr=0.1592rad  AvgPushes=6.8
+
+  [Test  6] combined_hard (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.051,+0.489) yaw=  -2.3°  goal=(-0.048,+0.300) yaw= -92.3°  final=(+0.072,+0.538) yaw= -10.9°  pos_err=0.2664m  rot_err=1.4208rad  end=max_pushes
+    ep   2/10  SUCCESS  pushes= 4  start=(-0.017,+0.515) yaw= -20.7°  goal=(+0.217,+0.601) yaw= +69.3°  final=(+0.208,+0.605) yaw= +61.3°  pos_err=0.0102m  rot_err=0.1402rad  end=success
+    ep   3/10  FAIL     pushes=10  start=(-0.026,+0.532) yaw=  -4.6°  goal=(-0.276,+0.528) yaw= -94.6°  final=(-0.038,+0.633) yaw= -47.5°  pos_err=0.2607m  rot_err=0.8209rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(-0.035,+0.475) yaw=  -9.3°  goal=(-0.273,+0.551) yaw= -99.3°  final=(-0.030,+0.578) yaw= -56.3°  pos_err=0.2449m  rot_err=0.7495rad  end=max_pushes
+    ep   5/10  FAIL     pushes= 3  start=(-0.016,+0.487) yaw= +13.0°  goal=(+0.211,+0.593) yaw=+103.0°  final=(+0.205,+0.592) yaw= +73.9°  pos_err=0.0823m  rot_err=0.5072rad  end=terminated
+    ep   6/10  SUCCESS  pushes= 2  start=(+0.032,+0.480) yaw=  -9.4°  goal=(-0.138,+0.650) yaw= +80.6°  final=(-0.101,+0.661) yaw= +74.2°  pos_err=0.0383m  rot_err=0.1112rad  end=success
+    ep   7/10  SUCCESS  pushes= 5  start=(+0.023,+0.481) yaw=  +4.2°  goal=(+0.224,+0.629) yaw= +94.2°  final=(+0.237,+0.642) yaw= +85.4°  pos_err=0.0176m  rot_err=0.1532rad  end=success
+    ep   8/10  FAIL     pushes=10  start=(+0.009,+0.483) yaw=  -4.8°  goal=(+0.256,+0.445) yaw= -94.8°  final=(+0.165,+0.431) yaw= -92.7°  pos_err=0.0920m  rot_err=0.0375rad  end=max_pushes
+    ep   9/10  SUCCESS  pushes= 7  start=(-0.017,+0.510) yaw=  -5.0°  goal=(-0.258,+0.573) yaw= +85.0°  final=(-0.247,+0.573) yaw= +77.6°  pos_err=0.0113m  rot_err=0.1292rad  end=success
+    ep  10/10  FAIL     pushes=10  start=(-0.009,+0.527) yaw=  -7.9°  goal=(+0.223,+0.434) yaw= -97.9°  final=(+0.338,+0.543) yaw= -69.9°  pos_err=0.1587m  rot_err=0.4878rad  end=max_pushes
+    RESULT: SR=40.0%  PosErr=0.1182m  RotErr=0.4558rad  AvgPushes=7.1
+
+  [Test  7] precision (10 episodes)
+    ep   1/10  FAIL     pushes= 1  start=(-0.014,+0.500) yaw=  -3.4°  goal=(-0.019,+0.471) yaw=  +6.6°  final=(-0.029,+0.503) yaw=  +4.7°  pos_err=0.0912m  rot_err=0.0336rad  end=terminated
+    ep   2/10  SUCCESS  pushes= 1  start=(+0.008,+0.511) yaw=  -8.0°  goal=(-0.017,+0.528) yaw= -18.0°  final=(+0.006,+0.521) yaw= -14.3°  pos_err=0.0244m  rot_err=0.0640rad  end=success
+    ep   3/10  FAIL     pushes= 1  start=(-0.000,+0.476) yaw= -11.9°  goal=(+0.030,+0.478) yaw=  -1.9°  final=(-0.024,+0.477) yaw=  +2.1°  pos_err=0.0983m  rot_err=0.0699rad  end=terminated
+    ep   4/10  FAIL     pushes= 1  start=(+0.004,+0.505) yaw=  -1.9°  goal=(+0.026,+0.525) yaw=  +8.1°  final=(-0.007,+0.506) yaw=  +3.0°  pos_err=0.1103m  rot_err=0.0887rad  end=terminated
+    ep   5/10  FAIL     pushes= 1  start=(+0.007,+0.521) yaw=  -3.7°  goal=(+0.036,+0.514) yaw=  +6.3°  final=(-0.006,+0.520) yaw=  +3.2°  pos_err=0.0913m  rot_err=0.0529rad  end=terminated
+    ep   6/10  FAIL     pushes= 1  start=(+0.000,+0.495) yaw=  -3.5°  goal=(-0.030,+0.497) yaw=  +6.5°  final=(-0.016,+0.497) yaw=  +5.5°  pos_err=0.0851m  rot_err=0.0170rad  end=terminated
+    ep   7/10  SUCCESS  pushes= 1  start=(-0.005,+0.490) yaw=  +1.1°  goal=(-0.015,+0.518) yaw=  -8.9°  final=(-0.008,+0.498) yaw=  -4.0°  pos_err=0.0211m  rot_err=0.0845rad  end=success
+    ep   8/10  SUCCESS  pushes= 1  start=(-0.006,+0.492) yaw=  -2.7°  goal=(+0.007,+0.519) yaw= -12.7°  final=(-0.009,+0.500) yaw=  -7.7°  pos_err=0.0245m  rot_err=0.0872rad  end=success
+    ep   9/10  SUCCESS  pushes= 1  start=(-0.017,+0.503) yaw=  +0.7°  goal=(-0.037,+0.526) yaw=  -9.3°  final=(-0.020,+0.512) yaw=  -5.3°  pos_err=0.0217m  rot_err=0.0698rad  end=success
+    ep  10/10  FAIL     pushes= 1  start=(-0.014,+0.508) yaw=  +3.2°  goal=(-0.038,+0.491) yaw= +13.2°  final=(-0.021,+0.509) yaw=  +5.8°  pos_err=0.0873m  rot_err=0.1301rad  end=terminated
+    RESULT: SR=40.0%  PosErr=0.0655m  RotErr=0.0698rad  AvgPushes=1.0
+
+  [Test  8] boundary_push (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.019,+0.426) yaw=  +8.3°  goal=(+0.268,+0.339) yaw= -36.7°  final=(+0.207,+0.399) yaw= -35.5°  pos_err=0.0856m  rot_err=0.0207rad  end=max_pushes
+    ep   2/10  SUCCESS  pushes= 6  start=(+0.001,+0.430) yaw= -11.2°  goal=(+0.264,+0.502) yaw= -56.2°  final=(+0.231,+0.531) yaw= -48.3°  pos_err=0.0442m  rot_err=0.1384rad  end=success
+    ep   3/10  FAIL     pushes=10  start=(+0.000,+0.440) yaw=  -7.5°  goal=(+0.160,+0.344) yaw= -52.5°  final=(+0.068,+0.485) yaw= -55.8°  pos_err=0.1687m  rot_err=0.0570rad  end=max_pushes
+    ep   4/10  SUCCESS  pushes= 3  start=(+0.007,+0.486) yaw=  +3.6°  goal=(-0.123,+0.353) yaw= +48.6°  final=(-0.102,+0.377) yaw= +57.7°  pos_err=0.0315m  rot_err=0.1593rad  end=success
+    ep   5/10  FAIL     pushes=10  start=(-0.008,+0.408) yaw= -16.4°  goal=(+0.262,+0.300) yaw= -61.4°  final=(+0.250,+0.433) yaw= -57.4°  pos_err=0.1336m  rot_err=0.0701rad  end=max_pushes
+    ep   6/10  SUCCESS  pushes= 2  start=(+0.011,+0.463) yaw=  -9.2°  goal=(-0.073,+0.597) yaw= +35.8°  final=(-0.046,+0.571) yaw= +30.5°  pos_err=0.0371m  rot_err=0.0928rad  end=success
+    ep   7/10  SUCCESS  pushes= 1  start=(-0.008,+0.453) yaw=  +6.2°  goal=(-0.146,+0.595) yaw= +51.2°  final=(-0.098,+0.586) yaw= +51.6°  pos_err=0.0491m  rot_err=0.0073rad  end=success
+    ep   8/10  FAIL     pushes= 1  start=(-0.016,+0.473) yaw=  +4.9°  goal=(+0.261,+0.366) yaw= +49.9°  final=(+0.153,+0.365) yaw=  +1.2°  pos_err=0.1485m  rot_err=0.8499rad  end=terminated
+    ep   9/10  FAIL     pushes=10  start=(-0.001,+0.479) yaw= +21.1°  goal=(+0.264,+0.322) yaw= -23.9°  final=(+0.197,+0.406) yaw= -27.9°  pos_err=0.1074m  rot_err=0.0695rad  end=max_pushes
+    ep  10/10  SUCCESS  pushes= 4  start=(+0.006,+0.499) yaw=  -1.0°  goal=(-0.092,+0.604) yaw= +44.0°  final=(-0.060,+0.611) yaw= +36.5°  pos_err=0.0320m  rot_err=0.1305rad  end=success
+    RESULT: SR=50.0%  PosErr=0.0838m  RotErr=0.1596rad  AvgPushes=5.7
+
+  [Test  9] random_easy (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.207,+0.534) yaw= -10.0°  goal=(+0.145,+0.526) yaw= -15.0°  final=(+0.203,+0.544) yaw= -15.8°  pos_err=0.0610m  rot_err=0.0155rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(+0.238,+0.421) yaw=+176.0°  goal=(+0.221,+0.560) yaw=-161.5°  final=(+0.037,+0.340) yaw=+139.0°  pos_err=0.2860m  rot_err=1.0391rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(-0.347,+0.459) yaw=  +5.6°  goal=(-0.286,+0.512) yaw= +26.9°  final=(-0.324,+0.478) yaw= +27.9°  pos_err=0.0504m  rot_err=0.0174rad  end=max_pushes
+    ep   4/10  FAIL     pushes= 4  start=(-0.187,+0.598) yaw= -24.9°  goal=(-0.086,+0.504) yaw= -12.2°  final=(-0.157,+0.604) yaw=  -2.7°  pos_err=0.1494m  rot_err=0.1646rad  end=terminated
+    ep   5/10  FAIL     pushes=10  start=(-0.244,+0.313) yaw=-122.8°  goal=(-0.185,+0.447) yaw=-108.1°  final=(-0.141,+0.541) yaw= +14.8°  pos_err=0.1041m  rot_err=2.1450rad  end=max_pushes
+    ep   6/10  SUCCESS  pushes= 3  start=(-0.079,+0.558) yaw= +69.2°  goal=(-0.061,+0.639) yaw= +60.5°  final=(-0.070,+0.598) yaw= +63.3°  pos_err=0.0422m  rot_err=0.0476rad  end=success
+    ep   7/10  SUCCESS  pushes= 3  start=(+0.156,+0.461) yaw=+157.1°  goal=(+0.050,+0.538) yaw=+137.5°  final=(+0.075,+0.548) yaw=+126.6°  pos_err=0.0267m  rot_err=0.1910rad  end=success
+    ep   8/10  FAIL     pushes=10  start=(+0.106,+0.319) yaw=-121.6°  goal=(+0.169,+0.329) yaw=-144.4°  final=(-0.087,+0.238) yaw=-171.0°  pos_err=0.2710m  rot_err=0.4643rad  end=max_pushes
+    ep   9/10  SUCCESS  pushes= 2  start=(+0.114,+0.364) yaw=+151.9°  goal=(+0.234,+0.444) yaw=+162.2°  final=(+0.201,+0.442) yaw=+156.9°  pos_err=0.0332m  rot_err=0.0922rad  end=success
+    ep  10/10  SUCCESS  pushes= 5  start=(-0.174,+0.364) yaw= +19.7°  goal=(-0.285,+0.356) yaw= +12.2°  final=(-0.334,+0.358) yaw= +22.9°  pos_err=0.0487m  rot_err=0.1866rad  end=success
+    RESULT: SR=40.0%  PosErr=0.1073m  RotErr=0.4363rad  AvgPushes=6.7
+
+  [Test 10] random_hard (10 episodes)
+    ep   1/10  SUCCESS  pushes= 4  start=(-0.184,+0.302) yaw= -79.0°  goal=(-0.306,+0.300) yaw=+155.8°  final=(-0.299,+0.318) yaw=+164.0°  pos_err=0.0192m  rot_err=0.1441rad  end=success
+    ep   2/10  FAIL     pushes=10  start=(-0.178,+0.562) yaw=-172.1°  goal=(-0.002,+0.612) yaw= -59.3°  final=(+0.017,+0.639) yaw= -20.4°  pos_err=0.0337m  rot_err=0.6786rad  end=max_pushes
+    ep   3/10  FAIL     pushes= 1  start=(+0.020,+0.544) yaw= -22.2°  goal=(-0.135,+0.464) yaw= +87.8°  final=(+0.138,+0.460) yaw=  +0.7°  pos_err=0.2868m  rot_err=1.5207rad  end=terminated
+    ep   4/10  FAIL     pushes=10  start=(+0.019,+0.448) yaw= +66.7°  goal=(-0.183,+0.300) yaw= -26.8°  final=(-0.233,+0.331) yaw= -20.2°  pos_err=0.0594m  rot_err=0.1139rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.233,+0.594) yaw=-143.3°  goal=(-0.017,+0.650) yaw= -21.4°  final=(-0.036,+0.687) yaw=  -5.0°  pos_err=0.0415m  rot_err=0.2867rad  end=max_pushes
+    ep   6/10  FAIL     pushes=10  start=(-0.001,+0.368) yaw=  -5.6°  goal=(+0.103,+0.300) yaw= -88.3°  final=(+0.132,+0.410) yaw= -84.6°  pos_err=0.1139m  rot_err=0.0659rad  end=max_pushes
+    ep   7/10  SUCCESS  pushes= 4  start=(+0.003,+0.448) yaw=+126.8°  goal=(+0.128,+0.650) yaw= +62.7°  final=(+0.124,+0.619) yaw= +51.3°  pos_err=0.0317m  rot_err=0.1982rad  end=success
+    ep   8/10  FAIL     pushes=10  start=(-0.000,+0.485) yaw= -43.8°  goal=(-0.108,+0.650) yaw= -76.1°  final=(+0.009,+0.539) yaw= -81.4°  pos_err=0.1611m  rot_err=0.0920rad  end=max_pushes
+    ep   9/10  SUCCESS  pushes= 3  start=(+0.123,+0.431) yaw=-113.5°  goal=(+0.183,+0.300) yaw=+169.8°  final=(+0.199,+0.274) yaw=+174.3°  pos_err=0.0303m  rot_err=0.0800rad  end=success
+    ep  10/10  SUCCESS  pushes= 4  start=(+0.246,+0.492) yaw= -56.3°  goal=(+0.037,+0.323) yaw= +48.3°  final=(+0.029,+0.300) yaw= +56.9°  pos_err=0.0251m  rot_err=0.1501rad  end=success
+    RESULT: SR=40.0%  PosErr=0.0803m  RotErr=0.3330rad  AvgPushes=6.6
+
+  ────────────────────────────────────────────────────────────
+  SUMMARY: Push-PPO (rel_full)
+  ────────────────────────────────────────────────────────────
+  Test                         SR%   PosErr   RotErr  Pushes
+  short_translation           0.0%   0.0801   0.0009   10.0
+  long_translation           20.0%   0.1417   0.0183    8.7
+  small_rotation             30.0%   0.0776   0.3730    1.5
+  large_rotation             20.0%   0.1081   0.8810    4.9
+  combined_easy              40.0%   0.0877   0.1592    6.8
+  combined_hard              40.0%   0.1182   0.4558    7.1
+  precision                  40.0%   0.0655   0.0698    1.0
+  boundary_push              50.0%   0.0838   0.1596    5.7
+  random_easy                40.0%   0.1073   0.4363    6.7
+  random_hard                40.0%   0.0803   0.3330    6.6
+  OVERALL                    32.0%   0.0950   0.2887    5.9
+
+======================================================================
+MODEL 3/3: Push-ASP Bob
+  type=push_asp_bob  rel_act=True  checkpoint=/home/vlad/IsaacLab/vlad/master_isaac/asyncDualPlayPPO/runs/26.06.09/hpc_push_asp_2048env/bob/model_best.pt
+======================================================================
+[GoalEncoder] K_per_obj=8, objects=1, variant=difference
+Actor trunk_layer1: Linear(in_features=518, out_features=512, bias=True)
+Actor trunk_rest: Sequential(
+  (0): Linear(in_features=512, out_features=256, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=256, out_features=128, bias=True)
+)
+Actor goal_proj: Linear(in_features=8, out_features=512, bias=False)
+Actor LSTM: LSTMCell(128, 256)
+Actor head: Linear(in_features=256, out_features=84, bias=True)
+Sequential(
+  (0): Linear(in_features=28, out_features=512, bias=True)
+  (1): ReLU()
+  (2): Linear(in_features=512, out_features=256, bias=True)
+  (3): ReLU()
+  (4): Linear(in_features=256, out_features=128, bias=True)
+  (5): ReLU()
+  (6): Linear(in_features=128, out_features=1, bias=True)
+)
+[Eval] Model loaded. obs_dim=28, LSTM=256
+
+  [Test  1] short_translation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.040,+0.515) yaw= +10.6°  goal=(-0.007,+0.580) yaw= +10.6°  final=(+0.134,+0.460) yaw= -69.5°  pos_err=0.1857m  rot_err=1.3981rad  end=max_pushes
+    ep   2/10  FAIL     pushes= 5  start=(-0.025,+0.504) yaw= -22.7°  goal=(-0.104,+0.518) yaw= -22.7°  final=(+0.232,+0.309) yaw=  +4.9°  pos_err=0.4039m  rot_err=0.4821rad  end=terminated
+    ep   3/10  FAIL     pushes=10  start=(+0.014,+0.507) yaw=  -5.4°  goal=(+0.006,+0.427) yaw=  -5.4°  final=(-0.035,+0.468) yaw= -81.5°  pos_err=0.0577m  rot_err=1.3292rad  end=max_pushes
+    ep   4/10  FAIL     pushes= 5  start=(+0.014,+0.512) yaw=  -1.2°  goal=(-0.060,+0.483) yaw=  -1.2°  final=(+0.023,+0.601) yaw=  -4.0°  pos_err=0.1658m  rot_err=0.0486rad  end=terminated
+    ep   5/10  FAIL     pushes=10  start=(-0.024,+0.523) yaw=  +2.9°  goal=(-0.046,+0.600) yaw=  +2.9°  final=(-0.658,+0.216) yaw=+115.2°  pos_err=0.7226m  rot_err=1.9595rad  end=max_pushes
+    ep   6/10  FAIL     pushes= 8  start=(-0.026,+0.487) yaw=  -5.6°  goal=(-0.078,+0.426) yaw=  -5.6°  final=(+0.051,+0.692) yaw= -90.9°  pos_err=0.3095m  rot_err=1.4874rad  end=terminated
+    ep   7/10  FAIL     pushes=10  start=(-0.011,+0.484) yaw=  -5.6°  goal=(-0.077,+0.440) yaw=  -5.6°  final=(+0.153,+0.556) yaw= -50.7°  pos_err=0.2578m  rot_err=0.7878rad  end=max_pushes
+    ep   8/10  FAIL     pushes= 3  start=(-0.010,+0.515) yaw=  +8.2°  goal=(-0.084,+0.486) yaw=  +8.2°  final=(-0.021,+0.519) yaw=  +3.5°  pos_err=0.1096m  rot_err=0.0807rad  end=terminated
+    ep   9/10  FAIL     pushes= 2  start=(+0.003,+0.504) yaw=  +6.8°  goal=(-0.017,+0.581) yaw=  +6.8°  final=(+0.007,+0.531) yaw=  +9.6°  pos_err=0.1010m  rot_err=0.0480rad  end=terminated
+    ep  10/10  FAIL     pushes= 9  start=(-0.001,+0.504) yaw=  -7.2°  goal=(-0.074,+0.471) yaw=  -7.2°  final=(-0.001,+0.680) yaw= -90.4°  pos_err=0.2421m  rot_err=1.4523rad  end=terminated
+    RESULT: SR=0.0%  PosErr=0.2556m  RotErr=0.9074rad  AvgPushes=7.2
+
+  [Test  2] long_translation (10 episodes)
+    ep   1/10  FAIL     pushes= 5  start=(-0.006,+0.476) yaw=  +3.4°  goal=(-0.154,+0.300) yaw=  +3.4°  final=(-0.013,+0.511) yaw= +85.3°  pos_err=0.2672m  rot_err=1.4294rad  end=terminated
+    ep   2/10  FAIL     pushes=10  start=(-0.009,+0.489) yaw=  +0.4°  goal=(-0.222,+0.358) yaw=  +0.4°  final=(+0.216,+0.719) yaw= +15.2°  pos_err=0.5677m  rot_err=0.2578rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(-0.003,+0.494) yaw=  -0.3°  goal=(-0.164,+0.303) yaw=  -0.3°  final=(-0.106,+0.475) yaw= -25.9°  pos_err=0.1817m  rot_err=0.4461rad  end=max_pushes
+    ep   4/10  FAIL     pushes=10  start=(+0.015,+0.504) yaw=  +1.3°  goal=(+0.226,+0.370) yaw=  +1.3°  final=(-0.087,+0.349) yaw= -49.9°  pos_err=0.3140m  rot_err=0.8944rad  end=max_pushes
+    ep   5/10  FAIL     pushes=10  start=(+0.018,+0.486) yaw=  +3.4°  goal=(+0.225,+0.625) yaw=  +3.4°  final=(+0.136,+0.771) yaw= +53.3°  pos_err=0.1708m  rot_err=0.8708rad  end=max_pushes
+    ep   6/10  FAIL     pushes= 2  start=(-0.011,+0.484) yaw=  +4.8°  goal=(-0.260,+0.460) yaw=  +4.8°  final=(+0.021,+0.391) yaw=  +1.8°  pos_err=0.3071m  rot_err=0.0512rad  end=terminated
+    ep   7/10  FAIL     pushes=10  start=(+0.008,+0.499) yaw=  +1.8°  goal=(+0.258,+0.498) yaw=  +1.8°  final=(+0.094,+0.637) yaw= -46.4°  pos_err=0.2155m  rot_err=0.8408rad  end=max_pushes
+    ep   8/10  FAIL     pushes= 5  start=(+0.012,+0.501) yaw=  +1.3°  goal=(-0.216,+0.399) yaw=  +1.3°  final=(+0.006,+0.665) yaw= +84.2°  pos_err=0.3615m  rot_err=1.4461rad  end=terminated
+    ep   9/10  FAIL     pushes= 8  start=(+0.014,+0.478) yaw=  -7.3°  goal=(+0.042,+0.650) yaw=  -7.3°  final=(-0.227,+0.357) yaw=+174.4°  pos_err=0.4059m  rot_err=3.1120rad  end=terminated
+    ep  10/10  FAIL     pushes= 6  start=(-0.012,+0.465) yaw= -12.9°  goal=(+0.238,+0.465) yaw= -12.9°  final=(+0.109,+0.410) yaw= -87.5°  pos_err=0.1651m  rot_err=1.3010rad  end=terminated
+    RESULT: SR=0.0%  PosErr=0.2956m  RotErr=1.0650rad  AvgPushes=7.6
+
+  [Test  3] small_rotation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(-0.026,+0.502) yaw=  +5.0°  goal=(-0.026,+0.502) yaw= +35.0°  final=(-0.038,+0.615) yaw= -72.5°  pos_err=0.1131m  rot_err=1.8763rad  end=max_pushes
+    ep   2/10  FAIL     pushes= 1  start=(+0.045,+0.474) yaw=  -3.6°  goal=(+0.045,+0.474) yaw= +26.4°  final=(-0.074,+0.437) yaw= -55.8°  pos_err=0.1494m  rot_err=1.4348rad  end=terminated
+    ep   3/10  FAIL     pushes= 7  start=(+0.012,+0.522) yaw=  +3.0°  goal=(+0.012,+0.522) yaw= +33.0°  final=(-0.220,+0.535) yaw=-119.7°  pos_err=0.2491m  rot_err=2.6650rad  end=terminated
+    ep   4/10  FAIL     pushes= 2  start=(+0.028,+0.486) yaw= +10.6°  goal=(+0.028,+0.486) yaw= +40.6°  final=(+0.143,+0.576) yaw=  +1.3°  pos_err=0.1699m  rot_err=0.6870rad  end=terminated
+    ep   5/10  FAIL     pushes= 2  start=(+0.020,+0.478) yaw=  +8.2°  goal=(+0.020,+0.478) yaw= +38.2°  final=(-0.024,+0.377) yaw= +79.1°  pos_err=0.1386m  rot_err=0.7134rad  end=terminated
+    ep   6/10  FAIL     pushes=10  start=(+0.034,+0.533) yaw=  +0.3°  goal=(+0.034,+0.533) yaw= +30.3°  final=(-0.195,+0.513) yaw=  -1.8°  pos_err=0.2292m  rot_err=0.5609rad  end=max_pushes
+    ep   7/10  SUCCESS  pushes= 1  start=(-0.021,+0.498) yaw= +16.2°  goal=(-0.021,+0.498) yaw= +46.2°  final=(-0.007,+0.455) yaw= +41.5°  pos_err=0.0446m  rot_err=0.0833rad  end=success
+    ep   8/10  FAIL     pushes= 1  start=(+0.020,+0.486) yaw=  -1.5°  goal=(+0.020,+0.486) yaw= +28.5°  final=(-0.046,+0.389) yaw=  +3.9°  pos_err=0.1438m  rot_err=0.4294rad  end=terminated
+    ep   9/10  FAIL     pushes= 3  start=(+0.006,+0.485) yaw=  +9.9°  goal=(+0.006,+0.485) yaw= +39.9°  final=(+0.159,+0.604) yaw=  +2.5°  pos_err=0.2107m  rot_err=0.6517rad  end=terminated
+    ep  10/10  FAIL     pushes= 8  start=(+0.007,+0.493) yaw=  -3.8°  goal=(+0.007,+0.493) yaw= -33.8°  final=(+0.016,+0.399) yaw=-179.2°  pos_err=0.1252m  rot_err=2.5383rad  end=terminated
+    RESULT: SR=10.0%  PosErr=0.1574m  RotErr=1.1640rad  AvgPushes=4.5
+
+  [Test  4] large_rotation (10 episodes)
+    ep   1/10  FAIL     pushes=10  start=(+0.028,+0.482) yaw=  -2.0°  goal=(+0.028,+0.482) yaw= +88.0°  final=(-0.042,+0.298) yaw= +41.5°  pos_err=0.1971m  rot_err=0.8126rad  end=max_pushes
+    ep   2/10  FAIL     pushes=10  start=(-0.015,+0.498) yaw= -18.7°  goal=(-0.015,+0.498) yaw=-108.7°  final=(+0.081,+0.248) yaw=  -0.3°  pos_err=0.2677m  rot_err=1.8918rad  end=max_pushes
+    ep   3/10  FAIL     pushes=10  start=(+0.015,+0.458) yaw= +14.9°  goal=(+0.015,+0.458) yaw=+104.9°  final=(-0.125,+0.276) yaw= -20.6°  pos_err=0.2286m  rot_err=2.1904rad  end=max_pushes
+    ep   4/10  FAIL     pushes= 2  start=(-0.044,+0.520) yaw=  -4.3°  goal=(-0.044,+0.520) yaw= +85.7°  final=(-0.086,+0.367) yaw=  +1.4°  pos_err=0.1887m  rot_err=1.4718rad  end=terminated
+    ep   5/10  FAIL     pushes= 6  start=(+0.005,+0.455) yaw=  +1.2°  goal=(+0.005,+0.455) yaw= -88.8°  final=(+0.130,+0.246) yaw= +92.5°  pos_err=0.2601m  rot_err=3.1192rad  end=terminated
+    ep   6/10  FAIL     pushes=10  start=(-0.024,+0.495) yaw=  +7.0°  goal=(-0.024,+0.495) yaw= +97.0°  final=(+0.037,+0.368) yaw=+166.6°  pos_err=0.1403m  rot_err=1.2141rad  end=max_pushes

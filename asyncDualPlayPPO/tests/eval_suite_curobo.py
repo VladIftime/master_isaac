@@ -285,7 +285,7 @@ def main():
             obs_shape=(bob_obs_dim,),
             states_shape=(bob_obs_dim,),
             actions_shape=(num_cat_dims,),
-            init_noise_std=1.0,
+            initial_std=1.0,
             model_cfg=policy_cfg,
             asymmetric=False,
         ).to(device)
