@@ -193,7 +193,6 @@ class PushEnvWrapper:
         Calls observation_manager.compute() outside env.step() — safe because
         the only observation group (push_policy) has no side effects
         (no sensors, no cameras).  The low-volume print confirms call frequency."""
-        print("[P5 check] _get_push_obs: observation_manager.compute() called outside step()", flush=True)
         self._update_goal_in_extras()
         obs_dict = self.env.observation_manager.compute()
         return self._build_obs(obs_dict)
@@ -394,8 +393,6 @@ class PushEnvWrapper:
 
         if too_close.any():
             tc_count = int(too_close.sum().item())
-            print(f"[P4 filter] {tc_count}/{N} goals too close to object spawn — resampling.",
-                  flush=True)
             # Resample goals for too-close envs
             gx[too_close] = torch.empty(tc_count, device=self.device).uniform_(*_GOAL_X_RANGE)
             gy[too_close] = torch.empty(tc_count, device=self.device).uniform_(*_GOAL_Y_RANGE)

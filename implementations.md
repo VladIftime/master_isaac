@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-08 (Fix P64-P66: Push-ASP dense reward fix, obj_lifted removal, rel_obs)
+**Last updated**: 2026-06-11 (Validation evaluation suite for model comparison)
 
 ---
 
@@ -14,6 +14,7 @@
 5. [HPC Setup & Run Guide](#hpc-setup)
 6. [Push-PPO Baseline](#push-ppo)
 7. [Push Primitive Test](#push-primitive-test)
+8. [Validation Evaluation Suite](#validation-suite)
 
 ---
 
@@ -1316,3 +1317,121 @@ Removed cube, cylinder, rect, and triangle from the `PushTaskSceneCfg` entirely 
 | `tasks/push_task_curobo.py` | `cube = cylinder = rect = triangle = None` (removed 4 free-falling rigid bodies) |
 | `tests/test_push_primitive.py` | Removed `_swap_object`, `SCENARIO_OBJECTS`, `_ALL_OBJECT_NAMES`; `active_obj_name` hardcoded to `"target_object"` |
 | `tasks/utils/action_push.py` | `PUSH_APPROACH_HEIGHT = 0.40 m`; substeps 115→76 per push (Fix P32) |
+
+---
+
+## 8. Validation Evaluation Suite <a name="validation-suite"></a>
+
+> Added 2026-06-11. Standardized evaluation suite for fair comparison of all push-T model variants.
+
+### 8.1 Overview
+
+A 10-test validation suite that evaluates trained models on identical, deterministically-seeded (start, goal) pairs. Supports all three model types in two scripts:
+
+| Script | Model Types | Action Pipeline |
+|--------|-------------|-----------------|
+| `tests/eval_suite.py` | Push-PPO (abs/rel), Push-ASP Bob | Push macro-actions (4D × 21 bins) → 72-substep waypoints → cuRobo IK |
+| `tests/eval_suite_curobo.py` | ASP Bob (cuRobo step) | Per-step EE deltas (6D × 11 bins) → accumulate → cuRobo IK |
+
+Both produce identical CSV format for merged analysis via `tests/eval_plot.py`.
+
+### 8.2 Test Definitions (`tests/eval_test_defs.py`)
+
+| # | Name | Goal Offset | N Episodes | Tests |
+|---|------|-------------|------------|-------|
+| 1 | `short_translation` | Δpos=0.08m, Δyaw=0 | 20 | Basic position accuracy |
+| 2 | `long_translation` | Δpos=0.25m, Δyaw=0 | 20 | Multi-push sequencing |
+| 3 | `small_rotation` | Δpos=0, Δyaw=30° | 20 | Rotation without translation |
+| 4 | `large_rotation` | Δpos=0, Δyaw=90° | 20 | Large rotation control |
+| 5 | `combined_easy` | Δpos=0.10m, Δyaw=30° | 20 | Basic combined |
+| 6 | `combined_hard` | Δpos=0.25m, Δyaw=90° | 20 | Full difficulty |
+| 7 | `precision` | Δpos=0.03m, Δyaw=10° | 20 | Fine correction |
+| 8 | `boundary_push` | Goal near workspace edge | 20 | Edge reachability |
+| 9 | `random_easy` | pos∈[0.05,0.15]m, rot∈[0,0.5]rad | 100 | Statistical (easy) |
+| 10 | `random_hard` | pos∈[0.15,0.35]m, rot∈[0.5,2.5]rad | 100 | Statistical (hard) |
+
+**Seeding**: `master_seed * 1000 + test_id * 100 + episode_idx` — all models face identical episodes.
+
+**Spawn noise** (tests 1-8): Gaussian position jitter σ=0.02m XY, σ=0.17rad yaw around workspace center (0, 0.50). Test 7 (precision) uses reduced noise σ=0.01m, σ=0.09rad.
+
+### 8.3 Success Criteria & Safety Guards
+
+| Criterion | Threshold |
+|-----------|-----------|
+| Position success | pos_err < 0.05m |
+| Rotation success | rot_err < 0.2rad (max-axis Euler wraparound) |
+| Max pushes (push models) | 10 |
+| Max steps (cuRobo Bob) | 100 |
+
+**Safety termination (per-waypoint checks):**
+- TCP Z < 0.01m → robot penetrating table → abort push
+- Object Z > 0.08m → gripper lifted/scooped object → abort push
+- Object XY out of bounds (|X|>0.75, Y<0.1 or Y>1.0) or Z<-0.1 → off-table/explosion → abort episode
+
+### 8.4 Model Configuration
+
+Models are specified as a list at the top of each script:
+
+```python
+MODELS = [
+    {
+        "name": "Push-PPO (abs)",
+        "type": "push_ppo",        # ActorCriticPush, no GoalEncoder
+        "rel_act": False,           # decode_push_action (absolute Xs, Ys)
+        "rel_obs": False,           # 28D observation
+        "checkpoint": "runs/.../agent/model_best.pt",
+    },
+    {
+        "name": "Push-PPO (rel_full)",
+        "type": "push_ppo",
+        "rel_act": True,            # decode_push_action_relative
+        "rel_obs": True,            # 30D observation (appends rel_dx, rel_dy)
+        "checkpoint": "runs/.../agent/model_best.pt",
+    },
+    {
+        "name": "Push-ASP Bob",
+        "type": "push_asp_bob",    # ActorCritic with GoalEncoder + PI encoder
+        "rel_act": True,            # always object-relative
+        "rel_obs": True,            # 28D (replaces last 2 dims with rel_dx, rel_dy)
+        "checkpoint": "runs/.../bob/model_best.pt",
+    },
+]
+```
+
+### 8.5 Execution
+
+```bash
+# Push-based models (non-headless, single env, visual markers)
+python -m asyncDualPlayPPO.tests.eval_suite
+
+# cuRobo step-based Bob
+python -m asyncDualPlayPPO.tests.eval_suite_curobo
+
+# Generate comparison plot from CSVs
+python -m asyncDualPlayPPO.tests.eval_plot
+```
+
+### 8.6 Output
+
+**CSV** (`results/eval_push_results.csv`): One row per episode with columns `model_name, model_type, checkpoint, test_id, test_name, episode_idx, seed, success, pos_error, rot_error, pushes_used`.
+
+**Terminal**: Per-episode summary line showing start/goal/final positions+yaw, pushes used, final errors, termination reason (`success`, `max_pushes`, `off_table`, `terminated`).
+
+**Plot** (`results/model_comparison.png`): 2×2 grouped bar chart — SR%, PosErr, RotErr, AvgPushes per test, one color per model.
+
+### 8.7 Visualization
+
+Non-headless by default (`HEADLESS = False`). The evaluation viewport shows:
+- **Orange flat T-block** at goal pose (updated per episode)
+- **Green sphere** at push start point (Xs, Ys)
+- **Red sphere** at push end point (Xf, Yf)
+- **Blue cylinder arrow** showing push direction
+
+### 8.8 Files
+
+| File | Purpose |
+|------|---------|
+| `tests/eval_test_defs.py` | 10 test definitions + seeded episode generator |
+| `tests/eval_suite.py` | Push-PPO & Push-ASP Bob evaluation |
+| `tests/eval_suite_curobo.py` | cuRobo step-based Bob evaluation |
+| `tests/eval_plot.py` | CSV reader + matplotlib comparison plot |
