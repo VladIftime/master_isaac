@@ -5,7 +5,7 @@ One-shot episodic environment matching the Gazebo MDP:
   - Observation space: Box(8) = [robot_obs, basket_x, basket_y, obj_x, obj_y, dist, dist_x, dist_y]
   - Each step() executes the full throw primitive (IK grasping + joint-space throw)
   - Episode = 1 step, always terminates after the throw
-  - Reward: Gazebo-style exponential distance (0.9*exp(-d²/0.01) + 0.1*exp(-d²/0.05))
+  - Reward: Widened exponential + linear (0.9*exp(-d²/0.1) + 0.1*exp(-d²/0.5) + 0.5*max(0,1-d))
 
 Internally creates a ThrowingEnv (ManagerBasedRLEnv) and uses IK-based grasping
 via env.step(ik_action), matching the proven pickup flow from test_joint_throwing.py.
@@ -16,6 +16,7 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from .throw_primitive import (
     execute_primitive_batched,
@@ -113,6 +114,8 @@ class ThrowingPrimitiveEnv(gym.Env):
         self.num_envs = cfg.num_envs
         self.device = self._env.device
         self._episode_count = 0
+        self._tb_writer: SummaryWriter | None = None
+        self._grasp_cache: dict = {}
 
     @property
     def state_space(self):
@@ -129,6 +132,9 @@ class ThrowingPrimitiveEnv(gym.Env):
     @property
     def num_observations(self):
         return 8
+
+    def set_log_dir(self, log_dir: str):
+        self._tb_writer = SummaryWriter(log_dir=log_dir)
 
     def _get_obs(self) -> torch.Tensor:
         """Compute 8D observation for all envs. Returns (N, 8) tensor."""
@@ -162,14 +168,15 @@ class ThrowingPrimitiveEnv(gym.Env):
         return obs
 
     def _compute_reward(self, distances: torch.Tensor) -> torch.Tensor:
-        """Gazebo-style reward from landing distance."""
+        """Widened exponential + linear distance reward."""
         alpha = 0.9
         reward = (
-            alpha * torch.exp(-(distances ** 2) / 0.01)
-            + (1.0 - alpha) * torch.exp(-(distances ** 2) / 0.05)
+            alpha * torch.exp(-(distances ** 2) / 0.1)
+            + (1.0 - alpha) * torch.exp(-(distances ** 2) / 0.5)
+            + 0.5 * torch.clamp(1.0 - distances, min=0.0)
         )
         success_mask = distances < 0.15
-        reward[success_mask] = 1.0
+        reward[success_mask] = 2.0
         return reward
 
     def step(self, action):
@@ -196,6 +203,7 @@ class ThrowingPrimitiveEnv(gym.Env):
             drink_x=self.cfg.drink_x,
             drink_y=self.cfg.drink_y,
             drink_z=self.cfg.drink_z,
+            grasp_cache=self._grasp_cache,
         )
 
         distances = result["distances"]
@@ -220,12 +228,17 @@ class ThrowingPrimitiveEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def _log_episodes(self, actions, target_pos, milk_final_pos, distances, rewards, dropped):
-        """Log episode summary for all envs."""
+        """Log episode summary for all envs (stdout + TensorBoard)."""
         params = map_action_to_params(actions, side=self._side)
         n_dropped = dropped.sum().item()
         n_success = (distances < 0.15).sum().item()
-        mean_dist = distances[~dropped].mean().item() if (~dropped).any() else float("inf")
+        valid_mask = ~dropped
+        mean_dist = distances[valid_mask].mean().item() if valid_mask.any() else float("inf")
+        min_dist = distances[valid_mask].min().item() if valid_mask.any() else float("inf")
+        max_dist = distances[valid_mask].max().item() if valid_mask.any() else float("inf")
         mean_reward = rewards.mean().item()
+        success_rate = n_success / self.num_envs
+        drop_rate = n_dropped / self.num_envs
 
         print(
             f"[Ep {self._episode_count:>6}] "
@@ -233,7 +246,7 @@ class ThrowingPrimitiveEnv(gym.Env):
             f"success={n_success}/{self.num_envs}  dropped={n_dropped}/{self.num_envs}"
         )
 
-        if self.num_envs <= 10:
+        if self.num_envs <= 50:
             for idx in range(self.num_envs):
                 tgt = target_pos[idx]
                 obj = milk_final_pos[idx]
@@ -264,6 +277,21 @@ class ThrowingPrimitiveEnv(gym.Env):
                 f"{' [EARLY_END]' if early else ''}"
             )
 
+        if self._tb_writer is not None:
+            step = self._episode_count
+            self._tb_writer.add_scalar("Throw / Mean Distance", mean_dist, step)
+            self._tb_writer.add_scalar("Throw / Min Distance", min_dist, step)
+            self._tb_writer.add_scalar("Throw / Max Distance", max_dist, step)
+            self._tb_writer.add_scalar("Throw / Success Rate", success_rate, step)
+            self._tb_writer.add_scalar("Throw / Drop Rate", drop_rate, step)
+            self._tb_writer.add_scalar("Throw / Mean Reward", mean_reward, step)
+            mean_params = params.mean(dim=0)
+            self._tb_writer.add_scalar("Action / Mean Initial JV", mean_params[0].item(), step)
+            self._tb_writer.add_scalar("Action / Mean Final JV", mean_params[1].item(), step)
+            self._tb_writer.add_scalar("Action / Mean Release Time", mean_params[2].item(), step)
+            self._tb_writer.add_scalar("Action / Mean Duration", mean_params[3].item(), step)
+            self._tb_writer.flush()
+
     def reset(self, seed=None, options=None):
         """Reset environment: randomize target, return fresh observation."""
         if seed is not None:
@@ -280,6 +308,8 @@ class ThrowingPrimitiveEnv(gym.Env):
         return self._env.render()
 
     def close(self):
+        if self._tb_writer is not None:
+            self._tb_writer.close()
         self._env.close()
 
     @property

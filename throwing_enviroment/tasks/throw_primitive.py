@@ -48,9 +48,11 @@ PHASE_LIFT = 60
 PHASE_GO_TO_INIT = 40
 PHASE_GO_TO_INITIAL = 40
 PHASE_THROW_MAX = 120
-PHASE_FLIGHT = 300
+PHASE_FLIGHT = 200
+PHASE_STABILIZE = 10
 
 GRASP_Z_OFFSET = 0.30
+GRASP_STR = 0.48
 
 DROP_DISTANCE_THRESHOLD = 0.25
 DROP_PENALTY_DISTANCE = 10.0
@@ -66,6 +68,74 @@ TOTAL_PRIMITIVE_STEPS = (
     PHASE_SETTLE + PHASE_APPROACH + PHASE_DESCEND + PHASE_GRASP + PHASE_LIFT
     + PHASE_GO_TO_INIT + PHASE_GO_TO_INITIAL + PHASE_THROW_MAX + PHASE_FLIGHT
 )
+
+
+def save_sim_state(env, extra: dict | None = None) -> dict:
+    """Save full simulation state (robot joints + milk + target) for later restore."""
+    robot = env.scene["robot"]
+    milk = env.scene["milk"]
+    target = env.scene["target"]
+    state = {
+        "joint_pos": robot.data.joint_pos.clone(),
+        "joint_vel": robot.data.joint_vel.clone(),
+        "joint_pos_target": robot.data.joint_pos_target.clone(),
+        "milk_state": milk.data.root_state_w.clone(),
+        "target_state": target.data.root_state_w.clone(),
+    }
+    if hasattr(env, "_holding"):
+        state["_holding"] = env._holding.clone()
+        state["_released"] = env._released.clone()
+        state["_steps_in_episode"] = env._steps_in_episode.clone()
+        state["_object_settled_count"] = env._object_settled_count.clone()
+        state["_object_landed"] = env._object_landed.clone()
+    if extra is not None:
+        state["extra"] = {k: v.clone() for k, v in extra.items()}
+    return state
+
+
+def restore_sim_state(env, state: dict, env_ids: torch.Tensor | None = None,
+                      restore_target: bool = True) -> dict | None:
+    """Restore simulation state from a saved snapshot.
+
+    After writing state, steps the sim once so PhysX absorbs the values.
+    Returns the ``extra`` dict (cloned) if it was saved, else None.
+    """
+    robot = env.scene["robot"]
+    milk = env.scene["milk"]
+    target = env.scene["target"]
+    device = env.device
+    render = env.sim.has_gui()
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=device)
+
+    robot.write_joint_state_to_sim(
+        state["joint_pos"][env_ids],
+        state["joint_vel"][env_ids],
+        env_ids=env_ids,
+    )
+    robot.set_joint_position_target(
+        state["joint_pos_target"][env_ids],
+        env_ids=env_ids,
+    )
+    milk.write_root_state_to_sim(state["milk_state"][env_ids], env_ids=env_ids)
+
+    if restore_target and "target_state" in state:
+        target.write_root_state_to_sim(state["target_state"][env_ids], env_ids=env_ids)
+
+    if hasattr(env, "_holding") and "_holding" in state:
+        env._holding[env_ids] = state["_holding"][env_ids]
+        env._released[env_ids] = state["_released"][env_ids]
+        env._steps_in_episode[env_ids] = state["_steps_in_episode"][env_ids]
+        env._object_settled_count[env_ids] = state["_object_settled_count"][env_ids]
+        env._object_landed[env_ids] = state["_object_landed"][env_ids]
+
+    env.sim.step(render=render)
+    env.scene.update(env.cfg.sim.dt)
+
+    if "extra" in state:
+        return {k: v.clone() for k, v in state["extra"].items()}
+    return None
 
 
 @dataclass
@@ -313,7 +383,7 @@ class ThrowPrimitiveExecutor:
         # ── GRASP: close gripper gradually ──────────────────────────────
         for i in range(PHASE_GRASP):
             progress = i / (PHASE_GRASP - 1) if PHASE_GRASP > 1 else 1.0
-            self.gripper_set_fn(self.robot, 0.48 * progress, env_ids)
+            self.gripper_set_fn(self.robot, GRASP_STR * progress, env_ids)
             env.step(torch.zeros(1, 6, device=device))
             _log("GRASP")
 
@@ -346,7 +416,7 @@ class ThrowPrimitiveExecutor:
             init_joints_rotated.unsqueeze(0), joint_ids=self.arm_joint_ids, env_ids=env_ids
         )
         for _ in range(PHASE_GO_TO_INIT):
-            self.gripper_set_fn(self.robot, 0.7, env_ids)
+            self.gripper_set_fn(self.robot, GRASP_STR, env_ids)
             self.robot.write_data_to_sim()
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
@@ -367,7 +437,7 @@ class ThrowPrimitiveExecutor:
             initial_joints_pose, joint_ids=self.arm_joint_ids, env_ids=env_ids
         )
         for _ in range(PHASE_GO_TO_INITIAL):
-            self.gripper_set_fn(self.robot, 0.7, env_ids)
+            self.gripper_set_fn(self.robot, GRASP_STR, env_ids)
             self.robot.write_data_to_sim()
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
@@ -392,7 +462,7 @@ class ThrowPrimitiveExecutor:
                 self.gripper_set_fn(self.robot, 0.0, env_ids)
                 released = True
             elif not released:
-                self.gripper_set_fn(self.robot, 0.7, env_ids)
+                self.gripper_set_fn(self.robot, GRASP_STR, env_ids)
             self.robot.write_data_to_sim()
             env.sim.step(render=not headless)
             env.scene.update(self.sim_dt)
@@ -441,11 +511,18 @@ def execute_primitive_batched(
     drink_x: float = DRINK_WORLD_X,
     drink_y: float = DRINK_WORLD_Y,
     drink_z: float = DRINK_WORLD_Z,
+    grasp_cache: dict | None = None,
 ) -> torch.Tensor:
     """Execute the throw primitive for all N envs in parallel. Returns distances (N,).
 
     Uses env.step(actions) for IK phases (all envs execute same phase simultaneously).
     Uses direct joint control for throw phase.
+
+    If *grasp_cache* is a dict, the first call runs the full IK grasping sequence
+    (SETTLE→GO_TO_INIT, ~380 steps) and saves the simulation state.  Subsequent
+    calls restore from cache and skip directly to GO_TO_INITIAL, saving ~3 s per
+    episode.  The target position is NOT restored — it stays at whatever the
+    caller set (typically randomized by env.reset() before this function).
 
     Args:
         env: ThrowingEnv (ManagerBasedRLEnv with DiffIK action term)
@@ -454,6 +531,7 @@ def execute_primitive_batched(
         ee_body_name: end-effector body name
         gripper_set_fn: function to set gripper state
         side: "right" or "left"
+        grasp_cache: mutable dict; pass ``{}`` to enable caching, or ``None`` to disable.
     """
     render = env.sim.has_gui()
     from isaaclab.utils.math import compute_pose_error
@@ -504,46 +582,8 @@ def execute_primitive_batched(
         )
         return torch.cat([pos_err, torch.zeros(N, 3, device=device)], dim=-1)
 
-    # ── SETTLE: spawn drinks on table ───────────────────────────────────
-    drink_pos_local = torch.tensor([[drink_x, drink_y, drink_z]], device=device).expand(N, -1)
-    drink_pos_w = drink_pos_local + origins
-    drink_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device).expand(N, -1)
-    milk.write_root_pose_to_sim(torch.cat([drink_pos_w, drink_quat], dim=-1), env_ids=all_ids)
-    milk.write_root_velocity_to_sim(torch.zeros(N, 6, device=device), env_ids=all_ids)
-    gripper_set_fn(robot, 0.0, all_ids)
-    for _ in range(PHASE_SETTLE):
-        env.step(torch.zeros(N, 6, device=device))
-
-    drink_actual_local = milk.data.root_pos_w[:, :3] - origins
-    crane_pos, _ = _ee_state()
-    crane_local = crane_pos - origins
-
-    # ── APPROACH: IK move EE above drink at crane Z ─────────────────────
-    target_approach = torch.stack([
-        drink_actual_local[:, 0], drink_actual_local[:, 1], crane_local[:, 2]
-    ], dim=-1)
-    for _ in range(PHASE_APPROACH):
-        env.step(_ik_action_toward(target_approach))
-
-    # ── DESCEND: IK lower to grasp height ───────────────────────────────
-    target_descend = torch.stack([
-        drink_actual_local[:, 0], drink_actual_local[:, 1],
-        drink_actual_local[:, 2] + GRASP_Z_OFFSET
-    ], dim=-1)
-    for _ in range(PHASE_DESCEND):
-        env.step(_ik_action_toward(target_descend))
-
-    # ── GRASP: close gripper gradually ──────────────────────────────────
-    for i in range(PHASE_GRASP):
-        progress = i / (PHASE_GRASP - 1) if PHASE_GRASP > 1 else 1.0
-        gripper_set_fn(robot, 0.48 * progress, all_ids)
-        env.step(torch.zeros(N, 6, device=device))
-
-    # ── Kinematic hold from here until release ─────────────────────────
-    ee_p_g, _ = _ee_state()
-    milk_p_g = milk.data.root_pos_w[:, :3].clone()
-    _grasp_offset = milk_p_g - ee_p_g
-    _grasp_quat = milk.data.root_quat_w.clone()
+    _grasp_offset = None
+    _grasp_quat = None
 
     def _hold_batched(env_ids_hold=None):
         if env_ids_hold is None:
@@ -555,10 +595,110 @@ def execute_primitive_batched(
         milk.write_root_velocity_to_sim(
             torch.zeros(len(env_ids_hold), 6, device=device), env_ids=env_ids_hold)
 
+    if grasp_cache is not None and "prepos" in grasp_cache:
+        # ── PRE-POSITION: skip SETTLE+APPROACH+DESCEND (~220 steps) ────
+        cached = grasp_cache["prepos"]
+        drink_settled_w = cached["drink_settled_local"] + origins
+        drink_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device).expand(N, -1)
+        milk.write_root_pose_to_sim(
+            torch.cat([drink_settled_w, drink_quat], dim=-1), env_ids=all_ids)
+        milk.write_root_velocity_to_sim(torch.zeros(N, 6, device=device), env_ids=all_ids)
+        robot.write_joint_state_to_sim(
+            cached["joint_pos"], cached["joint_vel"],
+            joint_ids=arm_joint_ids, env_ids=all_ids,
+        )
+        robot.set_joint_position_target(
+            cached["joint_pos"], joint_ids=arm_joint_ids,
+        )
+        gripper_set_fn(robot, 0.0, all_ids)
+        for _ in range(PHASE_STABILIZE):
+            env.step(torch.zeros(N, 6, device=device))
+        crane_local = cached["crane_local"]
+    else:
+        # ── SETTLE: spawn drinks on table ───────────────────────────────
+        drink_pos_local = torch.tensor([[drink_x, drink_y, drink_z]], device=device).expand(N, -1)
+        drink_pos_w = drink_pos_local + origins
+        drink_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device).expand(N, -1)
+        milk.write_root_pose_to_sim(torch.cat([drink_pos_w, drink_quat], dim=-1), env_ids=all_ids)
+        milk.write_root_velocity_to_sim(torch.zeros(N, 6, device=device), env_ids=all_ids)
+        gripper_set_fn(robot, 0.0, all_ids)
+        for _ in range(PHASE_SETTLE):
+            env.step(torch.zeros(N, 6, device=device))
+
+        drink_actual_local = milk.data.root_pos_w[:, :3] - origins
+        crane_pos, _ = _ee_state()
+        crane_local = crane_pos - origins
+
+        # ── APPROACH: IK move EE above drink at crane Z ─────────────────
+        target_approach = torch.stack([
+            drink_actual_local[:, 0], drink_actual_local[:, 1], crane_local[:, 2]
+        ], dim=-1)
+        for _ in range(PHASE_APPROACH):
+            env.step(_ik_action_toward(target_approach))
+
+        # ── DESCEND: IK lower to grasp height ───────────────────────────
+        target_descend = torch.stack([
+            drink_actual_local[:, 0], drink_actual_local[:, 1],
+            drink_actual_local[:, 2] + GRASP_Z_OFFSET
+        ], dim=-1)
+        for _ in range(PHASE_DESCEND):
+            env.step(_ik_action_toward(target_descend))
+
+        if grasp_cache is not None:
+            grasp_cache["prepos"] = {
+                "drink_settled_local": drink_actual_local.clone(),
+                "joint_pos": robot.data.joint_pos[:, arm_joint_ids].clone(),
+                "joint_vel": robot.data.joint_vel[:, arm_joint_ids].clone(),
+                "crane_local": crane_local.clone(),
+            }
+
+    dropped = torch.zeros(N, device=device, dtype=torch.bool)
+    drop_pos = milk.data.root_pos_w[:, :3].clone()
+    origin_z = origins[:, 2]
+
+    def _check_dropped():
+        milk_z = milk.data.root_pos_w[:, 2] - origin_z
+        newly = (milk_z < DRINK_BELOW_TABLE_Z) & ~dropped
+        if newly.any():
+            new_ids = newly.nonzero(as_tuple=True)[0]
+            drop_pos[new_ids] = milk.data.root_pos_w[new_ids, :3].clone()
+            dropped[newly] = True
+            safe_pos = origins[new_ids].clone()
+            safe_pos[:, 2] -= 10.0
+            safe_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device).expand(len(new_ids), -1)
+            milk.write_root_pose_to_sim(
+                torch.cat([safe_pos, safe_quat], dim=-1), env_ids=new_ids)
+            milk.write_root_velocity_to_sim(
+                torch.zeros(len(new_ids), 6, device=device), env_ids=new_ids)
+
+    def _hold_ids():
+        ids = (~dropped).nonzero(as_tuple=True)[0]
+        return ids if ids.numel() > 0 else None
+
+    # ── GRASP: close gripper gradually (always runs) ────────────────────
+    for i in range(PHASE_GRASP):
+        progress = i / (PHASE_GRASP - 1) if PHASE_GRASP > 1 else 1.0
+        gripper_set_fn(robot, GRASP_STR * progress, all_ids)
+        env.step(torch.zeros(N, 6, device=device))
+        _check_dropped()
+        if dropped.all():
+            break
+
+    # ── Kinematic hold from here until release ──────────────────────────
+    ee_p_g, _ = _ee_state()
+    milk_p_g = milk.data.root_pos_w[:, :3].clone()
+    _grasp_offset = milk_p_g - ee_p_g
+    _grasp_quat = milk.data.root_quat_w.clone()
+
     # ── LIFT: IK return to crane pose ───────────────────────────────────
     for _ in range(PHASE_LIFT):
         env.step(_ik_action_toward(crane_local))
-        _hold_batched()
+        ids = _hold_ids()
+        if ids is not None:
+            _hold_batched(ids)
+        _check_dropped()
+        if dropped.all():
+            break
 
     # ── GO_TO_INIT ──────────────────────────────────────────────────────
     init_joints_rotated = init_joints.clone()
@@ -567,22 +707,30 @@ def execute_primitive_batched(
         init_joints_rotated.unsqueeze(0).expand(N, -1), joint_ids=arm_joint_ids
     )
     for _ in range(PHASE_GO_TO_INIT):
-        gripper_set_fn(robot, 0.7, all_ids)
+        gripper_set_fn(robot, GRASP_STR, all_ids)
         robot.write_data_to_sim()
         env.sim.step(render=render)
         env.scene.update(sim_dt)
-        _hold_batched()
+        ids = _hold_ids()
+        if ids is not None:
+            _hold_batched(ids)
+        _check_dropped()
+        if dropped.all():
+            break
 
     # ── GO_TO_INITIAL ───────────────────────────────────────────────────
     robot.set_joint_position_target(initial_joints_pose, joint_ids=arm_joint_ids)
     for _ in range(PHASE_GO_TO_INITIAL):
-        gripper_set_fn(robot, 0.7, all_ids)
+        gripper_set_fn(robot, GRASP_STR, all_ids)
         robot.write_data_to_sim()
         env.sim.step(render=render)
         env.scene.update(sim_dt)
-        _hold_batched()
-
-    dropped = torch.zeros(N, device=device, dtype=torch.bool)
+        ids = _hold_ids()
+        if ids is not None:
+            _hold_batched(ids)
+        _check_dropped()
+        if dropped.all():
+            break
 
     # ── THROW: interpolate from initial to end joints ───────────────────
     released = torch.zeros(N, device=device, dtype=torch.bool)
@@ -600,14 +748,18 @@ def execute_primitive_batched(
 
         still_closed = ~released
         if still_closed.any():
-            gripper_set_fn(robot, 0.7, still_closed.nonzero(as_tuple=True)[0])
+            gripper_set_fn(robot, GRASP_STR, still_closed.nonzero(as_tuple=True)[0])
 
         robot.write_data_to_sim()
         env.sim.step(render=render)
         env.scene.update(sim_dt)
 
-        if still_closed.any():
-            _hold_batched(still_closed.nonzero(as_tuple=True)[0])
+        hold_mask = still_closed & ~dropped
+        if hold_mask.any():
+            _hold_batched(hold_mask.nonzero(as_tuple=True)[0])
+        _check_dropped()
+        if dropped.all():
+            break
 
     still_holding = ~released
     if still_holding.any():
@@ -619,13 +771,25 @@ def execute_primitive_batched(
     for _ in range(PHASE_FLIGHT):
         env.sim.step(render=render)
         env.scene.update(sim_dt)
+        _check_dropped()
         vel_norm = torch.norm(milk.data.root_lin_vel_w[:, :3], dim=-1)
         low_vel = vel_norm < 0.05
         settle_counts[low_vel & ~settled] += 1
         settle_counts[~low_vel] = 0
-        settled |= settle_counts >= 30
+        settled |= (settle_counts >= 30) | dropped
         if settled.all():
             break
+
+    # ── Restore dropped drinks to last valid position ─────────────────
+    if dropped.any():
+        drop_ids = dropped.nonzero(as_tuple=True)[0]
+        drop_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device).expand(len(drop_ids), -1)
+        milk.write_root_pose_to_sim(
+            torch.cat([drop_pos[drop_ids], drop_quat], dim=-1), env_ids=drop_ids)
+        milk.write_root_velocity_to_sim(
+            torch.zeros(len(drop_ids), 6, device=device), env_ids=drop_ids)
+        env.sim.step(render=render)
+        env.scene.update(sim_dt)
 
     # ── Measure distances ───────────────────────────────────────────────
     target_obj = env.scene["target"]

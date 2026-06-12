@@ -62,12 +62,12 @@ agent:
   discount_factor: 0.99
   polyak: 0.005
   learning_rate: 3.0e-04
-  random_timesteps: 200
-  learning_starts: 200
+  random_timesteps: 1000
+  learning_starts: 1000
   grad_norm_clip: 1.0
   learn_entropy: True
-  initial_entropy_value: 0.2
-  target_entropy: null
+  initial_entropy_value: 1.0
+  target_entropy: -2.0
   observation_preprocessor: RunningStandardScaler
   observation_preprocessor_kwargs: null
   experiment:

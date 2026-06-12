@@ -43,7 +43,8 @@ throwing_enviroment/
 │   ├── test_env.py                        # Launch & step environment
 │   ├── test_ik_throwing.py                # Multi-phase pick-and-throw IK benchmark (approach → descend → grasp → lift → raise → extend → settle → wrist-snap throw)
 │   ├── test_joint_throwing.py             # Gazebo-style joint-space throw (IK reach → bang-bang all-joint catapult)
-│   ├── test_throw.py                      # Single-throw test (kinematic hold → release → land, --loop flag)
+│   ├── test_throw.py                      # Throw primitive test (same pipeline as SAC, --loop uses pre-position cache)
+│   ├── plot_tb_logs.py                    # Plot TensorBoard logs (reward, distance, entropy, Q-values) + CSV export
 │   ├── convert_meshes.py                  # OBJ → USD with MeshConverter
 │   ├── prebake_physics.py                 # Apply CollisionAPI + PhysicsMaterial to USD meshes
 │   ├── prebake_drink.py                   # Pre-bake drink001: MassAPI, CollisionAPI, high-friction physics material (properly bound)
@@ -134,14 +135,17 @@ python scripts/export_full_scene.py --pose '{"right_elbow_joint": 0.0, "right_wr
 # Export with a JSON pose file
 python scripts/export_full_scene.py --pose my_pose.json
 
-# Single throw test (visual mode)
-python scripts/test_throw.py --ik diffik --amp 0.3
+# Throw primitive test (same pipeline as SAC training)
+python scripts/test_throw.py --ik diffik
 
-# Single throw (headless)
-python scripts/test_throw.py --ik diffik --headless --amp 0.3
-
-# Indefinite throws (Ctrl+C to stop)
+# Loop mode (pre-position cache kicks in after 1st throw)
 python scripts/test_throw.py --ik diffik --loop
+
+# Custom throw parameters
+python scripts/test_throw.py --ik diffik --loop --initial_jv 0.5 --final_jv -0.3
+
+# Plot training logs (auto-finds latest run)
+python scripts/plot_tb_logs.py
 
 # Multi-phase pick-and-throw IK benchmark
 python scripts/test_ik_throwing.py --ik diffik
@@ -767,24 +771,39 @@ python scripts/test_joint_throwing.py --throw_steps 60 --release_progress 0.4
 python scripts/test_joint_throwing.py --num_throws 10
 ```
 
-### Single-Throw Test (`scripts/test_throw.py`)
+### Throw Primitive Test (`scripts/test_throw.py`)
 
-Executes one complete throw cycle: spawn bottle → hold (kinematic pose write)
-→ throwing arc → release → fly → land → auto-terminate.
+Tests the exact same throw pipeline as SAC training via `execute_primitive_batched()`.
+Runs the full IK grasping + joint-space throw sequence with configurable action
+parameters. On `--loop`, the **pre-position cache** skips SETTLE+APPROACH+DESCEND
+(~220 steps) after the first throw.
+
+A **green sphere marker** at the target center shows the point from which the
+landing distance is measured.
 
 ```bash
-# Visual mode
-python scripts/test_throw.py --ik diffik --amp 0.3 --release-at 30
+# Single throw (full IK grasping sequence)
+python scripts/test_throw.py --ik diffik
 
-# Headless
-python scripts/test_throw.py --ik diffik --headless --amp 0.3
+# Loop mode — [PRE-POSITIONED] tag on throw #2+
+python scripts/test_throw.py --ik diffik --loop
 
-# Indefinite throws (Ctrl+C to stop)
-python scripts/test_throw.py --ik diffik --amp 0.3 --loop
+# Custom throw parameters
+python scripts/test_throw.py --ik diffik --loop --initial_jv 0.5 --final_jv -0.3
+
+# Multiple parallel envs
+python scripts/test_throw.py --ik diffik --loop --num_envs 4
 ```
 
-Output columns: `step`, `ee_y`, `ee_z`, `obj_y`, `obj_z`, `v_obj`, `dist3d`, `state`.
-3D Euclidean distance to target reported at completion.
+Output per throw:
+```
+[Throw #1] [FULL SEQUENCE]  target=(0.186, 1.231, 0.501)
+  env[0]: milk=(+0.281,+0.452,+0.538)  target=(+0.186,+1.231,+0.501)  dist=0.785m
+  Mean distance: 0.785m
+
+[Throw #2] [PRE-POSITIONED]  target=(0.300, 1.068, 0.501)
+  env[0]: ...  dist=0.598m
+```
 
 ## RL Training Pipeline
 
@@ -903,24 +922,28 @@ All positions are in environment-local coordinates.
 
 ### Reward Function
 
-Gazebo-style exponential distance reward:
+Widened exponential + linear distance reward (original Gazebo sigmas 0.01/0.05
+were too narrow, producing near-zero reward for throws >30cm off):
 
 ```python
-reward = 0.9 * exp(-d² / 0.01) + 0.1 * exp(-d² / 0.05)
+reward = 0.9 * exp(-d² / 0.1) + 0.1 * exp(-d² / 0.5) + 0.5 * max(0, 1 - d)
 if d < 0.15:
-    reward = 1.0  # success override
+    reward = 2.0  # success override
 ```
 
 | Distance (m) | Reward |
 |--------------|--------|
-| 0.0 | 1.0 |
-| 0.10 | ~0.37 |
-| 0.15 | 1.0 (success) |
-| 0.30 | ~0.0001 |
-| 0.50 | ~0.0 |
+| 0.0 | 2.0 (success) |
+| 0.15 | 2.0 (success) |
+| 0.30 | ~0.80 |
+| 0.50 | ~0.39 |
+| 1.00 | ~0.01 |
 
-If the drink is dropped before release (detected by falling below table height),
-a penalty distance of 10.0 m is assigned.
+If the drink is dropped before release (detected by falling below
+`DRINK_BELOW_TABLE_Z = 0.45` in env-local Z), a penalty distance of
+`DROP_PENALTY_DISTANCE = 10.0` m is assigned. Dropped drinks are despawned
+during the episode and restored to their last valid position before
+observation computation to avoid poisoning the replay buffer.
 
 ### Throw Primitive Execution (`tasks/throw_primitive.py`)
 
@@ -937,9 +960,45 @@ Each SAC step internally executes 10 phases using the underlying `ThrowingEnv`:
 | **GO_TO_INITIAL** | 40 | `set_joint_position_target` | Move to wind-up pose (`shoulder_pan = initial_joint_value`) |
 | **THROW** | 12–120 | Joint interpolation | Linear interpolation from initial→end joints over `duration` |
 | **RELEASE** | (within THROW) | Gripper open | Gripper opens at `releasing_time` fraction of throw |
-| **FLIGHT** | ≤300 | `env.sim.step()` | Wait for drink to settle (velocity < 0.05 m/s for 30 steps) |
+| **FLIGHT** | ≤200 | `env.sim.step()` | Wait for drink to settle (velocity < 0.05 m/s for 30 steps) |
 
-Total inner simulation steps per outer RL step: ~400–800 (varies with `duration`).
+Total inner simulation steps per outer RL step: ~300–700 (varies with `duration`).
+
+#### Pre-Position Cache
+
+On the **first** call to `execute_primitive_batched()`, the full SETTLE+APPROACH+DESCEND
+sequence (220 steps) runs and caches: arm joint positions after DESCEND, drink settled
+position, and crane EE position. On **subsequent** calls, the drink is spawned at the
+cached settled position and the arm joints are written directly to the grasp-ready
+configuration, followed by 10 stabilization steps. This skips ~220 steps per episode
+(~1.8 s at 120 Hz), giving approximately 2–3× speedup after the first episode.
+
+Pass `grasp_cache={}` to enable; `grasp_cache=None` to disable.
+
+#### Drop Detection
+
+The drink's env-local Z position is checked against `DRINK_BELOW_TABLE_Z = 0.45`
+after every sim step in **all** phases (GRASP, LIFT, GO_TO_INIT, GO_TO_INITIAL,
+THROW, FLIGHT). When a drop is detected:
+
+1. Last valid position is recorded in `drop_pos`
+2. Drink is despawned (teleported 10 m below scene) to prevent physics interference
+3. Kinematic hold is skipped for that env
+4. If all envs drop, the current phase loop exits early
+5. After FLIGHT, dropped drinks are restored to `drop_pos` so observations see
+   a physically plausible position (not the despawned location)
+6. `distances[dropped] = DROP_PENALTY_DISTANCE (10.0)` assigns the penalty
+
+This prevents dropped drinks from poisoning the SAC replay buffer with extreme
+outlier positions that would corrupt the `RunningStandardScaler` and critic Q-values.
+
+#### Gripper Consistency (`GRASP_STR`)
+
+The gripper hold strength is `GRASP_STR = 0.48` (calibrated at 65 N via force
+feedback — see `test_joint_throwing.py`). This value is used consistently across
+**all** phases: GRASP ramp (0→0.48), LIFT, GO_TO_INIT, GO_TO_INITIAL, and THROW
+(before release). Previously, post-GRASP phases used 0.7 (46% over-tightening),
+which caused the gripper to squeeze the bottle harder than intended.
 
 #### Kinematic Hold During Throw
 
@@ -1059,11 +1118,12 @@ per-env variations in `duration` and `releasing_time`:
 | Discount (γ) | 0.99 |
 | Polyak (τ) | 0.005 |
 | Learning rate | 3.0e-4 |
-| Random timesteps | 200 (pure exploration before learning) |
-| Learning starts | 200 |
+| Random timesteps | 1,000 (pure exploration before learning) |
+| Learning starts | 1,000 |
 | Gradient norm clip | 1.0 |
 | Learn entropy (α) | True (auto-tuned) |
-| Initial entropy | 0.2 |
+| Initial entropy | 1.0 |
+| Target entropy | -2.0 |
 | Observation preprocessor | RunningStandardScaler |
 | Total timesteps | 35,000 |
 | Trainer | SequentialTrainer |
@@ -1126,6 +1186,40 @@ python scripts/train_sac.py --headless --num_envs=64 --seed=123
 
 Logs are saved to `logs/skrl/throwing_primitive/<timestamp>_sac_torch/` with
 TensorBoard events and agent checkpoints every 1000 steps.
+
+### TensorBoard Custom Metrics
+
+In addition to skrl's built-in metrics (reward, loss, Q-values, entropy),
+`ThrowingPrimitiveEnv` logs custom metrics via its own `SummaryWriter`
+(set up by `env.set_log_dir(log_dir)` in `train_sac.py`):
+
+| Tag | Description |
+|-----|-------------|
+| `Throw / Mean Distance` | Mean landing distance to target (non-dropped envs) |
+| `Throw / Min Distance` | Best throw distance in batch |
+| `Throw / Max Distance` | Worst throw distance in batch |
+| `Throw / Success Rate` | Fraction of envs with distance < 0.15 m |
+| `Throw / Drop Rate` | Fraction of envs where drink was dropped |
+| `Throw / Mean Reward` | Mean reward across all envs |
+| `Action / Mean Initial JV` | Mean initial shoulder_pan (radians) |
+| `Action / Mean Final JV` | Mean final shoulder_pan (radians) |
+| `Action / Mean Release Time` | Mean release fraction |
+| `Action / Mean Duration` | Mean throw duration (seconds) |
+
+### Plotting Training Logs (`scripts/plot_tb_logs.py`)
+
+Reads TensorBoard event files and generates a 6-panel diagnostic figure
+(reward, distance, entropy coefficient, policy loss, critic loss, Q-values)
+plus CSV export:
+
+```bash
+python scripts/plot_tb_logs.py                    # auto-finds latest run
+python scripts/plot_tb_logs.py logs/skrl/throwing_primitive/<run>/
+```
+
+For runs with the custom `Throw / Mean Distance` tag, the distance panel
+shows the actual logged values. For older runs, distance is numerically
+inverted from the reward function.
 
 ### Training Log Output
 
