@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-11 (Validation evaluation suite for model comparison)
+**Last updated**: 2026-06-12 (PBRS reward redesign — three experimental models)
 
 ---
 
@@ -35,6 +35,9 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2 | **ASP + GoalEncoder (Charlie)** — same as above | `train_curobo.py` |
 | 3 | **Push-PPO Baseline** — single-agent PPO with push primitive | `train_push.py` |
 | 4 | **Push-ASP** — ASP with object-relative push primitives | `train_push_asp.py` |
+| 5 | **PBRS Model A** — PBRS dense reward, no curriculum | `train_push_pbrs_a.py` |
+| 6 | **PBRS Model B** — PBRS dense + forced pos→rot curriculum | `train_push_pbrs_b.py` |
+| 7 | **PBRS Model C** — PBRS dense + ASP curriculum (Alice/Bob) | `train_push_pbrs_c.py` |
 
 ### Stack Versions
 
@@ -153,6 +156,10 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-08 | **Fix P64 (Push-ASP dense reward normalised)** — `compute_bob_dense_push_reward()` in `wrapper_push_asp.py` was still using the old non-normalised formula (`R = 12·Δd + 1·Δyaw − 0.5·d_now − 0.25·y_now`) from Fix P53, while `wrapper_push.py` had already been upgraded to the normalised fractional formula in Fix P63. A 1cm improvement from 30cm away earned `12×0.01 − 0.5×0.29 = −0.025` — **negative** even for a progress-producing push. Random pushes averaging ~0cm improvement produced expected reward ≈ −0.15 with near-zero variance, starving Bob's PPO gradient. Now uses α=3.0 with division by d_prev/y_prev (clamped at 0.01). A push halving the distance earns +1.5. | `wrapper_push_asp.py:485-516` |
 | 2026-06-08 | **Fix P65 (Push-ASP obj_lifted criterion removed)** — Per-waypoint-substep Z-check (`obj_lifted |= _z_obs[:, _OBS_ROBOT_DIM + 2] > 0.10`) was firing on 45–55% of pushes, terminating episodes with −5 penalty. Push-PPO (`train_push.py`) does NOT have this check at all — it experiences the same physics but simply ignores momentary object tipping. The check was a false positive: objects briefly tip during pushes then settle back to the table. Removing it brings Push-ASP in line with Push-PPO's execution path, restoring 100% of push budget for Bob. Also removed `robot_through_table` check and the `_abnormal` handling block (which paid Alice +5 for Bob's "lifted" pushes, leaking reward). | `train_push_asp.py:933-1018` |
 | 2026-06-08 | **Fix P66 (Push-ASP --rel-obs for Bob)** — Bob's 28D observation `[ee_pose(6) | obj(14) | goal(6) | dist(2)]` required the LSTM+MLP to learn `atan2(goal_y−obj_y, goal_x−obj_x)` internally to predict the correct push θ. Same issue as Push-PPO Fix P50, solved differently here to avoid breaking `module.py`'s structured observation slicing (`_encode_obs` chunks by `_ge_raw_per_obj=22D`): when `--rel-obs` is on, `_get_push_obs()` replaces the `goal_dist(2)` slot (pos_dist, rot_dist) with `[rel_dx, rel_dy] = goal_xy − obj_xy`. Same 28D dimension — no model architecture changes. World-frame push direction θ is now trivially inferable from the observation. Backward-compatible (off by default). | `wrapper_push_asp.py:240-256`, `train_push_asp.py:120-123,202` |
+| 2026-06-12 | **PBRS reward redesign** — Three new standalone training scripts implementing Potential-Based Reward Shaping (Ng et al. 1999, Grzes & Kudenko 2009) as a thesis experiment. Replaces the fractional improvement formula (`α·Δd/d_prev`) with bounded exponential potentials (`Φ(s)=exp(-k·d²)`) using `gamma_shaping=1.0` (valid for episodic MDPs). Key parameters: `k_p=30, k_r=5, w_pos=w_rot=10.0`. Cosine angular distance replaces `_yaw_distance_rad` for smooth rotation metric. Episode terminates on both-threshold (pos<0.05m AND cos_rot<0.01) not position-only. Arm-through-table detection added. New files: `tasks/utils/reward_pbrs.py`, `train_push_pbrs_a.py` (Model A: PBRS only), `train_push_pbrs_b.py` (Model B: PBRS + pos→rot curriculum ramp), `train_push_pbrs_c.py` (Model C: PBRS + ASP with bug fixes). HPC scripts: `hpc/train_push_pbrs_{a,b,c}.slurm`. Design documented in `thesis_impl.md`. |
+| 2026-06-12 | **PBRS Model A** — Single-agent PPO with PBRS dense reward. Hardcoded `rel_obs=True, rel_act=True`. Dense: `F=Φ(s')−Φ(s)` (zero-sum cycles, no near-goal negativity). Sparse: +5 pos-only (no termination), +2 both (terminates). Penalties: −5 tip/launch/OOB/table (terminates). Per-env PBRS logging when `num_envs≤50`. `train_push_pbrs_a.py` (836 lines). |
+| 2026-06-12 | **PBRS Model B** — Model A + forced curriculum controller. Phase 1: `w_rot=0`, position-only termination (fast cycles). Phase 2 (triggered by `ema_pos_err<0.08m` for 50 iters): `w_rot` ramps 0→10 over 200 iters, `pos_term_threshold` fades 0.05→0.0 (smooth termination regime change). Phase 3: full multi-objective. `train_push_pbrs_b.py` (899 lines). |
+| 2026-06-12 | **PBRS Model C** — Fork of `train_push_asp.py` with PBRS for Bob. Fixes: `bob_done_now` set on early completion, LSTM zeroed on early completion, `_bob_gave_rot_bonus` buffer added, progress reward removed (redundant with PBRS). Bob sparse changed: +5 position-only gate (was both-threshold), +2 both-threshold (terminates phase). Approach params tightened: `min_r=0.02, max_r=0.08, max_l=0.20`. Phase-end logs use `_prev_initial` snapshot for correct start positions. `train_push_pbrs_c.py` (1436 lines). |
 
 ---
 
@@ -315,6 +322,9 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 | `train_push_rel.slurm` | Push-PPO baseline + `--rel-obs` (30D object-relative delta appended) |
 | `train_push_rel_full.slurm` | Push-PPO baseline + `--rel-obs --rel-act` (full object-relative: obs + actions) |
 | `train_push_asp.slurm` | Push-ASP — object-relative push primitives with Alice/Bob self-play |
+| `train_push_pbrs_a.slurm` | PBRS Model A — PBRS only, 2048 envs, 3000 iters |
+| `train_push_pbrs_b.slurm` | PBRS Model B — PBRS + forced curriculum, 2048 envs, 3000 iters |
+| `train_push_pbrs_c.slurm` | PBRS Model C — PBRS + ASP, 2048 envs, 3000 iters |
 | `diagnostic_tests.slurm` | Full 4-test suite on HPC |
 | `test1_ppo_reward.slurm` | Test 1 only |
 | `test2_alice_exploration.slurm` | Test 2 only (200 iters, random Bob) |
@@ -326,6 +336,7 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 - `utils/episode_manager.py`: phase tracking, goal storage, checkpoint support
 - `utils/profiler.py`: `TrainingProfiler` with `section()` context manager, `get_section_frac()`
 - `utils/goal_validator.py`: `validate_goal()` — minimum displacement threshold check
+- `tasks/utils/reward_pbrs.py`: PBRS utility — bounded exponential potentials (`k_p=30, k_r=5`), cosine angular distance, `compute_pbrs_reward()`, `check_done_pbrs()`, `gamma_shaping=1.0` (episodic PBRS)
 - `optuna_sweep.py`: Optuna hyperparameter sweep wrapper
 
 ---

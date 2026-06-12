@@ -49,33 +49,34 @@ R = alpha * (d_prev - d_now) / d_prev          # position improvement
 
 Problems with this formulation:
 
-1. **Division-by-zero instability**: `d_prev` is clamped at 0.01 but near the
-   goal, ratios explode.  A 1 mm improvement from 1.2 cm away produces
-   `3.0 * 0.001 / 0.012 = 0.25`, but a 1 mm improvement from 1.01 cm away
-   produces `3.0 * 0.001 / 0.0101 = 0.30` — the reward accelerates
-   unpredictably as the agent approaches the goal.
+1. **Non-separable state-pair dependence**: The reward `alpha * (d_prev - d_now) / d_prev`
+   depends on both the previous and current state through the `1/d_prev` ratio.
+   Two identical pushes producing identical outcomes yield different rewards
+   depending on what `d_prev` was.  This violates the Markov property in the
+   reward signal — the critic must implicitly model trajectory history, not
+   just states, making value function approximation harder.
 
-2. **Cyclical exploitation**: The fractional formula rewards oscillation.
-   Push the object 5 cm closer (reward +1.5), then push it 5 cm further
-   (reward -1.5 but the distance penalty `-beta * d_now` is smaller because
-   `d_now` was smaller at the closer position).  The net reward per cycle
-   is slightly positive because the penalty term differs between the two
-   positions.  The agent can harvest small positive returns by oscillating
-   without ever solving the task.
+2. **Asymmetric gradient amplification near the goal**: A 1 cm improvement
+   from 5 cm earns `3.0 * 0.01 / 0.05 = 0.60`, but the same 1 cm from
+   30 cm earns `3.0 * 0.01 / 0.30 = 0.10` — a 6x difference for identical
+   physical actions.  Near the goal, reward noise from physics (PhysX object
+   jitter, IK tolerance, contact dynamics) is amplified by the same 6x
+   factor, making the critic's approximation task harder and GAE advantage
+   estimates noisier.
 
-3. **Not policy-invariant**: The raw penalty terms (`-beta * d_now`,
-   `-beta_rot * y_now`) are state-dependent rewards that change the optimal
-   policy relative to the underlying sparse task.  The agent is incentivised
-   to minimise distance at all costs, even if a temporarily suboptimal
-   trajectory (e.g., pushing the object around an obstacle) would lead to
-   faster completion.
+3. **Penalty terms bias the optimal policy**: The `-beta * d_now` and
+   `-beta_rot * y_now` terms are state-dependent rewards not part of the
+   task objective.  They incentivise "be close right now" rather than "reach
+   the goal eventually."  A temporarily suboptimal trajectory (e.g.,
+   approaching from a better angle for rotation) is penalised even if it
+   leads to faster completion.  No potential function exists that reproduces
+   this penalty — it fundamentally changes the optimal policy relative to
+   the sparse-reward task.
 
-4. **Multi-objective gradient interference**: Position and rotation rewards
-   operate on different scales.  A 5 cm position improvement at 25 cm
-   distance earns `3.0 * 0.05 / 0.25 = 0.60`.  A 0.5 rad rotation
-   improvement at 1.5 rad distance earns `3.0 * 0.5 / 1.5 = 1.00`.
-   The critic network receives a scalarised sum and cannot separate which
-   action component drove which reward component.
+4. **No formal optimality guarantee**: Without PBRS structure, there is no
+   theorem ensuring the shaped optimal policy matches the sparse-reward
+   optimal policy.  The agent can converge to a reward-hacking local optimum
+   that maximises the dense signal without solving the sparse task.
 
 5. **Position-only termination blocks rotation learning**: `check_done`
    terminates the episode when `pos_err < 0.05 m`.  The agent collects +5
@@ -115,30 +116,42 @@ differs from Push-PPO in critical ways, despite using the same dense formula:
 
 ## 2. Root-Cause Analysis
 
-### 2.1 The oscillation problem (Push-PPO)
+### 2.1 The fractional formula is not potential-based
 
 The fractional improvement formula `alpha * (d_prev - d_now) / d_prev`
-is not potential-based.  For a push sequence A -> B -> A:
+is **not** a potential-based shaping reward, but — contrary to initial
+intuition — it does **not** reward oscillation.  For a push sequence
+A -> B -> A where `d_B < d_A`:
 
 ```
-Step 1 (A -> B): reward = alpha * (d_A - d_B) / d_A
-Step 2 (B -> A): reward = alpha * (d_B - d_A) / d_B
+Step 1 (A -> B): reward = alpha * (d_A - d_B) / d_A      (positive)
+Step 2 (B -> A): reward = alpha * (d_B - d_A) / d_B      (negative)
 ```
 
-Sum = `alpha * (d_A - d_B) * (1/d_A - 1/d_B)`.  If `d_B < d_A` (the agent
-moved closer then back), both factors have the same sign, so the sum is
-**positive**.  The agent profits from oscillation.  With proper PBRS using
-`gamma * Phi(s') - Phi(s)`, the sum is:
+Since `d_B < d_A`, we have `1/d_B > 1/d_A`, so `|Step 2| > |Step 1|`.
+The return trip always costs more than the forward trip earned.  The
+formula is inherently anti-oscillation.
 
-```
-Step 1: gamma * Phi(B) - Phi(A)
-Step 2: gamma * Phi(A) - Phi(B)
-Sum = (gamma - 1) * (Phi(B) - Phi(A))
-```
+The actual problems are structural, not about exploitation:
 
-With `gamma < 1`, the sum is negative if `Phi(B) > Phi(A)` (state B is
-closer to goal), so oscillation is penalised.  With `gamma = 1`, the sum
-is exactly zero — no profit, no loss.  Oscillation is strictly eliminated.
+1. **Non-separable state-pair dependence**: The reward for transitioning
+   from state s to s' depends on `d(s)` in the denominator.  This means
+   two identical actions producing identical outcomes from identical states
+   will receive different rewards if the *prior* state differed (because
+   `d_prev` was set at the prior push).  No potential function `Phi(s)`
+   can reproduce `alpha * (1 - d(s')/d(s))` because the right-hand side
+   is not separable into functions of `s` and `s'` individually (the
+   `d(s')/d(s)` ratio couples them).
+
+2. **Gradient amplification near the goal**: The `1/d_prev` factor
+   amplifies both signal and noise near the goal by up to 6x relative
+   to the far-field, making value function approximation harder.
+
+3. **Penalty terms change the optimal policy**: The `-beta * d_now` and
+   `-beta_rot * y_now` terms are not potential differences.  They add
+   a per-step cost to being far from the goal, which can bias the policy
+   away from temporarily-suboptimal-but-globally-better trajectories
+   (e.g., approaching from a better angle).
 
 ### 2.2 The sparse-signal starvation problem (Push-ASP)
 
@@ -149,7 +162,7 @@ essentially never fires.  The dense reward provides gradient but the
 distance penalty produces consistently negative mean returns (-0.80/push),
 and the critic learns to predict negative values for all states.
 
-### 2.3 The Euler-angle boundary fear
+### 2.3 The Euler-angle boundary
 
 The `_yaw_distance_rad` function:
 
@@ -189,7 +202,31 @@ Key properties:
   `(gamma^T - 1) * Phi(s_0)`, which is non-positive for `gamma < 1`.
 - **No reward hacking**: The agent cannot profit from oscillation.
 
-### 3.2 Bounded exponential potentials
+### 3.2 Episodic PBRS with gamma_shaping = 1.0
+
+The original Ng et al. (1999) PBRS uses the MDP's discount factor gamma.
+With `gamma = 0.95`, this creates a "discounting tax" near the goal:
+when `Phi(s)` is already high (agent is close), the shaping reward
+`0.95 * Phi(s') - Phi(s)` is negative even when making progress, because
+the 5% discount exceeds the marginal potential improvement.
+
+For **episodic** MDPs (which push-primitive tasks are — they terminate on
+success, failure, or budget), Grzes & Kudenko (2009) proved that using
+`gamma_shaping = 1.0` preserves policy invariance:
+
+```
+F(s, s') = Phi(s') - Phi(s)
+```
+
+Properties with gamma_shaping = 1.0:
+- Cycles sum to exactly zero (A -> B -> A earns `Phi(B) - Phi(A) + Phi(A) - Phi(B) = 0`)
+- No near-goal sign inversion (every improvement produces positive signal)
+- Valid for episodic MDPs with terminal states (policy-invariant)
+- Distinct from the PPO discount `gamma = 0.95` used in GAE
+
+This is the recommended formulation for this implementation.
+
+### 3.3 Bounded exponential potentials
 
 A linear potential `Phi(s) = -d(s)` is unbounded, making the critic's
 approximation task harder.  An exponential potential:
@@ -208,7 +245,7 @@ The exponential form provides:
 - No singularities or infinities
 - Bounded critic targets
 
-### 3.3 Temperature parameter selection
+### 3.4 Temperature parameter selection
 
 The temperature `k` controls the width of the reward gradient.  It must
 be tuned to the workspace scale.
@@ -217,19 +254,27 @@ For this task the workspace is ~1 m across and typical goal distances
 range from 0.05 m to 0.50 m.  We need meaningful signal across this
 entire range.
 
-**Position** (`Phi_pos = exp(-k_p * d^2)`):
+**Position** (`Phi_pos = exp(-k_p * d^2)`, using `F = Phi(s') - Phi(s)`):
 
-| k_p | d=0.30 m | d=0.20 m | d=0.10 m | d=0.05 m |
-|-----|----------|----------|----------|----------|
-| 100 | 0.0001   | 0.018    | 0.368    | 0.779    |
-| 50  | 0.011    | 0.135    | 0.607    | 0.882    |
-| 20  | 0.165    | 0.449    | 0.819    | 0.951    |
-| 15  | 0.259    | 0.549    | 0.861    | 0.963    |
-| 10  | 0.405    | 0.670    | 0.905    | 0.975    |
+The reward for a 5 cm improvement at various starting distances, scaled
+by `w_pos = 10.0`:
 
-`k_p = 100` (cited in Fetch literature) gives near-zero potential at
-0.30 m — no learning signal for typical starting distances.
-`k_p = 15` provides gradient across the full workspace.
+| k_p | 0.30→0.25 m | 0.20→0.15 m | 0.10→0.05 m | 0.05→0.00 m |
+|-----|-------------|-------------|-------------|-------------|
+| 15  | 1.36 | 0.89 | 1.02 | 0.37 |
+| 30  | 1.03 | 2.34 | 1.87 | 0.72 |
+| 50  | 0.33 | 1.90 | 2.75 | 1.18 |
+
+`k_p = 30` provides the best balance:
+- Far-field (0.30 m): ~1.0 reward per 5 cm push (meaningful gradient)
+- Mid-field (0.15 m): ~2.3 reward (strong signal)
+- Near-goal (0.05 m): ~0.7 for the final 5 cm (+5 sparse bonus compensates)
+- No sign inversion at any distance (gamma_shaping = 1.0)
+
+`k_p = 15` gives only 0.37 for the critical final 5 cm.
+`k_p = 50` gives only 0.33 for the 30→25 cm range (weak far-field signal).
+
+**Recommended: k_p = 30.**
 
 **Rotation** (`Phi_rot = exp(-k_r * c)`, where `c = (1-cos)/2 in [0,1]`):
 
@@ -241,7 +286,7 @@ entire range.
 
 `k_r = 5` gives good gradient across the typical rotation range.
 
-### 3.4 Cosine angular distance
+### 3.5 Cosine angular distance
 
 For planar pushing (SE(2)), only yaw matters.  The cosine distance:
 
@@ -261,19 +306,24 @@ This replaces `_yaw_distance_rad` in both wrappers.
 
 ## 4. Reward Architecture Design
 
-### 4.1 Dense reward (PBRS)
+### 4.1 Dense reward (PBRS, gamma_shaping = 1.0)
 
 ```
-Phi_pos(s) = exp(-k_p * ||p_current - p_target||^2)         k_p = 15.0
+Phi_pos(s) = exp(-k_p * ||p_current - p_target||_2D^2)         k_p = 30.0
 Phi_rot(s) = exp(-k_r * (1 - cos(yaw_current - yaw_target)) / 2)   k_r = 5.0
 
-r_dense_pos = gamma * Phi_pos(s') - Phi_pos(s)
-r_dense_rot = gamma * Phi_rot(s') - Phi_rot(s)
+r_dense_pos = Phi_pos(s') - Phi_pos(s)          # gamma_shaping = 1.0
+r_dense_rot = Phi_rot(s') - Phi_rot(s)          # gamma_shaping = 1.0
 
 r_dense = w_pos * r_dense_pos + w_rot * r_dense_rot
 ```
 
-where `gamma = 0.95` (PPO discount factor).
+Properties:
+- Strictly zero-sum over any cycle (no exploitation possible)
+- Positive for any improvement at any distance
+- No near-goal sign inversion
+- Bounded: max single-push reward ~ w * 1.0 (when Phi goes from 0 to 1)
+- Policy-invariant for episodic MDPs (Grzes & Kudenko 2009)
 
 **No distance penalty**.  The `-beta * d_now` and `-beta_rot * y_now` terms
 are removed.  They are not part of the PBRS framework and change the
@@ -331,18 +381,18 @@ R(t) = w_pos * r_dense_pos(t) + w_rot * r_dense_rot(t)
 
 ### 4.6 Scaling coefficients
 
-The PBRS dense terms produce values in approximately [-0.3, +0.3] per push.
-The sparse bonuses are +5 and +2.  The penalties are -5.  To ensure the
-dense signal is meaningful relative to sparse:
+The PBRS dense terms with `k_p = 30, k_r = 5` and `gamma_shaping = 1.0`
+produce values in approximately [-0.2, +0.3] per push for typical 3-5 cm
+push distances.  Scaling by `w = 10.0` yields [-2.0, +3.0] per push.
 
 ```
-w_pos = 10.0    # scales PBRS pos to approximately [-3, +3] range
-w_rot = 10.0    # scales PBRS rot to approximately [-3, +3] range
+w_pos = 10.0    # scales PBRS pos to approximately [-2, +3] range
+w_rot = 10.0    # scales PBRS rot to approximately [-2, +3] range
 ```
 
-These can be tuned.  The key property of PBRS is that any scalar multiple
-of the potential difference is also a valid shaping reward (it changes
-learning speed but not the optimal policy).
+The key property of PBRS is that any scalar multiple of the potential
+difference is also a valid shaping reward (it changes learning speed
+but not the optimal policy).
 
 ---
 
@@ -354,25 +404,26 @@ learning speed but not the optimal policy).
 provides sufficient gradient for a single agent to learn both position
 and rotation simultaneously, without any curriculum scheduling.
 
-**Script**: `train_push.py` (Push-PPO baseline)
+**Script**: `train_push.py --pbrs` (Push-PPO baseline)
 **Wrapper**: `wrapper_push.py` (modified)
 
 **Changes from current baseline**:
 - Replace fractional improvement with PBRS dense (Section 4.1)
-- Replace `_yaw_distance_rad` with cosine distance
+- Replace `_yaw_distance_rad` with cosine distance in reward computation
 - Remove `-beta * d_now` and `-beta_rot * y_now` penalties
 - Keep +5 position-only bonus (NO termination on position-only)
 - Add +2 both-threshold bonus (WITH termination)
 - Add arm-through-table termination
 - `check_done` terminates on: both-success, tip, launch, OOB, table, max_pushes
 - `w_pos = 10.0, w_rot = 10.0` (equal weighting from start)
+- `k_p = 30.0, k_r = 5.0, gamma_shaping = 1.0`
 
 **Expected behavior**:
 - Early training: agent learns to push toward goal (position gradient)
 - Position and rotation improve simultaneously (no forced staging)
 - +5 fires when position is correct, episode continues for rotation
 - +2 fires when both are correct, episode terminates cleanly
-- No oscillation (PBRS guarantee)
+- No exploitation of the dense signal (PBRS guarantee)
 
 **Risk**: Without curriculum gating, the rotation gradient may interfere
 with position learning at the start.  The agent tries to optimise both
@@ -384,7 +435,7 @@ simultaneously from push 1 and may converge slower than a staged approach.
 competency threshold accelerates convergence by allowing the agent to
 master position first, then add rotation as a refinement objective.
 
-**Script**: `train_push.py` (Push-PPO baseline)
+**Script**: `train_push.py --pbrs --curriculum` (Push-PPO baseline)
 **Wrapper**: `wrapper_push.py` (modified)
 
 **Changes from Model A**:
@@ -395,6 +446,7 @@ master position first, then add rotation as a refinement objective.
 - Ramp duration: 200 iterations (smooth transition)
 - The sparse +2 rotation bonus is also gated behind the same curriculum
   flag (not awarded until the rotation reward is active)
+- Position-only termination gradually fades out during the ramp
 - Log `w_rot` and `curriculum_phase` to TensorBoard
 
 **Curriculum phases**:
@@ -402,33 +454,36 @@ master position first, then add rotation as a refinement objective.
 ```
 Phase 1 (position only):
   w_rot = 0.0
-  Sparse: +5 for pos < 0.05 m (no termination)
-  Termination: tip, launch, OOB, table, max_pushes, pos-only (at-goal) termination ACTIVE
-  Agent learns pure translation.
+  Sparse: +5 for pos < 0.05 m (terminates episode — fast iteration)
+  Both-threshold +2 also terminates if triggered (rare in Phase 1)
+  Agent learns pure translation with rapid episode turnover.
 
-Phase 2 (transition):
-  EMA pos_err < 0.08 m triggers ramp
-  w_rot linearly increases from 0.0 to 10.0 over 200 iterations
-  Sparse +2 for both thresholds enabled (with termination)
-  Position-only termination REMOVED (episode continues for rotation)
-  Agent begins learning rotation while maintaining position skill.
+Phase 2 (transition, 200 iterations):
+  Triggered when ema_pos_err < 0.08 m for 50 consecutive iterations.
+  w_rot linearly increases from 0.0 to 10.0 over 200 iterations.
+  Position-only termination threshold smoothly DECREASES:
+      pos_term_threshold = 0.05 * (1.0 - ramp_progress)
+  As ramp_progress -> 1.0, pos_term_threshold -> 0.0 (effectively disabled).
+  Both-threshold termination always active.
+  Net effect: as w_rot increases, pos-only termination fades out,
+  giving the agent progressively more time for rotation refinement.
 
 Phase 3 (full):
   w_rot = 10.0 (stable)
-  Full reward: dense pos + dense rot + sparse pos + sparse rot
-  Termination: both-success, tip, launch, OOB, table, max_pushes
+  pos_term_threshold = 0.0 (disabled)
+  Episode terminates on: both-success, tip, launch, OOB, table, max_pushes
+  Full multi-objective optimisation.
 ```
 
 **Expected behavior**:
 - Phase 1: rapid position learning (same as current Push-PPO but with PBRS)
-- Phase 2: rotation signal smoothly introduced, agent refines orientation
+- Phase 2: rotation signal smoothly introduced while position-only
+  termination smoothly disabled — episode length increases organically
 - Phase 3: full multi-objective optimisation
 
-**Risk**: The phase transition may cause a temporary performance dip as the
-critic re-learns value estimates with the new rotation component.  The
-ramp duration (200 iterations) should smooth this.  Also, the switch from
-position-only termination (Phase 1) to both-required termination (Phase 2)
-changes the episode length distribution, which affects GAE.
+**Risk**: The critic must adapt to the changing reward landscape during
+Phase 2.  The 200-iteration ramp and smooth termination threshold change
+should smooth this transition, but a temporary performance dip is possible.
 
 ### Model C: PBRS rewards + ASP curriculum (Alice produces the curriculum)
 
@@ -437,25 +492,27 @@ emergent curriculum that replaces explicit position/rotation staging.
 As Alice learns to create harder goals, Bob is continuously challenged
 at the frontier of his capability.
 
-**Script**: `train_push_asp.py` (Push-ASP)
+**Script**: `train_push_asp.py --pbrs` (Push-ASP)
 **Wrapper**: `wrapper_push_asp.py` (modified)
 
 **Changes from current Push-ASP**:
 - Replace Bob's dense reward with PBRS (Section 4.1)
 - Replace `_yaw_distance_rad` with cosine distance
 - Remove distance/rotation penalties
-- Bob's sparse: +5 position-only (no termination) + +2 both (terminate Bob's phase)
-- Add `check_done` for Bob: tip, launch, OOB, arm-through-table (terminate Bob's phase early)
+- Bob's sparse: +5 position-only (no phase termination) + +2 both (terminate Bob's phase)
+- Add `check_bob_done` method: tip, launch, OOB, arm-through-table (terminate Bob's phase early)
 - Fix `bob_done_now` for early completions (set True when +2 fires)
 - Fix LSTM hidden state zeroing on early completion
-- Match approach radius: `max_r = 0.08` (was 0.15)
+- Remove `compute_bob_progress_reward` (redundant — PBRS provides per-push gradient)
+- Match approach radius: `min_r = 0.02, max_r = 0.08, max_l = 0.20`
 - `w_pos = 10.0, w_rot = 10.0` (no curriculum gating — Alice IS the curriculum)
+- `k_p = 30.0, k_r = 5.0, gamma_shaping = 1.0`
 - Alice's reward stays outcome-based (unchanged)
 
 **Bob's full reward per push**:
 ```
-r_dense = 10.0 * (gamma * Phi_pos(s') - Phi_pos(s))
-        + 10.0 * (gamma * Phi_rot(s') - Phi_rot(s))
+r_dense = 10.0 * (Phi_pos(s') - Phi_pos(s))
+        + 10.0 * (Phi_rot(s') - Phi_rot(s))
 r_sparse = +5.0  (first time pos < 0.05 m, no phase termination)
          + +2.0  (first time pos < 0.05 AND rot < threshold, TERMINATE Bob's phase)
 r_penalties = -5.0 for tip/launch/OOB/table (TERMINATE Bob's phase)
@@ -477,6 +534,12 @@ When Bob's phase ends early (completion or catastrophe):
 1. Set `bob_done_now[env_ids] = True`
 2. Zero Bob's LSTM hidden state for those envs
 3. Transition to Alice or reset episode (existing logic)
+
+**Why `compute_bob_progress_reward` is removed**: The phase-end progress
+reward (Fix P28) was added because sparse-only `{+1/-1/+5}` provided zero
+per-push gradient.  With PBRS dense active on every push, Bob receives
+meaningful directional signal at any distance.  The progress reward is
+redundant and adds a non-PBRS component that breaks policy invariance.
 
 **Alice's curriculum role**:
 - Alice starts with random pushes producing shallow goals (~0.04 m)
@@ -506,46 +569,9 @@ and learning rate.
 
 #### 6.1.1 New utility: `reward_pbrs.py`
 
-Create `asyncDualPlayPPO/tasks/utils/reward_pbrs.py`:
-
-```python
-"""
-Potential-Based Reward Shaping (PBRS) for push-primitive tasks.
-
-Implements bounded exponential potentials with cosine angular distance.
-Policy-invariant shaping guarantee (Ng et al. 1999).
-"""
-
-def cosine_rot_error(yaw_current, yaw_target):
-    """
-    Cosine angular distance, bounded in [0, 1].
-    0 = aligned, 1 = 180 deg opposite.
-    Smooth everywhere, no wrap-around discontinuity.
-    """
-    return (1.0 - torch.cos(yaw_target - yaw_current)) / 2.0
-
-def potential_pos(obj_pos, goal_pos, k_p=15.0):
-    """
-    Bounded exponential position potential.
-    Returns values in [0, 1]. 1 = at goal, 0 = far away.
-    """
-    d_sq = ((obj_pos[..., :2] - goal_pos[..., :2]) ** 2).sum(dim=-1)
-    return torch.exp(-k_p * d_sq)
-
-def potential_rot(yaw_current, yaw_target, k_r=5.0):
-    """
-    Bounded exponential rotation potential.
-    Returns values in [0, 1]. 1 = aligned, 0 = opposite.
-    """
-    c = cosine_rot_error(yaw_current, yaw_target)
-    return torch.exp(-k_r * c)
-
-def pbrs_reward(phi_prev, phi_now, gamma=0.95):
-    """
-    PBRS shaping: gamma * Phi(s') - Phi(s).
-    """
-    return gamma * phi_now - phi_prev
-```
+Create `asyncDualPlayPPO/tasks/utils/reward_pbrs.py` with bounded exponential
+potentials and cosine angular distance.  Uses `gamma_shaping = 1.0` (valid
+for episodic MDPs, Grzes & Kudenko 2009).
 
 #### 6.1.2 Cosine rotation metric
 
@@ -567,297 +593,21 @@ In both training loops, after each waypoint substep, check:
 
 ```python
 tcp_z = _tcp_pos_local()[:, 2]
-arm_through_table = tcp_z < -0.01  # 1 cm below table surface
+arm_through_table = tcp_z < -0.01
 ```
 
 This triggers the same handling as `terminated` (hold joints, apply penalty).
 
-### 6.2 Model A specific changes
+### 6.2 Model A & B: `--pbrs` and `--curriculum` flags in `train_push.py`
 
-#### Files modified:
-- `asyncDualPlayPPO/tasks/utils/wrapper_push.py`
-- `asyncDualPlayPPO/train_push.py`
+Both models use the same `wrapper_push.py` with PBRS methods (gated behind
+`--pbrs` flag).  Model B additionally uses `--curriculum` to enable the
+staged w_rot ramp and position-only termination in Phase 1.
 
-#### `wrapper_push.py` changes:
+### 6.3 Model C: `--pbrs` flag in `train_push_asp.py`
 
-1. **Import `reward_pbrs`** at the top.
-
-2. **Add potential state tracking**:
-   ```python
-   self.prev_phi_pos = None  # set in capture_pre_push
-   self.prev_phi_rot = None
-   ```
-
-3. **Modify `capture_pre_push`** to compute and store potentials:
-   ```python
-   def capture_pre_push(self, obs):
-       self.prev_obj_pos = self._get_obj_pos(obs).clone()
-       self.prev_obj_euler = self._get_obj_euler(obs).clone()
-       goal_pos = self._get_goal_pos(obs)
-       goal_euler = self._get_goal_euler(obs)
-       self.prev_phi_pos = potential_pos(self.prev_obj_pos, goal_pos, k_p=self.k_p)
-       self.prev_phi_rot = potential_rot(
-           self.prev_obj_euler[..., 2], goal_euler[..., 2], k_r=self.k_r
-       )
-   ```
-
-4. **Replace `compute_push_reward`** with new PBRS version:
-   ```python
-   def compute_push_reward(self, obs, w_pos=10.0, w_rot=10.0):
-       cur_obj_pos = self._get_obj_pos(obs)
-       cur_obj_euler = self._get_obj_euler(obs)
-       goal_pos = self._get_goal_pos(obs)
-       goal_euler = self._get_goal_euler(obs)
-
-       # PBRS dense
-       phi_pos_now = potential_pos(cur_obj_pos, goal_pos, k_p=self.k_p)
-       phi_rot_now = potential_rot(
-           cur_obj_euler[..., 2], goal_euler[..., 2], k_r=self.k_r
-       )
-       dense_pos = pbrs_reward(self.prev_phi_pos, phi_pos_now, gamma=self.gamma)
-       dense_rot = pbrs_reward(self.prev_phi_rot, phi_rot_now, gamma=self.gamma)
-       reward = w_pos * dense_pos + w_rot * dense_rot
-
-       # Sparse
-       pos_err = (cur_obj_pos[:, :2] - goal_pos[:, :2]).norm(dim=-1)
-       rot_err = cosine_rot_error(cur_obj_euler[:, 2], goal_euler[:, 2])
-       pos_success = pos_err < 0.05
-       rot_success = rot_err < 0.01
-
-       new_pos_completion = pos_success & ~self._gave_completion
-       reward += new_pos_completion.float() * 5.0
-       self._gave_completion |= new_pos_completion
-
-       new_both = pos_success & rot_success & ~self._gave_rot_bonus
-       reward += new_both.float() * 2.0
-       self._gave_rot_bonus |= new_both
-
-       # Tip penalty
-       tipped = (cur_obj_euler[:, 0].abs() > 0.3) | (cur_obj_euler[:, 1].abs() > 0.3)
-       reward += tipped.float() * (-5.0)
-
-       # Store for metrics
-       self.at_goal = pos_success & rot_success
-       self._last_pos_err = pos_err
-       self._last_rot_err = rot_err  # keep radian metric for logging
-       self.push_count += 1
-       return reward
-   ```
-
-5. **Modify `check_done`**:
-   ```python
-   def check_done(self, obs, terminated):
-       max_pushes = self.push_count >= self.max_pushes_per_episode
-       # Object catastrophes
-       obj_z = obs[:, _OBS_ROBOT_DIM + 2]
-       launched = obj_z > 0.10
-       tipped = (obs[:, _OBS_ROBOT_DIM + 3].abs() > 0.3) | \
-                (obs[:, _OBS_ROBOT_DIM + 4].abs() > 0.3)
-       obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
-       goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
-                       _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
-       out_of_bounds = (obj_pos - goal_pos).norm(dim=-1) > 0.5
-       # Success: BOTH position AND rotation
-       both_success = self.at_goal
-       return terminated | max_pushes | both_success | launched | tipped | out_of_bounds
-   ```
-
-   Note: position-only success (`at_goal_pos`) is removed from termination.
-
-#### `train_push.py` changes:
-
-1. Add arm-through-table check inside the waypoint loop:
-   ```python
-   tcp_z = _tcp_pos_local()[:, 2]
-   arm_bad = tcp_z < -0.01
-   terminated |= arm_bad
-   ```
-
-2. Pass `w_pos` and `w_rot` to `compute_push_reward`:
-   ```python
-   reward = env.compute_push_reward(obs, w_pos=10.0, w_rot=10.0)
-   ```
-
-3. Add new TensorBoard metrics:
-   - `Metrics/PhiPos` (mean potential position)
-   - `Metrics/PhiRot` (mean potential rotation)
-   - `Metrics/DensePos` (mean PBRS position component)
-   - `Metrics/DenseRot` (mean PBRS rotation component)
-
-### 6.3 Model B specific changes
-
-All Model A changes plus:
-
-#### `train_push.py` additional changes:
-
-1. **Curriculum controller**:
-   ```python
-   curriculum_active = False
-   curriculum_ramp_start = None
-   CURRICULUM_RAMP_ITERS = 200
-   CURRICULUM_POS_THRESHOLD = 0.08  # EMA pos_err must be below this
-   CURRICULUM_LOOKBACK = 50         # sustained for this many iterations
-   ema_pos_err_hist = deque(maxlen=CURRICULUM_LOOKBACK)
-   ```
-
-2. **Per-iteration curriculum check**:
-   ```python
-   ema_pos_err_hist.append(mean_pos_err)
-   if not curriculum_active and len(ema_pos_err_hist) == CURRICULUM_LOOKBACK:
-       if all(e < CURRICULUM_POS_THRESHOLD for e in ema_pos_err_hist):
-           curriculum_active = True
-           curriculum_ramp_start = iteration
-           print(f"[Curriculum] Phase 2: rotation reward ramp started at iter {iteration}")
-
-   if curriculum_active:
-       ramp_progress = min(1.0, (iteration - curriculum_ramp_start) / CURRICULUM_RAMP_ITERS)
-       w_rot = 10.0 * ramp_progress
-   else:
-       w_rot = 0.0
-   w_pos = 10.0
-   ```
-
-3. **Phase 1 termination override**:
-   ```python
-   if not curriculum_active:
-       # Phase 1: terminate on position-only success (faster episodes)
-       pos_only_success = env._last_pos_err < 0.05
-       done = done | pos_only_success
-   ```
-
-4. **Phase 2 rotation bonus gating**:
-   ```python
-   reward = env.compute_push_reward(obs, w_pos=w_pos, w_rot=w_rot,
-                                     enable_rot_sparse=curriculum_active)
-   ```
-
-   The wrapper's `compute_push_reward` gains an `enable_rot_sparse` parameter
-   that gates the +2 both-threshold bonus.
-
-5. **Log curriculum state**:
-   ```python
-   writer.add_scalar("Curriculum/w_rot", w_rot, iteration)
-   writer.add_scalar("Curriculum/phase", 2 if curriculum_active else 1, iteration)
-   ```
-
-### 6.4 Model C specific changes
-
-#### Files modified:
-- `asyncDualPlayPPO/tasks/utils/wrapper_push_asp.py`
-- `asyncDualPlayPPO/train_push_asp.py`
-
-#### `wrapper_push_asp.py` changes:
-
-1. **Import `reward_pbrs`**.
-
-2. **Add potential tracking** (same as Model A).
-
-3. **Replace `compute_bob_dense_push_reward`** with PBRS version:
-   ```python
-   def compute_bob_dense_push_reward(self, push_obs, w_pos=10.0, w_rot=10.0):
-       cur_obj_pos = self._get_obj_pos(push_obs)
-       cur_obj_euler = self._get_obj_euler(push_obs)
-       goal_pos = self._get_goal_pos(push_obs)
-       goal_euler = self._get_goal_euler(push_obs)
-
-       phi_pos_now = potential_pos(cur_obj_pos, goal_pos, k_p=self.k_p)
-       phi_rot_now = potential_rot(
-           cur_obj_euler[..., 2], goal_euler[..., 2], k_r=self.k_r
-       )
-       dense_pos = pbrs_reward(self.prev_phi_pos, phi_pos_now, gamma=0.95)
-       dense_rot = pbrs_reward(self.prev_phi_rot, phi_rot_now, gamma=0.95)
-       return w_pos * dense_pos + w_rot * dense_rot
-   ```
-
-4. **Replace `compute_bob_push_reward`** (sparse):
-   ```python
-   def compute_bob_push_reward(self, push_obs):
-       rewards = torch.zeros(self.num_envs, device=self.device)
-       cur_obj_pos = self._get_obj_pos(push_obs)
-       cur_obj_euler = self._get_obj_euler(push_obs)
-       goal_pos = self._get_goal_pos(push_obs)
-       goal_euler = self._get_goal_euler(push_obs)
-
-       pos_err = (cur_obj_pos[:, :2] - goal_pos[:, :2]).norm(dim=-1)
-       rot_err = cosine_rot_error(cur_obj_euler[:, 2], goal_euler[:, 2])
-       pos_success = pos_err < 0.05
-       rot_success = rot_err < 0.01
-
-       new_pos = pos_success & ~self._bob_gave_completion
-       rewards += new_pos.float() * 5.0
-       self._bob_gave_completion |= new_pos
-
-       new_both = pos_success & rot_success & ~self._bob_gave_rot_bonus
-       rewards += new_both.float() * 2.0
-       self._bob_gave_rot_bonus |= new_both
-
-       self._bob_at_goal = pos_success & rot_success
-       return rewards
-   ```
-
-5. **Add `check_bob_done` method**:
-   ```python
-   def check_bob_done(self, push_obs, terminated):
-       obj_euler = self._get_obj_euler(push_obs)
-       tipped = (obj_euler[:, 0].abs() > 0.3) | (obj_euler[:, 1].abs() > 0.3)
-       obj_z = push_obs[:, _OBS_ROBOT_DIM + 2]
-       launched = obj_z > 0.10
-       obj_pos = self._get_obj_pos(push_obs)
-       goal_pos = self._get_goal_pos(push_obs)
-       oob = (obj_pos[:, :2] - goal_pos[:, :2]).norm(dim=-1) > 0.5
-       both_success = self._bob_at_goal
-
-       penalties = torch.zeros(self.num_envs, device=self.device)
-       should_end = tipped | launched | oob | terminated
-       penalties[should_end] = -5.0
-
-       return should_end | both_success, penalties
-   ```
-
-6. **Add `_bob_gave_rot_bonus` buffer** initialised alongside
-   `_bob_gave_completion` in `__init__` and cleared on phase reset.
-
-#### `train_push_asp.py` changes:
-
-1. **Add arm-through-table check** in waypoint loop (same as Model A).
-
-2. **Add Bob phase early termination** after reward computation:
-   ```python
-   if len(bob_indices) > 0:
-       bob_should_end, bob_end_penalties = env.check_bob_done(full_push_obs, terminated)
-       bob_rewards += bob_end_penalties
-       # Early termination: transition Bob out
-       early_end_ids = torch.where(bob_should_end & is_bob & ~bob_done_mask)[0]
-       if len(early_end_ids) > 0:
-           bob_done_now[early_end_ids] = True
-           # ... handle phase transition (same as handle_bob_phase_end)
-   ```
-
-3. **Fix `bob_done_now` for early completions** (existing bug):
-   ```python
-   if bob_achieved_completion.any():
-       completion_ids = torch.where(bob_achieved_completion)[0]
-       bob_progress_rew += env.handle_bob_early_success(completion_ids, full_push_obs)
-       bob_done_now[completion_ids] = True  # FIX: was missing
-   ```
-
-4. **Fix LSTM zeroing for early completions**:
-   ```python
-   # After the existing bob_done_mask LSTM zero block:
-   if bob_hidden is not None:
-       early_done = bob_done_now & ~bob_done_mask  # envs that ended early
-       if early_done.any():
-           early_ids = torch.where(early_done)[0]
-           bob_hidden[0][early_ids] = 0.0
-           bob_hidden[1][early_ids] = 0.0
-   ```
-
-5. **Match approach parameters**:
-   ```python
-   min_r = 0.02   # was 0.03
-   max_r = 0.08   # was 0.15
-   max_l = 0.20   # was 0.25
-   ```
+Enables PBRS dense reward for Bob, adds `check_bob_done`, fixes early
+completion bugs, removes progress reward.
 
 ---
 
@@ -873,10 +623,11 @@ All three models use the same environment and hyperparameters:
 | max_iterations | 3000 |
 | push_nsteps (PPO rollout) | 15 |
 | max_pushes_per_episode | 5 (Models A/B), 10 Bob pushes (Model C) |
-| gamma | 0.95 |
+| gamma (PPO discount) | 0.95 |
+| gamma_shaping | 1.0 (episodic PBRS) |
 | ent_coef | 0.002 |
 | learning_rate | 3e-4 |
-| k_p (position temperature) | 15.0 |
+| k_p (position temperature) | 30.0 |
 | k_r (rotation temperature) | 5.0 |
 | w_pos | 10.0 |
 | w_rot | 10.0 (Model A/C), 0.0 -> 10.0 curriculum (Model B) |
@@ -891,7 +642,7 @@ For all models, log to TensorBoard:
 | Metrics/PositionSR | Position-only success rate |
 | Metrics/RotationSR | Rotation-only success rate (gated behind position) |
 | Metrics/PosError | Mean position error (m) |
-| Metrics/RotError | Mean cosine rotation error |
+| Metrics/CosRotError | Mean cosine rotation error |
 | Metrics/RotErrorRad | Mean yaw error (radians, for human readability) |
 | Reward/Dense/Pos | Mean PBRS position component |
 | Reward/Dense/Rot | Mean PBRS rotation component |
@@ -899,30 +650,24 @@ For all models, log to TensorBoard:
 | Reward/Sparse/RotBonus | Mean +2 bonus |
 | Reward/Penalties | Mean penalty rewards |
 | Metrics/EpisodeLength | Mean pushes per episode |
-| Metrics/TermReason/* | Count per termination reason (success/tip/launch/OOB/table/budget) |
+| Metrics/TermReason/* | Count per termination reason |
 
 Model B additionally:
+
+| Metric | Description |
+|--------|-------------|
 | Curriculum/w_rot | Current rotation weight |
 | Curriculum/Phase | 1 or 2 |
+| Curriculum/pos_term_threshold | Position-only termination threshold |
 
 Model C additionally:
+
+| Metric | Description |
+|--------|-------------|
 | Metrics/Alice/* | Alice's existing metrics (ValidGoals, MeanDisp3D, etc.) |
 | Metrics/Bob/PhaseLength | Mean Bob pushes before phase end |
 
-### 7.3 Comparison analysis
-
-After training, run `analyze_tensorboard.py` comparing all three:
-
-```bash
-python asyncDualPlayPPO/extras/analyze_tensorboard.py \
-    --summary-dirs runs/pbrs_model_a/summary \
-                   runs/pbrs_model_b/summary \
-                   runs/pbrs_model_c/summary \
-    --labels "A: PBRS only" "B: PBRS+Curriculum" "C: PBRS+ASP" \
-    --csv
-```
-
-### 7.4 Success criteria
+### 7.3 Success criteria
 
 | Metric | Model A target | Model B target | Model C target |
 |--------|----------------|----------------|----------------|
@@ -935,13 +680,12 @@ Model C targets are lower because ASP inherently has fewer Bob training
 episodes (Alice takes half the rollout) and goal quality depends on
 Alice's learning progress.
 
-### 7.5 Ablation studies (if time permits)
+### 7.4 Ablation studies (if time permits)
 
-1. **k_p sensitivity**: Run Model A with k_p in {5, 10, 15, 20, 30}
+1. **k_p sensitivity**: Run Model A with k_p in {10, 15, 30, 50, 100}
 2. **w_rot sensitivity**: Run Model A with w_rot in {5, 10, 20}
 3. **Curriculum threshold**: Run Model B with threshold in {0.05, 0.08, 0.12}
-4. **Pure sparse + HER**: If an off-policy implementation (SAC) is available,
-   test pure sparse reward with HER relabeling for comparison
+4. **gamma_shaping**: Run Model A with gamma_shaping in {0.95, 0.99, 1.0}
 
 ---
 
@@ -950,15 +694,30 @@ Alice's learning progress.
 ### A.1 PBRS policy invariance proof sketch
 
 For MDP M with reward R, define shaped MDP M' with reward R' = R + F where
-F(s, s') = gamma * Phi(s') - Phi(s).  For any policy pi:
+F(s, s') = Phi(s') - Phi(s) (gamma_shaping = 1.0, episodic MDP).
+
+For any policy pi, the shaped return of a trajectory (s_0, s_1, ..., s_T) is:
 
 ```
-V'_pi(s) = V_pi(s) + Phi(s)
-Q'_pi(s, a) = Q_pi(s, a) + Phi(s)
+G'_pi = sum_{t=0}^{T-1} gamma^t * [R(s_t, a_t, s_{t+1}) + Phi(s_{t+1}) - Phi(s_t)]
+      = G_pi + sum_{t=0}^{T-1} gamma^t * [Phi(s_{t+1}) - Phi(s_t)]
 ```
 
-Since Phi(s) is added uniformly to all actions in state s, the
-arg max is preserved: `pi* under R' = pi* under R`.
+The key insight is that in any state s, the shaping contribution
+`Phi(s_{t+1}) - Phi(s_t)` depends only on the resulting state, not the
+action taken.  Therefore:
+
+```
+Q'_pi(s, a) = Q_pi(s, a) + C(s)
+```
+
+where C(s) is action-independent.  Since `arg max_a Q'(s, a) = arg max_a Q(s, a)`,
+the optimal policy is preserved.
+
+For the episodic case with gamma_shaping = 1.0, Grzes & Kudenko (2009)
+showed that policy invariance holds provided Phi(s_terminal) is constant.
+Since our potentials satisfy Phi(at_goal) = 1.0 for both position and
+rotation (constant for all terminal states), this condition is met.
 
 ### A.2 Why the fractional formula is not PBRS
 
@@ -973,11 +732,16 @@ This depends on BOTH `d_prev` and `d_now`, not on a potential evaluated
 at individual states.  No function `Phi(s)` exists such that:
 
 ```
-gamma * Phi(s') - Phi(s) = alpha * (1 - d(s') / d(s))
+Phi(s') - Phi(s) = alpha * (1 - d(s') / d(s))
 ```
 
 for all state pairs, because the right-hand side is not separable into
 functions of `s'` and `s` individually (due to the ratio `d(s')/d(s)`).
+
+Note: while the fractional formula naturally penalises oscillation (the
+return trip costs more than the forward trip earns due to the smaller
+denominator), it is still not policy-invariant.  The shaped optimal
+policy may differ from the sparse-reward optimal policy.
 
 ### A.3 Cosine distance vs modular arithmetic
 
@@ -995,3 +759,17 @@ The cosine form is preferred because:
 - No conditional (where/if for the pi wraparound)
 - Bounded in [0, 1] (vs [0, pi] for modular)
 - Smooth second derivative everywhere
+
+### A.4 Equivalence of rotation thresholds
+
+The current rotation success threshold is `rot_err < 0.2 rad` using
+`_yaw_distance_rad`.  The equivalent cosine threshold:
+
+```
+cos_threshold = (1 - cos(0.2)) / 2 = (1 - 0.9801) / 2 = 0.00997 ~ 0.01
+```
+
+Note: the cosine mapping is nonlinear.  Errors near 0 are compressed
+(0.1 rad -> cos = 0.0025) while errors near pi are expanded (3.0 rad ->
+cos = 0.99).  For the success threshold (0.2 rad), the correspondence
+is tight enough that the effective gate is unchanged.
