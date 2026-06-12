@@ -367,18 +367,18 @@ class PushEnvWrapper:
         ], dim=-1)
 
     def _sample_goals_filtered(self, env_ids: torch.Tensor):
-        """Sample goals and reject those within success threshold of the object.
+        """Sample goals rejecting those too close (<0.05m) or too far (>0.45m).
         
         Must be called AFTER object position is finalized (i.e. after
         _randomize_object_spawn).  Reads the current object scene position
-        and resamples any goal that falls within 0.05 m of it — preventing
-        episodes that would terminate instantly with zero pushes (P4)."""
+        and resamples invalid goals up to 10 times."""
         if len(env_ids) == 0:
             return
         N = len(env_ids)
         obj = self.env.scene["target_object"]
         obj_pos_w = obj.data.root_pos_w[env_ids]
         obj_pos_local = obj_pos_w - self.env.scene.env_origins[env_ids]
+        obj_xy = obj_pos_local[:, :2]
 
         gx = torch.empty(N, device=self.device).uniform_(*_GOAL_X_RANGE)
         gy = torch.empty(N, device=self.device).uniform_(*_GOAL_Y_RANGE)
@@ -386,16 +386,15 @@ class PushEnvWrapper:
         geuler = torch.zeros(N, 3, device=self.device)
         geuler[:, 2] = torch.empty(N, device=self.device).uniform_(0, 2 * torch.pi)
 
-        goal_xy = torch.stack([gx, gy], dim=-1)
-        obj_xy = obj_pos_local[:, :2]
-        dist = (goal_xy - obj_xy).norm(dim=-1)
-        too_close = dist < PUSH_SUCCESS_THRESHOLD_POS
-
-        if too_close.any():
-            tc_count = int(too_close.sum().item())
-            # Resample goals for too-close envs
-            gx[too_close] = torch.empty(tc_count, device=self.device).uniform_(*_GOAL_X_RANGE)
-            gy[too_close] = torch.empty(tc_count, device=self.device).uniform_(*_GOAL_Y_RANGE)
+        for _resample_attempt in range(10):
+            goal_xy = torch.stack([gx, gy], dim=-1)
+            dist = (goal_xy - obj_xy).norm(dim=-1)
+            bad = (dist < PUSH_SUCCESS_THRESHOLD_POS) | (dist > 0.45)
+            if not bad.any():
+                break
+            bad_count = int(bad.sum().item())
+            gx[bad] = torch.empty(bad_count, device=self.device).uniform_(*_GOAL_X_RANGE)
+            gy[bad] = torch.empty(bad_count, device=self.device).uniform_(*_GOAL_Y_RANGE)
 
         self.goal_pos_euler[env_ids] = torch.cat([
             gx.unsqueeze(-1), gy.unsqueeze(-1), gz.unsqueeze(-1), geuler,

@@ -628,16 +628,16 @@ def main():
             env._last_pos_imp = pbrs_result["dense_pos"]
             env._last_rot_imp = pbrs_result["dense_rot"]
             env._last_penalty = torch.zeros_like(reward)
-            env._last_completion = pbrs_result["reward"] - pbrs_result["dense_pos"] * PBRS_W_POS - pbrs_result["dense_rot"] * PBRS_W_ROT
+            env._last_completion = pbrs_result["reward"] - pbrs_result["dense_pos"] - pbrs_result["dense_rot"]
             env.push_count += 1
-            # Envs that terminated mid-trajectory were auto-reset: apply a heavy
-            # negative penalty so the agent learns to avoid off-table / exploded states.
             reward[terminated] = -10.0
-            episode_reward += reward
-            done = check_done_pbrs(
+            done, done_reasons = check_done_pbrs(
                 obs, terminated, env.push_count, env.max_pushes_per_episode,
                 pbrs_result["at_goal"], robot_dim=env.robot_dim, obj_state_dim=env.obj_state_dim,
             )
+            catastrophe = done_reasons["launched"] | done_reasons["tipped"] | done_reasons["oob"]
+            reward[catastrophe & ~terminated] = -10.0
+            episode_reward += reward
 
             # ── Record transition ────────────────────────────────────────────
             agent.storage.add_transitions(
@@ -720,17 +720,34 @@ def main():
                     for i, (p, s) in enumerate(zip(new_pushes, new_successes)):
                         status = "SUCCESS" if s else "fail"
                         gi = min(i, len(done_ids) - 1)
+                        eid = done_ids[gi]
                         g_pos = goal_pos_done[gi]
                         g_rot = goal_euler_done[gi]
                         o_pos = obj_pos_done[gi]
                         o_rot = obj_euler_done[gi]
-                        s_pos = env._ep_start_pos[max(0, done_ids[gi])]
-                        s_rot = env._ep_start_euler[max(0, done_ids[gi])]
+                        s_pos = env._ep_start_pos[max(0, eid)]
+                        s_rot = env._ep_start_euler[max(0, eid)]
                         pe = pos_err_done[gi]
                         re = float(rot_err_done[gi])
                         er = float(ep_rews_done[gi])
+                        _reason_parts = []
+                        if done_reasons["success"][eid]:
+                            _reason_parts.append("SUCCESS")
+                        if done_reasons["max_pushes"][eid]:
+                            _reason_parts.append("MAX_PUSH")
+                        if done_reasons["tipped"][eid]:
+                            _reason_parts.append("TIPPED")
+                        if done_reasons["launched"][eid]:
+                            _reason_parts.append("LAUNCHED")
+                        if done_reasons["oob"][eid]:
+                            _reason_parts.append("OOB")
+                        if done_reasons["terminated"][eid]:
+                            _reason_parts.append("PHYSICS")
+                        if done_reasons["pos_only"][eid]:
+                            _reason_parts.append("POS_ONLY")
+                        _reason_str = "+".join(_reason_parts) if _reason_parts else "UNKNOWN"
                         _pr(
-                            f"  [Episode] pushes={p}  {status}  rew={er:+.3f}  "
+                            f"  [Episode] pushes={p}  {status}  end={_reason_str}  rew={er:+.3f}  "
                             f"start=({s_pos[0]:+.3f},{s_pos[1]:+.3f},{s_pos[2]:+.3f}) "
                             f"yaw={s_rot[2]:+.3f}  "
                             f"goal=({g_pos[0]:+.3f},{g_pos[1]:+.3f},{g_pos[2]:+.3f}) "
@@ -834,8 +851,10 @@ def main():
 
         # ── Checkpoint ────────────────────────────────────────────────────────
         if iteration > 0 and iteration % args.save_interval == 0:
-            agent.save(os.path.join(agent.log_dir, f"model_{iteration}.pt"))
-            print(f"  [Checkpoint] Saved model_{iteration}.pt")
+            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+            with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as _f:
+                _f.write(str(iteration))
+            print(f"  [Checkpoint] Saved latest_checkpoint.pt (iter {iteration})")
 
         rew_buf.clear()
         sr_buf.clear()
@@ -845,12 +864,16 @@ def main():
         iteration += 1
 
         if _shutdown_requested:
-            agent.save(os.path.join(agent.log_dir, f"model_{iteration}_emergency.pt"))
-            print("[INFO] Emergency checkpoint saved. Shutting down.")
+            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+            with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as _f:
+                _f.write(str(iteration))
+            print(f"[INFO] Emergency checkpoint saved (iter {iteration}). Shutting down.")
             break
 
     print(f"\nTraining complete. Best SR: {best_success_rate:.4f}")
-    agent.save(os.path.join(agent.log_dir, "model_final.pt"))
+    agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+    with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as _f:
+        _f.write(str(iteration))
     simulation_app.close()
 
 

@@ -1,20 +1,20 @@
 #!/bin/bash
-#SBATCH --job-name=pbrs_a
-#SBATCH --time=23:00:00
+#SBATCH --job-name=pbrs_curr
+#SBATCH --time=03:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
-#SBATCH --output=slurm-%j-pbrs_a.out
+#SBATCH --output=slurm-%j-pbrs_curr.out
 #SBATCH --signal=B:USR1@120
 WILL_RESUBMIT=false
 trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
-NUM_ENVS=2048
+NUM_ENVS=528
 MAX_ITERATIONS=3000
-SAVE_INTERVAL=50
-EXP_NAME="hpc_pbrs_a_${NUM_ENVS}env"
+SAVE_INTERVAL=100
+EXP_NAME="hpc_pbrs_curr_${NUM_ENVS}env"
 
 SIF_IMAGE="isaac-lab.sif"
 CURBO_OVERLAY="curobo_overlay.img"
@@ -29,7 +29,7 @@ cleanup() {
     echo "[INFO] Sync complete."
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_push_pbrs_a.slurm" 2>&1)
+        SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_push_pbrs_curr.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
         if [ -n "$NEXT_JOB" ]; then
             echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
@@ -45,18 +45,13 @@ trap cleanup EXIT
 
 RESUME_ARGS=""
 ITER_NUM=""
-if [ "$RESUME_CHAIN" = "1" ] && [ -d "$NFS_RUN_DIR/agent" ]; then
-    LATEST_AGENT=$(ls "$NFS_RUN_DIR/agent"/model_*.pt 2>/dev/null | grep -v best | grep -v final \
-        | sed 's/.*model_//' | sed 's/\.pt//' | sort -n | tail -1)
-    if [ -n "$LATEST_AGENT" ]; then
-        ITER_NUM="$LATEST_AGENT"
-        AGENT_FILE="model_${ITER_NUM}.pt"
-        if [ -f "$NFS_RUN_DIR/agent/$AGENT_FILE" ]; then
-            echo "[INFO] Resuming from iteration $ITER_NUM"
-            echo "[INFO]   Agent: $NFS_RUN_DIR/agent/$AGENT_FILE"
-            rsync -a --no-perms "$NFS_RUN_DIR/" "$LOCAL_RUNS/$EXP_NAME/"
-            RESUME_ARGS="--chkpt runs/$EXP_NAME/agent/$AGENT_FILE --resume_iteration $ITER_NUM"
-        fi
+if [ "$RESUME_CHAIN" = "1" ] && [ -f "$NFS_RUN_DIR/agent/latest_checkpoint.pt" ]; then
+    ITER_NUM=$(cat "$NFS_RUN_DIR/agent/latest_iter.txt" 2>/dev/null)
+    if [ -n "$ITER_NUM" ]; then
+        echo "[INFO] Resuming from iteration $ITER_NUM"
+        echo "[INFO]   Agent: $NFS_RUN_DIR/agent/latest_checkpoint.pt"
+        rsync -a --no-perms "$NFS_RUN_DIR/" "$LOCAL_RUNS/$EXP_NAME/"
+        RESUME_ARGS="--chkpt runs/$EXP_NAME/agent/latest_checkpoint.pt --resume_iteration $ITER_NUM"
     fi
 fi
 
@@ -66,7 +61,7 @@ echo "[INFO] Max iterations target:  $MAX_ITERATIONS"
 echo "[INFO] Job ID:        $SLURM_JOB_ID"
 echo "[INFO] Node:          $SLURMD_NODENAME"
 echo "[INFO] Envs:          $NUM_ENVS"
-echo "[INFO] Model:         PBRS Model A (no curriculum)"
+echo "[INFO] Model:         PBRS Model B (with curriculum)"
 echo "[INFO] Local runs:    $LOCAL_RUNS"
 
 if [ ! -f "$SIF_IMAGE" ]; then
@@ -88,7 +83,7 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
     "$SIF_IMAGE" \
-    /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train_push_pbrs_a.py \
+    /workspace/isaaclab/isaaclab.sh -p /workspace/isaaclab/user_project/asyncDualPlayPPO/train_push_pbrs_curr.py \
     --num_envs       "$NUM_ENVS" \
     --max_iterations "$MAX_ITERATIONS" \
     --save_interval  "$SAVE_INTERVAL" \
@@ -99,8 +94,7 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
                                    -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined"
 TRAIN_EXIT=$?
 
-LATEST_AFTER=$(ls "$NFS_RUN_DIR/agent"/model_*.pt 2>/dev/null | grep -v best | grep -v final \
-    | sed 's/.*model_//' | sed 's/\.pt//' | sort -n | tail -1)
+LATEST_AFTER=$(cat "$NFS_RUN_DIR/agent/latest_iter.txt" 2>/dev/null)
 echo "[INFO] Global iteration end: ${LATEST_AFTER:-unknown}"
 
 if [ $TRAIN_EXIT -ne 0 ]; then

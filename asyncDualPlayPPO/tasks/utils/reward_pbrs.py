@@ -106,7 +106,7 @@ def check_done_pbrs(
     robot_dim: int = 6,
     obj_state_dim: int = 14,
     pos_term_threshold: float = 0.0,
-) -> torch.Tensor:
+):
     max_push_done = push_count >= max_pushes
 
     obj_z = obs[:, robot_dim + 2]
@@ -115,14 +115,24 @@ def check_done_pbrs(
              (obs[:, robot_dim + 4].abs() > TIP_OVER_THRESHOLD)
     obj_pos = obs[:, robot_dim: robot_dim + 3]
     goal_pos = obs[:, robot_dim + obj_state_dim: robot_dim + obj_state_dim + 3]
-    out_of_bounds = (obj_pos - goal_pos).norm(dim=-1) > 0.5
+    out_of_bounds = (obj_pos[:, :2] - goal_pos[:, :2]).norm(dim=-1) > 0.5
 
     both_success = at_goal
     done = terminated | max_push_done | both_success | launched | tipped | out_of_bounds
 
+    pos_only = torch.zeros_like(done)
     if pos_term_threshold > 0.0:
         pos_err = (obj_pos[:, :2] - goal_pos[:, :2]).norm(dim=-1)
         pos_only = pos_err < pos_term_threshold
         done = done | pos_only
 
-    return done
+    reasons = {
+        "terminated": terminated,
+        "max_pushes": max_push_done,
+        "success": both_success,
+        "launched": launched,
+        "tipped": tipped,
+        "oob": out_of_bounds,
+        "pos_only": pos_only,
+    }
+    return done, reasons
