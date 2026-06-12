@@ -114,7 +114,10 @@ class PPO:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         else:
             self.actor_critic.load_state_dict(checkpoint, strict=False)
-        self.current_learning_iteration = int(path.split("_")[-1].split(".")[0])
+        try:
+            self.current_learning_iteration = int(path.split("_")[-1].split(".")[0])
+        except ValueError:
+            self.current_learning_iteration = 0
         self.actor_critic.train()
 
     def save(self, path):
