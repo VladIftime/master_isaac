@@ -518,8 +518,8 @@ def main():
         _train_state_path = args.chkpt_bob.replace("model_", "train_state_")
         if os.path.isfile(_train_state_path):
             _ts = torch.load(_train_state_path, map_location="cpu")
-            alice_ppo.entropy_coef = float(_ts["entropy_coef"])
-            bob_ppo.abc_coef = float(_ts["abc_coef"])
+            alice_ppo.entropy_coef = float(_ts.get("entropy_coef", 0.005))
+            bob_ppo.abc_coef = float(_ts.get("abc_coef", 0.5))
             bob_success_buf.extend(_ts.get("bob_success_buf", []))
             print(f"[Resume] Restored train state: entropy_coef={alice_ppo.entropy_coef:.4f}")
 
