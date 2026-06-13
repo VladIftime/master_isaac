@@ -988,7 +988,7 @@ def main():
                 _launched = _obj_pos_now[:, 2] > 0.10
                 _oob = (_obj_pos_now[:, :2] - _goal_pos_now[:, :2]).norm(dim=-1) > 0.5
                 _catastrophe = (_tipped | _launched | _oob) & is_bob
-                bob_rewards[_catastrophe] += PBRS_CATASTROPHE_PENALTY
+                bob_rewards[_catastrophe & ~terminated] = -10.0
             bob_rewards[terminated] = 0.0
 
             # Per-push summary (every push)
@@ -1037,8 +1037,14 @@ def main():
                             flush=True,
                         )
                     elif is_alice[e]:
+                        _a_ox = full_push_obs[e, _OBS_ROBOT_DIM].item()
+                        _a_oy = full_push_obs[e, _OBS_ROBOT_DIM + 1].item()
+                        _a_oz = full_push_obs[e, _OBS_ROBOT_DIM + 2].item()
+                        _a_yaw = full_push_obs[e, _OBS_ROBOT_DIM + 5].item()
                         print(
-                            f"    env {e:3d} [ALICE]: push={env.episode_manager.phase_step[e].item()}",
+                            f"    env {e:3d} [ALICE]: push={env.episode_manager.phase_step[e].item()}  "
+                            f"obj=({_a_ox:+.3f},{_a_oy:+.3f},{_a_oz:+.3f}) yaw={_a_yaw:+.3f}  "
+                            f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°",
                             flush=True,
                         )
 
@@ -1054,10 +1060,6 @@ def main():
             bob_progress_rew = torch.zeros(env.num_envs, device=env.device)
 
             _prev_initial = env.episode_manager.initial_states.clone()
-
-            if len(bob_indices) > 0:
-                _bob_should_end = _catastrophe | (pbrs_result["at_goal"] & is_bob)
-                _bob_early_end = _bob_should_end & ~bob_done_now if 'bob_done_now' in dir() else _bob_should_end
 
             phase_info = env.episode_manager.step()
 
@@ -1095,6 +1097,13 @@ def main():
                 )
                 bob_done_now[completion_ids] = True
 
+            _cata_early = _catastrophe & is_bob & ~bob_done_mask & ~bob_achieved_completion
+            if _cata_early.any():
+                cata_ids = torch.where(_cata_early)[0]
+                env.handle_bob_phase_end(cata_ids, full_push_obs)
+                bob_done_now[cata_ids] = True
+                _bob_gave_rot_bonus[cata_ids] = False
+
             if args.debug_rewards:
                 for _gi in alice_done_ids.tolist():
                     _valid = "VALID" if goal_valid_now[_gi].item() else "INVALID"
@@ -1110,8 +1119,20 @@ def main():
                     _fz = _final_pos[2].item()
                     _fyaw = _final_ori[2].item()
                     _disp3d = math.sqrt((_fx-_sx)**2 + (_fy-_sy)**2 + (_fz-_sz)**2)
+                    _disp2d = math.sqrt((_fx-_sx)**2 + (_fy-_sy)**2)
+                    _reason_parts = []
+                    if not goal_valid_now[_gi].item():
+                        if _fz > 0.05:
+                            _reason_parts.append("AIRBORNE")
+                        if _disp2d < 0.05:
+                            _reason_parts.append("NO_DISP")
+                        elif _disp2d < 0.10:
+                            _reason_parts.append("SHALLOW")
+                        if _fx < -0.50 or _fx > 0.50 or _fy < 0.25 or _fy > 0.70:
+                            _reason_parts.append("OOZ")
+                    _reason_str = "(" + "+".join(_reason_parts) + ")" if _reason_parts else ""
                     print(
-                        f"  [ALICE END | iter={bob_updates} env={_gi}] {_valid}  rew={_rew:+.1f}  "
+                        f"  [ALICE END | iter={bob_updates} env={_gi}] {_valid}{_reason_str}  rew={_rew:+.1f}  "
                         f"disp3D={_disp3d:.4f}m  "
                         f"obj_start=({_sx:+.3f},{_sy:+.3f},{_sz:+.3f}) yaw={_syaw:+.3f}  "
                         f"obj_end=({_fx:+.3f},{_fy:+.3f},{_fz:+.3f}) yaw={_fyaw:+.3f}  "
@@ -1186,7 +1207,7 @@ def main():
                     bob_hidden[0][early_ids] = 0.0
                     bob_hidden[1][early_ids] = 0.0
 
-            needs_ee_reset = alice_done_mask | bob_done_mask | terminated
+            needs_ee_reset = alice_done_mask | bob_done_mask | bob_done_now | terminated
             if needs_ee_reset.any():
                 reset_eids = torch.where(needs_ee_reset)[0]
                 ee_pos_local[reset_eids] = _tcp_pos_local()[reset_eids]
@@ -1372,47 +1393,53 @@ def main():
         )
 
         if _shutdown_requested:
-            _ckpt_iter = bob_updates
-            print(f"[INFO] Emergency checkpoint at iter {_ckpt_iter}", flush=True)
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{_ckpt_iter}.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{_ckpt_iter}.pt"))
+            print(f"[INFO] Emergency checkpoint at iter {bob_updates}", flush=True)
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(env.episode_manager.state_dict(),
-                       os.path.join(bob_ppo.log_dir, f"episode_manager_{_ckpt_iter}.pt"))
+                       os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
                         "bob_success_buf": list(bob_success_buf)},
-                       os.path.join(bob_ppo.log_dir, f"train_state_{_ckpt_iter}.pt"))
-            print("[INFO] Emergency checkpoint saved — exiting cleanly.", flush=True)
+                       os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
+            with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
+                _f.write(str(bob_updates))
+            print(f"[INFO] Emergency checkpoint saved (iter {bob_updates}) — exiting cleanly.", flush=True)
             break
 
         if args.save_interval > 0 and bob_updates % args.save_interval == 0:
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, f"model_{bob_updates}.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, f"model_{bob_updates}.pt"))
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(env.episode_manager.state_dict(),
-                       os.path.join(bob_ppo.log_dir, f"episode_manager_{bob_updates}.pt"))
+                       os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
                         "bob_success_buf": list(bob_success_buf)},
-                       os.path.join(bob_ppo.log_dir, f"train_state_{bob_updates}.pt"))
+                       os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
+            with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
+                _f.write(str(bob_updates))
+            print(f"  [Checkpoint] Saved latest_checkpoint.pt (iter {bob_updates})")
 
-    alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_final.pt"))
-    bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_final.pt"))
+    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
     bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
     torch.save(env.episode_manager.state_dict(),
-               os.path.join(bob_ppo.log_dir, "episode_manager_final.pt"))
+               os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
     torch.save({"entropy_coef": alice_ppo.entropy_coef,
                 "abc_coef": bob_ppo.abc_coef,
                 "bob_success_buf": list(bob_success_buf)},
-               os.path.join(bob_ppo.log_dir, "train_state_final.pt"))
+               os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
+    with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
+        _f.write(str(bob_updates))
     print("  Saved final models")
     writer.close()
 
     print(f"\n{'='*80}\nTRAINING COMPLETE ({bob_updates} iterations)\n{'='*80}")
-    print(f"To resume:\n  python -m asyncDualPlayPPO.train_push_pbrs_c --exp_name {args.exp_name} \\")
-    print(f"    --chkpt_alice runs/{args.exp_name}/alice/model_final.pt \\")
-    print(f"    --chkpt_bob   runs/{args.exp_name}/bob/model_final.pt \\")
+    print(f"To resume:\n  python -m asyncDualPlayPPO.train_push_pbrs_asp --exp_name {args.exp_name} \\")
+    print(f"    --chkpt_alice runs/{args.exp_name}/alice/latest_checkpoint.pt \\")
+    print(f"    --chkpt_bob   runs/{args.exp_name}/bob/latest_checkpoint.pt \\")
     print(f"    --resume_iteration {bob_updates}\n{'='*80}\n")
 
 
