@@ -33,9 +33,7 @@ fi
 find "$PROJECT_ROOT" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 echo "[INFO] Cleared __pycache__ directories"
 
-WARP_TMP="/tmp/warp_cache_${SLURM_JOB_ID:-$$}"
-mkdir -p "$WARP_TMP"
-apptainer exec --nv --bind "$WARP_TMP":"$HOME/.cache/warp" \
+apptainer exec --nv \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
