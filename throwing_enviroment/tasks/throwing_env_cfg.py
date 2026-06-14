@@ -21,7 +21,6 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import (
-    GroundPlaneCfg,
     UrdfFileCfg,
     UsdFileCfg,
 )
@@ -35,12 +34,11 @@ from . import rewards as rew_mod
 from . import events as evt_mod
 
 _PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_PINGPONG_ROOT = os.path.join(_PKG_ROOT, "..", "pingpong_dual_arm")
 
 import sys
 
-if _PINGPONG_ROOT not in sys.path:
-    sys.path.insert(0, _PINGPONG_ROOT)
+if _PKG_ROOT not in sys.path:
+    sys.path.insert(0, _PKG_ROOT)
 
 from ik_solvers import build_ik_action, IK_SOLVER_TYPE
 
@@ -50,7 +48,7 @@ from ik_solvers import build_ik_action, IK_SOLVER_TYPE
 
 UR5e_SINGLE_CFG = ArticulationCfg(
     spawn=UrdfFileCfg(
-        asset_path=f"{_PINGPONG_ROOT}/assets/urdf/ur_robotics/ur5e/ur5e_robotiq_140.urdf",
+        asset_path=f"{_PKG_ROOT}/assets/urdf/ur_robotics/ur5e/ur5e_robotiq_140.urdf",
         fix_base=True,
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
             gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
@@ -98,7 +96,7 @@ UR5e_SINGLE_CFG = ArticulationCfg(
 
 DualArm_CFG = UR5e_SINGLE_CFG.replace(
     spawn=UrdfFileCfg(
-        asset_path=f"{_PINGPONG_ROOT}/urdf/dual_arm_robot.urdf",
+        asset_path=f"{_PKG_ROOT}/urdf/dual_arm_robot.urdf",
         fix_base=False,
         joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
             gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
@@ -188,10 +186,12 @@ class ThrowingSceneCfg(InteractiveSceneCfg):
 
     plane = AssetBaseCfg(
         prim_path="/World/GroundPlane",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]),
-        spawn=GroundPlaneCfg(
-            size=(6.0, 6.0),
-            color=(0.15, 0.15, 0.15),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, -0.005]),
+        spawn=sim_utils.CuboidCfg(
+            size=(10.0, 10.0, 0.01),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.15, 0.15, 0.15)),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
         ),
     )
 

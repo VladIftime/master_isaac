@@ -2,7 +2,7 @@
 #SBATCH --job-name=throw_sac
 #SBATCH --time=23:00:00
 #SBATCH --partition=gpu
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=rtx_pro_6000:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --output=slurm-%j-throw-sac.out
@@ -13,35 +13,43 @@ trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=t
 set -o pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURATION — edit these for your run
+# CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-NUM_ENVS=512
+NUM_ENVS=2048
 MAX_ITERATIONS=100000
 SEED=42
 PLAYING_ARM="right"
 EXP_NAME="hpc_throw_sac_${NUM_ENVS}env"
 
-# Paths
-PROJECT_ROOT="/home/vlad/IsaacLab/vlad/master_isaac/throwing_enviroment"
-VENV_PATH="/home/vlad/env_isaaclab"
+# Paths — submit from the throwing_enviroment/ directory:
+#   cd /path/to/master_isaac/throwing_enviroment && sbatch hpc/train_sac.slurm
+PROJECT_ROOT=$(pwd)
+SIF_IMAGE="$(dirname "$PROJECT_ROOT")/asyncDualPlayPPO/isaac-lab.sif"
 LOG_DIR="$PROJECT_ROOT/logs/skrl/throwing_primitive"
 
 # Local scratch for faster I/O (synced to NFS on exit)
-LOCAL_RUNS="${TMPDIR:-/tmp}/throw_sac_${SLURM_JOB_ID}"
-mkdir -p "$LOCAL_RUNS"
+LOCAL_LOGS="${TMPDIR:-/tmp}/throw_sac_${SLURM_JOB_ID}"
+mkdir -p "$LOCAL_LOGS"
+mkdir -p "$PROJECT_ROOT/.cache/warp"
+mkdir -p "$PROJECT_ROOT/.isaac_cache/kit/data"
+mkdir -p "$PROJECT_ROOT/.isaac_cache/kit/cache"
+mkdir -p "$PROJECT_ROOT/.isaac_cache/kit/logs"
+
+CONTAINER_PROJECT="/workspace/isaaclab/user_project/throwing_enviroment"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLEANUP + RESUBMISSION
 # ═══════════════════════════════════════════════════════════════════════════════
 
 cleanup() {
-    echo "[INFO] Syncing results from $LOCAL_RUNS → $LOG_DIR ..."
-    rsync -a --no-perms "$LOCAL_RUNS/" "$LOG_DIR/" 2>/dev/null
+    echo "[INFO] Syncing results from $LOCAL_LOGS -> $LOG_DIR ..."
+    mkdir -p "$LOG_DIR"
+    rsync -a --no-perms "$LOCAL_LOGS/" "$LOG_DIR/" 2>/dev/null
     echo "[INFO] Sync complete."
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch "$PROJECT_ROOT/hpc/train_sac.slurm" 2>&1)
+        SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_sac.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
         if [ -n "$NEXT_JOB" ]; then
             echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
@@ -50,6 +58,7 @@ cleanup() {
         fi
     else
         echo "[INFO] Training complete or stop requested — no resubmission."
+        touch "$LOG_DIR/$EXP_NAME.done"
     fi
 }
 trap cleanup EXIT
@@ -59,17 +68,19 @@ trap cleanup EXIT
 # ═══════════════════════════════════════════════════════════════════════════════
 
 RESUME_ARGS=""
-if [ -d "$LOG_DIR" ]; then
+if [ "$RESUME_CHAIN" = "1" ] && [ -d "$LOG_DIR" ]; then
     LATEST_DIR=$(ls -td "$LOG_DIR"/*_sac_torch 2>/dev/null | head -1)
     if [ -n "$LATEST_DIR" ] && [ -d "$LATEST_DIR" ]; then
-        LATEST_CKPT=$(ls "$LATEST_DIR"/checkpoints/agent_*.pt 2>/dev/null | sort -t_ -k2 -n | tail -1)
+        LATEST_CKPT=$(find "$LATEST_DIR" -name "agent_*.pt" 2>/dev/null \
+            | sort -t_ -k2 -n | tail -1)
         if [ -z "$LATEST_CKPT" ]; then
-            LATEST_CKPT=$(ls "$LATEST_DIR"/agent_*.pt 2>/dev/null | sort -t_ -k2 -n | tail -1)
+            LATEST_CKPT=$(find "$LATEST_DIR" -name "best_agent.pt" 2>/dev/null \
+                | sort | tail -1)
         fi
         if [ -n "$LATEST_CKPT" ]; then
             echo "[INFO] Resuming from checkpoint: $LATEST_CKPT"
             RESUME_ARGS="--checkpoint $LATEST_CKPT"
-            rsync -a --no-perms "$LATEST_DIR/" "$LOCAL_RUNS/$(basename $LATEST_DIR)/"
+            rsync -a --no-perms "$LOG_DIR/" "$LOCAL_LOGS/"
         fi
     fi
 fi
@@ -78,9 +89,9 @@ fi
 # PRINT JOB INFO
 # ═══════════════════════════════════════════════════════════════════════════════
 
-echo "═══════════════════════════════════════════════════════════════"
+echo "==================================================================="
 echo "  SAC Throw Primitive — HPC Training"
-echo "═══════════════════════════════════════════════════════════════"
+echo "==================================================================="
 echo "  Job ID         : $SLURM_JOB_ID"
 echo "  Node           : $SLURMD_NODENAME"
 echo "  GPU            : $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
@@ -89,25 +100,41 @@ echo "  Max iterations : $MAX_ITERATIONS"
 echo "  Seed           : $SEED"
 echo "  Arm            : $PLAYING_ARM"
 echo "  Experiment     : $EXP_NAME"
-echo "  Local scratch  : $LOCAL_RUNS"
+echo "  Project root   : $PROJECT_ROOT"
+echo "  Container      : $SIF_IMAGE"
+echo "  Local scratch  : $LOCAL_LOGS"
 echo "  Resume         : ${RESUME_ARGS:-none}"
-echo "═══════════════════════════════════════════════════════════════"
+echo "==================================================================="
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ACTIVATE ENVIRONMENT + RUN TRAINING
+# RUN TRAINING
 # ═══════════════════════════════════════════════════════════════════════════════
 
-source "$VENV_PATH/bin/activate"
-cd "$PROJECT_ROOT"
+if [ ! -f "$SIF_IMAGE" ]; then
+    echo "[ERROR] Container image $SIF_IMAGE not found in $(pwd)!"
+    echo "[INFO]  Pull it with: apptainer pull isaac-lab.sif docker://nvcr.io/nvidia/isaac-lab:2.3.0"
+    exit 1
+fi
 
-python scripts/train_sac.py \
-    --headless \
-    --num_envs "$NUM_ENVS" \
-    --max_iterations "$MAX_ITERATIONS" \
-    --seed "$SEED" \
-    --playing_arm_side "$PLAYING_ARM" \
-    $RESUME_ARGS \
-    2>&1 | tee "$LOCAL_RUNS/train_${SLURM_JOB_ID}.log"
+apptainer exec --nv \
+    --pwd "$CONTAINER_PROJECT" \
+    --env PYTHONPATH="$CONTAINER_PROJECT:$CONTAINER_PROJECT/source/Throwing" \
+    --env WARP_CACHE_PATH=/root/.cache/warp \
+    --bind "$PROJECT_ROOT":"$CONTAINER_PROJECT" \
+    --bind "$LOCAL_LOGS":"$CONTAINER_PROJECT/logs/skrl/throwing_primitive" \
+    --bind "$PROJECT_ROOT/.cache":/root/.cache \
+    --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
+    --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \
+    --bind "$PROJECT_ROOT/.isaac_cache/kit/logs":/isaac-sim/kit/logs \
+    "$SIF_IMAGE" \
+    /workspace/isaaclab/isaaclab.sh -p "$CONTAINER_PROJECT/scripts/train_sac.py" \
+        --headless \
+        --num_envs       "$NUM_ENVS" \
+        --max_iterations "$MAX_ITERATIONS" \
+        --seed           "$SEED" \
+        --playing_arm_side "$PLAYING_ARM" \
+        $RESUME_ARGS \
+    2>&1 | tee "$LOCAL_LOGS/train_${SLURM_JOB_ID}.log"
 
 TRAIN_EXIT=$?
 
