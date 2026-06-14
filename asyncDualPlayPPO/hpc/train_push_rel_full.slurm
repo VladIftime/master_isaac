@@ -84,7 +84,9 @@ if [ ! -f "$PROJECT_ROOT/$CURBO_OVERLAY" ]; then
     exit 1
 fi
 
-apptainer exec --nv --env WARP_CACHE_ROOT=/tmp/warp_cache --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
+WARP_TMP="/tmp/warp_cache_${SLURM_JOB_ID:-$$}"
+mkdir -p "$WARP_TMP"
+apptainer exec --nv --bind "$WARP_TMP":"$HOME/.cache/warp" --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     --overlay "$PROJECT_ROOT/$CURBO_OVERLAY":ro \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$LOCAL_RUNS":/workspace/isaaclab/user_project/asyncDualPlayPPO/runs \
