@@ -33,7 +33,7 @@ fi
 find "$PROJECT_ROOT" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 echo "[INFO] Cleared __pycache__ directories"
 
-apptainer exec --nv \
+apptainer exec --nv --env WARP_CACHE_ROOT=/tmp/warp_cache \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
