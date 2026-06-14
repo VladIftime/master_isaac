@@ -5,9 +5,15 @@ Uses the pre-defined test scenes from validation_configs.py to measure push
 success rate, steps-to-solve, and push count across multiple scenarios.
 
 Usage:
+  # Original Push-PPO (absolute actions):
   python -m asyncDualPlayPPO.tests.validate_push \
       --chkpt runs/push_ppo_baseline/agent/model_best.pt \
       --num_tests 10 --headless
+
+  # PBRS Models A/B (object-relative obs+actions):
+  python -m asyncDualPlayPPO.tests.validate_push \
+      --chkpt runs/long_runs/hpc_pbrs_simp_528env/agent/model_best.pt \
+      --rel-obs --rel-act --num_tests 10 --headless
 """
 
 import argparse
@@ -48,6 +54,9 @@ from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
 from asyncDualPlayPPO.tasks.utils.action_push import (
     decode_push_action, compute_push_waypoints,
 )
+from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+    decode_push_action_relative,
+)
 from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
 from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
 from asyncDualPlayPPO.algorithms.rl.ppo.storage import RolloutStorage
@@ -82,6 +91,12 @@ def main():
     parser.add_argument("--chkpt", type=str, required=True, help="Path to trained checkpoint")
     parser.add_argument("--num_tests", type=int, default=10, help="Number of test scenes to run")
     parser.add_argument("--max_pushes", type=int, default=30, help="Max pushes per test")
+    parser.add_argument("--rot_threshold", type=float, default=0.2,
+                        help="Rotation success threshold in radians (default 0.2)")
+    parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
+                        help="Use object-relative observation (30D instead of 28D)")
+    parser.add_argument("--rel-act", action="store_true", dest="rel_act",
+                        help="Decode actions as object-relative (r, phi, len, theta)")
     parser.add_argument("--headless", action="store_true")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
@@ -107,6 +122,7 @@ def main():
     env = PushEnvWrapper(
         env=base_env, device=device, num_objects=1,
         max_pushes_per_episode=args.max_pushes,
+        rel_obs=args.rel_obs,
     )
 
     # ── cuRobo IK ─────────────────────────────────────────────────────────────
@@ -169,6 +185,8 @@ def main():
     agent.load(args.chkpt)
     agent.actor_critic.eval()
     print(f"[Validate] Loaded model from {args.chkpt}")
+    print(f"[Validate] Mode: rel_obs={args.rel_obs}, rel_act={args.rel_act}, "
+          f"rot_threshold={args.rot_threshold:.3f} rad, max_pushes={args.max_pushes}")
 
     # ── Run tests ─────────────────────────────────────────────────────────────
     results: List[ValidationResult] = []
@@ -224,13 +242,25 @@ def main():
 
         for push_i in range(args.max_pushes):
             with torch.no_grad():
-                actions, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
+                actions, _, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
                     obs, None, (hidden[0], hidden[1]),
                 )
-                hidden[0] = new_h[0]
-                hidden[1] = new_h[1]
+                if new_h is not None:
+                    hidden[0] = new_h[0]
+                    hidden[1] = new_h[1]
 
-            Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
+            if args.rel_act:
+                obj_x = obs[0, env.robot_dim]
+                obj_y = obs[0, env.robot_dim + 1]
+                obj_yaw = obs[0, env.robot_dim + 5]
+                Xs, Ys, length, theta = decode_push_action_relative(
+                    actions,
+                    torch.stack([obj_x, obj_y]).unsqueeze(0),
+                    obj_yaw.unsqueeze(0),
+                    num_bins=num_bins,
+                )
+            else:
+                Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
 
             waypoints = compute_push_waypoints(
                 Xs=Xs, Ys=Ys, length=length, theta=theta,
@@ -269,7 +299,7 @@ def main():
             pos_err = (cur_obj_pos - goal_pos).norm().item()
             rot_err = _rot_distance_rad(cur_obj_euler.unsqueeze(0), goal_euler.unsqueeze(0)).item()
 
-            if pos_err < 0.05 and rot_err < 0.035:
+            if pos_err < 0.05 and rot_err < args.rot_threshold:
                 test_success = True
                 break
 
