@@ -1,0 +1,28 @@
+
+robot_cfg:
+  kinematics:
+    urdf_path: "robot/ur_description/ur5e.urdf"
+    asset_root_path: "robot/ur_description"
+    
+    base_link: "base_link_inertia"
+    ee_link: "wrist_3_link"
+    link_names: null
+    lock_joints: null
+    extra_links: null
+
+    collision_link_names: null
+    collision_spheres: {}
+    collision_sphere_buffer: 0.0
+    self_collision_ignore: {}
+    self_collision_buffer: {}
+    use_global_cumul: True
+    mesh_link_names: null
+
+    cspace:
+      joint_names: ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint']
+      retract_config:  [0.0, -1.57, 1.57, -1.57, -1.57, 0.0]
+      null_space_weight:  [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      max_jerk: 500.0
+      max_acceleration: 12.0
+      position_limit_clip: 0.1

@@ -52,27 +52,28 @@ import numpy as np
 
 import skrl
 from skrl.utils.runner.torch import Runner
-from skrl.envs.wrappers.torch import wrap_env
 
-from tasks.throwing_primitive_env_cfg import ThrowingPrimitiveEnvCfg
-from tasks.throwing_primitive_env import ThrowingPrimitiveEnv
+from isaaclab_rl.skrl import SkrlVecEnvWrapper
+
+from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg
+from tasks.throwing_direct_env import ThrowingDirectEnv
 
 
 def main():
-    cfg = ThrowingPrimitiveEnvCfg()
-    cfg.num_envs = args_cli.num_envs
+    cfg = ThrowingDirectEnvCfg()
+    cfg.scene.num_envs = args_cli.num_envs
     cfg.playing_arm_side = args_cli.playing_arm_side
     cfg.seed = args_cli.seed
 
     print(f"\n{'='*60}")
-    print(f"  SAC Training — Throw Primitive")
-    print(f"  num_envs          : {cfg.num_envs}")
+    print(f"  SAC Training — Throw Primitive (DirectRLEnv)")
+    print(f"  num_envs          : {cfg.scene.num_envs}")
     print(f"  playing_arm_side  : {cfg.playing_arm_side}")
     print(f"  max_iterations    : {args_cli.max_iterations}")
-    print(f"  seed              : {cfg.seed}")
+    print(f"  seed              : {args_cli.seed}")
     print(f"{'='*60}\n")
 
-    env = ThrowingPrimitiveEnv(cfg=cfg)
+    env = ThrowingDirectEnv(cfg=cfg)
 
     agent_cfg_path = os.path.join(
         _PROJECT_ROOT, "source", "Throwing", "Throwing", "tasks",
@@ -95,9 +96,7 @@ def main():
     log_dir = os.path.join(log_root_path, log_dir)
     os.makedirs(os.path.join(log_dir, "params"), exist_ok=True)
 
-    env.set_log_dir(log_dir)
-
-    env_wrapped = wrap_env(env, wrapper="gymnasium")
+    env_wrapped = SkrlVecEnvWrapper(env, ml_framework="torch")
 
     runner = Runner(env_wrapped, agent_cfg)
 

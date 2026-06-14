@@ -44,6 +44,8 @@ parser.add_argument("--duration", type=float, default=0.3,
 parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel envs")
 parser.add_argument("--playing_arm_side", type=str, default="right",
                     choices=["right", "left"], help="Which arm throws")
+parser.add_argument("--direct", action="store_true",
+                    help="Use DirectRLEnv (fast, no IK, no ManagerBased overhead)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -54,9 +56,67 @@ import numpy as np
 import isaaclab.sim as sim_utils
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 
+from tasks.throw_primitive import map_action_to_params
+
+if args_cli.direct:
+    from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg
+    from tasks.throwing_direct_env import ThrowingDirectEnv
+
+    SIDE = args_cli.playing_arm_side
+    cfg = ThrowingDirectEnvCfg()
+    cfg.scene.num_envs = args_cli.num_envs
+    cfg.playing_arm_side = SIDE
+
+    env = ThrowingDirectEnv(cfg=cfg)
+    device = env.device
+
+    action = torch.tensor(
+        [[args_cli.initial_jv, args_cli.final_jv,
+          args_cli.releasing_time, args_cli.duration]],
+        device=device,
+    ).expand(args_cli.num_envs, -1)
+
+    params = map_action_to_params(action[0:1], side=SIDE)
+    print(f"\n=== Throw Primitive Test (DirectRLEnv) ===")
+    print(f"  Arm           : {SIDE}")
+    print(f"  Num envs      : {args_cli.num_envs}")
+    print(f"  Loop          : {args_cli.loop}")
+    print(f"  Raw action    : [{args_cli.initial_jv:.3f}, {args_cli.final_jv:.3f}, "
+          f"{args_cli.releasing_time:.3f}, {args_cli.duration:.3f}]")
+    print(f"  Mapped params : ijv={params[0,0]:.3f} fjv={params[0,1]:.3f} "
+          f"rel={params[0,2]:.3f} dur={params[0,3]:.3f}")
+    print()
+
+    throw_number = 0
+    try:
+        while simulation_app.is_running():
+            throw_number += 1
+            obs, info = env.reset()
+            obs_dict, reward, terminated, truncated, info = env.step(action)
+
+            for i in range(min(args_cli.num_envs, 10)):
+                mp = env._last_milk_pos[i].cpu()
+                tp = env._last_target_pos[i].cpu()
+                d = env._last_distances[i].item()
+                status = "SUCCESS" if d < 0.15 else f"dist={d:.3f}m"
+                print(f"  env[{i}]: milk=({mp[0]:+.3f},{mp[1]:+.3f},{mp[2]:+.3f})  "
+                      f"target=({tp[0]:+.3f},{tp[1]:+.3f},{tp[2]:+.3f})  {status}")
+
+            print(f"  [Throw #{throw_number}] reward={reward.mean().item():.4f}\n")
+
+            if not args_cli.loop:
+                break
+    except KeyboardInterrupt:
+        print(f"\n[Interrupted after {throw_number} throws]")
+
+    env.close()
+    simulation_app.close()
+    import sys
+    sys.exit(0)
+
 from tasks.throwing_env_cfg import ThrowingEnvCfg
 from tasks.throwing_env import ThrowingEnv
-from tasks.throw_primitive import execute_primitive_batched, map_action_to_params
+from tasks.throw_primitive import execute_primitive_batched
 from tasks.events import _set_gripper_state
 
 SIDE = args_cli.playing_arm_side
@@ -179,5 +239,6 @@ try:
 except KeyboardInterrupt:
     print(f"\n[Interrupted after {throw_number} throws]")
 
-env.close()
-simulation_app.close()
+if not args_cli.direct:
+    env.close()
+    simulation_app.close()
