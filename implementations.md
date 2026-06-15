@@ -169,6 +169,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-12 | **Fix P73 (Alice logging in Model C)** — Per-push Alice debug lines expanded from `push=N` to `push=N obj=(x,y,z) yaw=... len=... θ=...` showing object position and push parameters. `[ALICE END]` lines now include inferred invalid-goal reason: `INVALID(AIRBORNE)`, `INVALID(NO_DISP)`, `INVALID(SHALLOW)`, `INVALID(OOZ)`, or combinations. `train_push_pbrs_asp.py`. |
 | 2026-06-12 | **Fix P74 (checkpoint overhaul)** — Periodic checkpoints changed from `model_{iteration}.pt` (accumulating files) to `latest_checkpoint.pt` (single file, overwritten) + `latest_iter.txt` (plain text iteration number). `model_best.pt` unchanged. Emergency and final saves use the same scheme. HPC slurm scripts updated: resume logic reads `latest_checkpoint.pt` + `latest_iter.txt` instead of parsing `model_*.pt` filenames. All three PBRS training scripts + all three PBRS HPC scripts. |
 | 2026-06-12 | **Fix P75 (ppo.py load crash on latest_checkpoint.pt)** — `PPO.load()` parsed iteration from filename via `int(path.split("_")[-1].split(".")[0])`. With `latest_checkpoint.pt`, this produced `int("checkpoint")` → `ValueError`. Wrapped in try/except, defaults to 0. The actual iteration is always set via `--resume_iteration` from the training script. `algorithms/rl/ppo/ppo.py:117`. |
+| 2026-06-15 | **Fix P76 (validation scripts + configs + plotting)** — (a) Created `tasks/utils/validation_configs.py` with 20 predefined test scenes across easy/medium/hard difficulty with varied start→goal directions. (b) Restored `tests/validate_push.py` with original module-level import structure, added: `VisualizationMarkers` for goal flat-T-block and push arrows (green start, red end, blue cylinder), airborne/tipped/OOB detection (`obj_z > 0.10`, `|roll| > 0.3`, `|pitch| > 0.3`, `||obj_xy - goal_xy|| > 0.5`), per-push prediction logging (`bins=... r=... len=... θ=... pos=... rot=... z=...`), termination reason tracking (`stop_reason`), `--csv` flag for CSV output. (c) Created `tests/validate_push_asp.py` — separate script for ASP Model C Bob using `PPOABC` with GoalEncoder. Same markers + detection + logging. Loads `episode_manager` state for goal management. (d) Created `tests/plot_validation.py` — reads CSV files from multiple models and generates comparison plots: `overall_sr.png`, `sr_easy.png`/`medium.png`/`hard.png`, `sr_by_difficulty_grouped.png`, `avg_pushes.png`, `per_test_comparison.txt`, `summary.md` (markdown table). All four files created. |
 
 ---
 
@@ -345,7 +346,11 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 - `utils/episode_manager.py`: phase tracking, goal storage, checkpoint support
 - `utils/profiler.py`: `TrainingProfiler` with `section()` context manager, `get_section_frac()`
 - `utils/goal_validator.py`: `validate_goal()` — minimum displacement threshold check
-- `tasks/utils/reward_pbrs.py`: PBRS utility — bounded exponential potentials (`k_p=30, k_r=5`), cosine angular distance, `compute_pbrs_reward()`, `check_done_pbrs()` (returns `(done, reasons)` tuple with per-condition masks), OOB uses 2D distance, `gamma_shaping=1.0` (episodic PBRS)
+- `tasks/utils/reward_pbrs.py`: PBRS utility — bounded exponential potentials (`k_p=30, k_r=5`), cosine angular distance, `compute_pbrs_reward()`, `check_done_pbrs()`, `gamma_shaping=1.0` (episodic PBRS)
+- `tasks/utils/validation_configs.py`: 20 predefined test scenes (easy/medium/hard, varied directions) for push model validation evaluation
+- `tests/validate_push.py`: Push-PPO model validator — loads `ActorCriticPush`, runs test scenes, outputs per-push predictions, detects airborne/tipped/OOB
+- `tests/validate_push_asp.py`: ASP Model C Bob validator — loads `PPOABC` + GoalEncoder, runs test scenes with same features
+- `tests/plot_validation.py`: Validation result plotter — reads CSV files, generates SR/pushes/difficulty comparison plots and markdown summary
 - `optuna_sweep.py`: Optuna hyperparameter sweep wrapper
 
 ---
@@ -1441,6 +1446,8 @@ python -m asyncDualPlayPPO.tests.eval_plot
 
 ### 8.7 Visualization
 
+Visual markers (goal ghost + push start/end spheres + direction arrow) are shown during evaluation (non-headless mode).
+
 Non-headless by default (`HEADLESS = False`). The evaluation viewport shows:
 - **Orange flat T-block** at goal pose (updated per episode)
 - **Green sphere** at push start point (Xs, Ys)
@@ -1455,3 +1462,7 @@ Non-headless by default (`HEADLESS = False`). The evaluation viewport shows:
 | `tests/eval_suite.py` | Push-PPO & Push-ASP Bob evaluation |
 | `tests/eval_suite_curobo.py` | cuRobo step-based Bob evaluation |
 | `tests/eval_plot.py` | CSV reader + matplotlib comparison plot |
+| `tests/validate_push.py` | Simpler single-model validator — per-push predictions, airborne detection, CSV output |
+| `tests/validate_push_asp.py` | Simpler ASP Bob validator — same features, loads GoalEncoder |
+| `tests/plot_validation.py` | Reads CSVs from validate scripts, generates comparison plots + markdown summary |
+| `tasks/utils/validation_configs.py` | 20 predefined test scenes (easy/medium/hard) |

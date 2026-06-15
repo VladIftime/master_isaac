@@ -3,6 +3,8 @@ Validate a trained push-PPO model against test configurations.
 
 Uses the pre-defined test scenes from validation_configs.py to measure push
 success rate, steps-to-solve, and push count across multiple scenarios.
+Visual markers show goal position and push arrows.  Airborne/tipped/OOB
+objects are detected and terminate the test early.
 
 Usage:
   # Original Push-PPO (absolute actions):
@@ -13,13 +15,14 @@ Usage:
   # PBRS Models A/B (object-relative obs+actions):
   python -m asyncDualPlayPPO.tests.validate_push \
       --chkpt runs/long_runs/hpc_pbrs_simp_528env/agent/model_best.pt \
-      --rel-obs --rel-act --num_tests 10 --headless
+      --rel-obs --rel-act --num_tests 10 --headless --csv results.csv
 """
 
 import argparse
 import os
 import sys
 import time
+import math
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -43,26 +46,9 @@ import torch.optim      # noqa
 
 from isaaclab.app import AppLauncher
 
-import isaaclab.envs.mdp as mdp
-
 from asyncDualPlayPPO.tasks.utils.validation_configs import (
     ALL_TESTS, get_test_config, get_test_count, PushTestConfig,
 )
-
-from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
-from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper
-from asyncDualPlayPPO.tasks.utils.action_push import (
-    decode_push_action, compute_push_waypoints,
-)
-from asyncDualPlayPPO.tasks.utils.action_push_relative import (
-    decode_push_action_relative,
-)
-from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
-from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
-from asyncDualPlayPPO.algorithms.rl.ppo.storage import RolloutStorage
-
-import copy
-import gymnasium as gym_mc
 
 _ARM_JOINT_NAMES = [
     "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
@@ -74,10 +60,12 @@ _ARM_JOINT_NAMES = [
 class ValidationResult:
     test_index: int
     test_name: str
+    test_type: str
     success: bool
     pushes_used: int
     final_pos_error: float
     final_rot_error: float
+    area_coverage: float
 
 
 def _rot_distance_rad(euler_a, euler_b):
@@ -86,25 +74,54 @@ def _rot_distance_rad(euler_a, euler_b):
     return diff.max(dim=-1)[0]
 
 
+def _area_coverage(pos_err, rot_err):
+    pc = max(0.0, 1.0 - pos_err / 0.10)
+    rc = max(0.0, 1.0 - rot_err / 0.40)
+    return pc * rc * 100.0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate Push-PPO Model")
     parser.add_argument("--chkpt", type=str, required=True, help="Path to trained checkpoint")
     parser.add_argument("--num_tests", type=int, default=10, help="Number of test scenes to run")
-    parser.add_argument("--max_pushes", type=int, default=30, help="Max pushes per test")
+    parser.add_argument("--max_pushes", type=int, default=15, help="Max pushes per test")
     parser.add_argument("--rot_threshold", type=float, default=0.2,
                         help="Rotation success threshold in radians (default 0.2)")
     parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
                         help="Use object-relative observation (30D instead of 28D)")
     parser.add_argument("--rel-act", action="store_true", dest="rel_act",
                         help="Decode actions as object-relative (r, phi, len, theta)")
-    parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--csv", type=str, default=None,
+                        help="Save validation results to CSV file")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
 
+    chkpt_run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.chkpt)))
+    if args.csv is None:
+        args.csv = os.path.join(chkpt_run_dir, "validation_results.csv")
+    elif not os.path.isabs(args.csv):
+        args.csv = os.path.join(chkpt_run_dir, args.csv)
+
     from isaaclab.envs import ManagerBasedRLEnv
+    import isaaclab.envs.mdp as mdp
+    import isaaclab.sim as sim_utils
+    from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
+    from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+    from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
+    from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper, _euler_to_quat
+    from asyncDualPlayPPO.tasks.utils.action_push import (
+        decode_push_action, compute_push_waypoints,
+    )
+    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+        decode_push_action_relative,
+    )
+    from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
+    from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
+    from asyncDualPlayPPO.algorithms.rl.ppo.storage import RolloutStorage
+    import gymnasium as gym_mc
     import numpy as np
 
     # ── Environment ────────────────────────────────────────────────────────────
@@ -125,6 +142,69 @@ def main():
         rel_obs=args.rel_obs,
     )
 
+    # ── Visual markers ─────────────────────────────────────────────────────────
+    _goal_viz = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/GoalMarkers",
+            markers={
+                "tblock": UsdFileCfg(
+                    usd_path=os.path.join(
+                        os.path.dirname(os.path.dirname(__file__)), "assets/blocks/t_shape.usda"),
+                    scale=(2.0, 2.0, 0.01),
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
+                ),
+            },
+        )
+    )
+    _push_viz_start = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/PushStart",
+            markers={"sphere": sim_utils.SphereCfg(radius=0.015,
+                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)))},
+        )
+    )
+    _push_viz_end = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/PushEnd",
+            markers={"sphere": sim_utils.SphereCfg(radius=0.015,
+                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)))},
+        )
+    )
+    _push_viz_arrow = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/PushArrow",
+            markers={"cylinder": sim_utils.CylinderCfg(radius=0.005, height=0.30,
+                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.2, 0.4, 1.0)))},
+        )
+    )
+    _ident_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], dtype=torch.float32)
+
+    def _update_goal_marker(gx, gy, gyaw=0.0):
+        origins = env.env.scene.env_origins
+        pos = torch.tensor([[gx, gy, 0.001]], device=device) + origins
+        euler = torch.zeros(1, 3, device=device)
+        euler[0, 2] = gyaw
+        quat = _euler_to_quat(euler)
+        _goal_viz.visualize(translations=pos, orientations=quat)
+
+    def _update_push_markers(Xs, Ys, Xf, Yf, angle):
+        N = 1
+        origins = env.env.scene.env_origins
+        z_t = 0.002
+        ident = _ident_quat.to(device).expand(N, 4)
+        sp = torch.stack([Xs.float(), Ys.float(), torch.full((N,), z_t, device=device)], dim=-1) + origins
+        ep = torch.stack([Xf.float(), Yf.float(), torch.full((N,), z_t, device=device)], dim=-1) + origins
+        _push_viz_start.visualize(translations=sp, orientations=ident)
+        _push_viz_end.visualize(translations=ep, orientations=ident)
+        mid = torch.stack([(Xs + Xf) / 2, (Ys + Yf) / 2,
+                           torch.full((N,), z_t, device=device)], dim=-1) + origins
+        half = math.pi / 4
+        ch, sh = math.cos(half), math.sin(half)
+        aq = torch.stack([torch.full((N,), ch, device=device),
+                          -sh * torch.sin(angle), sh * torch.cos(angle),
+                          torch.zeros(N, device=device)], dim=-1)
+        _push_viz_arrow.visualize(translations=mid, orientations=aq)
+
     # ── cuRobo IK ─────────────────────────────────────────────────────────────
     _tensor_args = TensorDeviceType(device=torch.device(device), dtype=torch.float32)
     _ur5e_yaml = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
@@ -138,9 +218,38 @@ def main():
 
     _robot_scene = env.env.scene["robot"]
     _arm_jids, _ = _robot_scene.find_joints(_ARM_JOINT_NAMES, preserve_order=True)
-    _wrist3_ids, _ = _robot_scene.find_bodies("wrist_3_link")
     _lf_ids, _ = _robot_scene.find_bodies("left_inner_finger")
     _rf_ids, _ = _robot_scene.find_bodies("right_inner_finger")
+
+    def _tcp_pos_local():
+        lf_w = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
+        rf_w = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
+        return ((lf_w + rf_w) / 2.0 - env.env.scene.env_origins).clone()
+
+    # ── IK→physics calibration ────────────────────────────────────────────────
+    _WS_X = (-0.50, 0.50)
+    _WS_Y = (0.25, 0.70)
+    _WS_Z = (0.25, 0.55)
+    print("[Setup] Calibrating IK→physics error...")
+    _calib_pos = torch.zeros(1, 3, device=device)
+    _calib_pos[:, 1] = 0.60
+    _calib_pos[:, 2] = 0.25
+    _calib_cur = _robot_scene.data.joint_pos[:, _arm_jids]
+    _calib_res = ik_solver.solve_batch(
+        CuroboPose(position=_calib_pos, quaternion=_QUAT_TOOL_DOWN.expand(1, 4)),
+        seed_config=_calib_cur.unsqueeze(1),
+        retract_config=_calib_cur,
+    )
+    _calib_cmd = _calib_res.solution.view(1, 6)
+    _calib_act = torch.zeros(1, env.action_space.shape[0], device=device)
+    _calib_act[:, :6] = _calib_cmd
+    _calib_act[:, 6] = 1.0
+    for _ in range(30):
+        env.step(_calib_act)
+    _finger_after = _tcp_pos_local()
+    _TOTAL_IK_ERROR = (_finger_after - _calib_pos).clone()
+    print(f"[Setup] IK error = ({float(_TOTAL_IK_ERROR[0,0]):+.3f}, "
+          f"{float(_TOTAL_IK_ERROR[0,1]):+.3f}, {float(_TOTAL_IK_ERROR[0,2]):+.3f})")
 
     # ── Load checkpoint ────────────────────────────────────────────────────────
     num_cat_dims = 4
@@ -199,133 +308,210 @@ def main():
 
         print(f"\n[Test {test_idx}/{n_tests}] {cfg.name} #{cfg.test_id}")
 
-        obs = env.reset()
-        env.goal_pos_euler[0, 0] = cfg.main_goal_x
-        env.goal_pos_euler[0, 1] = cfg.main_goal_y
-        env.goal_pos_euler[0, 2] = 0.0
-        env.goal_pos_euler[0, 3:] = 0.0
-        env._update_goal_in_extras()
-
-        # Place object at start position
-        obj = env.env.scene["target_object"]
-        obj.write_root_pose_to_sim(torch.tensor([[
-            cfg.main_start.x, cfg.main_start.y, 0.02, 1.0, 0.0, 0.0, 0.0
-        ]], device=device))
-
-        env.env.sim.step()
-        obs_dict = env.env.observation_manager.compute()
-        obs = env._build_obs(obs_dict)
-        env._capture_prev_obj(obs)
-
-        hidden = [
-            torch.zeros(1, agent.actor_critic.lstm_hidden_size, device=device),
-            torch.zeros(1, agent.actor_critic.lstm_hidden_size, device=device),
-        ]
-
-        def _tcp_pos_local():
-            lfw = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
-            rfw = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
-            return ((lfw + rfw) / 2.0 - env.env.scene.env_origins).clone()
-
-        def _tcp_offset():
-            lfw = _robot_scene.data.body_pos_w[:, _lf_ids[0]]
-            rfw = _robot_scene.data.body_pos_w[:, _rf_ids[0]]
-            w3w = _robot_scene.data.body_pos_w[:, _wrist3_ids[0]]
-            return (lfw + rfw) / 2.0 - w3w
-
-        ee_pos_local = _tcp_pos_local()
-        ee_quat_w = _QUAT_TOOL_DOWN.expand(1, 4).clone()
-        prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
-
         test_success = False
         pushes_used = 0
+        stop_reason = "max_pushes"
+        pos_err = 0.0
+        rot_err = 0.0
+        retry_count = 0
+        MAX_RETRIES = 3
 
-        for push_i in range(args.max_pushes):
-            with torch.no_grad():
-                actions, _, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
-                    obs, None, (hidden[0], hidden[1]),
-                )
-                if new_h is not None:
-                    hidden[0] = new_h[0]
-                    hidden[1] = new_h[1]
+        for retry in range(MAX_RETRIES):
+            retry_count = retry + 1
 
-            if args.rel_act:
-                obj_x = obs[0, env.robot_dim]
-                obj_y = obs[0, env.robot_dim + 1]
-                obj_yaw = obs[0, env.robot_dim + 5]
-                Xs, Ys, length, theta = decode_push_action_relative(
-                    actions,
-                    torch.stack([obj_x, obj_y]).unsqueeze(0),
-                    obj_yaw.unsqueeze(0),
-                    num_bins=num_bins,
-                )
-            else:
-                Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
+            obs = env.reset()
+            env.goal_pos_euler[0, 0] = cfg.main_goal_x
+            env.goal_pos_euler[0, 1] = cfg.main_goal_y
+            env.goal_pos_euler[0, 2] = 0.0
+            env.goal_pos_euler[0, 3:5] = 0.0
+            env.goal_pos_euler[0, 5] = cfg.main_goal_yaw
+            env._update_goal_in_extras()
+            _update_goal_marker(cfg.main_goal_x, cfg.main_goal_y, cfg.main_goal_yaw)
 
-            waypoints = compute_push_waypoints(
-                Xs=Xs, Ys=Ys, length=length, theta=theta,
-                current_ee_pos=ee_pos_local,
-                current_ee_quat=ee_quat_w, device=device,
-            )
+            obj = env.env.scene["target_object"]
+            obj.write_root_pose_to_sim(torch.tensor([[
+                cfg.main_start.x, cfg.main_start.y, 0.02, 1.0, 0.0, 0.0, 0.0
+            ]], device=device))
 
-            terminated = torch.zeros(1, dtype=torch.bool, device=device)
-            for wp_pos, wp_quat, _wp_grip in waypoints:
-                tcp_offs = _tcp_offset()
-                ik_target = wp_pos - tcp_offs
-                result = ik_solver.solve_batch(
-                    CuroboPose(position=ik_target, quaternion=wp_quat),
-                    seed_config=prev_joint_cmd.unsqueeze(1),
-                    retract_config=prev_joint_cmd,
-                )
-                ik_ok = result.success.squeeze(-1)
-                cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
-                solved = result.solution.view(1, 6)
-                raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, cur_joints)
-                prev_joint_cmd = raw_cmd.detach().clone()
+            env.env.sim.step()
+            obs = env._get_push_obs()
+            env._capture_prev_obj(obs)
 
-                env_full = torch.zeros(1, env.action_space.shape[0], device=device)
-                env_full[:, :6] = raw_cmd
-                env_full[:, 6] = -1.0  # always closed
-                obs, _, terminated, _, _ = env.step(env_full)
+            _init_obj_pos = obs[0, env.robot_dim:env.robot_dim + 3]
+            _init_obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6]
+            _init_goal_pos = obs[0, env.robot_dim + env.obj_state_dim:env.robot_dim + env.obj_state_dim + 3]
+            _init_goal_euler = obs[0, env.robot_dim + env.obj_state_dim + 3:env.robot_dim + env.obj_state_dim + 6]
+            _init_pos_err = (_init_obj_pos - _init_goal_pos).norm().item()
+            _init_rot_err = _rot_distance_rad(_init_obj_euler.unsqueeze(0), _init_goal_euler.unsqueeze(0)).item()
+            _rtag = f"[R{retry_count}] " if retry > 0 else ""
+            print(f"  {_rtag}[{cfg.test_type}] goal=({cfg.main_goal_x:+.3f},{cfg.main_goal_y:+.3f}) yaw={cfg.main_goal_yaw:+.3f}  "
+                  f"start=({cfg.main_start.x:+.3f},{cfg.main_start.y:+.3f})  "
+                  f"init_pos_err={_init_pos_err:.4f}m  init_rot_err={_init_rot_err:.3f}rad")
 
-            env.push_count[0] += 1
-            pushes_used = int(env.push_count[0].item())
-
-            cur_obj_pos = obs[0, env.robot_dim:env.robot_dim + 3]
-            cur_obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6]
-            goal_pos = obs[0, env.robot_dim + env.obj_state_dim:env.robot_dim + env.obj_state_dim + 3]
-            goal_euler = obs[0, env.robot_dim + env.obj_state_dim + 3:env.robot_dim + env.obj_state_dim + 6]
-
-            pos_err = (cur_obj_pos - goal_pos).norm().item()
-            rot_err = _rot_distance_rad(cur_obj_euler.unsqueeze(0), goal_euler.unsqueeze(0)).item()
-
-            if pos_err < 0.05 and rot_err < args.rot_threshold:
-                test_success = True
-                break
-
-            if terminated[0]:
-                break
+            hidden = [
+                torch.zeros(1, agent.actor_critic.lstm_hidden_size, device=device),
+                torch.zeros(1, agent.actor_critic.lstm_hidden_size, device=device),
+            ]
 
             ee_pos_local = _tcp_pos_local()
             ee_quat_w = _QUAT_TOOL_DOWN.expand(1, 4).clone()
-            env._capture_prev_obj(obs)
+            prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
+
+            test_success = False
+            pushes_used = 0
+            stop_reason = "max_pushes"
+            pos_err = 0.0
+            rot_err = 0.0
+
+            for push_i in range(args.max_pushes):
+                with torch.no_grad():
+                    actions, _, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
+                        obs, None, (hidden[0], hidden[1]),
+                    )
+                    if new_h is not None:
+                        hidden[0] = new_h[0]
+                        hidden[1] = new_h[1]
+
+                if args.rel_act:
+                    obj_x = obs[0, env.robot_dim]
+                    obj_y = obs[0, env.robot_dim + 1]
+                    obj_yaw = obs[0, env.robot_dim + 5]
+                    Xs, Ys, length, theta = decode_push_action_relative(
+                        actions,
+                        torch.stack([obj_x, obj_y]).unsqueeze(0),
+                        obj_yaw.unsqueeze(0),
+                        num_bins=num_bins,
+                    )
+                else:
+                    Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
+
+                Xf = Xs + length * torch.cos(theta)
+                Yf = Ys + length * torch.sin(theta)
+
+                waypoints = compute_push_waypoints(
+                    Xs=Xs, Ys=Ys, length=length, theta=theta,
+                    current_ee_pos=ee_pos_local,
+                    current_ee_quat=ee_quat_w, device=device,
+                )
+
+                _update_push_markers(Xs, Ys, Xf, Yf, theta)
+
+                terminated = torch.zeros(1, dtype=torch.bool, device=device)
+                for wp_idx, (wp_pos, wp_quat, _wp_grip) in enumerate(waypoints):
+                    ik_target = wp_pos - _TOTAL_IK_ERROR
+                    ik_target[:, 0].clamp_(_WS_X[0], _WS_X[1])
+                    ik_target[:, 1].clamp_(_WS_Y[0], _WS_Y[1])
+                    ik_target[:, 2].clamp_(_WS_Z[0], _WS_Z[1])
+                    result = ik_solver.solve_batch(
+                        CuroboPose(position=ik_target, quaternion=wp_quat),
+                        seed_config=prev_joint_cmd.unsqueeze(1),
+                        retract_config=prev_joint_cmd,
+                    )
+                    ik_ok = result.success.squeeze(-1)
+                    cur_joints = _robot_scene.data.joint_pos[:, _arm_jids]
+                    solved = result.solution.view(1, 6)
+                    elbow_bad = solved[:, 2] < 0.0
+                    if elbow_bad.any():
+                        ik_ok[elbow_bad] = False
+                    raw_cmd = torch.where(ik_ok.unsqueeze(-1), solved, prev_joint_cmd)
+                    if terminated.any():
+                        raw_cmd[terminated] = cur_joints[terminated]
+                    prev_joint_cmd = raw_cmd.detach().clone()
+
+                    env_full = torch.zeros(1, env.action_space.shape[0], device=device)
+                    env_full[:, :6] = raw_cmd
+                    env_full[:, 6] = -1.0  # always closed
+                    obs, _, step_terminated, _, _ = env.step(env_full)
+                    terminated |= step_terminated
+
+                    _tcp_z_check = _tcp_pos_local()[:, 2]
+                    terminated |= (_tcp_z_check < -0.01)
+
+                env.push_count[0] += 1
+                pushes_used = int(env.push_count[0].item())
+
+                ee_pos_local = _tcp_pos_local()
+                ee_quat_w = _QUAT_TOOL_DOWN.expand(1, 4).clone()
+                prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
+                obs = env._get_push_obs()
+
+                cur_obj_pos = obs[0, env.robot_dim:env.robot_dim + 3]
+                cur_obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6]
+                goal_pos = obs[0, env.robot_dim + env.obj_state_dim:env.robot_dim + env.obj_state_dim + 3]
+                goal_euler = obs[0, env.robot_dim + env.obj_state_dim + 3:env.robot_dim + env.obj_state_dim + 6]
+
+                pos_err = (cur_obj_pos - goal_pos).norm().item()
+                rot_err = _rot_distance_rad(cur_obj_euler.unsqueeze(0), goal_euler.unsqueeze(0)).item()
+
+                obj_z = float(obs[0, env.robot_dim + 2])
+                tipped = (abs(float(cur_obj_euler[0])) > 0.3 or abs(float(cur_obj_euler[1])) > 0.3)
+                oob_2d = float((cur_obj_pos[:2] - goal_pos[:2]).norm())
+
+                r_dec = float(torch.sqrt((Xs - obj_x.detach())**2 + (Ys - obj_y.detach())**2).item()) if args.rel_act else float(Xs.item())
+                _cov = _area_coverage(pos_err, rot_err)
+                print(f"  push {push_i:2d}: bins=({', '.join(f'{int(actions[0,i].item()):2d}' for i in range(4))})  "
+                      f"r={r_dec:.3f} len={float(length.item()):.3f} θ={math.degrees(float(theta.item())):.0f}°  "
+                      f"pos={pos_err:.4f}m rot={rot_err:.3f}rad z={obj_z:.3f} cov={_cov:.1f}%")
+
+                if terminated[0]:
+                    stop_reason = "physics"
+                    break
+
+                if pos_err < 0.05 and rot_err < args.rot_threshold:
+                    test_success = True
+                    stop_reason = "success"
+                    break
+
+                if obj_z > 0.10:
+                    stop_reason = "launched"
+                    break
+                if tipped:
+                    stop_reason = "tipped"
+                    break
+                if oob_2d > 0.50:
+                    stop_reason = "oob"
+                    break
+
+                env.capture_pre_push(obs)
+
+            if test_success:
+                break
+            if stop_reason in ("max_pushes", "physics"):
+                break
+            if retry < MAX_RETRIES - 1:
+                pass
+            else:
+                break
+
+        if retry_count > 1:
+            stop_reason += f"_r{retry_count}"
 
         result = ValidationResult(
             test_index=test_idx,
             test_name=f"{cfg.name} #{cfg.test_id}",
+            test_type=cfg.test_type,
             success=test_success,
             pushes_used=pushes_used,
             final_pos_error=pos_err if not test_success else 0.0,
             final_rot_error=rot_err if not test_success else 0.0,
+            area_coverage=_area_coverage(pos_err if not test_success else 0.0, rot_err if not test_success else 0.0),
         )
         results.append(result)
         status = "PASS" if test_success else "FAIL"
-        print(f"  {status} | pushes: {pushes_used} | pos_err: {pos_err:.4f} | rot_err: {rot_err:.4f}")
+        print(f"  {status} | pushes: {pushes_used} | reason: {stop_reason} | "
+              f"pos_err: {pos_err:.4f} | rot_err: {rot_err:.4f} | cov: {_area_coverage(pos_err, rot_err):.1f}%")
 
     # ── Summary ───────────────────────────────────────────────────────────────
     n_success = sum(1 for r in results if r.success)
     sr = n_success / len(results) * 100 if results else 0
     avg_pushes = np.mean([r.pushes_used for r in results]) if results else 0
+
+    pos_only = [r for r in results if r.test_type == "pos_only"]
+    pos_rot  = [r for r in results if r.test_type == "pos_rot"]
+    sr_po = sum(1 for r in pos_only if r.success) / len(pos_only) * 100 if pos_only else 0
+    sr_pr = sum(1 for r in pos_rot if r.success) / len(pos_rot) * 100 if pos_rot else 0
+
+    avg_cov = np.mean([r.area_coverage for r in results]) if results else 0
 
     print(f"\n{'='*60}")
     print(f"VALIDATION RESULTS")
@@ -333,14 +519,29 @@ def main():
     print(f"  Total tests:   {len(results)}")
     print(f"  Successes:     {n_success}")
     print(f"  Success rate:  {sr:.1f}%")
+    print(f"  Pos-only SR:   {sr_po:.1f}% ({len(pos_only)} tests)")
+    print(f"  Pos+rot SR:    {sr_pr:.1f}% ({len(pos_rot)} tests)")
     print(f"  Avg pushes:    {avg_pushes:.1f}")
+    print(f"  Avg coverage:  {avg_cov:.1f}%")
     print(f"{'='*60}")
 
     for r in results:
         status = "PASS" if r.success else "FAIL"
         print(f"  {status:5s} | Test {r.test_index:2d} | {r.test_name:30s} | pushes={r.pushes_used:2d}")
 
+    if args.csv:
+        import csv as _csv
+        with open(args.csv, "w", newline="") as _f:
+            writer = _csv.writer(_f)
+            writer.writerow(["test_index", "test_name", "test_type", "success", "pushes_used",
+                             "pos_err", "rot_err", "area_coverage"])
+            for r in results:
+                writer.writerow([r.test_index, r.test_name, r.test_type, int(r.success),
+                                 r.pushes_used, r.final_pos_error, r.final_rot_error, r.area_coverage])
+        print(f"\n[CSV] Results saved to {args.csv}")
+
     simulation_app.close()
+    sys.exit(0)
 
 
 if __name__ == "__main__":
