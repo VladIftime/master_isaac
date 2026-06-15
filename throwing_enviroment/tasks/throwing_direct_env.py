@@ -264,10 +264,14 @@ class ThrowingDirectEnv(DirectRLEnv):
         self._last_milk_pos = torch.nan_to_num(milk_pos - origins, nan=0.0).clone()
         self._last_target_pos = torch.nan_to_num(target_pos - origins, nan=0.0).clone()
 
-        reward = -dist
+        alpha = 0.9
+        reward = (
+            alpha * torch.exp(-(dist ** 2) / 0.01)
+            + (1.0 - alpha) * torch.exp(-(dist ** 2) / 0.05)
+        )
         reward[dist < self.cfg.success_threshold] = 1.0
-        reward[self._dropped] = -10.0
-        reward[nan_mask] = -10.0
+        reward[self._dropped] = 0.0
+        reward[nan_mask] = 0.0
 
         self._episode_count += self.num_envs
         if self._episode_count % (self.num_envs * 10) == 0:

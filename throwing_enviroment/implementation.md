@@ -949,32 +949,80 @@ arc and landing distance.
 
 ### Reward Function
 
-Negative distance reward matching the reference paper (Kasaei & Kasaei,
-ICRA 2023). The original Gazebo-style exponential rewards (`0.9*exp(-d²/0.01)`)
-had near-zero gradient at typical operating distances (0.8–1.0 m), causing
-the agent to get stuck. The paper's `-distance` provides constant gradient
-of 1.0/m everywhere.
+Gazebo-style dual-Gaussian reward, matching the actual implementation in
+`gazebo_impl/RL_tossing_object_with_obstacle_avoidance_v3.py` (line 601-606):
 
 ```python
-reward = -distance
-if distance < 0.15:
+reward = 0.9 * exp(-d² / 0.01) + 0.1 * exp(-d² / 0.05)
+if d < 0.15:
     reward = 1.0   # success
 if dropped:
-    reward = -10.0  # drop penalty
+    reward = 0.0   # drop penalty
 ```
 
-| Distance (m) | Reward | Gradient |
-|--------------|--------|----------|
-| 0.0 | 1.0 (success) | — |
-| 0.15 | 1.0 (success) | — |
-| 0.30 | -0.30 | 1.0/m |
-| 0.50 | -0.50 | 1.0/m |
-| 1.00 | -1.00 | 1.0/m |
-| dropped | -10.0 | — |
+| Distance (m) | Reward |
+|--------------|--------|
+| 0.0 | 1.0 (success) |
+| 0.10 | ~0.37 |
+| 0.15 | 1.0 (success) |
+| 0.30 | ~0.0001 |
+| 0.50 | ~0.0 |
+| dropped | 0.0 |
 
 Dropped drinks are despawned during the episode (teleported 10 m below
 scene) and restored to their last valid position before observation
 computation to avoid poisoning the replay buffer with extreme outliers.
+
+#### Reward Investigation History
+
+The ICRA 2023 paper (Kasaei & Kasaei) **claims** the reward is `r = -dis(o,g)`
+(negative distance) with `-10` for obstacle collision and `+1` for success.
+However, inspection of the actual Gazebo source code
+(`RL_tossing_object_with_obstacle_avoidance_v3.py:601-606`) reveals the paper
+**misrepresents its own reward**: the code uses the dual-Gaussian formula above,
+not negative distance. The Gaussians achieved 94% success in Gazebo with SAC.
+
+An initial attempt to switch to `-distance` (matching the paper's claim) was
+reverted after discovering this discrepancy. The real blockers preventing
+learning were:
+
+1. **Action dead zones** (>50% of action range for `releasing_time` and
+   `duration` mapped to the same clamped value) — now fixed with proper
+   linear remapping in `_pre_physics_step`
+2. **Replay buffer too small** (100K vs Gazebo's 1M default from
+   stable_baselines3) — now fixed to 1M
+3. **Entropy collapse** (`target_entropy: null` → α crashed to zero) — now
+   fixed with `target_entropy: -2.0`
+
+#### If Training Still Does Not Converge
+
+If the Gaussian reward + fixes above still fail to produce learning, try
+these alternatives in order:
+
+1. **Switch to `-distance` reward**: Replace the Gaussians with the paper's
+   claimed formula (`reward = -dist`, success=1.0, drop=-10.0). This provides
+   constant gradient of 1.0/m at all distances — much stronger signal than
+   the Gaussians at d>0.3m. The code change is in `_get_rewards()` in
+   `throwing_direct_env.py`.
+
+2. **Widen the Gaussians**: Change σ² from `0.01/0.05` to `0.1/0.5`. This
+   extends meaningful gradient to ~1m instead of ~0.2m, while keeping the
+   Gaussian shape the paper's SAC was tuned for.
+
+3. **Add a linear term**: `+ 0.5 * max(0, 1 - d)` provides gradient of 0.5/m
+   out to 1m, supplementing the Gaussians where they go flat.
+
+4. **Widen target randomization**: Gazebo uses `x: [-1.2, 1.2]`,
+   `y: [0.8, 1.5]` — much wider than the current `x: [0.0, 0.5]`,
+   `y: [1.0, 1.6]`. Wider ranges force more diverse exploration.
+
+5. **Use DDPG instead of SAC**: The Gazebo code also tested DDPG (85%
+   success). For a 1-step bandit problem, DDPG's deterministic policy
+   gradient may converge faster than SAC's stochastic entropy-regularized
+   approach.
+
+6. **Curriculum learning**: Start with targets close to the robot (y~0.8m),
+   then gradually increase range as the agent improves.
 
 ### Throw Primitive Execution (`tasks/throw_primitive.py`)
 

@@ -259,7 +259,17 @@ def _run_fast_validation():
     import gymnasium as gym
     from skrl.envs.wrappers.torch import wrap_env
 
-    dummy_obs_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(8,), dtype=np.float32)
+    model_obs_dim = cfg.observation_space
+    ckpt = torch.load(args_cli.checkpoint, map_location=device, weights_only=False)
+    if isinstance(ckpt, dict) and "policy" in ckpt:
+        policy_sd = ckpt["policy"]
+        if isinstance(policy_sd, dict) and "net_container.0.weight" in policy_sd:
+            model_obs_dim = policy_sd["net_container.0.weight"].shape[1]
+    print(f"[INFO] Model obs dim: {model_obs_dim}, Env obs dim: {cfg.observation_space}")
+
+    _OBS_8D_FROM_10D = [0, 1, 2, 4, 5, 7, 8, 9]
+
+    dummy_obs_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(model_obs_dim,), dtype=np.float32)
     dummy_act_space = gym.spaces.Box(
         low=np.array([-1.0, -1.0, 0.05, 0.1], dtype=np.float32),
         high=np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
@@ -273,8 +283,8 @@ def _run_fast_validation():
             self.num_envs = 1
             self.num_agents = 1
             self.device = device
-        def reset(self): return torch.zeros(1, 8, device=device), {}
-        def step(self, a): return torch.zeros(1, 8, device=device), torch.zeros(1), torch.zeros(1, dtype=torch.bool), torch.zeros(1, dtype=torch.bool), {}
+        def reset(self): return torch.zeros(1, model_obs_dim, device=device), {}
+        def step(self, a): return torch.zeros(1, model_obs_dim, device=device), torch.zeros(1), torch.zeros(1, dtype=torch.bool), torch.zeros(1, dtype=torch.bool), {}
         def close(self): pass
         def render(self): pass
 
@@ -308,6 +318,8 @@ def _run_fast_validation():
             )
 
             obs = env._get_observations()["policy"]
+            if model_obs_dim < obs.shape[-1]:
+                obs = obs[:, _OBS_8D_FROM_10D]
 
             with torch.no_grad():
                 act_out = agent.policy.act({"states": obs}, role="policy")

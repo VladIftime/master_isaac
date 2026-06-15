@@ -168,8 +168,12 @@ class ThrowingPrimitiveEnv(gym.Env):
         return obs
 
     def _compute_reward(self, distances: torch.Tensor) -> torch.Tensor:
-        """Paper reward: -distance, +1 for success, -10 for drop."""
-        reward = -distances
+        """Gazebo-style Gaussian reward (matches RL_tossing v3)."""
+        alpha = 0.9
+        reward = (
+            alpha * torch.exp(-(distances ** 2) / 0.01)
+            + (1.0 - alpha) * torch.exp(-(distances ** 2) / 0.05)
+        )
         reward[distances < 0.15] = 1.0
         return reward
 
