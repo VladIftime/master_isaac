@@ -910,55 +910,71 @@ The agent outputs 4 continuous parameters per throw:
 | 2 | `releasing_time` | [0.05, 1.0] | Fraction of throw duration at which gripper opens |
 | 3 | `duration` | [0.1, 1.0] | Total throw trajectory time in seconds |
 
-Action mapping (`map_action_to_params`):
+Action mapping (DirectRLEnv — `_pre_physics_step`):
 ```python
-initial_jv = (0.5 * (1 + action[0]) * 2.4) + 0.001   # right arm
-final_jv   = (0.5 * (1 + action[1]) * 2.4) + 0.001   # right arm
-releasing_time = action[2]                              # direct
-duration       = action[3]                              # direct
+# All 4 actions remap [-1,1] to valid physical ranges (no dead zones)
+initial_jv     = (0.5 * (1 + action[0]) * 2.4) + 0.001   # → [0.001, 2.401] rad
+final_jv       = (0.5 * (1 + action[1]) * 2.4) + 0.001   # → [0.001, 2.401] rad
+releasing_time = 0.05 + 0.95 * (action[2] + 1) / 2        # → [0.05, 1.0]
+duration       = 0.1  + 0.9  * (action[3] + 1) / 2        # → [0.1, 1.0]
 ```
 
 For the left arm, the joint values are negated.
 
-### Observation Space (8D)
+**Dead-zone fix**: The original implementation passed `releasing_time` and
+`duration` through raw from SAC's [-1,1] output and then clamped. This
+created dead zones where >50% of the action range mapped to the same
+clamped value (e.g., all actions in [-1.0, 0.05) → 0.05), giving the
+critic zero gradient over half the action space. The linear remap
+eliminates this entirely.
+
+### Observation Space (10D)
 
 | Index | Dimension | Description |
 |-------|-----------|-------------|
 | 0 | robot_indicator | +1.0 (right arm) or -1.0 (left arm) |
 | 1 | basket_x | Target X position / 3.0 (normalized) |
 | 2 | basket_y | Target Y position / 3.0 (normalized) |
-| 3 | obj_x | Drink X position / 3.0 (normalized) |
-| 4 | obj_y | Drink Y position / 3.0 (normalized) |
-| 5 | dist | 3D distance (object → target) / 3.0 |
-| 6 | dist_x | |X distance| / 3.0 |
-| 7 | dist_y | |Y distance| / 3.0 |
+| 3 | basket_z | Target Z position / 3.0 (normalized) |
+| 4 | obj_x | Drink X position / 3.0 (normalized) |
+| 5 | obj_y | Drink Y position / 3.0 (normalized) |
+| 6 | obj_z | Drink Z position / 3.0 (normalized) |
+| 7 | dist | 3D distance (object → target) / 3.0 |
+| 8 | dist_x | |X distance| / 3.0 |
+| 9 | dist_y | |Y distance| / 3.0 |
 
-All positions are in environment-local coordinates.
+All positions are in environment-local coordinates. Z-axis observations
+are critical for ballistic throwing — release height determines trajectory
+arc and landing distance.
 
 ### Reward Function
 
-Widened exponential + linear distance reward (original Gazebo sigmas 0.01/0.05
-were too narrow, producing near-zero reward for throws >30cm off):
+Negative distance reward matching the reference paper (Kasaei & Kasaei,
+ICRA 2023). The original Gazebo-style exponential rewards (`0.9*exp(-d²/0.01)`)
+had near-zero gradient at typical operating distances (0.8–1.0 m), causing
+the agent to get stuck. The paper's `-distance` provides constant gradient
+of 1.0/m everywhere.
 
 ```python
-reward = 0.9 * exp(-d² / 0.1) + 0.1 * exp(-d² / 0.5) + 0.5 * max(0, 1 - d)
-if d < 0.15:
-    reward = 2.0  # success override
+reward = -distance
+if distance < 0.15:
+    reward = 1.0   # success
+if dropped:
+    reward = -10.0  # drop penalty
 ```
 
-| Distance (m) | Reward |
-|--------------|--------|
-| 0.0 | 2.0 (success) |
-| 0.15 | 2.0 (success) |
-| 0.30 | ~0.80 |
-| 0.50 | ~0.39 |
-| 1.00 | ~0.01 |
+| Distance (m) | Reward | Gradient |
+|--------------|--------|----------|
+| 0.0 | 1.0 (success) | — |
+| 0.15 | 1.0 (success) | — |
+| 0.30 | -0.30 | 1.0/m |
+| 0.50 | -0.50 | 1.0/m |
+| 1.00 | -1.00 | 1.0/m |
+| dropped | -10.0 | — |
 
-If the drink is dropped before release (detected by falling below
-`DRINK_BELOW_TABLE_Z = 0.45` in env-local Z), a penalty distance of
-`DROP_PENALTY_DISTANCE = 10.0` m is assigned. Dropped drinks are despawned
-during the episode and restored to their last valid position before
-observation computation to avoid poisoning the replay buffer.
+Dropped drinks are despawned during the episode (teleported 10 m below
+scene) and restored to their last valid position before observation
+computation to avoid poisoning the replay buffer with extreme outliers.
 
 ### Throw Primitive Execution (`tasks/throw_primitive.py`)
 
@@ -1128,7 +1144,7 @@ per-env variations in `duration` and `releasing_time`:
 
 | Hyperparameter | Value |
 |----------------|-------|
-| Replay buffer | RandomMemory, size 100,000 |
+| Replay buffer | RandomMemory, size 1,000,000 |
 | Batch size | 256 |
 | Discount (γ) | 0.99 |
 | Polyak (τ) | 0.005 |

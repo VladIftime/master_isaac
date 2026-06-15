@@ -54,7 +54,7 @@ models:
 
 memory:
   class: RandomMemory
-  memory_size: 100000
+  memory_size: 1000000
 
 agent:
   class: SAC

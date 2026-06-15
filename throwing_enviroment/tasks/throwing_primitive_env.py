@@ -168,15 +168,9 @@ class ThrowingPrimitiveEnv(gym.Env):
         return obs
 
     def _compute_reward(self, distances: torch.Tensor) -> torch.Tensor:
-        """Widened exponential + linear distance reward."""
-        alpha = 0.9
-        reward = (
-            alpha * torch.exp(-(distances ** 2) / 0.1)
-            + (1.0 - alpha) * torch.exp(-(distances ** 2) / 0.5)
-            + 0.5 * torch.clamp(1.0 - distances, min=0.0)
-        )
-        success_mask = distances < 0.15
-        reward[success_mask] = 2.0
+        """Paper reward: -distance, +1 for success, -10 for drop."""
+        reward = -distances
+        reward[distances < 0.15] = 1.0
         return reward
 
     def step(self, action):

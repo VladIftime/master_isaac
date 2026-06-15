@@ -193,8 +193,8 @@ class ThrowingDirectEnvCfg(DirectRLEnvCfg):
     decimation: int = TOTAL_DECIMATION
     episode_length_s: float = 4.0
     action_space: int = 4
-    observation_space: int = 8
-    state_space: int = 8
+    observation_space: int = 10
+    state_space: int = 10
 
     scene: ThrowingDirectSceneCfg = ThrowingDirectSceneCfg(num_envs=2048, env_spacing=3.0)
 

@@ -113,11 +113,15 @@ class ThrowingDirectEnv(DirectRLEnv):
         actions = actions.clamp(-1.0, 1.0)
         actions = torch.nan_to_num(actions, nan=0.0)
 
-        params = map_action_to_params(actions, side=self._side)
+        remapped = actions.clone()
+        remapped[:, 2] = 0.05 + 0.95 * (actions[:, 2] + 1.0) / 2.0
+        remapped[:, 3] = 0.1 + 0.9 * (actions[:, 3] + 1.0) / 2.0
+
+        params = map_action_to_params(remapped, side=self._side)
         initial_jv = params[:, 0]
         final_jv = params[:, 1]
-        releasing_time = params[:, 2].clamp(0.05, 1.0)
-        duration = params[:, 3].clamp(0.1, 1.0)
+        releasing_time = params[:, 2]
+        duration = params[:, 3]
 
         boundaries = compute_phase_boundaries(duration, releasing_time, self.physics_dt)
         self._throw_steps = boundaries["throw_steps"]
@@ -233,8 +237,10 @@ class ThrowingDirectEnv(DirectRLEnv):
             robot_ind,
             target_pos[:, 0:1] / OBS_MAX_NORM,
             target_pos[:, 1:2] / OBS_MAX_NORM,
+            target_pos[:, 2:3] / OBS_MAX_NORM,
             milk_pos[:, 0:1] / OBS_MAX_NORM,
             milk_pos[:, 1:2] / OBS_MAX_NORM,
+            milk_pos[:, 2:3] / OBS_MAX_NORM,
             dist / OBS_MAX_NORM,
             dist_x / OBS_MAX_NORM,
             dist_y / OBS_MAX_NORM,
@@ -258,15 +264,10 @@ class ThrowingDirectEnv(DirectRLEnv):
         self._last_milk_pos = torch.nan_to_num(milk_pos - origins, nan=0.0).clone()
         self._last_target_pos = torch.nan_to_num(target_pos - origins, nan=0.0).clone()
 
-        alpha = 0.9
-        reward = (
-            alpha * torch.exp(-(dist ** 2) / 0.1)
-            + (1.0 - alpha) * torch.exp(-(dist ** 2) / 0.5)
-            + 0.5 * torch.clamp(1.0 - dist, min=0.0)
-        )
-        reward[dist < self.cfg.success_threshold] = 2.0
-        reward[self._dropped] = 0.0
-        reward[nan_mask] = 0.0
+        reward = -dist
+        reward[dist < self.cfg.success_threshold] = 1.0
+        reward[self._dropped] = -10.0
+        reward[nan_mask] = -10.0
 
         self._episode_count += self.num_envs
         if self._episode_count % (self.num_envs * 10) == 0:
