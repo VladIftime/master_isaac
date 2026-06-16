@@ -1213,7 +1213,7 @@ per-env variations in `duration` and `releasing_time`:
 | Observation preprocessor | None (manual /3.0 normalization) |
 | Total timesteps | `max_iterations × num_envs` (=100K × 2048 = 204.8M) |
 | Trainer | SB3 SAC |
-| Checkpoint format | `.zip` (SB3), every 1000 env.steps |
+| Checkpoint format | `.zip` (SB3), every 1000 env.steps; `latest_checkpoint.zip` always overwritten |
 
 ### SB3 VecEnv Wrapper (`tasks/sb3_vec_env.py`)
 
@@ -1306,8 +1306,19 @@ cd throwing_enviroment && sbatch hpc/train_sac_direct.slurm
 ```
 
 Logs are saved to `logs/sac/throwing_primitive/<timestamp>_sac_sb3/` with
-TensorBoard events and SB3 checkpoints every 1000 env.steps in `checkpoints/`.
-Checkpoints are `.zip` files named `agent_<step>_steps.zip`.
+TensorBoard events and two kinds of SB3 checkpoints every 1000 iterations
+(`1000 × num_envs` timesteps):
+
+- **`latest_checkpoint.zip`** — overwritten at each checkpoint interval in the
+  run directory root. Always reflects the most recent model state. This is the
+  checkpoint used by the SLURM auto-resume logic.
+- **`checkpoints/agent_<step>_steps.zip`** — timestamped per-step checkpoints
+  kept for history/diagnostics.
+
+The `latest_checkpoint.zip` is saved by a custom `LatestCheckpointCallback`
+(`scripts/train_sac.py:57`) that tracks `self.num_timesteps` (SB3's cumulative
+timestep counter) rather than `n_calls`, ensuring correct save frequency
+regardless of vectorized env batching.
 
 ### TensorBoard Custom Metrics
 
@@ -1515,14 +1526,18 @@ sbatch hpc/train_sac_direct.slurm
 sbatch hpc/train_sac.slurm
 ```
 
-**Logs**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/checkpoints/agent_*_steps.zip`
-**Resume**: SIGUSR1 trap + `RESUME_CHAIN=1` auto-resumes from latest `.zip` checkpoint.
+**Logs**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/`
+**Checkpoint**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/latest_checkpoint.zip` (overwritten every 1000 iterations)
+**Resume**: SIGUSR1 trap + `RESUME_CHAIN=1` auto-resumes from `latest_checkpoint.zip`. The SLURM script
+scans `$LOG_DIR` for any `latest_checkpoint.zip` (defaulting to the most recently modified), converts
+the host path to a container path via `sed "s|^$PROJECT_ROOT|$CONTAINER_PROJECT|"`, and passes it as
+`--checkpoint` to `train_sac.py`.
 
 **Features**:
 - Apptainer container (`isaac-lab.sif`) with all dependencies
 - SIGUSR1 trap for automatic resubmission on time-limit
 - Local scratch (`$TMPDIR`) for fast I/O, synced to NFS on exit
-- Auto-resume from latest checkpoint via `RESUME_CHAIN=1`
+- Auto-resume from `latest_checkpoint.zip` via `RESUME_CHAIN=1` (no directory scanning or filename sorting needed)
 - Warp/matplotlib cache redirected to writable dirs
 - Isaac Sim kit data/cache/logs bound to project-local dirs
 

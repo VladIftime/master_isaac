@@ -66,20 +66,13 @@ trap cleanup EXIT
 
 RESUME_ARGS=""
 if [ "$RESUME_CHAIN" = "1" ] && [ -d "$LOG_DIR" ]; then
-    LATEST_DIR=$(ls -td "$LOG_DIR"/*_sac_sb3 2>/dev/null | head -1)
-    if [ -n "$LATEST_DIR" ] && [ -d "$LATEST_DIR" ]; then
-        LATEST_CKPT=$(find "$LATEST_DIR" -name "agent_*_steps.zip" 2>/dev/null \
-            | sort -t_ -k2 -n | tail -1)
-        if [ -z "$LATEST_CKPT" ]; then
-            LATEST_CKPT=$(find "$LATEST_DIR" -name "agent_final.zip" 2>/dev/null \
-                | sort | tail -1)
-        fi
-        if [ -n "$LATEST_CKPT" ]; then
-            echo "[INFO] Resuming from checkpoint: $LATEST_CKPT"
-            RESUME_ARGS="--checkpoint $LATEST_CKPT"
-            rsync -a --no-perms "$LOG_DIR/" "$LOCAL_LOGS/"
-        fi
+    LATEST_CKPT_HOST=$(find "$LOG_DIR" -name "latest_checkpoint.zip" -type f 2>/dev/null | sort | tail -1)
+    if [ -n "$LATEST_CKPT_HOST" ]; then
+        LATEST_CKPT=$(echo "$LATEST_CKPT_HOST" | sed "s|^$PROJECT_ROOT|$CONTAINER_PROJECT|")
+        echo "[INFO] Resuming from checkpoint: $LATEST_CKPT"
+        RESUME_ARGS="--checkpoint $LATEST_CKPT"
     fi
+    rsync -a --no-perms "$LOG_DIR/" "$LOCAL_LOGS/"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════

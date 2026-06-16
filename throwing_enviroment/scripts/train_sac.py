@@ -51,6 +51,23 @@ from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg
 from tasks.throwing_direct_env import ThrowingDirectEnv
 from tasks.sb3_vec_env import DirectRLVecEnv
 
+from stable_baselines3 import SAC
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+
+
+class LatestCheckpointCallback(BaseCallback):
+    def __init__(self, save_freq, save_path, verbose=0):
+        super().__init__(verbose)
+        self.save_freq = save_freq
+        self.save_path = save_path
+        self._last_save = -save_freq
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps - self._last_save >= self.save_freq:
+            self.model.save(self.save_path)
+            self._last_save = self.num_timesteps
+        return True
+
 
 def main():
     cfg = ThrowingDirectEnvCfg()
@@ -75,9 +92,6 @@ def main():
     log_dir = os.path.join(log_root, datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_sac_sb3")
     os.makedirs(log_dir, exist_ok=True)
     print(f"[INFO] Logging to: {log_dir}")
-
-    from stable_baselines3 import SAC
-    from stable_baselines3.common.callbacks import CheckpointCallback
 
     if args_cli.checkpoint:
         print(f"[INFO] Loading checkpoint: {args_cli.checkpoint}")
@@ -117,6 +131,11 @@ def main():
         save_replay_buffer=False,
     )
 
+    latest_ckpt_callback = LatestCheckpointCallback(
+        save_freq=ckpt_interval,
+        save_path=os.path.join(log_dir, "latest_checkpoint"),
+    )
+
     print(f"[INFO] Total timesteps: {total_timesteps} ({args_cli.max_iterations} iterations × {cfg.scene.num_envs} envs)")
     print(f"[INFO] Checkpoint every: {ckpt_interval} timesteps ({ckpt_interval // cfg.scene.num_envs} iterations)")
 
@@ -124,7 +143,7 @@ def main():
         total_timesteps=total_timesteps,
         log_interval=10,
         progress_bar=True,
-        callback=checkpoint_callback,
+        callback=[checkpoint_callback, latest_ckpt_callback],
     )
 
     ckpt_path = os.path.join(ckpt_dir, "agent_final")
