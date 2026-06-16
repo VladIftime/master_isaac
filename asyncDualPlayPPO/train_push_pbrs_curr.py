@@ -888,7 +888,7 @@ def main():
         if curriculum_active:
             ramp_progress = min(1.0, (iteration - curriculum_ramp_start) / CURRICULUM_RAMP_ITERS)
             w_rot = PBRS_W_ROT * ramp_progress
-            pos_term_threshold = 0.05 * (1.0 - ramp_progress)
+            pos_term_threshold = 0.05 - 0.03 * ramp_progress
         else:
             w_rot = 0.0
             pos_term_threshold = 0.05
