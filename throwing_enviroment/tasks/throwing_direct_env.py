@@ -266,8 +266,8 @@ class ThrowingDirectEnv(DirectRLEnv):
 
         alpha = 0.9
         reward = (
-            alpha * torch.exp(-(dist ** 2) / 0.01)
-            + (1.0 - alpha) * torch.exp(-(dist ** 2) / 0.05)
+            alpha * torch.exp(-(dist ** 2) / 0.1)
+            + (1.0 - alpha) * torch.exp(-(dist ** 2) / 0.5)
         )
         reward[dist < self.cfg.success_threshold] = 1.0
         reward[self._dropped] = 0.0
