@@ -32,6 +32,7 @@ throwing_enviroment/
 │   ├── throwing_direct_env.py             # DirectRLEnv — state-machine throw (replicate_physics)
 │   ├── throwing_primitive_env_cfg.py      # SAC macro-action env config (legacy gymnasium wrapper)
 │   ├── throwing_primitive_env.py          # SAC one-shot gymnasium.Env wrapper (legacy)
+│   ├── sb3_vec_env.py                    # VecEnv wrapper for stable-baselines3 compatibility
 │   ├── throw_primitive.py                 # Throw primitive execution (batched + single)
 │   ├── throw_validation_configs.py        # 10 predefined target configs for validation
 │   ├── observations.py                    # Observation functions (joints, EE, objects)
@@ -39,7 +40,8 @@ throwing_enviroment/
 │   ├── events.py                          # Reset events (robot reset, randomize target, attach)
 │   └── terminations.py                    # Boundary + settled checks
 ├── scripts/
-│   ├── train_sac.py                       # SAC training launcher (DirectRLEnv + skrl)
+│   ├── train_sac.py                       # SAC training launcher (stable-baselines3 + DirectRLEnv)
+│   ├── test_train_quick.py                # Quick sanity test (SB3 SAC, NaN detection, checkpoints)
 │   ├── validate_throw.py                  # Validation: 10 test targets × 3 attempts + plots (--fast for DirectRLEnv)
 │   ├── prebake_robot_usd.py               # One-time URDF→USD conversion for faster startup
 │   ├── skrl/
@@ -174,17 +176,23 @@ python scripts/test_joint_throwing.py --target_x 0.0 --target_y 1.0 --throw_step
 # Re-bake drink friction (run after modifying prebake_drink.py)
 python scripts/prebake_drink.py
 
-# Headless training
+# SB3 SAC training (DirectRLEnv, fast, recommended)
+python scripts/train_sac.py --headless --num_envs=2048 --max_iterations=100000
+
+# Quick sanity test (300 env.steps, validates no NaN)
+python scripts/test_train_quick.py --headless --steps 300
+
+# Validate checkpoint (SB3 .zip or skrl .pt)
+python scripts/validate_throw.py --checkpoint path/to/agent_200_steps.zip --fast --headless
+
+# Resubmit HPC job
+cd throwing_enviroment && sbatch hpc/train_sac_direct.slurm
+
+# ManagerBased PPO training (legacy)
 python scripts/skrl/train.py --task=Throwing-Direct-v0 --headless --num_envs=1024
 
-# With specific IK solver
-python scripts/skrl/train.py --task=Throwing-Direct-v0 --headless --ik_solver=osc --num_envs=512
-
-# Playback
+# Playback (legacy)
 python scripts/skrl/play.py --task=Throwing-Direct-v0 --num_envs=1 --checkpoint=path/to/agent.pt
-
-# Resume from checkpoint
-python scripts/skrl/train.py --task=Throwing-Direct-v0 --headless --checkpoint=logs/skrl/throwing/.../agent_5000.pt
 ```
 
 ## Object Attachment — Three Options
@@ -883,20 +891,22 @@ complete throw attempt, always terminated after.
 
 This architecture directly mirrors the Gazebo RL implementation in
 `gazebo_impl/RL_tossing_object_with_obstacle_avoidance_v3.py`, adapted to
-Isaac Lab with skrl as the RL framework.
+Isaac Lab with **stable-baselines3** SAC (matching the proven Gazebo setup).
 
 ### Code Structure
 
 ```
 throwing_enviroment/
 ├── tasks/
-│   ├── throwing_primitive_env.py       # gymnasium.Env wrapper (one-shot episodic)
-│   ├── throwing_primitive_env_cfg.py   # Simple dataclass config
-│   └── throw_primitive.py             # Core throw execution logic (batched + single)
+│   ├── throwing_direct_env_cfg.py      # DirectRLEnvCfg (scene + hyperparams)
+│   ├── throwing_direct_env.py          # DirectRLEnv — state-machine throw
+│   ├── sb3_vec_env.py                  # VecEnv wrapper (SB3 ↔ DirectRLEnv)
+│   └── throw_primitive.py              # Core throw execution (legacy batched)
 ├── scripts/
-│   └── train_sac.py                   # SAC training launcher (skrl Runner)
-└── source/Throwing/Throwing/tasks/throwing/agents/
-    └── skrl_sac_cfg.yaml              # SAC agent hyperparameters
+│   ├── train_sac.py                    # SB3 SAC training launcher
+│   └── test_train_quick.py             # Quick sanity test
+└── source/Throwing/.../agents/
+    └── skrl_sac_cfg.yaml               # Legacy skrl config (archived)
 ```
 
 ### Action Space (4D Macro-Action)
@@ -1186,42 +1196,74 @@ per-env variations in `duration` and `releasing_time`:
 
 | Component | Architecture |
 |-----------|-------------|
-| **Policy** | GaussianMixin, MLP [256, 256], ReLU, clipped log_std ∈ [-20, 2] |
-| **Critic 1 & 2** | DeterministicMixin, MLP [256, 256], ReLU, input = [STATES, ACTIONS] |
-| **Target Critic 1 & 2** | Same architecture as critics, Polyak-averaged |
+| **Policy** | SAC MlpPolicy, MLP [256, 256], ReLU |
+| **Critic 1 & 2** | MLP [256, 256], ReLU, input = [STATES, ACTIONS] |
+| **Target Critics** | Same architecture, Polyak-averaged |
 
 | Hyperparameter | Value |
 |----------------|-------|
-| Replay buffer | RandomMemory, size 1,000,000 |
+| Replay buffer | RandomMemory, size 100,000 |
 | Batch size | 256 |
 | Discount (γ) | 0.99 |
 | Polyak (τ) | 0.005 |
 | Learning rate | 3.0e-4 |
 | Random timesteps | 1,000 (pure exploration before learning) |
 | Learning starts | 1,000 |
-| Gradient norm clip | 1.0 |
-| Learn entropy (α) | True (auto-tuned) |
-| Initial entropy | 1.0 |
-| Target entropy | -2.0 |
-| Observation preprocessor | RunningStandardScaler |
-| Total timesteps | 35,000 |
-| Trainer | SequentialTrainer |
-| Checkpoint interval | 1,000 steps |
+| Learn entropy (α) | auto (auto-tuned target entropy) |
+| Observation preprocessor | None (manual /3.0 normalization) |
+| Total timesteps | `max_iterations × num_envs` (=100K × 2048 = 204.8M) |
+| Trainer | SB3 SAC |
+| Checkpoint format | `.zip` (SB3), every 1000 env.steps |
 
-### SAC vs PPO Comparison
+### SB3 VecEnv Wrapper (`tasks/sb3_vec_env.py`)
 
-| Aspect | PPO (per-step) | SAC (macro-action) |
-|--------|----------------|-------------------|
+A thin `VecEnv` wrapper that exposes the DirectRLEnv's internal vectorization
+(`replicate_physics=True`, N envs) as a stable-baselines3 `VecEnv`. Key
+design: **one** DirectRLEnv instance handles all N envs internally — no
+DummyVecEnv copies. The wrapper passes `step_async`/`step_wait` through
+to `env.step(action)` and converts torch tensors to numpy arrays for SB3.
+
+### NaN / Numerical Stability
+
+| Aspect | PPO (per-step) | SB3 SAC (macro-action) |
+|--------|----------------|----------------------|
 | Action dim | 6 (EE deltas) | 4 (throw params) |
-| Obs dim | 27 | 8 |
+| Obs dim | 27 | 10 |
 | Episode length | 600 steps (5s) | 1 outer step |
-| Inner sim steps/action | 1 | ~400–800 |
-| Release mechanism | Velocity threshold | Explicit `releasing_time` parameter |
-| Agent controls | Continuous EE trajectory | Throw shape (wind-up, release, power) |
-| Training timesteps | 300,000 | 35,000 |
+| Inner sim steps | 1 | 320 |
+| Release | Velocity threshold | Explicit `releasing_time` |
+| Framework | skrl PPO | **stable-baselines3 SAC** |
+| Total transitions | 60M (300K × 200 envs) | 204.8M (100K × 2048 envs) |
 | Network size | [512, 256, 128] | [256, 256] |
-| Off-policy | No | Yes (replay buffer) |
-| Exploration | PPO clipping | Entropy-regularized (auto α) |
+
+### NaN / Numerical Stability
+
+Three defensive measures prevent NaN from contaminating the training pipeline:
+
+1. **Observation sanitization** (`torch.nan_to_num` in `_get_observations()`) — catches
+   NaN/Inf from PhysX at the env boundary before entering the replay buffer
+2. **No RunningStandardScaler** — observations are manually normalized to `[-1, 1]`
+   via `/OBS_MAX_NORM`. skrl's `RunningStandardScaler` was found to collapse
+   variance on certain dimensions during exploration, producing extreme normalized
+   values that caused NaN gradients on the very first backprop step.
+3. **GPU memory isolation** — launching training immediately after a GPU OOM-kill
+   can reuse stale NaN memory for new tensor allocations. A system restart or
+   `pkill -9 -f isaaclab` clears the GPU context.
+
+### Why skrl SAC Was Replaced With stable-baselines3
+
+Despite clean observations and rewards, skrl's SAC produced NaN gradients on the
+very first backprop step (losses, Q-values, entropy coefficient all NaN at the
+first TensorBoard write). This occurred even with:
+- No RunningStandardScaler
+- Sanitized observations
+- Fresh GPU after system restart
+- No NaN warnings from the env pipeline
+
+The proven fix: **stable-baselines3 SAC**, which is the exact framework used by
+the Gazebo paper (94% success). SB3 handles the same DirectRLEnv through a thin
+`VecEnv` wrapper (`tasks/sb3_vec_env.py`) and produces clean gradients immediately.
+The Gazebo paper validated SB3's SAC for this exact macro-action throwing task.
 
 ### Why SAC for This Task
 
@@ -1246,25 +1288,26 @@ per-env variations in `duration` and `releasing_time`:
 ### Training CLI
 
 ```bash
-source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
-cd /home/vladi/IsaacLab/master_isaac/throwing_enviroment
+source ~/env_isaaclab/bin/activate
+cd throwing_enviroment
 
-# Basic SAC training (64 parallel envs)
-python scripts/train_sac.py --headless --num_envs=64
+# Local training (SB3 SAC + DirectRLEnv, fast)
+python scripts/train_sac.py --headless --num_envs=2048 --max_iterations=100000
 
-# More envs, full training
-python scripts/train_sac.py --headless --num_envs=128 --max_iterations=35000
+# Resume from checkpoint (SB3 .zip)
+python scripts/train_sac.py --headless --num_envs=2048 \
+    --checkpoint logs/sac/throwing_primitive/.../checkpoints/agent_20000_steps.zip
 
-# Resume from checkpoint
-python scripts/train_sac.py --headless --num_envs=64 \
-    --checkpoint=logs/skrl/throwing_primitive/.../agent_5000.pt
+# Quick sanity test
+python scripts/test_train_quick.py --headless --steps 300
 
-# Custom seed
-python scripts/train_sac.py --headless --num_envs=64 --seed=123
+# HPC (2048 envs, auto-resume)
+cd throwing_enviroment && sbatch hpc/train_sac_direct.slurm
 ```
 
-Logs are saved to `logs/skrl/throwing_primitive/<timestamp>_sac_torch/` with
-TensorBoard events and agent checkpoints every 1000 steps.
+Logs are saved to `logs/sac/throwing_primitive/<timestamp>_sac_sb3/` with
+TensorBoard events and SB3 checkpoints every 1000 env.steps in `checkpoints/`.
+Checkpoints are `.zip` files named `agent_<step>_steps.zip`.
 
 ### TensorBoard Custom Metrics
 
@@ -1465,12 +1508,15 @@ SLURM job scripts for training on the Hábrók HPC cluster with Apptainer (Singu
 ```bash
 cd /path/to/master_isaac/throwing_enviroment
 
-# DirectRLEnv (fast, 4096 envs — recommended)
+# DirectRLEnv (SB3 SAC, 2048 envs — recommended)
 sbatch hpc/train_sac_direct.slurm
 
-# ManagerBased (legacy, 2048 envs)
+# ManagerBased (legacy, PPO)
 sbatch hpc/train_sac.slurm
 ```
+
+**Logs**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/checkpoints/agent_*_steps.zip`
+**Resume**: SIGUSR1 trap + `RESUME_CHAIN=1` auto-resumes from latest `.zip` checkpoint.
 
 **Features**:
 - Apptainer container (`isaac-lab.sif`) with all dependencies
