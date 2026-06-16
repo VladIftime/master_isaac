@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-12 (PBRS post-implementation bug fixes, checkpoint overhaul, goal filtering)
+**Last updated**: 2026-06-16 (Model D GoalEncoder ablation, Model B pos_term_threshold floor 0.02)
 
 ---
 
@@ -38,6 +38,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 5 | **PBRS Model A** — PBRS dense reward, no curriculum | `train_push_pbrs_no_curr.py` |
 | 6 | **PBRS Model B** — PBRS dense + forced pos→rot curriculum | `train_push_pbrs_curr.py` |
 | 7 | **PBRS Model C** — PBRS dense + ASP curriculum (Alice/Bob) | `train_push_pbrs_asp.py` |
+| 8 | **PBRS Model D** — Model C with GoalEncoder ablated (PI-encoder only for Bob) | `train_push_pbrs_asp_no_ge.py` |
 
 ### Stack Versions
 
@@ -160,6 +161,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-12 | **PBRS Model A** — Single-agent PPO with PBRS dense reward. Hardcoded `rel_obs=True, rel_act=True`. Dense: `F=Φ(s')−Φ(s)` (zero-sum cycles, no near-goal negativity). Sparse: +5 pos-only (no termination), +2 both (terminates). Penalties: −5 tip/launch/OOB/table (terminates). Per-env PBRS logging when `num_envs≤50`. `train_push_pbrs_a.py` (836 lines). |
 | 2026-06-12 | **PBRS Model B** — Model A + forced curriculum controller. Phase 1: `w_rot=0`, position-only termination (fast cycles). Phase 2 (triggered by `ema_pos_err<0.08m` for 50 iters): `w_rot` ramps 0→10 over 200 iters, `pos_term_threshold` fades 0.05→0.0 (smooth termination regime change). Phase 3: full multi-objective. `train_push_pbrs_b.py` (899 lines). |
 | 2026-06-12 | **PBRS Model C** — Fork of `train_push_asp.py` with PBRS for Bob. Fixes: `bob_done_now` set on early completion, LSTM zeroed on early completion, `_bob_gave_rot_bonus` buffer added, progress reward removed (redundant with PBRS). Bob sparse changed: +5 position-only gate (was both-threshold), +2 both-threshold (terminates phase). Approach params tightened: `min_r=0.02, max_r=0.08, max_l=0.20`. Phase-end logs use `_prev_initial` snapshot for correct start positions. `train_push_pbrs_asp.py`. |
+| 2026-06-16 | **PBRS Model D (GoalEncoder ablation)** — Fork of Model C with Bob's GoalEncoder removed. Bob config: `use_goal_encoder=False`, `pi_obj_dim=22` (PI-encoder sees full 22D per-object chunk: obj_state 14D + goal_pose 6D + dist 2D). Bob still uses PI-encoder + LSTM + MultiCategorical 4D×21 bins + PPOABC. Alice unchanged. Purpose: isolate whether the GoalEncoder's 8D latent compression bottleneck prevents Bob from learning translation under PBRS + adversarial Alice curriculum. If Bob translates without GoalEncoder, the 8D bottleneck was the cause. If not, the issue lies in ASP dynamics or PI-encoder inductive bias. `train_push_pbrs_asp_no_ge.py`, `hpc/train_push_pbrs_asp_noge.slurm`. |
 | 2026-06-12 | **Fix P67 (Model B missing push_count increment)** — `env.push_count += 1` was absent from Model B's push loop. `check_done_pbrs` never triggered `max_push_done` → episodes had no budget cap, `episode_push_counts` always reported 0, `gave_completion`/`gave_rot_bonus` never reset between logical episodes. Added `env.push_count += 1` before `check_done_pbrs`. `train_push_pbrs_curr.py`. |
 | 2026-06-12 | **Fix P68 (Model C catastrophe early termination)** — `_bob_should_end` and `_bob_early_end` were computed but never used (dead code). Bob continued pushing tipped/launched/OOB objects for the full phase budget. Removed dead code; added `_cata_early` handling after completion block: calls `handle_bob_phase_end` for catastrophe envs, sets `bob_done_now=True`, zeros `_bob_gave_rot_bonus`, includes catastrophe envs in EE reset set (`needs_ee_reset |= bob_done_now`). `train_push_pbrs_asp.py`. |
 | 2026-06-12 | **Fix P69 (Model A double-scaled logging)** — `env._last_completion` subtracted `dense_pos * PBRS_W_POS` but `dense_pos` already includes `w_pos` scaling → squared the weight. Logging-only bug. Fixed to `reward - dense_pos - dense_rot`. `train_push_pbrs_no_curr.py`. |
@@ -169,6 +171,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-12 | **Fix P73 (Alice logging in Model C)** — Per-push Alice debug lines expanded from `push=N` to `push=N obj=(x,y,z) yaw=... len=... θ=...` showing object position and push parameters. `[ALICE END]` lines now include inferred invalid-goal reason: `INVALID(AIRBORNE)`, `INVALID(NO_DISP)`, `INVALID(SHALLOW)`, `INVALID(OOZ)`, or combinations. `train_push_pbrs_asp.py`. |
 | 2026-06-12 | **Fix P74 (checkpoint overhaul)** — Periodic checkpoints changed from `model_{iteration}.pt` (accumulating files) to `latest_checkpoint.pt` (single file, overwritten) + `latest_iter.txt` (plain text iteration number). `model_best.pt` unchanged. Emergency and final saves use the same scheme. HPC slurm scripts updated: resume logic reads `latest_checkpoint.pt` + `latest_iter.txt` instead of parsing `model_*.pt` filenames. All three PBRS training scripts + all three PBRS HPC scripts. |
 | 2026-06-12 | **Fix P75 (ppo.py load crash on latest_checkpoint.pt)** — `PPO.load()` parsed iteration from filename via `int(path.split("_")[-1].split(".")[0])`. With `latest_checkpoint.pt`, this produced `int("checkpoint")` → `ValueError`. Wrapped in try/except, defaults to 0. The actual iteration is always set via `--resume_iteration` from the training script. `algorithms/rl/ppo/ppo.py:117`. |
+| 2026-06-16 | **PBRS Model D (GoalEncoder ablation)** — Fork of Model C with Bob's GoalEncoder removed. Bob's PI-encoder sees full 22D per-object chunk (obj_state + goal_pose + dist) directly, without the 8D latent compression bottleneck. All other architecture unchanged — ASP two-phase loop, Alice unchanged, PBRS dense reward, PPOABC + ABC buffer, historical pool. `train_push_pbrs_asp_no_ge.py`, `hpc/train_push_pbrs_asp_noge.slurm`. |
+| 2026-06-16 | **Model B pos_term_threshold floor** — `pos_term_threshold` fade changed from `0.05→0.0` to `0.05→0.02` during curriculum ramp. Prevents position-only termination from becoming infinitely tight, preserving some position-only gating in Phase 3. `train_push_pbrs_curr.py:891`. |
 | 2026-06-15 | **Fix P76 (validation scripts + configs + plotting)** — (a) Created `tasks/utils/validation_configs.py` with 20 predefined test scenes across easy/medium/hard difficulty with varied start→goal directions. (b) Restored `tests/validate_push.py` with original module-level import structure, added: `VisualizationMarkers` for goal flat-T-block and push arrows (green start, red end, blue cylinder), airborne/tipped/OOB detection (`obj_z > 0.10`, `|roll| > 0.3`, `|pitch| > 0.3`, `||obj_xy - goal_xy|| > 0.5`), per-push prediction logging (`bins=... r=... len=... θ=... pos=... rot=... z=...`), termination reason tracking (`stop_reason`), `--csv` flag for CSV output. (c) Created `tests/validate_push_asp.py` — separate script for ASP Model C Bob using `PPOABC` with GoalEncoder. Same markers + detection + logging. Loads `episode_manager` state for goal management. (d) Created `tests/plot_validation.py` — reads CSV files from multiple models and generates comparison plots: `overall_sr.png`, `sr_easy.png`/`medium.png`/`hard.png`, `sr_by_difficulty_grouped.png`, `avg_pushes.png`, `per_test_comparison.txt`, `summary.md` (markdown table). All four files created. |
 
 ---
@@ -335,6 +339,7 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 | `train_push_pbrs_simp.slurm` | PBRS Model A — PBRS only, 528 envs, 3000 iters |
 | `train_push_pbrs_curr.slurm` | PBRS Model B — PBRS + forced curriculum, 528 envs, 3000 iters |
 | `train_push_pbrs_asp.slurm` | PBRS Model C — PBRS + ASP, 528 envs, 3000 iters |
+| `train_push_pbrs_asp_noge.slurm` | PBRS Model D — PBRS + ASP, GoalEncoder ablated, 528 envs, 3000 iters |
 | `diagnostic_tests.slurm` | Full 4-test suite on HPC |
 | `test1_ppo_reward.slurm` | Test 1 only |
 | `test2_alice_exploration.slurm` | Test 2 only (200 iters, random Bob) |
