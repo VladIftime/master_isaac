@@ -370,7 +370,9 @@ def _run_fast_validation():
     print(f"{'='*60}")
 
     if not args_cli.no_plot:
-        plot_path = os.path.join(_PROJECT_ROOT, "logs", "validation_results_fast.png")
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{ts}.png")
         plot_results(results, args_cli.success_threshold, plot_path, show=not headless)
 
     env.close()
@@ -566,7 +568,9 @@ def main():
 
     # ── Plots ─────────────────────────────────────────────────────────────
     if not args_cli.no_plot:
-        plot_path = os.path.join(_PROJECT_ROOT, "logs", "validation_results.png")
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_{ts}.png")
         plot_results(results, args_cli.success_threshold, plot_path, show=not headless)
 
     env.close()

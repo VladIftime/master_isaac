@@ -204,10 +204,12 @@ def main():
     grid_size = args_cli.grid_size
     total = grid_size * grid_size
 
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_png = args_cli.output or os.path.join(_PROJECT_ROOT, "logs",
-                                                  "heatmap_generalisation.png")
+                                                  f"heatmap_generalisation_{ts}.png")
     output_csv = args_cli.csv or os.path.join(_PROJECT_ROOT, "logs",
-                                               "heatmap_generalisation.csv")
+                                               f"heatmap_generalisation_{ts}.csv")
 
     print(f"\n{'='*60}")
     print(f"  GENERALISATION HEATMAP")

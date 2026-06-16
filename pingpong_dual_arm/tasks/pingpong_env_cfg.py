@@ -421,6 +421,7 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
 
     ik_solver: IK_SOLVER_TYPE = "diffik"
     playing_arm_side: str = "right"
+    joint_control_left_arm: bool = False
 
     # Game parameters — same ranges as TableTennisRobot
     ball_speed_x_range: tuple = (-1.0, 1.0)
@@ -465,13 +466,26 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
         self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
 
-        self.actions.arm_A = build_ik_action(
-            self.ik_solver,
-            asset_name="robot_A",
-            side=self.playing_arm_side,
-        )
-        self.actions.arm_B = build_ik_action(
-            self.ik_solver,
-            asset_name="robot_B",
-            side=self.playing_arm_side,
-        )
+        if self.joint_control_left_arm:
+            from isaaclab.envs.mdp.actions.actions_cfg import JointPositionActionCfg
+            self.actions.arm_A = JointPositionActionCfg(
+                asset_name="robot_A",
+                joint_names=ARM_JOINTS_LEFT,
+                scale=50.0,
+            )
+            self.actions.arm_B = JointPositionActionCfg(
+                asset_name="robot_B",
+                joint_names=ARM_JOINTS_LEFT,
+                scale=50.0,
+            )
+        else:
+            self.actions.arm_A = build_ik_action(
+                self.ik_solver,
+                asset_name="robot_A",
+                side=self.playing_arm_side,
+            )
+            self.actions.arm_B = build_ik_action(
+                self.ik_solver,
+                asset_name="robot_B",
+                side=self.playing_arm_side,
+            )
