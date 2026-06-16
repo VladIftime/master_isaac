@@ -26,7 +26,7 @@ EXP_NAME="hpc_throw_sac_${NUM_ENVS}env"
 #   cd /path/to/master_isaac/throwing_enviroment && sbatch hpc/train_sac.slurm
 PROJECT_ROOT=$(pwd)
 SIF_IMAGE="$(dirname "$PROJECT_ROOT")/asyncDualPlayPPO/isaac-lab.sif"
-LOG_DIR="$PROJECT_ROOT/logs/skrl/throwing_primitive"
+LOG_DIR="$PROJECT_ROOT/logs/sac/throwing_primitive"
 
 # Local scratch for faster I/O (synced to NFS on exit)
 LOCAL_LOGS="${TMPDIR:-/tmp}/throw_sac_${SLURM_JOB_ID}"
@@ -69,12 +69,12 @@ trap cleanup EXIT
 
 RESUME_ARGS=""
 if [ "$RESUME_CHAIN" = "1" ] && [ -d "$LOG_DIR" ]; then
-    LATEST_DIR=$(ls -td "$LOG_DIR"/*_sac_torch 2>/dev/null | head -1)
+    LATEST_DIR=$(ls -td "$LOG_DIR"/*_sac_sb3 2>/dev/null | head -1)
     if [ -n "$LATEST_DIR" ] && [ -d "$LATEST_DIR" ]; then
-        LATEST_CKPT=$(find "$LATEST_DIR" -name "agent_*.pt" 2>/dev/null \
+        LATEST_CKPT=$(find "$LATEST_DIR" -name "agent_*_steps.zip" 2>/dev/null \
             | sort -t_ -k2 -n | tail -1)
         if [ -z "$LATEST_CKPT" ]; then
-            LATEST_CKPT=$(find "$LATEST_DIR" -name "best_agent.pt" 2>/dev/null \
+            LATEST_CKPT=$(find "$LATEST_DIR" -name "agent_final.zip" 2>/dev/null \
                 | sort | tail -1)
         fi
         if [ -n "$LATEST_CKPT" ]; then
@@ -121,7 +121,7 @@ apptainer exec --nv \
     --env PYTHONPATH="$CONTAINER_PROJECT:$CONTAINER_PROJECT/source/Throwing" \
     --env WARP_CACHE_PATH=/root/.cache/warp \
     --bind "$PROJECT_ROOT":"$CONTAINER_PROJECT" \
-    --bind "$LOCAL_LOGS":"$CONTAINER_PROJECT/logs/skrl/throwing_primitive" \
+    --bind "$LOCAL_LOGS":"$CONTAINER_PROJECT/logs/sac/throwing_primitive" \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/data":/isaac-sim/kit/data \
     --bind "$PROJECT_ROOT/.isaac_cache/kit/cache":/isaac-sim/kit/cache \
