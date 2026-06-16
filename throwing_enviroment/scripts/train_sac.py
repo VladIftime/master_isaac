@@ -1,62 +1,55 @@
 #!/usr/bin/env python3
 """Train a SAC agent for the Gazebo-style throw primitive.
 
+Uses stable-baselines3 SAC (matching the reference paper — Kasaei & Kasaei, ICRA 2023)
+with DirectRLEnv for fast GPU-parallel training.
+
 The agent learns 4 macro parameters:
   [initial_joint_value, final_joint_value, releasing_time, duration]
 
-Each episode is a single throw (one outer step = full IK grasping + throw).
+Each episode is a single throw (one outer step = full throw primitive).
 
 Usage:
-    source /home/vladi/IsaacLab/master_isaac/.master_venv/bin/activate
+    source ~/env_isaaclab/bin/activate
     cd throwing_enviroment
-    python scripts/train_sac.py --headless --num_envs=64
-    python scripts/train_sac.py --headless --num_envs=128 --max_iterations=35000
-    python scripts/train_sac.py --headless --num_envs=64 --checkpoint=logs/skrl/throwing_primitive/.../agent_5000.pt
+    python scripts/train_sac.py --headless --num_envs=4096
+    python scripts/train_sac.py --headless --num_envs=4096 --max_iterations=100000
+    python scripts/train_sac.py --headless --num_envs=4096 --checkpoint path/to/model.zip
 """
 
 import argparse
-import sys
 import os
+import sys
+from datetime import datetime
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _PROJECT_ROOT)
 sys.path.insert(0, os.path.join(_PROJECT_ROOT, "source", "Throwing"))
 
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Train SAC agent for throw primitive.")
-parser.add_argument("--num_envs", type=int, default=64, help="Number of parallel environments.")
-parser.add_argument("--max_iterations", type=int, default=35000, help="Total training timesteps.")
+parser.add_argument("--num_envs", type=int, default=4096,
+                    help="Number of parallel environments (default: 4096).")
+parser.add_argument("--max_iterations", type=int, default=100000,
+                    help="Total training timesteps (default: 100000).")
 parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-parser.add_argument("--checkpoint", type=str, default=None, help="Resume from checkpoint.")
-parser.add_argument("--playing_arm_side", type=str, default="right", help="Which arm throws.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos.")
-parser.add_argument("--video_length", type=int, default=200, help="Video length in steps.")
-parser.add_argument("--video_interval", type=int, default=2000, help="Interval between recordings.")
+parser.add_argument("--checkpoint", type=str, default=None,
+                    help="Resume from SB3 checkpoint (.zip).")
+parser.add_argument("--playing_arm_side", type=str, default="right",
+                    choices=["right", "left"], help="Which arm throws.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-
-if args_cli.video:
-    args_cli.enable_cameras = True
 
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import copy
-import yaml
-from datetime import datetime
-
-import torch
 import numpy as np
-
-import skrl
-from skrl.utils.runner.torch import Runner
-
-from isaaclab_rl.skrl import SkrlVecEnvWrapper
+import torch
 
 from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg
 from tasks.throwing_direct_env import ThrowingDirectEnv
+from tasks.sb3_vec_env import DirectRLVecEnv
 
 
 def main():
@@ -66,45 +59,78 @@ def main():
     cfg.seed = args_cli.seed
 
     print(f"\n{'='*60}")
-    print(f"  SAC Training — Throw Primitive (DirectRLEnv)")
+    print(f"  SAC Training — Throw Primitive (SB3 + DirectRLEnv)")
     print(f"  num_envs          : {cfg.scene.num_envs}")
     print(f"  playing_arm_side  : {cfg.playing_arm_side}")
     print(f"  max_iterations    : {args_cli.max_iterations}")
-    print(f"  seed              : {args_cli.seed}")
+    print(f"  seed              : {cfg.seed}")
+    print(f"  observation_dim   : {cfg.observation_space}")
+    print(f"  action_dim        : {cfg.action_space}")
     print(f"{'='*60}\n")
 
     env = ThrowingDirectEnv(cfg=cfg)
+    env_wrapped = DirectRLVecEnv(env)
 
-    agent_cfg_path = os.path.join(
-        _PROJECT_ROOT, "source", "Throwing", "Throwing", "tasks",
-        "throwing", "agents", "skrl_sac_cfg.yaml",
-    )
-    with open(agent_cfg_path, "r") as f:
-        agent_cfg = yaml.safe_load(f)
+    log_root = os.path.abspath(os.path.join("logs", "sac", "throwing_primitive"))
+    log_dir = os.path.join(log_root, datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_sac_sb3")
+    os.makedirs(log_dir, exist_ok=True)
+    print(f"[INFO] Logging to: {log_dir}")
 
-    agent_cfg["seed"] = args_cli.seed
-    agent_cfg["trainer"]["timesteps"] = args_cli.max_iterations
-    agent_cfg["trainer"]["close_environment_at_exit"] = False
-
-    log_root_path = os.path.join("logs", "skrl", agent_cfg["agent"]["experiment"]["directory"])
-    log_root_path = os.path.abspath(log_root_path)
-    print(f"[INFO] Logging experiment in directory: {log_root_path}")
-
-    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_sac_torch"
-    agent_cfg["agent"]["experiment"]["directory"] = log_root_path
-    agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
-    log_dir = os.path.join(log_root_path, log_dir)
-    os.makedirs(os.path.join(log_dir, "params"), exist_ok=True)
-
-    env_wrapped = SkrlVecEnvWrapper(env, ml_framework="torch")
-
-    runner = Runner(env_wrapped, agent_cfg)
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.callbacks import CheckpointCallback
 
     if args_cli.checkpoint:
-        print(f"[INFO] Loading model checkpoint from: {args_cli.checkpoint}")
-        runner.agent.load(args_cli.checkpoint)
+        print(f"[INFO] Loading checkpoint: {args_cli.checkpoint}")
+        model = SAC.load(
+            args_cli.checkpoint, env=env_wrapped,
+            tensorboard_log=log_dir, seed=args_cli.seed,
+        )
+    else:
+        model = SAC(
+            "MlpPolicy", env_wrapped,
+            learning_rate=3e-4,
+            buffer_size=100000,
+            learning_starts=1000,
+            batch_size=256,
+            tau=0.005,
+            gamma=0.99,
+            ent_coef="auto",
+            target_entropy="auto",
+            policy_kwargs={
+                "net_arch": [256, 256],
+                "activation_fn": torch.nn.ReLU,
+            },
+            tensorboard_log=log_dir,
+            seed=args_cli.seed,
+            verbose=1,
+        )
 
-    runner.run()
+    total_timesteps = args_cli.max_iterations * cfg.scene.num_envs
+    ckpt_interval = 1000 * cfg.scene.num_envs
+    ckpt_dir = os.path.join(log_dir, "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+
+    checkpoint_callback = CheckpointCallback(
+        save_freq=ckpt_interval,
+        save_path=ckpt_dir,
+        name_prefix="agent",
+        save_replay_buffer=False,
+    )
+
+    print(f"[INFO] Total timesteps: {total_timesteps} ({args_cli.max_iterations} iterations × {cfg.scene.num_envs} envs)")
+    print(f"[INFO] Checkpoint every: {ckpt_interval} timesteps ({ckpt_interval // cfg.scene.num_envs} iterations)")
+
+    model.learn(
+        total_timesteps=total_timesteps,
+        log_interval=10,
+        progress_bar=True,
+        callback=checkpoint_callback,
+    )
+
+    ckpt_path = os.path.join(ckpt_dir, "agent_final")
+    model.save(ckpt_path)
+    print(f"[INFO] Final model saved to: {ckpt_path}.zip")
+
     env.close()
 
 

@@ -101,6 +101,8 @@ class ThrowingDirectEnv(DirectRLEnv):
         self._last_distances = torch.zeros(N, device=self.device)
         self._last_milk_pos = torch.zeros(N, 3, device=self.device)
         self._last_target_pos = torch.zeros(N, 3, device=self.device)
+        self._nan_obs_warned = False
+        self._nan_reward_warned = False
 
     def _setup_scene(self):
         self.scene.clone_environments(copy_from_source=False)
@@ -183,7 +185,8 @@ class ThrowingDirectEnv(DirectRLEnv):
                 vel_dir = ee_lin_vel / vel_norm
                 release_pos = milk.data.root_pos_w[release_ids, :3] + vel_dir * 0.10
                 release_pos = torch.nan_to_num(release_pos, nan=0.0)
-                release_quat = milk.data.root_quat_w[release_ids]
+                release_quat = torch.nan_to_num(
+                    milk.data.root_quat_w[release_ids], nan=0.0)
                 milk.write_root_pose_to_sim(
                     torch.cat([release_pos, release_quat], dim=-1), env_ids=release_ids
                 )
@@ -212,7 +215,10 @@ class ThrowingDirectEnv(DirectRLEnv):
                         torch.zeros(len(hold_ids), 6, device=self.device), env_ids=hold_ids
                     )
 
-        milk_z = milk.data.root_pos_w[:, 2] - self.scene.env_origins[:, 2]
+        milk_z = torch.nan_to_num(
+            milk.data.root_pos_w[:, 2] - self.scene.env_origins[:, 2],
+            nan=DRINK_BELOW_TABLE_Z + 1.0,
+        )
         new_drop = (milk_z < DRINK_BELOW_TABLE_Z) & ~self._dropped & self._released
         self._dropped |= new_drop
 
@@ -246,6 +252,16 @@ class ThrowingDirectEnv(DirectRLEnv):
             dist_y / OBS_MAX_NORM,
         ], dim=-1)
 
+        nan_in_obs = torch.isnan(obs).any() or torch.isinf(obs).any()
+        if nan_in_obs and not self._nan_obs_warned:
+            self._nan_obs_warned = True
+            nan_count = torch.isnan(obs).sum().item()
+            inf_count = torch.isinf(obs).sum().item()
+            print(f"  [WARN] NaN/Inf in observations at step {self._episode_count}: "
+                  f"{nan_count} NaN, {inf_count} Inf", flush=True)
+
+        obs = torch.nan_to_num(obs, nan=0.0, posinf=OBS_MAX_NORM, neginf=-OBS_MAX_NORM)
+
         return {"policy": obs, "critic": obs}
 
     def _get_rewards(self) -> torch.Tensor:
@@ -257,6 +273,10 @@ class ThrowingDirectEnv(DirectRLEnv):
         dist = torch.norm(milk_pos - target_pos, dim=-1)
 
         nan_mask = torch.isnan(dist)
+        if nan_mask.any() and not self._nan_reward_warned:
+            self._nan_reward_warned = True
+            print(f"  [WARN] NaN in distance at step {self._episode_count}: "
+                  f"{nan_mask.sum().item()}/{self.num_envs} envs", flush=True)
         dist = torch.nan_to_num(dist, nan=10.0)
 
         origins = self.scene.env_origins
@@ -326,8 +346,8 @@ class ThrowingDirectEnv(DirectRLEnv):
         milk.write_root_pose_to_sim(torch.cat([drink_pos, drink_quat], dim=-1), env_ids=env_ids)
         milk.write_root_velocity_to_sim(torch.zeros(N, 6, device=self.device), env_ids=env_ids)
 
-        self._grasp_offset[env_ids] = drink_pos - ee_pos
-        self._grasp_quat[env_ids] = drink_quat
+        self._grasp_offset[env_ids] = torch.nan_to_num(drink_pos - ee_pos, nan=0.0)
+        self._grasp_quat[env_ids] = torch.nan_to_num(drink_quat, nan=0.0)
 
         self._sub_step[env_ids] = 0
         self._released[env_ids] = False

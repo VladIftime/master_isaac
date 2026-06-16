@@ -54,7 +54,7 @@ models:
 
 memory:
   class: RandomMemory
-  memory_size: 1000000
+  memory_size: 100000
 
 agent:
   class: SAC
@@ -62,19 +62,19 @@ agent:
   discount_factor: 0.99
   polyak: 0.005
   learning_rate: 3.0e-04
-  random_timesteps: 1000
-  learning_starts: 1000
+  random_timesteps: 100 #orig:1000
+  learning_starts: 100 #orig:1000
   grad_norm_clip: 1.0
   learn_entropy: True
   initial_entropy_value: 1.0
   target_entropy: -2.0
-  observation_preprocessor: RunningStandardScaler
+  observation_preprocessor: null
   observation_preprocessor_kwargs: null
   experiment:
     directory: "throwing_primitive"
     experiment_name: ""
     write_interval: 100
-    checkpoint_interval: 1000
+    checkpoint_interval: 100 #orig:1000
 
 trainer:
   class: SequentialTrainer

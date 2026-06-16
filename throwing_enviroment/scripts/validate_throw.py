@@ -32,7 +32,11 @@ sys.path.insert(0, os.path.join(_PROJECT_ROOT, "source", "Throwing"))
 from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Validate trained SAC throw model")
-parser.add_argument("--checkpoint", type=str, required=True, help="Path to agent checkpoint (.pt)")
+parser.add_argument("--checkpoint", type=str, required=True,
+                    help="Path to agent checkpoint (.pt for skrl, .zip for SB3)")
+parser.add_argument("--model_type", type=str, default="auto",
+                    choices=["auto", "skrl", "sb3"],
+                    help="Model type: auto-detect, skrl, or sb3")
 parser.add_argument("--num_tests", type=int, default=10, help="Number of test configs to run (max 10)")
 parser.add_argument("--attempts", type=int, default=3, help="Throws per target")
 parser.add_argument("--success_threshold", type=float, default=0.15, help="Distance threshold for success (m)")
@@ -245,6 +249,7 @@ def _run_fast_validation():
     """Fast validation using DirectRLEnv (no IK, no ManagerBased overhead)."""
     from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg, TABLE_Z as DTABLE_Z
     from tasks.throwing_direct_env import ThrowingDirectEnv
+    from tasks.sb3_vec_env import DirectRLVecEnv
 
     headless = args_cli.headless
 
@@ -256,40 +261,56 @@ def _run_fast_validation():
     device = env.device
     env.reset()
 
-    import gymnasium as gym
-    from skrl.envs.wrappers.torch import wrap_env
+    ckpt_path = args_cli.checkpoint
+    is_zip = ckpt_path.endswith(".zip")
+    model_type = args_cli.model_type
+    if model_type == "auto":
+        model_type = "sb3" if is_zip else "skrl"
 
-    model_obs_dim = cfg.observation_space
-    ckpt = torch.load(args_cli.checkpoint, map_location=device, weights_only=False)
-    if isinstance(ckpt, dict) and "policy" in ckpt:
-        policy_sd = ckpt["policy"]
-        if isinstance(policy_sd, dict) and "net_container.0.weight" in policy_sd:
-            model_obs_dim = policy_sd["net_container.0.weight"].shape[1]
-    print(f"[INFO] Model obs dim: {model_obs_dim}, Env obs dim: {cfg.observation_space}")
+    if model_type == "sb3":
+        # ── SB3 model loading ─────────────────────────────────────────
+        from stable_baselines3 import SAC
+
+        env_wrapped = DirectRLVecEnv(env)
+        model = SAC.load(ckpt_path, env=env_wrapped, seed=42)
+        model_obs_dim = env.cfg.observation_space
+        print(f"[INFO] Loaded SB3 SAC from: {ckpt_path}")
+    else:
+        # ── skrl model loading (legacy) ───────────────────────────────
+        import gymnasium as gym
+        from skrl.envs.wrappers.torch import wrap_env
+
+        model_obs_dim = cfg.observation_space
+        ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+        if isinstance(ckpt, dict) and "policy" in ckpt:
+            policy_sd = ckpt["policy"]
+            if isinstance(policy_sd, dict) and "net_container.0.weight" in policy_sd:
+                model_obs_dim = policy_sd["net_container.0.weight"].shape[1]
+
+        dummy_obs_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(model_obs_dim,), dtype=np.float32)
+        dummy_act_space = gym.spaces.Box(
+            low=np.array([-1.0, -1.0, 0.05, 0.1], dtype=np.float32),
+            high=np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
+        )
+
+        class _DummyEnv:
+            def __init__(self):
+                self.observation_space = dummy_obs_space
+                self.action_space = dummy_act_space
+                self.state_space = dummy_obs_space
+                self.num_envs = 1
+                self.num_agents = 1
+                self.device = device
+            def reset(self): return torch.zeros(1, model_obs_dim, device=device), {}
+            def step(self, a): return torch.zeros(1, model_obs_dim, device=device), torch.zeros(1), torch.zeros(1, dtype=torch.bool), torch.zeros(1, dtype=torch.bool), {}
+            def close(self): pass
+            def render(self): pass
+
+        dummy_wrapped = wrap_env(_DummyEnv(), wrapper="gymnasium")
+        agent = load_sac_agent(dummy_wrapped, ckpt_path, device)
+        print(f"[INFO] Model obs dim: {model_obs_dim}, Env obs dim: {cfg.observation_space}")
 
     _OBS_8D_FROM_10D = [0, 1, 2, 4, 5, 7, 8, 9]
-
-    dummy_obs_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(model_obs_dim,), dtype=np.float32)
-    dummy_act_space = gym.spaces.Box(
-        low=np.array([-1.0, -1.0, 0.05, 0.1], dtype=np.float32),
-        high=np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
-    )
-
-    class _DummyEnv:
-        def __init__(self):
-            self.observation_space = dummy_obs_space
-            self.action_space = dummy_act_space
-            self.state_space = dummy_obs_space
-            self.num_envs = 1
-            self.num_agents = 1
-            self.device = device
-        def reset(self): return torch.zeros(1, model_obs_dim, device=device), {}
-        def step(self, a): return torch.zeros(1, model_obs_dim, device=device), torch.zeros(1), torch.zeros(1, dtype=torch.bool), torch.zeros(1, dtype=torch.bool), {}
-        def close(self): pass
-        def render(self): pass
-
-    dummy_wrapped = wrap_env(_DummyEnv(), wrapper="gymnasium")
-    agent = load_sac_agent(dummy_wrapped, args_cli.checkpoint, device)
 
     n_tests = min(args_cli.num_tests, get_test_count())
     results: List[ThrowResult] = []
@@ -317,15 +338,20 @@ def _run_fast_validation():
                 torch.cat([pos, quat], dim=-1), env_ids=torch.tensor([0], device=device)
             )
 
-            obs = env._get_observations()["policy"]
-            if model_obs_dim < obs.shape[-1]:
-                obs = obs[:, _OBS_8D_FROM_10D]
+            obs_raw = env._get_observations()["policy"]
+            if model_obs_dim < obs_raw.shape[-1]:
+                obs_raw = obs_raw[:, _OBS_8D_FROM_10D]
 
-            with torch.no_grad():
-                act_out = agent.policy.act({"states": obs}, role="policy")
-                action = act_out[0]
+            if model_type == "sb3":
+                obs_np = obs_raw.cpu().numpy()
+                action_np, _ = model.predict(obs_np, deterministic=True)
+                action_np = action_np.flatten()
+            else:
+                with torch.no_grad():
+                    act_out = agent.policy.act({"states": obs_raw}, role="policy")
+                    action = act_out[0]
+                action_np = action.cpu().numpy().flatten()
 
-            action_np = action.cpu().numpy().flatten()
             action_clamped = torch.tensor(action_np, device=device).unsqueeze(0)
             action_clamped[:, 0].clamp_(-1.0, 1.0)
             action_clamped[:, 1].clamp_(-1.0, 1.0)
