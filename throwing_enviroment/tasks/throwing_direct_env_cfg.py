@@ -217,6 +217,7 @@ class ThrowingDirectEnvCfg(DirectRLEnvCfg):
             dynamic_friction=1.0,
             restitution=0.3,
         )
+        self.sim.physx.enable_enhanced_determinism = True
         self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
         self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
         self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4
