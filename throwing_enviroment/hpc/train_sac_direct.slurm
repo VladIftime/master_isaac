@@ -45,6 +45,18 @@ cleanup() {
     rsync -a --no-perms "$LOCAL_LOGS/" "$LOG_DIR/" 2>/dev/null
     echo "[INFO] Sync complete."
 
+    # Fallback: create latest_checkpoint.zip from most recent agent checkpoint
+    # (only if signal-saved latest_checkpoint.zip doesn't already exist anywhere)
+    EXISTING_LATEST=$(find "$LOG_DIR" -name "latest_checkpoint.zip" -type f 2>/dev/null | head -1)
+    if [ -z "$EXISTING_LATEST" ]; then
+        LATEST_AGENT_ZIP=$(find "$LOG_DIR" -name "agent_*_steps.zip" -type f 2>/dev/null | sort -V | tail -1)
+        if [ -n "$LATEST_AGENT_ZIP" ]; then
+            RUN_DIR=$(dirname "$(dirname "$LATEST_AGENT_ZIP")")
+            cp "$LATEST_AGENT_ZIP" "$RUN_DIR/latest_checkpoint.zip"
+            echo "[CKPT] Fallback: created latest_checkpoint.zip from $(basename "$LATEST_AGENT_ZIP")"
+        fi
+    fi
+
     if [ "$WILL_RESUBMIT" = "true" ]; then
         SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_sac_direct.slurm" 2>&1)
         NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')

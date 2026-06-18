@@ -1213,7 +1213,7 @@ per-env variations in `duration` and `releasing_time`:
 | Observation preprocessor | None (manual /3.0 normalization) |
 | Total timesteps | `max_iterations × num_envs` (=100K × 2048 = 204.8M) |
 | Trainer | SB3 SAC |
-| Checkpoint format | `.zip` (SB3), every 1000 env.steps; `latest_checkpoint.zip` always overwritten |
+| Checkpoint format | `.zip` (SB3), every 1000 iterations; `latest_checkpoint.zip` overwritten via lazy-init callback + SIGUSR1 handler |
 
 ### SB3 VecEnv Wrapper (`tasks/sb3_vec_env.py`)
 
@@ -1306,19 +1306,22 @@ cd throwing_enviroment && sbatch hpc/train_sac_direct.slurm
 ```
 
 Logs are saved to `logs/sac/throwing_primitive/<timestamp>_sac_sb3/` with
-TensorBoard events and two kinds of SB3 checkpoints every 1000 iterations
-(`1000 × num_envs` timesteps):
+TensorBoard events and SB3 checkpoints:
 
-- **`latest_checkpoint.zip`** — overwritten at each checkpoint interval in the
-  run directory root. Always reflects the most recent model state. This is the
-  checkpoint used by the SLURM auto-resume logic.
-- **`checkpoints/agent_<step>_steps.zip`** — timestamped per-step checkpoints
-  kept for history/diagnostics.
-
-The `latest_checkpoint.zip` is saved by a custom `LatestCheckpointCallback`
-(`scripts/train_sac.py:57`) that tracks `self.num_timesteps` (SB3's cumulative
-timestep counter) rather than `n_calls`, ensuring correct save frequency
-regardless of vectorized env batching.
+- **`latest_checkpoint.zip`** — saved at each checkpoint interval in the
+  run directory root. Overwritten each time. Used by the SLURM auto-resume
+  logic. Saved via two independent mechanisms:
+  - `LatestCheckpointCallback` (`train_sac.py:59-72`): fires every 1000
+    iterations during training. Uses lazy initialization (`_last_save = None`)
+    so that on resume from a checkpoint at step N, the first save doesn't
+    trigger until step N + `save_freq` — preventing the stale-checkpoint loop
+    where every job saves at the same step count.
+  - SIGUSR1 handler (`train_sac.py:145-154`): saves the model at its **current**
+    training state when the SLURM time-limit signal fires (120s before kill).
+    This ensures `latest_checkpoint.zip` reflects the most recent weights even
+    if the last callback save was thousands of iterations ago.
+- **`checkpoints/agent_<step>_steps.zip`** — per-step checkpoints kept
+  for history/diagnostics. Saved by SB3 `CheckpointCallback`.
 
 ### TensorBoard Custom Metrics
 
@@ -1526,18 +1529,115 @@ sbatch hpc/train_sac_direct.slurm
 sbatch hpc/train_sac.slurm
 ```
 
+### Checkpoint Lifecycle
+
+The multi-job auto-resume chain is implemented across three components:
+
+#### 1. Checkpoint Saving (`scripts/train_sac.py`)
+
+Three mechanisms ensure checkpoints are saved:
+
+| Mechanism | When | Output |
+|-----------|------|--------|
+| `LatestCheckpointCallback` | Every 1000 iterations during training | `log_dir/latest_checkpoint.zip` |
+| SIGUSR1/SIGTERM handler | 120s before SLURM kills job | `log_dir/latest_checkpoint.zip` |
+| `CheckpointCallback` | Every 1000 iterations | `checkpoints/agent_<step>_steps.zip` |
+
+**`LatestCheckpointCallback`** (`train_sac.py:59-72`) — uses lazy
+initialization: `_last_save` starts as `None` and is set to
+`self.num_timesteps` on the first `_on_step` call. This prevents the
+immediate-save-on-resume bug: when loading a checkpoint at step N, the
+callback waits until step N + `save_freq` before saving again. Without
+this fix, `_last_save = -save_freq` would trigger an immediate save on
+the first step, producing an identical checkpoint at the same step count
+and stalling the chain.
+
+**SIGUSR1 handler** (`train_sac.py:145-154`) — registered before
+`model.learn()`. When the SLURM time-limit signal fires (SIGUSR1, 120
+seconds before kill), the handler saves the model at its **current**
+training state (e.g. step 6.9M). Without this, `latest_checkpoint.zip`
+would only reflect the last callback-triggered save (step 4.1M), losing
+hours of training progress.
+
+#### 2. Checkpoint Persistence (`hpc/train_sac_direct.slurm:42-58`)
+
+On job exit (normal or signaled), the SLURM cleanup trap:
+
+1. **rsyncs** local scratch (`$LOCAL_LOGS`) → NFS (`$LOG_DIR`), including
+   the signal-saved `latest_checkpoint.zip`
+2. **Fallback**: if no `latest_checkpoint.zip` exists anywhere on NFS
+   (e.g. signal handler never fired due to a crash), creates one from the
+   most recent `agent_*_steps.zip`:
+
+```bash
+EXISTING_LATEST=$(find "$LOG_DIR" -name "latest_checkpoint.zip" -type f | head -1)
+if [ -z "$EXISTING_LATEST" ]; then
+    LATEST_AGENT_ZIP=$(find "$LOG_DIR" -name "agent_*_steps.zip" -type f | sort -V | tail -1)
+    if [ -n "$LATEST_AGENT_ZIP" ]; then
+        RUN_DIR=$(dirname "$(dirname "$LATEST_AGENT_ZIP")")
+        cp "$LATEST_AGENT_ZIP" "$RUN_DIR/latest_checkpoint.zip"
+    fi
+fi
+```
+
+#### 3. Checkpoint Loading (`hpc/train_sac_direct.slurm:64-105`)
+
+On the next job with `RESUME_CHAIN=1`:
+
+1. **Finds** `latest_checkpoint.zip` anywhere under `$LOG_DIR` on NFS
+2. **Converts** host path to container path via `sed`:
+   ```bash
+   LATEST_CKPT=$(echo "$LATEST_CKPT_HOST" | sed "s|^$PROJECT_ROOT|$CONTAINER_PROJECT|")
+   ```
+3. **Syncs** NFS logs → local scratch (so the file is visible inside the container)
+4. **Passes** `--checkpoint <container_path>` to `train_sac.py`
+
+Inside `train_sac.py`, `SAC.load(checkpoint, env=env_wrapped)` restores
+the model including `num_timesteps` (cumulative step counter).
+`model.learn()` then sets `_num_timesteps_at_start = num_timesteps` and
+continues training. The `LatestCheckpointCallback` sees `_last_save = None`
+and initializes to the current step count, so the first save after resume
+won't trigger until another `save_freq` steps have elapsed.
+
+#### End-to-End Multi-Job Flow
+
+```
+Job N (running)
+  │
+  ├─ LatestCheckpointCallback saves at step 4.1M, 8.2M, ...
+  │
+  ├─ SLURM sends SIGUSR1 (120s before time limit)
+  │    └─→ handler saves latest_checkpoint.zip with CURRENT weights
+  │         (e.g. at step 6.9M — beyond last callback save)
+  │
+  ├─ Job exits → cleanup trap fires:
+  │    1. rsync local → NFS
+  │    2. Fallback: copy agent checkpoint if latest_checkpoint missing
+  │    3. sbatch next job with RESUME_CHAIN=1
+  │
+Job N+1 (starts)
+  │
+  ├─ finds latest_checkpoint.zip on NFS (from job N's SIGUSR1 save)
+  ├─ converts to container path → --checkpoint argument
+  ├─ SAC.load() restores model at step 6.9M
+  ├─ LatestCheckpointCallback._last_save = 6.9M (NOT -save_freq)
+  │    → next save won't fire until step 11.0M (6.9M + 4.1M)
+  │
+  └─ training continues from 6.9M → 11.0M → ...
+```
+
+### HPC Configuration
+
 **Logs**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/`
-**Checkpoint**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/latest_checkpoint.zip` (overwritten every 1000 iterations)
-**Resume**: SIGUSR1 trap + `RESUME_CHAIN=1` auto-resumes from `latest_checkpoint.zip`. The SLURM script
-scans `$LOG_DIR` for any `latest_checkpoint.zip` (defaulting to the most recently modified), converts
-the host path to a container path via `sed "s|^$PROJECT_ROOT|$CONTAINER_PROJECT|"`, and passes it as
-`--checkpoint` to `train_sac.py`.
 
 **Features**:
 - Apptainer container (`isaac-lab.sif`) with all dependencies
 - SIGUSR1 trap for automatic resubmission on time-limit
+- SIGUSR1 handler in training script saves model before kill
 - Local scratch (`$TMPDIR`) for fast I/O, synced to NFS on exit
 - Auto-resume from `latest_checkpoint.zip` via `RESUME_CHAIN=1` (no directory scanning or filename sorting needed)
+- `LatestCheckpointCallback` with lazy `_last_save` — prevents stale-checkpoint loop
+- Cleanup fallback creates `latest_checkpoint.zip` from agent checkpoint if signal handler didn't fire
 - Warp/matplotlib cache redirected to writable dirs
 - Isaac Sim kit data/cache/logs bound to project-local dirs
 

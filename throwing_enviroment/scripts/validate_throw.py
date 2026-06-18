@@ -38,7 +38,7 @@ parser.add_argument("--model_type", type=str, default="auto",
                     choices=["auto", "skrl", "sb3"],
                     help="Model type: auto-detect, skrl, or sb3")
 parser.add_argument("--num_tests", type=int, default=10, help="Number of test configs to run (max 10)")
-parser.add_argument("--attempts", type=int, default=3, help="Throws per target")
+parser.add_argument("--attempts", type=int, default=10, help="Max throws per target (stops early on success)")
 parser.add_argument("--success_threshold", type=float, default=0.15, help="Distance threshold for success (m)")
 parser.add_argument("--no_plot", action="store_true", help="Skip plot generation")
 parser.add_argument("--fast", action="store_true",
@@ -376,9 +376,12 @@ def _run_fast_validation():
                 f"dist={distance:.3f}m [{status}]"
             )
 
+            if distance < args_cli.success_threshold:
+                break
+
         results.append(result)
         pass_str = "PASS" if result.passed else "FAIL"
-        print(f"  Result: {pass_str} | best={result.best_distance:.3f}m | success={result.success_count}/{args_cli.attempts}")
+        print(f"  Result: {pass_str} | best={result.best_distance:.3f}m | success={result.success_count}/{len(result.distances)} attempts")
 
     n_passed = sum(1 for r in results if r.passed)
     sr = n_passed / len(results) * 100 if results else 0
@@ -390,7 +393,7 @@ def _run_fast_validation():
     for r in results:
         status = "PASS" if r.passed else "FAIL"
         print(f"  Test {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m | "
-              f"{r.success_count}/{args_cli.attempts} | {status}")
+              f"{r.success_count}/{len(r.distances)} attempts | {status}")
     print(f"{'='*60}")
     print(f"  Passed: {n_passed}/{len(results)} ({sr:.1f}%) | Avg best: {avg_best:.3f}m")
     print(f"{'='*60}")
@@ -398,7 +401,7 @@ def _run_fast_validation():
     if not args_cli.no_plot:
         from datetime import datetime
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{ts}.png")
+        plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{sr:.0f}pct_{ts}.png")
         plot_results(results, args_cli.success_threshold, plot_path, show=not headless)
 
     env.close()
@@ -563,9 +566,12 @@ def main():
                 f"dist={distance:.3f}m [{status}]"
             )
 
+            if distance < args_cli.success_threshold:
+                break
+
         results.append(result)
         pass_str = "PASS" if result.passed else "FAIL"
-        print(f"  Result: {pass_str} | best={result.best_distance:.3f}m | success={result.success_count}/{args_cli.attempts}")
+        print(f"  Result: {pass_str} | best={result.best_distance:.3f}m | success={result.success_count}/{len(result.distances)} attempts")
 
     # ── Summary ───────────────────────────────────────────────────────────
     n_passed = sum(1 for r in results if r.passed)
@@ -576,14 +582,14 @@ def main():
 
     print(f"\n{'='*60}")
     print(f"  THROW VALIDATION RESULTS")
-    print(f"  Threshold: {args_cli.success_threshold}m | Attempts/test: {args_cli.attempts}")
+    print(f"  Threshold: {args_cli.success_threshold}m | Max attempts/test: {args_cli.attempts}")
     print(f"{'='*60}")
     for r in results:
         status = "PASS" if r.passed else "FAIL"
         print(
             f"  Test {r.test_id:2d} | {r.test_name:22s} | "
             f"target=({r.target_x:.2f},{r.target_y:.2f}) | "
-            f"best={r.best_distance:.3f}m | {r.success_count}/{args_cli.attempts} | {status}"
+            f"best={r.best_distance:.3f}m | {r.success_count}/{len(r.distances)} attempts | {status}"
         )
     print(f"{'='*60}")
     print(f"  Total tests  : {len(results)}")
@@ -596,7 +602,7 @@ def main():
     if not args_cli.no_plot:
         from datetime import datetime
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_{ts}.png")
+        plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_{sr:.0f}pct_{ts}.png")
         plot_results(results, args_cli.success_threshold, plot_path, show=not headless)
 
     env.close()

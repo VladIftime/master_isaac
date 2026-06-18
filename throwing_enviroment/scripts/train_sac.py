@@ -19,6 +19,7 @@ Usage:
 
 import argparse
 import os
+import signal
 import sys
 from datetime import datetime
 
@@ -60,9 +61,11 @@ class LatestCheckpointCallback(BaseCallback):
         super().__init__(verbose)
         self.save_freq = save_freq
         self.save_path = save_path
-        self._last_save = -save_freq
+        self._last_save = None
 
     def _on_step(self) -> bool:
+        if self._last_save is None:
+            self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
             self.model.save(self.save_path)
             self._last_save = self.num_timesteps
@@ -138,6 +141,17 @@ def main():
 
     print(f"[INFO] Total timesteps: {total_timesteps} ({args_cli.max_iterations} iterations × {cfg.scene.num_envs} envs)")
     print(f"[INFO] Checkpoint every: {ckpt_interval} timesteps ({ckpt_interval // cfg.scene.num_envs} iterations)")
+
+    # Register signal handler to save final checkpoint on SIGUSR1 / SIGTERM
+    latest_ckpt_path = os.path.join(log_dir, "latest_checkpoint")
+
+    def _save_on_signal(signum, frame):
+        print(f"\n[CKPT] Received signal {signum} — saving latest_checkpoint...")
+        model.save(latest_ckpt_path)
+        print(f"[CKPT] Saved to: {latest_ckpt_path}.zip")
+
+    signal.signal(signal.SIGUSR1, _save_on_signal)
+    signal.signal(signal.SIGTERM, _save_on_signal)
 
     model.learn(
         total_timesteps=total_timesteps,
