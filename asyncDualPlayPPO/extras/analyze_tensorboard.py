@@ -17,8 +17,10 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
+from datetime import datetime
 from collections import defaultdict
 
 import numpy as np
@@ -339,7 +341,7 @@ def plot_comparison(all_data: list, labels: list, out_dir: Path,
 
 
 def write_csv(data: dict, out_dir: Path, prefix: str = ""):
-    csv_dir = out_dir / "csv"
+    csv_dir = out_dir
     csv_dir.mkdir(parents=True, exist_ok=True)
     for tag, series in data.items():
         safe_tag = tag.replace("/", "_")
@@ -378,7 +380,7 @@ def main():
     parser.add_argument("--labels", nargs="+", type=str, default=None,
                         help="Labels for each summary dir (defaults to dir parent name).")
     parser.add_argument("-o", "--out-dir", type=str, default=None,
-                        help="Output directory (defaults to first summary dir's parent).")
+                        help="Output directory for all plots and CSVs (default: ./tb_analysis).")
     parser.add_argument("--mode", type=str, choices=["separate", "combined", "both"],
                         default="both",
                         help="'separate': one PNG per metric. 'combined': single grid PNG. "
@@ -404,8 +406,9 @@ def main():
     else:
         labels = [sd.parent.name for sd in summary_dirs]
 
-    out_dir = Path(args.out_dir) if args.out_dir else summary_dirs[0].parent / "tb_analysis"
+    out_dir = Path(args.out_dir) if args.out_dir else Path("tb_analysis")
     out_dir.mkdir(parents=True, exist_ok=True)
+    csv_dir = out_dir / "csv"
 
     print(f"[INFO] Loading {len(summary_dirs)} TensorBoard summary dir(s) ...")
     all_data = []
@@ -428,7 +431,7 @@ def main():
             plot_single_run(data, run_type, run_dir, lbl,
                             args.mode, args.smoothing)
             if args.csv:
-                write_csv(data, run_dir, prefix="")
+                write_csv(data, csv_dir, prefix=f"{safe_label}_")
 
     if len(all_data) > 1:
         print(f"\n[INFO] Generating comparison plots ...")
@@ -437,7 +440,19 @@ def main():
         plot_comparison(all_data, labels, cmp_dir,
                         args.mode, args.smoothing)
 
-    print(f"\n[INFO] Output saved to: {out_dir}")
+    print(f"\n[INFO] Output directory: {out_dir.resolve()}")
+    print(f"[INFO]")
+    print(f"[INFO]   {out_dir.name}/")
+    for lbl in labels:
+        safe_label = lbl.replace(" ", "_").replace("/", "_")
+        print(f"[INFO]   ├── {safe_label}/        (individual plots)")
+    if args.csv:
+        print(f"[INFO]   ├── csv/                 (CSV exports)")
+    if len(all_data) > 1:
+        print(f"[INFO]   └── comparison/          (cross-run comparisons)")
+    else:
+        safe_label = labels[0].replace(" ", "_").replace("/", "_")
+        print(f"[INFO]   └── {safe_label}/        (individual plots)")
     print("[INFO] Done.")
 
 

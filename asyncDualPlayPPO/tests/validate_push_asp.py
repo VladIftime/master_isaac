@@ -132,16 +132,30 @@ def main():
     num_cat_dims = 4
     num_bins = 21
 
+    # Auto-detect Model D (no GoalEncoder) from checkpoint
+    _chkpt = torch.load(args.chkpt_bob, map_location="cpu", weights_only=False)
+    _chkpt_state = _chkpt.get("model_state_dict", _chkpt)
+    _pi_w0 = _chkpt_state.get("pi_encoder.obj_encoder.0.weight")
+    _is_noge = _pi_w0 is not None and _pi_w0.shape[1] == 22
+    _has_goal_encoder = False if _is_noge else True
+    print(f"[Detect] Checkpoint has pi_encoder.0.weight shape={_pi_w0.shape if _pi_w0 is not None else 'N/A'}, "
+          f"GoalEncoder={_has_goal_encoder}")
+    del _chkpt, _chkpt_state
+    torch.cuda.empty_cache()
+
     bob_cfg = copy.deepcopy(ppo_cfg["params"])
     bob_cfg["policy"]["use_pi_encoder"] = True
     bob_cfg["policy"]["use_multicategorical"] = True
     bob_cfg["policy"]["use_lstm"] = True
-    bob_cfg["policy"]["use_goal_encoder"] = True
+    bob_cfg["policy"]["use_goal_encoder"] = _has_goal_encoder
     bob_cfg["policy"]["num_cat_dims"] = num_cat_dims
     bob_cfg["policy"]["num_bins"] = num_bins
-    bob_cfg["policy"]["num_objects"] = 1
     bob_cfg["policy"]["robot_state_dim"] = 6
-    bob_cfg["policy"]["goal_embed_dim"] = 8
+    if _has_goal_encoder:
+        bob_cfg["policy"]["num_objects"] = 1
+        bob_cfg["policy"]["goal_embed_dim"] = 8
+    else:
+        bob_cfg["policy"]["pi_obj_dim"] = 22
 
     env_cfg = PushTaskCuRoboEnvCfg()
     env_cfg.scene.num_envs = 1
@@ -329,8 +343,8 @@ def main():
     else:
         alice_ppo = None
 
-    print(f"[Validate] Mode: rel_obs=True, rot_threshold={args.rot_threshold:.3f} rad, "
-          f"max_pushes={args.max_pushes}")
+    print(f"[Validate] Mode: rel_obs=True, GoalEncoder={'ON' if _has_goal_encoder else 'OFF (Model D)'}, "
+          f"rot_threshold={args.rot_threshold:.3f} rad, max_pushes={args.max_pushes}")
 
     # ── Init ──────────────────────────────────────────────────────────────────
     obs = env.reset()
