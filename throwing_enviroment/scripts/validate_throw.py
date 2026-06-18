@@ -43,6 +43,7 @@ parser.add_argument("--success_threshold", type=float, default=0.15, help="Dista
 parser.add_argument("--no_plot", action="store_true", help="Skip plot generation")
 parser.add_argument("--fast", action="store_true",
                     help="Use DirectRLEnv (faster, no IK overhead)")
+parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -257,9 +258,10 @@ def _run_fast_validation():
     cfg.scene.num_envs = 1
     cfg.playing_arm_side = PLAYING_SIDE
 
+    torch.manual_seed(args_cli.seed)
     env = ThrowingDirectEnv(cfg=cfg)
     device = env.device
-    env.reset()
+    env.reset(seed=args_cli.seed)
 
     ckpt_path = args_cli.checkpoint
     is_zip = ckpt_path.endswith(".zip")
@@ -272,7 +274,7 @@ def _run_fast_validation():
         from stable_baselines3 import SAC
 
         env_wrapped = DirectRLVecEnv(env)
-        model = SAC.load(ckpt_path, env=env_wrapped, seed=42)
+        model = SAC.load(ckpt_path, env=env_wrapped, seed=args_cli.seed)
         model_obs_dim = env.cfg.observation_space
         print(f"[INFO] Loaded SB3 SAC from: {ckpt_path}")
     else:
@@ -327,6 +329,8 @@ def _run_fast_validation():
         print(f"\n[Test {test_idx}/{n_tests}] {test_cfg.name} — target=({test_cfg.target_x:.2f}, {test_cfg.target_y:.2f})")
 
         for attempt in range(args_cli.attempts):
+            torch.manual_seed(args_cli.seed)
+            env.reset(seed=args_cli.seed)
             target_obj = env.scene["target"]
             origin = env.scene.env_origins[0]
             tgt_z = DTABLE_Z + 0.001
@@ -417,6 +421,7 @@ def main():
     print(f"  Tests             : {args_cli.num_tests}")
     print(f"  Attempts/test     : {args_cli.attempts}")
     print(f"  Success threshold : {args_cli.success_threshold}m")
+    print(f"  Seed              : {args_cli.seed}")
     print(f"{'='*60}\n")
 
     if args_cli.fast:
@@ -444,7 +449,8 @@ def main():
 
     env = ThrowingEnv(cfg=cfg)
     device = env.device
-    env.reset()
+    torch.manual_seed(args_cli.seed)
+    env.reset(seed=args_cli.seed)
     env._holding[:] = False
     env._released[:] = False
 
@@ -516,7 +522,8 @@ def main():
         print(f"\n[Test {test_idx}/{n_tests}] {test_cfg.name} — target=({test_cfg.target_x:.2f}, {test_cfg.target_y:.2f})")
 
         for attempt in range(args_cli.attempts):
-            env.reset()
+            torch.manual_seed(args_cli.seed)
+            env.reset(seed=args_cli.seed)
             env._holding[:] = False
             env._released[:] = False
 
