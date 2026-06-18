@@ -1584,6 +1584,13 @@ On job exit (normal or signaled), the SLURM cleanup trap:
    (e.g. signal handler never fired due to a crash), creates one from the
    most recent `agent_*_steps.zip`:
 
+**Note**: The fallback checkpoint created from `agent_*_steps.zip` does
+**not** contain the SAC replay buffer (periodic checkpoints are saved with
+`save_replay_buffer=False`). On resume from this fallback, SAC starts with
+an empty replay buffer, which refills in ~1000 env steps. This is acceptable
+because the crash+fallback path is rare — the SIGTERM handler covers the
+normal time-limit case.
+
 ```bash
 EXISTING_LATEST=$(find "$LOG_DIR" -name "latest_checkpoint.zip" -type f | head -1)
 if [ -z "$EXISTING_LATEST" ]; then
