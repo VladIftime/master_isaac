@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-16 (Model D GoalEncoder ablation, Model B pos_term_threshold floor 0.02)
+**Last updated**: 2026-06-18 (Model E/F d_pose, workspace/table/bounds fixes, absolute OOB termination)
 
 ---
 
@@ -39,6 +39,8 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 6 | **PBRS Model B** — PBRS dense + forced pos→rot curriculum | `train_push_pbrs_curr.py` |
 | 7 | **PBRS Model C** — PBRS dense + ASP curriculum (Alice/Bob) | `train_push_pbrs_asp.py` |
 | 8 | **PBRS Model D** — Model C with GoalEncoder ablated (PI-encoder only for Bob) | `train_push_pbrs_asp_no_ge.py` |
+| 9 | **PBRS Model E** — Model C with SE(2) d_pose metric (T-block) | `train_push_pbrs_asp_dpose.py` |
+| 10 | **PBRS Model F** — Model E with disc object (position-only d_pose) | `train_push_pbrs_asp_disc.py` |
 
 ### Stack Versions
 
@@ -174,6 +176,12 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-16 | **PBRS Model D (GoalEncoder ablation)** — Fork of Model C with Bob's GoalEncoder removed. Bob's PI-encoder sees full 22D per-object chunk (obj_state + goal_pose + dist) directly, without the 8D latent compression bottleneck. All other architecture unchanged — ASP two-phase loop, Alice unchanged, PBRS dense reward, PPOABC + ABC buffer, historical pool. `train_push_pbrs_asp_no_ge.py`, `hpc/train_push_pbrs_asp_noge.slurm`. |
 | 2026-06-16 | **Model B pos_term_threshold floor** — `pos_term_threshold` fade changed from `0.05→0.0` to `0.05→0.02` during curriculum ramp. Prevents position-only termination from becoming infinitely tight, preserving some position-only gating in Phase 3. `train_push_pbrs_curr.py:891`. |
 | 2026-06-15 | **Fix P76 (validation scripts + configs + plotting)** — (a) Created `tasks/utils/validation_configs.py` with 20 predefined test scenes across easy/medium/hard difficulty with varied start→goal directions. (b) Restored `tests/validate_push.py` with original module-level import structure, added: `VisualizationMarkers` for goal flat-T-block and push arrows (green start, red end, blue cylinder), airborne/tipped/OOB detection (`obj_z > 0.10`, `|roll| > 0.3`, `|pitch| > 0.3`, `||obj_xy - goal_xy|| > 0.5`), per-push prediction logging (`bins=... r=... len=... θ=... pos=... rot=... z=...`), termination reason tracking (`stop_reason`), `--csv` flag for CSV output. (c) Created `tests/validate_push_asp.py` — separate script for ASP Model C Bob using `PPOABC` with GoalEncoder. Same markers + detection + logging. Loads `episode_manager` state for goal management. (d) Created `tests/plot_validation.py` — reads CSV files from multiple models and generates comparison plots: `overall_sr.png`, `sr_easy.png`/`medium.png`/`hard.png`, `sr_by_difficulty_grouped.png`, `avg_pushes.png`, `per_test_comparison.txt`, `summary.md` (markdown table). All four files created. |
+| 2026-06-18 | **PBRS Model E (T-block + SE(2) d_pose)** — Replaces separate position/rotation PBRS potentials with a single SE(2) metric `d_pose = sqrt(dx² + dy² + L²·dθ²)` where `L=0.07m` is the T-block characteristic length. Observation slot `goal_dist(2)` replaced with `[d_pose, bearing]` where `bearing = atan2(dy, dx)`. Single PBRS potential `Φ(s) = exp(-k·d_pose²)` with `k=30, w=10`. Success: `d_pose < 0.055m`. Eliminates competing position/rotation gradients. No rotation bonus, no `_bob_gave_rot_bonus`. Progress reward uses single d_pose metric. `wrapper_push_asp.py` gains `dpose_obs`, `char_length`, `dpose_threshold` params (backwards compatible). `reward_pbrs.py` gains `compute_dpose()`, `potential_dpose()`, `compute_pbrs_reward_dpose()`. `train_push_pbrs_asp_dpose.py`, `hpc/train_push_pbrs_asp_dpose.slurm`. |
+| 2026-06-18 | **PBRS Model F (Disc + position-only d_pose)** — Fork of Model E with rotationally-symmetric disc (10cm diameter, 6cm tall, `CylinderCfg`) replacing the T-block. `char_length=0.0` collapses d_pose to pure 2D position distance `sqrt(dx² + dy²)`. Rotation still observed but not rewarded — network learns to ignore meaningless yaw. New env config `PushTaskCuRoboDiscEnvCfg` in `tasks/push_task_curobo_disc.py` uses `sim_utils.CylinderCfg(radius=0.05, height=0.06)` with `collision_props`, `mass_props(density=300)`, `physics_material(friction=0.6)`. Success: `d_pose < 0.05m`. `events.py` `reset_objects_to_random_safe_pose()` gains `spawn_z`, `settled_z` params for disc half-height (0.03m). `train_push_pbrs_asp_disc.py`, `hpc/train_push_pbrs_asp_disc.slurm`. |
+| 2026-06-18 | **Fix P77 (workspace border markers corrected)** — Zone border cuboids in `push_primitive_1arm_env.py` were at X=±0.65, Y=0.20/0.75 — 15cm wider in X and 5cm wider in Y than the actual IK workspace. Corrected to match `_WS_X=[-0.50,0.50], _WS_Y=[0.25,0.70]`: top Y 0.75→0.70, bottom Y 0.20→0.25, left/right X ±0.65→±0.50, bar widths 1.32→1.02, bar heights 0.57→0.47. Fix propagates to all task envs via `Push1ArmSceneCfg` inheritance. |
+| 2026-06-18 | **Fix P78 (table resized)** — Table shrunk from 2.0×2.0m to 1.40×1.00m, center moved (0,0.5)→(0,0.40). New edges: X∈[-0.70,0.70], Y∈[-0.10,0.90] — 20cm margin from IK workspace on left/right/far, 35cm on robot side. Eliminates wasted table area that was never reachable. `push_primitive_1arm_env.py`. |
+| 2026-06-18 | **Fix P79 (placement_bounds aligned to IK workspace)** — `placement_bounds` X∈[-0.75,0.75]→[-0.50,0.50], Y∈[0.20,1.00]→[0.25,0.70] — now identical to IK workspace. `table_bounds` tightened to match new table: X∈[-1.0,1.0]→[-0.70,0.70], Y∈[-0.5,1.5]→[-0.10,0.90]. Goals outside IK workspace are now invalid. `wrapper_push_asp.py`, `wrapper.py`, `train_curobo.py`. |
+| 2026-06-18 | **Fix P80 (absolute workspace OOB termination)** — Old OOB check used relative distance from goal (`‖obj−goal‖ > 0.5m`); object 0.49m from goal but outside IK workspace was not detected. Replaced with absolute IK workspace bounds check `_oob_ws = (obj_x < -0.50) ∣ (obj_x > 0.50) ∣ (obj_y < 0.25) ∣ (obj_y > 0.70)`. For Bob: feeds into existing catastrophe detection → −10 penalty, early phase end. For Alice: new `_alice_oob` block immediately resets the episode with −3.0 penalty when object leaves IK workspace during Alice's phase (object unreachable). Applied to all four PBRS ASP scripts: Models C, D, E, F. |
 
 ---
 
@@ -340,6 +348,8 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 | `train_push_pbrs_curr.slurm` | PBRS Model B — PBRS + forced curriculum, 528 envs, 3000 iters |
 | `train_push_pbrs_asp.slurm` | PBRS Model C — PBRS + ASP, 528 envs, 3000 iters |
 | `train_push_pbrs_asp_noge.slurm` | PBRS Model D — PBRS + ASP, GoalEncoder ablated, 528 envs, 3000 iters |
+| `train_push_pbrs_asp_dpose.slurm` | PBRS Model E — T-block + SE(2) d_pose, 528 envs, 3000 iters |
+| `train_push_pbrs_asp_disc.slurm` | PBRS Model F — Disc + position-only d_pose, 528 envs, 3000 iters |
 | `diagnostic_tests.slurm` | Full 4-test suite on HPC |
 | `test1_ppo_reward.slurm` | Test 1 only |
 | `test2_alice_exploration.slurm` | Test 2 only (200 iters, random Bob) |

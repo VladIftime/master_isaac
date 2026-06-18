@@ -1,35 +1,21 @@
 """
-Push-ASP PBRS Model C training script.
+Push-ASP PBRS Model F training script (Disc + position-only d_pose).
 
-Combines the ASP two-phase architecture with push-primitive macro-actions and
-PBRS (Potential-Based Reward Shaping) dense reward for Bob.  Alice uses push
-primitives to construct goal configurations by moving objects.  Bob uses push
-primitives to match the objects to their goal positions and orientations,
-receiving PBRS-shaped dense reward instead of sparse thresholds.  ASP
-curriculum from Alice provides automatic goal difficulty progression.
+Same as Model E but uses a rotationally-symmetric disc (10cm diameter, 6cm tall)
+instead of the T-block.  Because the disc has no meaningful yaw orientation,
+char_length=0 makes d_pose collapse to pure 2D position distance:
+d_pose = sqrt(dx^2 + dy^2).  Rotation is still observed but not rewarded.
 
-Action space: 4D MultiCategorical (Xs, Ys, length, theta).
-  Xs, Ys  = push start position in world coords
-  length   = push length
-  theta    = push orientation angle
-  Gripper always closed — no control over it.
+Action space: 4D MultiCategorical (Xs, Ys, length, theta) — unchanged.
 
-Architecture:
-  - Alice: PI-encoder + LSTM, 4D x 21-bin MultiCategorical, no GoalEncoder
-  - Bob:   PI-encoder + GoalEncoder (difference, K=8, max-pool) + LSTM,
-           4D x 21-bin MultiCategorical
-  - Rewards: Alice gets outcome reward at phase end (same as ASP), Bob gets
-    PBRS dense reward per push (potential shaping on position + rotation)
-    plus one-shot completion/rotation bonuses and catastrophe penalties.
-  - ABC: Optional, but demonstration signal is coarse with only 5 push
-    actions per Alice trajectory.
+Architecture: Same as Model E. GoalEncoder still active.
 
 Observations:
-  Alice: [ee_pose(6)|obj_state(14)] = 20D (num_objects=1)
-  Bob:   [ee_pose(6)|obj_state(14)|goal_pose(6)|goal_dist(2)] = 28D
+  Alice: [ee_pose(6)|obj_state(14)] = 20D
+  Bob:   [ee_pose(6)|obj_state(14)|goal_pose(6)|d_pose(1)|bearing(1)] = 28D
 
 Run locally:
-  python -m asyncDualPlayPPO.train_push_pbrs_c --num_envs 16 --max_iterations 500 --exp_name push_pbrs_c_test --headless
+  python -m asyncDualPlayPPO.train_push_pbrs_asp_disc --num_envs 16 --max_iterations 500 --exp_name push_pbrs_disc_test --headless
 """
 
 try:
@@ -99,9 +85,9 @@ def load_cfg(path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Train Push-Primitive Asymmetric Self-Play (PBRS Model C)"
+        description="Train Push-Primitive ASP with disc object (PBRS Model F)"
     )
-    parser.add_argument("--exp_name", type=str, default="push_pbrs_c")
+    parser.add_argument("--exp_name", type=str, default="push_pbrs_disc")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num_envs", type=int, default=512)
     parser.add_argument("--max_iterations", type=int, default=5000)
@@ -120,10 +106,10 @@ def main():
     parser.add_argument("--no_hist_pool", action="store_true",
                         help="Disable historical policy pool")
     parser.add_argument("--debug_rewards", action="store_true")
-    parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
-                        help="Replace goal_dist(2) with [rel_dx, rel_dy] = goal_xy - obj_xy in Bob's observation. "
-                             "Same 28D dimension — no architecture changes needed. "
-                             "Gives the policy direct access to push direction without learning atan2.")
+    parser.add_argument("--char_length", type=float, default=0.0,
+                        help="SE(2) characteristic length L (radians to metres)")
+    parser.add_argument("--dpose_threshold", type=float, default=0.05,
+                        help="d_pose success threshold (metres)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     if args.num_envs < 50:
@@ -141,9 +127,8 @@ def main():
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
     import isaaclab.sim as sim_utils
-    from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
     from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
-    from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
+    from asyncDualPlayPPO.tasks.push_task_curobo_disc import PushTaskCuRoboDiscEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push_asp import PushASPEnvWrapper
     from asyncDualPlayPPO.tasks.utils.wrapper_push_asp import _OBS_ROBOT_DIM
     from asyncDualPlayPPO.tasks.utils.action_push import (
@@ -160,10 +145,10 @@ def main():
     from asyncDualPlayPPO.algorithms.rl.ppo.storage import GPUDemonstrationBuffer
     from asyncDualPlayPPO.utils.historical_pool import HistoricalPolicyPool
     from asyncDualPlayPPO.tasks.utils.reward_pbrs import (
-        potential_pos, potential_rot, cosine_rot_error, pbrs_dense,
-        compute_pbrs_reward, PBRS_K_POS, PBRS_K_ROT, PBRS_W_POS, PBRS_W_ROT,
-        PBRS_POS_THRESHOLD, PBRS_COS_ROT_THRESHOLD, TIP_OVER_THRESHOLD,
-        PBRS_COMPLETION_BONUS, PBRS_ROTATION_BONUS, PBRS_CATASTROPHE_PENALTY,
+        potential_dpose, compute_dpose, compute_pbrs_reward_dpose,
+        PBRS_K_DPOSE, PBRS_W_DPOSE,
+        TIP_OVER_THRESHOLD, PBRS_COMPLETION_BONUS,
+        PBRS_CATASTROPHE_PENALTY,
     )
 
     ppo_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
@@ -174,8 +159,9 @@ def main():
     max_goals_per_episode = args.max_goals_per_episode
 
     print(
-        f"[Config] Push-ASP PBRS-C: alice_pushes={alice_pushes}, bob_pushes={bob_pushes}, "
-        f"max_goals={max_goals_per_episode}, ABC={'OFF' if args.no_abc else 'ON'}"
+        f"[Config] Push-ASP PBRS-F (disc+d_pose): alice_pushes={alice_pushes}, bob_pushes={bob_pushes}, "
+        f"max_goals={max_goals_per_episode}, L={args.char_length}, thr={args.dpose_threshold}, "
+        f"ABC={'OFF' if args.no_abc else 'ON'}"
     )
 
     num_cat_dims = 4
@@ -183,7 +169,7 @@ def main():
     use_lstm = True
     print(f"[Config] Push action space: {num_cat_dims}D x {num_bins} bins")
 
-    env_cfg = PushTaskCuRoboEnvCfg()
+    env_cfg = PushTaskCuRoboDiscEnvCfg()
     env_cfg.scene.num_envs = args.num_envs
 
     env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
@@ -203,10 +189,13 @@ def main():
         bob_pushes=bob_pushes,
         max_goals_per_episode=max_goals_per_episode,
         num_objects=1,
-        rel_obs=args.rel_obs,
+        dpose_obs=True,
+        char_length=args.char_length,
+        dpose_threshold=args.dpose_threshold,
+        obj_spawn_z=0.03,
+        obj_settled_z=0.03,
         device=base_env.device,
     )
-    _bob_gave_rot_bonus = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
     print("Environment ready.")
 
     print("[cuRobo] Initialising IK solver...")
@@ -234,14 +223,13 @@ def main():
 
     _QUAT_TOOL_DOWN = torch.tensor([[0.0, 1.0, 0.0, 0.0]], device=env.device, dtype=torch.float32)
 
-    _blk_dir = os.path.join(os.path.dirname(__file__), "assets/blocks")
     _goal_viz = VisualizationMarkers(
         VisualizationMarkersCfg(
             prim_path="/Visuals/GoalMarker",
             markers={
-                "tblock": UsdFileCfg(
-                    usd_path=os.path.join(_blk_dir, "t_shape.usda"),
-                    scale=(2.0, 2.0, 0.01),
+                "disc": sim_utils.CylinderCfg(
+                    radius=0.05,
+                    height=0.001,
                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
                 ),
             },
@@ -652,8 +640,7 @@ def main():
     ee_pos_local = _tcp_pos_local()
     ee_quat_w = _QUAT_TOOL_DOWN.expand(env.num_envs, 4).clone()
     prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
-    prev_phi_pos = torch.zeros(env.num_envs, device=env.device)
-    prev_phi_rot = torch.zeros(env.num_envs, device=env.device)
+    prev_phi_dpose = torch.zeros(env.num_envs, device=env.device)
 
     print("Starting training loop...")
 
@@ -692,8 +679,11 @@ def main():
         _obj_euler_pre = full_push_obs[:, _OBS_ROBOT_DIM + 3:_OBS_ROBOT_DIM + 6]
         _goal_pos_pre = full_push_obs[:, _OBS_ROBOT_DIM + 14:_OBS_ROBOT_DIM + 14 + 3]
         _goal_euler_pre = full_push_obs[:, _OBS_ROBOT_DIM + 14 + 3:_OBS_ROBOT_DIM + 14 + 6]
-        prev_phi_pos = potential_pos(_obj_pos_pre, _goal_pos_pre)
-        prev_phi_rot = potential_rot(_obj_euler_pre[..., 2], _goal_euler_pre[..., 2])
+        prev_phi_dpose = potential_dpose(
+            _obj_pos_pre, _goal_pos_pre,
+            _obj_euler_pre[..., 2], _goal_euler_pre[..., 2],
+            args.char_length,
+        )
 
         _a_pdim = num_cat_dims
         _b_pdim = num_cat_dims
@@ -979,22 +969,22 @@ def main():
                 _obj_euler_now = full_push_obs[:, _OBS_ROBOT_DIM + 3:_OBS_ROBOT_DIM + 6]
                 _goal_pos_now = full_push_obs[:, _OBS_ROBOT_DIM + 14:_OBS_ROBOT_DIM + 14 + 3]
                 _goal_euler_now = full_push_obs[:, _OBS_ROBOT_DIM + 14 + 3:_OBS_ROBOT_DIM + 14 + 6]
-                pbrs_result = compute_pbrs_reward(
+                pbrs_result = compute_pbrs_reward_dpose(
                     _obj_pos_now, _obj_euler_now, _goal_pos_now, _goal_euler_now,
-                    prev_phi_pos, prev_phi_rot,
-                    env._bob_gave_completion, _bob_gave_rot_bonus,
+                    prev_phi_dpose,
+                    env._bob_gave_completion,
+                    char_length=args.char_length,
+                    success_threshold=args.dpose_threshold,
                 )
                 bob_rewards = pbrs_result["reward"]
                 env._bob_gave_completion = pbrs_result["gave_completion"]
-                _bob_gave_rot_bonus = pbrs_result["gave_rot_bonus"]
-                bob_sparse = pbrs_result["reward"] - pbrs_result["dense_pos"] * PBRS_W_POS - pbrs_result["dense_rot"] * PBRS_W_ROT
+                bob_sparse = pbrs_result["reward"] - pbrs_result["dense"]
                 _tipped = pbrs_result["tipped"]
                 _launched = _obj_pos_now[:, 2] > 0.10
                 _catastrophe = (_tipped | _launched | _oob_ws) & is_bob
                 bob_rewards[_catastrophe & ~terminated] = -10.0
             bob_rewards[terminated] = 0.0
 
-            # Per-push summary (every push)
             _n_alice = len(alice_indices)
             _n_bob = len(bob_indices)
             _bob_rew_mean = bob_rewards[bob_indices].mean().item() if _n_bob > 0 else 0.0
@@ -1002,10 +992,8 @@ def main():
                 print(
                     f"  [Step {t:3d}] A={_n_alice} B={_n_bob}  "
                     f"bob_rew={_bob_rew_mean:+.3f}  "
-                    f"dPos={pbrs_result['dense_pos'][bob_indices].mean().item():+.4f}  "
-                    f"dRot={pbrs_result['dense_rot'][bob_indices].mean().item():+.4f}  "
-                    f"pos_err={pbrs_result['pos_err'][bob_indices].mean().item():.4f}  "
-                    f"cos_rot={pbrs_result['cos_rot_err'][bob_indices].mean().item():.4f}  "
+                    f"dense={pbrs_result['dense'][bob_indices].mean().item():+.4f}  "
+                    f"d_pose={pbrs_result['d_pose'][bob_indices].mean().item():.4f}  "
                     f"at_goal={pbrs_result['at_goal'][bob_indices].sum().item():.0f}/{_n_bob}  "
                     f"cata={_catastrophe.sum().item()}",
                     flush=True,
@@ -1017,10 +1005,8 @@ def main():
                 for e in range(env.num_envs):
                     if is_bob[e]:
                         _flags = []
-                        if pbrs_result["pos_success"][e]:
-                            _flags.append("POS_OK")
-                        if pbrs_result["rot_success"][e]:
-                            _flags.append("ROT_OK")
+                        if pbrs_result["at_goal"][e]:
+                            _flags.append("AT_GOAL")
                         if pbrs_result["tipped"][e]:
                             _flags.append("TIPPED")
                         if _catastrophe[e]:
@@ -1030,12 +1016,9 @@ def main():
                         _flag_str = " ".join(_flags) if _flags else ""
                         print(
                             f"    env {e:3d} [BOB ]: rew={bob_rewards[e].item():+.3f}  "
-                            f"Φp={prev_phi_pos[e].item():.3f}→{pbrs_result['phi_pos_now'][e].item():.3f}  "
-                            f"Φr={prev_phi_rot[e].item():.3f}→{pbrs_result['phi_rot_now'][e].item():.3f}  "
-                            f"d_pos={pbrs_result['dense_pos'][e].item():+.4f}  "
-                            f"d_rot={pbrs_result['dense_rot'][e].item():+.4f}  "
-                            f"pos_err={pbrs_result['pos_err'][e].item():.4f}m  "
-                            f"cos_rot={pbrs_result['cos_rot_err'][e].item():.4f}  "
+                            f"Phi={prev_phi_dpose[e].item():.3f}->{pbrs_result['phi_now'][e].item():.3f}  "
+                            f"dense={pbrs_result['dense'][e].item():+.4f}  "
+                            f"d_pose={pbrs_result['d_pose'][e].item():.4f}m  "
                             f"{_flag_str}",
                             flush=True,
                         )
@@ -1047,7 +1030,7 @@ def main():
                         print(
                             f"    env {e:3d} [ALICE]: push={env.episode_manager.phase_step[e].item()}  "
                             f"obj=({_a_ox:+.3f},{_a_oy:+.3f},{_a_oz:+.3f}) yaw={_a_yaw:+.3f}  "
-                            f"len={float(length[e]):.3f} θ={math.degrees(float(theta[e])):.0f}°",
+                            f"len={float(length[e]):.3f} theta={math.degrees(float(theta[e])):.0f} deg",
                             flush=True,
                         )
 
@@ -1090,8 +1073,6 @@ def main():
                 bob_pos_err_now[bob_done_ids] = bpos[bob_done_ids]
                 bob_rot_err_now[bob_done_ids] = brot[bob_done_ids]
                 bob_done_now[bob_done_ids] = bdone[bob_done_ids]
-                # Progress reward removed for PBRS — PBRS provides per-push gradient
-                _bob_gave_rot_bonus[bob_done_ids] = False
 
             if bob_achieved_completion.any():
                 completion_ids = torch.where(bob_achieved_completion)[0]
@@ -1105,7 +1086,6 @@ def main():
                 cata_ids = torch.where(_cata_early)[0]
                 env.handle_bob_phase_end(cata_ids, full_push_obs)
                 bob_done_now[cata_ids] = True
-                _bob_gave_rot_bonus[cata_ids] = False
 
             _alice_oob = _oob_ws & is_alice & ~alice_done_mask
             if _alice_oob.any():
@@ -1153,7 +1133,7 @@ def main():
                         f"disp3D={_disp3d:.4f}m  "
                         f"obj_start=({_sx:+.3f},{_sy:+.3f},{_sz:+.3f}) yaw={_syaw:+.3f}  "
                         f"obj_end=({_fx:+.3f},{_fy:+.3f},{_fz:+.3f}) yaw={_fyaw:+.3f}  "
-                        f"Δxy=({_fx-_sx:+.3f},{_fy-_sy:+.3f}) Δyaw={_fyaw-_syaw:+.3f}",
+                        f"Dxy=({_fx-_sx:+.3f},{_fy-_sy:+.3f}) Dyaw={_fyaw-_syaw:+.3f}",
                         flush=True,
                     )
 
@@ -1175,15 +1155,22 @@ def main():
                         _goal_yaw = 0.0
                     _obj_pos = full_push_obs[_gi, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 3].tolist()
                     _obj_yaw = full_push_obs[_gi, _OBS_ROBOT_DIM + 5].item()
-                    _phi_p = pbrs_result["phi_pos_now"][_gi].item() if pbrs_result is not None else 0.0
-                    _phi_r = pbrs_result["phi_rot_now"][_gi].item() if pbrs_result is not None else 0.0
+                    _phi = pbrs_result["phi_now"][_gi].item() if pbrs_result is not None else 0.0
+                    _d_pose_val = compute_dpose(
+                        torch.tensor([_obj_pos]).to(env.device),
+                        torch.tensor([_goal_pos]).to(env.device),
+                        torch.tensor([_obj_yaw]).to(env.device),
+                        torch.tensor([_goal_yaw]).to(env.device),
+                        args.char_length,
+                    ).item()
                     print(
                         f"  [BOB END   | iter={bob_updates} env={_gi}] {_succ} ({_gv})  "
                         f"obj_start=({_start_pos[0]:+.3f},{_start_pos[1]:+.3f},{_start_pos[2]:+.3f}) yaw={_start_yaw:+.3f}  "
                         f"goal=({_goal_pos[0]:+.3f},{_goal_pos[1]:+.3f},{_goal_pos[2]:+.3f}) yaw={_goal_yaw:+.3f}  "
                         f"obj_final=({_obj_pos[0]:+.3f},{_obj_pos[1]:+.3f},{_obj_pos[2]:+.3f}) yaw={_obj_yaw:+.3f}  "
                         f"pos_err={_pos:.4f}m  rot_err={_rot:.4f}rad  "
-                        f"Φp={_phi_p:.3f} Φr={_phi_r:.3f}",
+                        f"d_pose={_d_pose_val:.4f}m  "
+                        f"Phi={_phi:.3f}",
                         flush=True,
                     )
 
@@ -1199,8 +1186,8 @@ def main():
             if len(bob_indices) > 0:
                 bob_rew_buf.extend(rewards[bob_indices].cpu().tolist())
                 if pbrs_result is not None:
-                    writer.add_scalar("Reward/Bob/Dense/Pos", pbrs_result["dense_pos"][bob_indices].mean().item(), bob_updates)
-                    writer.add_scalar("Reward/Bob/Dense/Rot", pbrs_result["dense_rot"][bob_indices].mean().item(), bob_updates)
+                    writer.add_scalar("Reward/Bob/Dense/DPose", pbrs_result["dense"][bob_indices].mean().item(), bob_updates)
+                    writer.add_scalar("Metrics/Bob/DPose", pbrs_result["d_pose"][bob_indices].mean().item(), bob_updates)
 
             dones_all = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
 
@@ -1215,7 +1202,6 @@ def main():
                 if len(done_b) > 0:
                     bob_hidden[0][done_b] = 0.0
                     bob_hidden[1][done_b] = 0.0
-                    _bob_gave_rot_bonus[done_b] = False
 
             if bob_hidden is not None:
                 early_done = bob_done_now & ~bob_done_mask
@@ -1355,8 +1341,11 @@ def main():
             _obj_euler_pre = full_push_obs[:, _OBS_ROBOT_DIM + 3:_OBS_ROBOT_DIM + 6]
             _goal_pos_pre = full_push_obs[:, _OBS_ROBOT_DIM + 14:_OBS_ROBOT_DIM + 14 + 3]
             _goal_euler_pre = full_push_obs[:, _OBS_ROBOT_DIM + 14 + 3:_OBS_ROBOT_DIM + 14 + 6]
-            prev_phi_pos = potential_pos(_obj_pos_pre, _goal_pos_pre)
-            prev_phi_rot = potential_rot(_obj_euler_pre[..., 2], _goal_euler_pre[..., 2])
+            prev_phi_dpose = potential_dpose(
+                _obj_pos_pre, _goal_pos_pre,
+                _obj_euler_pre[..., 2], _goal_euler_pre[..., 2],
+                args.char_length,
+            )
 
         perform_alice_update()
         perform_bob_update(current_bob_obs)
@@ -1405,7 +1394,7 @@ def main():
             f"Bob succ={_bob_succ} fail={_bob_fail} | "
             f"IK_fail={_ik_fail_rate:.3f} | "
             f"Term={_iter_terminated}"
-            + (" | rel_obs" if args.rel_obs else ""),
+            + f" | disc_dpose L={args.char_length} thr={args.dpose_threshold}",
             flush=True,
         )
 
@@ -1454,9 +1443,10 @@ def main():
     writer.close()
 
     print(f"\n{'='*80}\nTRAINING COMPLETE ({bob_updates} iterations)\n{'='*80}")
-    print(f"To resume:\n  python -m asyncDualPlayPPO.train_push_pbrs_asp --exp_name {args.exp_name} \\")
+    print(f"To resume:\n  python -m asyncDualPlayPPO.train_push_pbrs_asp_disc --exp_name {args.exp_name} \\")
     print(f"    --chkpt_alice runs/{args.exp_name}/alice/latest_checkpoint.pt \\")
     print(f"    --chkpt_bob   runs/{args.exp_name}/bob/latest_checkpoint.pt \\")
+    print(f"    --char_length {args.char_length} --dpose_threshold {args.dpose_threshold} \\")
     print(f"    --resume_iteration {bob_updates}\n{'='*80}\n")
 
 

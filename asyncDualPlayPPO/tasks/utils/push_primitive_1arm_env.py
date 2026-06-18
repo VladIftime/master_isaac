@@ -123,10 +123,10 @@ class Push1ArmSceneCfg(InteractiveSceneCfg):
     table = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Table",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=[0.0, 0.5, -0.05], rot=[1.0, 0, 0, 0]
+            pos=[0.0, 0.40, -0.05], rot=[1.0, 0, 0, 0]
         ),
         spawn=sim_utils.CuboidCfg(
-            size=(2.0, 2.0, 0.1),
+            size=(1.40, 1.00, 0.1),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True, disable_gravity=True
             ),
@@ -145,10 +145,10 @@ class Push1ArmSceneCfg(InteractiveSceneCfg):
     zone_border_top = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/ZoneBorderTop",
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[0.0, 0.75, 0.001], rot=[1.0, 0, 0, 0]
+            pos=[0.0, 0.70, 0.001], rot=[1.0, 0, 0, 0]
         ),
         spawn=sim_utils.CuboidCfg(
-            size=(1.32, 0.02, 0.001),
+            size=(1.02, 0.02, 0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(
                 diffuse_color=(0.08, 0.08, 0.08)
             ),
@@ -157,10 +157,10 @@ class Push1ArmSceneCfg(InteractiveSceneCfg):
     zone_border_bottom = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/ZoneBorderBottom",
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[0.0, 0.20, 0.001], rot=[1.0, 0, 0, 0]
+            pos=[0.0, 0.25, 0.001], rot=[1.0, 0, 0, 0]
         ),
         spawn=sim_utils.CuboidCfg(
-            size=(1.32, 0.02, 0.001),
+            size=(1.02, 0.02, 0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(
                 diffuse_color=(0.08, 0.08, 0.08)
             ),
@@ -169,10 +169,10 @@ class Push1ArmSceneCfg(InteractiveSceneCfg):
     zone_border_left = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/ZoneBorderLeft",
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[-0.65, 0.475, 0.001], rot=[1.0, 0, 0, 0]
+            pos=[-0.50, 0.475, 0.001], rot=[1.0, 0, 0, 0]
         ),
         spawn=sim_utils.CuboidCfg(
-            size=(0.02, 0.57, 0.001),
+            size=(0.02, 0.47, 0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(
                 diffuse_color=(0.08, 0.08, 0.08)
             ),
@@ -181,10 +181,10 @@ class Push1ArmSceneCfg(InteractiveSceneCfg):
     zone_border_right = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/ZoneBorderRight",
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[0.65, 0.475, 0.001], rot=[1.0, 0, 0, 0]
+            pos=[0.50, 0.475, 0.001], rot=[1.0, 0, 0, 0]
         ),
         spawn=sim_utils.CuboidCfg(
-            size=(0.02, 0.57, 0.001),
+            size=(0.02, 0.47, 0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(
                 diffuse_color=(0.08, 0.08, 0.08)
             ),

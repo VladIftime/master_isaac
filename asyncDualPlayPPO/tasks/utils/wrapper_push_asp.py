@@ -34,6 +34,7 @@ from ...utils.episode_manager import EpisodeManager, Phase
 from ...utils.goal_validator import validate_goal
 from . import rewards as reward_utils
 from .events import reset_objects_to_random_safe_pose, reset_robot_joints
+from .reward_pbrs import compute_dpose
 
 # Observation layout indices (matches push_task_curobo.py, Fix P39: no gripper):
 # [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 28D total
@@ -85,6 +86,11 @@ class PushASPEnvWrapper:
         max_goals_per_episode: int = 3,
         num_objects: int = 1,
         rel_obs: bool = False,
+        dpose_obs: bool = False,
+        char_length: float = 0.0,
+        dpose_threshold: float = 0.06,
+        obj_spawn_z: float = 0.05,
+        obj_settled_z: float = 0.023,
         device: str = "cuda",
     ):
         self.env = env
@@ -94,6 +100,11 @@ class PushASPEnvWrapper:
         self.bob_pushes = bob_pushes
         self.max_goals_per_episode = max_goals_per_episode
         self.rel_obs = rel_obs
+        self.dpose_obs = dpose_obs
+        self.char_length = char_length
+        self.dpose_threshold = dpose_threshold
+        self.obj_spawn_z = obj_spawn_z
+        self.obj_settled_z = obj_settled_z
 
         self.robot_dim = _OBS_ROBOT_DIM
         self.obj_state_dim = _OBS_OBJ_STATE_DIM
@@ -142,14 +153,14 @@ class PushASPEnvWrapper:
 
         # Table bounds for goal validation
         self.table_bounds = {
-            "x_range": (-1.0, 1.0),
-            "y_range": (-0.5, 1.5),
+            "x_range": (-0.70, 0.70),
+            "y_range": (-0.10, 0.90),
             "z_min": -0.2,
             "z_max": 0.15,
         }
         self.placement_bounds = {
-            "x_range": (-0.75, 0.75),
-            "y_range": (0.2, 1.0),
+            "x_range": (-0.50, 0.50),
+            "y_range": (0.25, 0.70),
         }
 
         # Alice reward accumulator (paid at phase end)
@@ -158,6 +169,7 @@ class PushASPEnvWrapper:
         # Bob phase-end progress reward state
         self.bob_init_pos_err = torch.zeros(env.num_envs, device=device)
         self.bob_init_rot_err = torch.zeros(env.num_envs, device=device)
+        self.bob_init_dpose = torch.zeros(env.num_envs, device=device)
         self._bob_progress_captured = torch.zeros(
             env.num_envs, dtype=torch.bool, device=device,
         )
@@ -172,7 +184,7 @@ class PushASPEnvWrapper:
 
         # Safe reset state (local frame)
         _id_euler = torch.tensor([0.0, 0.0, 0.0], device=device)
-        _t_pos = torch.tensor([0.0, 0.5, 0.023], device=device)
+        _t_pos = torch.tensor([0.0, 0.5, obj_settled_z], device=device)
         if num_objects == 1:
             self._safe_reset_state = torch.cat([_t_pos, _id_euler])
         else:
@@ -190,8 +202,9 @@ class PushASPEnvWrapper:
 
         print(f"[PushASP Wrapper] Initialized: Alice {alice_pushes} pushes, "
               f"Bob {bob_pushes} pushes, max_goals={max_goals_per_episode}")
-        print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D"
-              + (" (rel_obs)" if rel_obs else ""))
+        _obs_tag = " (dpose L={:.3f} thr={:.3f})".format(char_length, dpose_threshold) if dpose_obs else \
+                   " (rel_obs)" if rel_obs else ""
+        print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D{_obs_tag}")
 
         # Tight spawn bounds (10cm × 10cm box) + random yaw to limit OOB
         self.spawn_x_range = (-0.04, 0.04)
@@ -204,6 +217,8 @@ class PushASPEnvWrapper:
             x_range=self.spawn_x_range,
             y_range=self.spawn_y_range,
             random_yaw=True,
+            spawn_z=self.obj_spawn_z,
+            settled_z=self.obj_settled_z,
         )
 
     # ------------------------------------------------------------------
@@ -237,19 +252,31 @@ class PushASPEnvWrapper:
     # ------------------------------------------------------------------
 
     def _get_push_obs(self) -> torch.Tensor:
-        """Get the full push-policy observation. When rel_obs=True, replaces
-        goal_dist(2) with [rel_dx, rel_dy] — same dimension, different content.
-        This avoids breaking the structured slicing in module.py's _encode_obs."""
+        """Get the full push-policy observation. When dpose_obs=True, replaces
+        goal_dist(2) with [d_pose, bearing]. When rel_obs=True (and not dpose),
+        replaces goal_dist(2) with [rel_dx, rel_dy]."""
         self._update_goal_in_extras()
         obs_dict = self.env.observation_manager.compute()
         obs = obs_dict["push_policy"]
-        if self.rel_obs:
+        dist_idx = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM
+        if self.dpose_obs:
+            obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
+            obj_yaw = obs[:, _OBS_ROBOT_DIM + 5]
+            goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
+                           _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
+            goal_yaw = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 5]
+            d_pose = compute_dpose(obj_pos, goal_pos, obj_yaw, goal_yaw, self.char_length)
+            dx = goal_pos[:, 0] - obj_pos[:, 0]
+            dy = goal_pos[:, 1] - obj_pos[:, 1]
+            bearing = torch.atan2(dy, dx)
+            obs[:, dist_idx] = d_pose
+            obs[:, dist_idx + 1] = bearing
+        elif self.rel_obs:
             obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
             goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
                            _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
             rel_dx = goal_pos[:, 0:1] - obj_pos[:, 0:1]
             rel_dy = goal_pos[:, 1:2] - obj_pos[:, 1:2]
-            dist_idx = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM
             obs[:, dist_idx:dist_idx + 1] = rel_dx
             obs[:, dist_idx + 1:dist_idx + 2] = rel_dy
         return obs
@@ -453,7 +480,6 @@ class PushASPEnvWrapper:
         """Capture Bob's initial position/rotation errors for phase-end progress."""
         if len(env_ids) == 0:
             return
-        # Read current object state after Bob phase reset
         obs = self._get_push_obs()
         cur_pos = self._get_obj_pos(obs)[env_ids]
         cur_euler = self._get_obj_euler(obs)[env_ids]
@@ -465,21 +491,22 @@ class PushASPEnvWrapper:
 
         self.bob_init_pos_err[env_ids] = pos_err
         self.bob_init_rot_err[env_ids] = rot_err
+        if self.dpose_obs:
+            self.bob_init_dpose[env_ids] = compute_dpose(
+                cur_pos, goal_pos, cur_euler[:, 2], goal_euler[:, 2], self.char_length,
+            )
         self._bob_progress_captured[env_ids] = True
 
     def compute_bob_progress_reward(self, bob_done_ids: torch.Tensor) -> torch.Tensor:
         """
         Phase-end progress reward for Bob envs that just completed.
-        r_progress = clamp(w_pos * delta_pos/init_pos + w_rot * delta_rot/init_rot, -1, +1)
+        When dpose_obs=True, uses single d_pose metric.
+        Otherwise: r_progress = clamp(w_pos * delta_pos/init_pos + w_rot * delta_rot/init_rot, -1, +1)
         """
-        w_pos, w_rot = 0.6, 0.4
         prog_rew = torch.zeros(self.num_envs, device=self.device)
 
         if len(bob_done_ids) == 0:
             return prog_rew
-
-        init_pos = self.bob_init_pos_err[bob_done_ids]
-        init_rot = self.bob_init_rot_err[bob_done_ids]
 
         obs = self._get_push_obs()
         cur_pos = self._get_obj_pos(obs)[bob_done_ids]
@@ -487,12 +514,22 @@ class PushASPEnvWrapper:
         goal_pos = self._get_goal_pos(obs)[bob_done_ids]
         goal_euler = self._get_goal_euler(obs)[bob_done_ids]
 
-        final_pos = (cur_pos - goal_pos).norm(dim=-1)
-        final_rot = _rot_distance_rad(cur_euler, goal_euler)
+        if self.dpose_obs:
+            init_dp = self.bob_init_dpose[bob_done_ids]
+            final_dp = compute_dpose(
+                cur_pos, goal_pos, cur_euler[:, 2], goal_euler[:, 2], self.char_length,
+            )
+            r_prog = ((init_dp - final_dp) / (init_dp + 1e-6)).clamp(-1.0, 1.0)
+        else:
+            w_pos, w_rot = 0.6, 0.4
+            init_pos = self.bob_init_pos_err[bob_done_ids]
+            init_rot = self.bob_init_rot_err[bob_done_ids]
+            final_pos = (cur_pos - goal_pos).norm(dim=-1)
+            final_rot = _rot_distance_rad(cur_euler, goal_euler)
+            pos_progress = (init_pos - final_pos) / (init_pos + 1e-6)
+            rot_progress = (init_rot - final_rot) / (init_rot + 1e-6)
+            r_prog = (w_pos * pos_progress + w_rot * rot_progress).clamp(-1.0, 1.0)
 
-        pos_progress = (init_pos - final_pos) / (init_pos + 1e-6)
-        rot_progress = (init_rot - final_rot) / (init_rot + 1e-6)
-        r_prog = (w_pos * pos_progress + w_rot * rot_progress).clamp(-1.0, 1.0)
         prog_rew[bob_done_ids] = r_prog
         self._bob_progress_captured[bob_done_ids] = False
 
@@ -621,9 +658,13 @@ class PushASPEnvWrapper:
         _goal_euler = goal_state[env_ids, 3:6]
         _start_pos = start_states[:, 0:3]
         _start_euler = start_states[:, 3:6]
-        _pos_dist = (_start_pos - _goal_pos).norm(dim=-1)
-        _rot_dist = _rot_distance_rad(_start_euler, _goal_euler)
-        too_easy = (_pos_dist < POS_THRESHOLD) & (_rot_dist < ROT_THRESHOLD)
+        if self.dpose_obs:
+            _dp = compute_dpose(_start_pos, _goal_pos, _start_euler[:, 2], _goal_euler[:, 2], self.char_length)
+            too_easy = _dp < self.dpose_threshold
+        else:
+            _pos_dist = (_start_pos - _goal_pos).norm(dim=-1)
+            _rot_dist = _rot_distance_rad(_start_euler, _goal_euler)
+            too_easy = (_pos_dist < POS_THRESHOLD) & (_rot_dist < ROT_THRESHOLD)
 
         too_easy_ids = env_ids[too_easy]
         valid_env_ids = env_ids[~too_easy]
@@ -684,7 +725,11 @@ class PushASPEnvWrapper:
         pos_err = (cur_pos - goal_pos).norm(dim=-1)
         rot_err = _rot_distance_rad(cur_euler, goal_euler)
 
-        success = (pos_err < POS_THRESHOLD) & (rot_err < ROT_THRESHOLD)
+        if self.dpose_obs:
+            dp = compute_dpose(cur_pos, goal_pos, cur_euler[:, 2], goal_euler[:, 2], self.char_length)
+            success = dp < self.dpose_threshold
+        else:
+            success = (pos_err < POS_THRESHOLD) & (rot_err < ROT_THRESHOLD)
         self.episode_manager.mark_bob_success(env_ids, success)
 
         n_success = int(success.sum().item())
@@ -759,21 +804,26 @@ class PushASPEnvWrapper:
         self.episode_manager.bob_success[env_ids] = True
         self.episode_manager.completion_given[env_ids] = True
 
-        w_pos, w_rot = 0.6, 0.4
-        init_pos = self.bob_init_pos_err[env_ids]
-        init_rot = self.bob_init_rot_err[env_ids]
-
         cur_pos = self._get_obj_pos(push_obs)[env_ids]
         cur_euler = self._get_obj_euler(push_obs)[env_ids]
         goal_pos = self._get_goal_pos(push_obs)[env_ids]
         goal_euler = self._get_goal_euler(push_obs)[env_ids]
 
-        final_pos = (cur_pos - goal_pos).norm(dim=-1)
-        final_rot = _rot_distance_rad(cur_euler, goal_euler)
-
-        pos_prog = (init_pos - final_pos) / (init_pos + 1e-6)
-        rot_prog = (init_rot - final_rot) / (init_rot + 1e-6)
-        r_prog = (w_pos * pos_prog + w_rot * rot_prog).clamp(-1.0, 1.0)
+        if self.dpose_obs:
+            init_dp = self.bob_init_dpose[env_ids]
+            final_dp = compute_dpose(
+                cur_pos, goal_pos, cur_euler[:, 2], goal_euler[:, 2], self.char_length,
+            )
+            r_prog = ((init_dp - final_dp) / (init_dp + 1e-6)).clamp(-1.0, 1.0)
+        else:
+            w_pos, w_rot = 0.6, 0.4
+            init_pos = self.bob_init_pos_err[env_ids]
+            init_rot = self.bob_init_rot_err[env_ids]
+            final_pos = (cur_pos - goal_pos).norm(dim=-1)
+            final_rot = _rot_distance_rad(cur_euler, goal_euler)
+            pos_prog = (init_pos - final_pos) / (init_pos + 1e-6)
+            rot_prog = (init_rot - final_rot) / (init_rot + 1e-6)
+            r_prog = (w_pos * pos_prog + w_rot * rot_prog).clamp(-1.0, 1.0)
         self._bob_progress_captured[env_ids] = False
 
         prog_rew = torch.zeros(self.num_envs, device=self.device)

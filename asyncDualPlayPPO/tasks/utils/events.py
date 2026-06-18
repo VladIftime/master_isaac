@@ -123,6 +123,8 @@ def reset_objects_to_random_safe_pose(
     x_range: tuple[float, float] = (-0.35, 0.35),
     y_range: tuple[float, float] = (0.45, 0.80),
     random_yaw: bool = False,
+    spawn_z: float = 0.05,
+    settled_z: float = 0.023,
 ) -> dict:
     """
     Reset objects to random positions within the table workspace.
@@ -141,14 +143,14 @@ def reset_objects_to_random_safe_pose(
     # Random XY for target_object
     x_local = torch.rand(num_resets, device=env.device) * (x_range[1] - x_range[0]) + x_range[0]
     y_local = torch.rand(num_resets, device=env.device) * (y_range[1] - y_range[0]) + y_range[0]
-    spawn_z = torch.full((num_resets,), 0.05, device=env.device)
-    settled_z = torch.full((num_resets,), 0.023, device=env.device)
+    spawn_z_t = torch.full((num_resets,), spawn_z, device=env.device)
+    settled_z_t = torch.full((num_resets,), settled_z, device=env.device)
 
     result = {}
 
     try:
         obj = env.scene["target_object"]
-        t_spawn = torch.stack([x_local, y_local, spawn_z], dim=1)
+        t_spawn = torch.stack([x_local, y_local, spawn_z_t], dim=1)
         t_world = t_spawn + env_origins
         if random_yaw:
             _yaw = torch.rand(num_resets, device=env.device) * 2.0 * math.pi - math.pi
@@ -164,7 +166,7 @@ def reset_objects_to_random_safe_pose(
             quat = identity_quat.unsqueeze(0).expand(num_resets, -1)
         obj.write_root_pose_to_sim(torch.cat([t_world, quat], dim=1), env_ids=env_ids)
         obj.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
-        result["target_local"] = torch.stack([x_local, y_local, settled_z], dim=1)
+        result["target_local"] = torch.stack([x_local, y_local, settled_z_t], dim=1)
         result["target_yaw"] = _yaw
     except KeyError:
         pass
@@ -189,13 +191,13 @@ def reset_objects_to_random_safe_pose(
             _fallback_sign = -_sign[_too_close]
             cx_local[_too_close] = (x_local[_too_close] + _fallback_sign * 0.25).clamp(x_range[0], x_range[1])
             cy_local[_too_close] = (y_local[_too_close] - _fallback_sign * 0.15).clamp(y_range[0], y_range[1])
-        c_spawn = torch.stack([cx_local, cy_local, spawn_z], dim=1)
+        c_spawn = torch.stack([cx_local, cy_local, spawn_z_t], dim=1)
         c_world = c_spawn + env_origins
         quat = identity_quat.unsqueeze(0).expand(num_resets, -1)
         obj = env.scene["cube"]
         obj.write_root_pose_to_sim(torch.cat([c_world, quat], dim=1), env_ids=env_ids)
         obj.write_root_velocity_to_sim(zero_vel, env_ids=env_ids)
-        result["cube_local"] = torch.stack([cx_local, cy_local, settled_z], dim=1)
+        result["cube_local"] = torch.stack([cx_local, cy_local, settled_z_t], dim=1)
     except KeyError:
         pass
 

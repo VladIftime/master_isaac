@@ -492,9 +492,9 @@ def main():
             test_type=cfg.test_type,
             success=test_success,
             pushes_used=pushes_used,
-            final_pos_error=pos_err if not test_success else 0.0,
-            final_rot_error=rot_err if not test_success else 0.0,
-            area_coverage=_area_coverage(pos_err if not test_success else 0.0, rot_err if not test_success else 0.0),
+            final_pos_error=pos_err,
+            final_rot_error=rot_err,
+            area_coverage=_area_coverage(pos_err, rot_err),
         )
         results.append(result)
         status = "PASS" if test_success else "FAIL"

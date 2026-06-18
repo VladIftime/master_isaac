@@ -327,8 +327,8 @@ def main():
     # Tighten object termination bounds to match placement area + table surface
     env_cfg.terminations.objects_off_table.func = terminations.objects_out_of_bounds
     env_cfg.terminations.objects_off_table.params = {
-        "x_range": (-0.75, 0.75),  # placement_bounds X
-        "y_range": (0.2, 1.0),     # placement_bounds Y
+        "x_range": (-0.50, 0.50),  # placement_bounds X = IK workspace
+        "y_range": (0.25, 0.70),   # placement_bounds Y = IK workspace
         "z_min": -0.2,              # below table
     }
 

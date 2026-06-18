@@ -1,3 +1,4 @@
+import math
 import torch
 
 
@@ -13,6 +14,11 @@ PBRS_COMPLETION_BONUS = 5.0
 PBRS_ROTATION_BONUS = 2.0
 PBRS_TIP_PENALTY = -5.0
 PBRS_CATASTROPHE_PENALTY = -5.0
+
+PBRS_K_DPOSE = 30.0
+PBRS_W_DPOSE = 10.0
+PBRS_DPOSE_THRESHOLD_TBLOCK = 0.055
+PBRS_DPOSE_THRESHOLD_DISC = 0.05
 
 TIP_OVER_THRESHOLD = 0.3
 
@@ -136,3 +142,73 @@ def check_done_pbrs(
         "pos_only": pos_only,
     }
     return done, reasons
+
+
+def compute_dpose(
+    obj_pos: torch.Tensor,
+    goal_pos: torch.Tensor,
+    obj_yaw: torch.Tensor,
+    goal_yaw: torch.Tensor,
+    char_length: float,
+) -> torch.Tensor:
+    dx = obj_pos[..., 0] - goal_pos[..., 0]
+    dy = obj_pos[..., 1] - goal_pos[..., 1]
+    dtheta = ((obj_yaw - goal_yaw + math.pi) % (2.0 * math.pi)) - math.pi
+    d_sq = dx ** 2 + dy ** 2 + char_length ** 2 * dtheta ** 2
+    return torch.sqrt(d_sq + 1e-12)
+
+
+def potential_dpose(
+    obj_pos: torch.Tensor,
+    goal_pos: torch.Tensor,
+    obj_yaw: torch.Tensor,
+    goal_yaw: torch.Tensor,
+    char_length: float,
+    k: float = PBRS_K_DPOSE,
+) -> torch.Tensor:
+    dx = obj_pos[..., 0] - goal_pos[..., 0]
+    dy = obj_pos[..., 1] - goal_pos[..., 1]
+    dtheta = ((obj_yaw - goal_yaw + math.pi) % (2.0 * math.pi)) - math.pi
+    d_sq = dx ** 2 + dy ** 2 + char_length ** 2 * dtheta ** 2
+    return torch.exp(-k * d_sq)
+
+
+def compute_pbrs_reward_dpose(
+    cur_obj_pos: torch.Tensor,
+    cur_obj_euler: torch.Tensor,
+    goal_pos: torch.Tensor,
+    goal_euler: torch.Tensor,
+    prev_phi_dpose: torch.Tensor,
+    gave_completion: torch.Tensor,
+    char_length: float,
+    k: float = PBRS_K_DPOSE,
+    w: float = PBRS_W_DPOSE,
+    success_threshold: float = PBRS_DPOSE_THRESHOLD_TBLOCK,
+):
+    obj_yaw = cur_obj_euler[..., 2]
+    goal_yaw = goal_euler[..., 2]
+
+    phi_now = potential_dpose(cur_obj_pos, goal_pos, obj_yaw, goal_yaw, char_length, k)
+    dense = w * (phi_now - prev_phi_dpose)
+    reward = dense.clone()
+
+    d_pose = compute_dpose(cur_obj_pos, goal_pos, obj_yaw, goal_yaw, char_length)
+    at_goal = d_pose < success_threshold
+
+    new_completion = at_goal & ~gave_completion
+    reward += new_completion.float() * PBRS_COMPLETION_BONUS
+    gave_completion = gave_completion | new_completion
+
+    tipped = (cur_obj_euler[:, 0].abs() > TIP_OVER_THRESHOLD) | \
+             (cur_obj_euler[:, 1].abs() > TIP_OVER_THRESHOLD)
+    reward += tipped.float() * PBRS_TIP_PENALTY
+
+    return {
+        "reward": reward,
+        "phi_now": phi_now,
+        "d_pose": d_pose,
+        "at_goal": at_goal,
+        "tipped": tipped,
+        "dense": dense,
+        "gave_completion": gave_completion,
+    }

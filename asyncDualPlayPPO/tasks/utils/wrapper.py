@@ -158,14 +158,14 @@ class AsyncDualPlayEnvWrapper:
 
         # Table and placement bounds for goal validation
         self.table_bounds = {
-            "x_range": (-1.0, 1.0),
-            "y_range": (-0.5, 1.5),
+            "x_range": (-0.70, 0.70),
+            "y_range": (-0.10, 0.90),
             "z_min": -0.2,
             "z_max": 0.15,
         }
         self.placement_bounds = {
-            "x_range": (-0.75, 0.75),
-            "y_range": (0.2, 1.0),
+            "x_range": (-0.50, 0.50),
+            "y_range": (0.25, 0.70),
         }
 
         # Buffer to hold Alice's rewards until her cycle ends (either Alice failed or Bob finished)

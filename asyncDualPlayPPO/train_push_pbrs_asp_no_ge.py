@@ -968,6 +968,10 @@ def main():
             current_alice_obs = env._get_alice_obs(full_push_obs)
             current_bob_obs = env._get_bob_obs(full_push_obs)
 
+            _obj_pos_all = full_push_obs[:, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 3]
+            _oob_ws = ((_obj_pos_all[:, 0] < _WS_X[0]) | (_obj_pos_all[:, 0] > _WS_X[1]) |
+                       (_obj_pos_all[:, 1] < _WS_Y[0]) | (_obj_pos_all[:, 1] > _WS_Y[1]))
+
             bob_rewards = torch.zeros(env.num_envs, device=env.device)
             bob_sparse = torch.zeros(env.num_envs, device=env.device)
             pbrs_result = None
@@ -988,8 +992,7 @@ def main():
                 bob_sparse = pbrs_result["reward"] - pbrs_result["dense_pos"] * PBRS_W_POS - pbrs_result["dense_rot"] * PBRS_W_ROT
                 _tipped = pbrs_result["tipped"]
                 _launched = _obj_pos_now[:, 2] > 0.10
-                _oob = (_obj_pos_now[:, :2] - _goal_pos_now[:, :2]).norm(dim=-1) > 0.5
-                _catastrophe = (_tipped | _launched | _oob) & is_bob
+                _catastrophe = (_tipped | _launched | _oob_ws) & is_bob
                 bob_rewards[_catastrophe & ~terminated] = -10.0
             bob_rewards[terminated] = 0.0
 
@@ -1105,6 +1108,20 @@ def main():
                 env.handle_bob_phase_end(cata_ids, full_push_obs)
                 bob_done_now[cata_ids] = True
                 _bob_gave_rot_bonus[cata_ids] = False
+
+            _alice_oob = _oob_ws & is_alice & ~alice_done_mask
+            if _alice_oob.any():
+                _aoob_ids = torch.where(_alice_oob)[0]
+                env.episode_manager.reset_episode(_aoob_ids, reason="Object Outside WS")
+                env.hide_goal_ghost(_aoob_ids)
+                _sp = env._rand_reset_objs(_aoob_ids)
+                reset_robot_joints(env.env, _aoob_ids)
+                env.env.scene.write_data_to_sim()
+                env.episode_manager.initial_states[_aoob_ids] = env._initial_states_from_spawn(
+                    _sp, len(_aoob_ids))
+                alice_rewards_now[_aoob_ids] = -3.0
+                alice_done_now[_aoob_ids] = True
+                env.set_table_color(_aoob_ids, (0.8, 0.1, 0.1))
 
             if args.debug_rewards:
                 for _gi in alice_done_ids.tolist():

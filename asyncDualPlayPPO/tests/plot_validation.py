@@ -76,6 +76,8 @@ def main():
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.patches import Rectangle
     except ImportError:
         print("[ERROR] matplotlib is required. Install it with: pip install matplotlib")
         sys.exit(1)
@@ -102,12 +104,29 @@ def main():
         sys.exit(1)
 
     n_models = len(all_data)
+    _cmap = matplotlib.colormaps["tab10"].resampled(max(n_models, 3))
+    model_colors = [_cmap(i) for i in range(n_models)]
+
+    test_indices = sorted(set(int(r["test_index"]) for d in all_data for r in d["rows"]))
+    test_short_names = []
+    for tid in test_indices:
+        _found = False
+        for d in all_data:
+            for r in d["rows"]:
+                if int(r["test_index"]) == tid:
+                    test_short_names.append(r["test_name"].split(" #")[0])
+                    _found = True
+                    break
+            if _found:
+                break
+        if not _found:
+            test_short_names.append(f"T{tid}")
 
     # ── Overall success rate ──────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(6, 4))
     model_labels = [d["label"] for d in all_data]
     srs = [d["metrics"]["sr"] for d in all_data]
-    bars = ax.bar(model_labels, srs, color=["#2196F3", "#4CAF50", "#FF9800"][:n_models])
+    bars = ax.bar(model_labels, srs, color=model_colors[:n_models])
     ax.set_ylabel("Success Rate (%)")
     ax.set_title("Overall Validation Success Rate")
     for bar, val in zip(bars, srs):
@@ -133,7 +152,7 @@ def main():
             plt.close(fig)
             continue
         bars = ax.bar(model_labels, diff_srs,
-                       color=["#2196F3", "#4CAF50", "#FF9800"][:n_models])
+                       color=model_colors[:n_models])
         ax.set_ylabel("Success Rate (%)")
         ax.set_title(f"Success Rate — {diff.title()} Difficulty")
         for bar, val in zip(bars, diff_srs):
@@ -147,7 +166,7 @@ def main():
     # ── Average pushes ────────────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(6, 4))
     avg_pushes = [d["metrics"]["avg_pushes"] for d in all_data]
-    bars = ax.bar(model_labels, avg_pushes, color=["#2196F3", "#4CAF50", "#FF9800"][:n_models])
+    bars = ax.bar(model_labels, avg_pushes, color=model_colors[:n_models])
     ax.set_ylabel("Average Pushes")
     ax.set_title("Average Pushes per Test")
     for bar, val in zip(bars, avg_pushes):
@@ -159,7 +178,7 @@ def main():
 
     fig, ax = plt.subplots(figsize=(6, 4))
     avg_covs = [d["metrics"]["avg_coverage"] for d in all_data]
-    bars = ax.bar(model_labels, avg_covs, color=["#2196F3", "#4CAF50", "#FF9800"][:n_models])
+    bars = ax.bar(model_labels, avg_covs, color=model_colors[:n_models])
     ax.set_ylabel("Area Coverage (%)")
     ax.set_title("Average Target Area Coverage")
     for bar, val in zip(bars, avg_covs):
@@ -183,7 +202,7 @@ def main():
         offset = (i - n_models / 2 + 0.5) * width
         bars = ax.bar([xi + offset for xi in x], diff_srs_list, width,
                        label=d["label"],
-                       color=["#2196F3", "#4CAF50", "#FF9800"][i])
+                       color=model_colors[i])
         for bar, val in zip(bars, diff_srs_list):
             if val > 0:
                 ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
@@ -205,7 +224,7 @@ def main():
         t_rows = [r for r in d["rows"] if r.get("test_type", "") == "pos_only"]
         t_m = compute_metrics(t_rows)
         type_srs.append(t_m["sr"])
-    bars = ax.bar(model_labels, type_srs, color=["#2196F3", "#4CAF50", "#FF9800"][:n_models])
+    bars = ax.bar(model_labels, type_srs, color=model_colors[:n_models])
     ax.set_ylabel("Success Rate (%)")
     ax.set_title("Success Rate — Position Only (10 tests)")
     for bar, val in zip(bars, type_srs):
@@ -222,7 +241,7 @@ def main():
         t_rows = [r for r in d["rows"] if r.get("test_type", "") == "pos_rot"]
         t_m = compute_metrics(t_rows)
         type_srs_rot.append(t_m["sr"])
-    bars = ax.bar(model_labels, type_srs_rot, color=["#2196F3", "#4CAF50", "#FF9800"][:n_models])
+    bars = ax.bar(model_labels, type_srs_rot, color=model_colors[:n_models])
     ax.set_ylabel("Success Rate (%)")
     ax.set_title("Success Rate — Position + Rotation (10 tests)")
     for bar, val in zip(bars, type_srs_rot):
@@ -246,7 +265,7 @@ def main():
         offset = (i - n_models / 2 + 0.5) * width
         bars = ax.bar([xi + offset for xi in x], type_srs_list, width,
                        label=d["label"],
-                       color=["#2196F3", "#4CAF50", "#FF9800"][i])
+                       color=model_colors[i])
         for bar, val in zip(bars, type_srs_list):
             if val > 0:
                 ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
@@ -260,18 +279,168 @@ def main():
     fig.savefig(os.path.join(args.out_dir, "sr_by_test_type_grouped.png"))
     plt.close(fig)
 
+    # ── Per-test error comparison (position + rotation) ───────────────────────
+    fig, (ax_pos, ax_rot) = plt.subplots(2, 1, figsize=(max(14, len(test_indices) * 0.8), 9), sharex=True)
+    x_t = np.arange(len(test_indices))
+    w_t = 0.8 / n_models
+
+    for i, d in enumerate(all_data):
+        pe_vals, re_vals = [], []
+        for tid in test_indices:
+            match = [r for r in d["rows"] if int(r["test_index"]) == tid]
+            pe_vals.append(float(match[0]["pos_err"]) if match else 0.0)
+            re_vals.append(float(match[0]["rot_err"]) if match else 0.0)
+        offset = (i - n_models / 2 + 0.5) * w_t
+        ax_pos.bar(x_t + offset, pe_vals, w_t, label=d["label"], color=model_colors[i],
+                   edgecolor="white", linewidth=0.5)
+        ax_rot.bar(x_t + offset, re_vals, w_t, label=d["label"], color=model_colors[i],
+                   edgecolor="white", linewidth=0.5)
+
+    ax_pos.axhline(0.05, color="red", linestyle="--", alpha=0.6, linewidth=1.2,
+                   label="Threshold (0.05 m)")
+    ax_pos.set_ylabel("Position Error (m)")
+    ax_pos.set_title("Final Position Error per Test")
+    ax_pos.legend(fontsize=8, loc="upper right")
+    ax_pos.grid(axis="y", alpha=0.3)
+
+    ax_rot.axhline(0.2, color="red", linestyle="--", alpha=0.6, linewidth=1.2,
+                   label="Threshold (0.2 rad)")
+    ax_rot.set_ylabel("Rotation Error (rad)")
+    ax_rot.set_title("Final Rotation Error per Test")
+    ax_rot.set_xticks(x_t)
+    ax_rot.set_xticklabels(test_short_names, rotation=45, ha="right", fontsize=8)
+    ax_rot.legend(fontsize=8, loc="upper right")
+    ax_rot.grid(axis="y", alpha=0.3)
+
+    fig.suptitle("Distance to Target per Test", fontsize=13, fontweight="bold", y=0.98)
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fig.savefig(os.path.join(args.out_dir, "per_test_error.png"), dpi=150)
+    plt.close(fig)
+    print(f"[OK] per_test_error.png saved")
+
+    # ── Error scatter (pos_err vs rot_err) ────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(10, 8))
+    _markers = ["o", "s", "^", "D", "v", "P", "X", "*"]
+    rect = Rectangle((0, 0), 0.05, 0.2, linewidth=2, edgecolor="green",
+                      facecolor="green", alpha=0.12, label="Success region")
+    ax.add_patch(rect)
+
+    for i, d in enumerate(all_data):
+        mk = _markers[i % len(_markers)]
+        for r in d["rows"]:
+            pe = float(r["pos_err"])
+            re = float(r["rot_err"])
+            tid = int(r["test_index"])
+            ax.scatter(pe, re, c=[model_colors[i]], marker=mk, s=70,
+                       edgecolors="black", linewidths=0.5, zorder=5)
+            ax.annotate(str(tid), (pe, re), textcoords="offset points",
+                        xytext=(5, 5), fontsize=6, color="gray")
+
+    for i, d in enumerate(all_data):
+        ax.scatter([], [], c=[model_colors[i]], marker=_markers[i % len(_markers)],
+                   s=70, edgecolors="black", linewidths=0.5, label=d["label"])
+
+    ax.axvline(0.05, color="red", linestyle="--", alpha=0.4, linewidth=1)
+    ax.axhline(0.2, color="red", linestyle="--", alpha=0.4, linewidth=1)
+    ax.set_xlabel("Position Error (m)")
+    ax.set_ylabel("Rotation Error (rad)")
+    ax.set_title("Final Error: Position vs Rotation (numbers = test ID)")
+    ax.legend(loc="upper right", fontsize=9)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(args.out_dir, "error_scatter.png"), dpi=150)
+    plt.close(fig)
+    print(f"[OK] error_scatter.png saved")
+
+    # ── Normalized distance to target ─────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(max(14, len(test_indices) * 0.8), 5))
+    x_t = np.arange(len(test_indices))
+    w_t = 0.8 / n_models
+
+    for i, d in enumerate(all_data):
+        norms = []
+        for tid in test_indices:
+            match = [r for r in d["rows"] if int(r["test_index"]) == tid]
+            if match:
+                pe = float(match[0]["pos_err"])
+                re = float(match[0]["rot_err"])
+                norms.append(max(pe / 0.05, re / 0.2))
+            else:
+                norms.append(0.0)
+        offset = (i - n_models / 2 + 0.5) * w_t
+        bars = ax.bar(x_t + offset, norms, w_t, label=d["label"], color=model_colors[i],
+                      edgecolor="white", linewidth=0.5)
+        for bar, val in zip(bars, norms):
+            if val > 0:
+                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
+                        f"{val:.1f}", ha="center", va="bottom", fontsize=6)
+
+    ax.axhline(1.0, color="red", linestyle="--", alpha=0.7, linewidth=1.5,
+               label="Pass threshold (1.0)")
+    ax.set_ylabel("Normalized Distance (max of pos/0.05, rot/0.2)")
+    ax.set_title("Normalized Distance to Target — below 1.0 = passed")
+    ax.set_xticks(x_t)
+    ax.set_xticklabels(test_short_names, rotation=45, ha="right", fontsize=8)
+    ax.legend(fontsize=8, loc="upper right")
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(args.out_dir, "normalized_distance.png"), dpi=150)
+    plt.close(fig)
+    print(f"[OK] normalized_distance.png saved")
+
+    # ── Average error by difficulty ───────────────────────────────────────────
+    fig, (ax_pos, ax_rot) = plt.subplots(1, 2, figsize=(12, 5))
+    x_d = np.arange(len(difficulties))
+    w_d = 0.8 / n_models
+
+    for i, d in enumerate(all_data):
+        avg_pe, avg_re = [], []
+        for diff in difficulties:
+            dr = [r for r in d["rows"] if difficulty_from_name(r["test_name"]) == diff]
+            avg_pe.append(np.mean([float(r["pos_err"]) for r in dr]) if dr else 0.0)
+            avg_re.append(np.mean([float(r["rot_err"]) for r in dr]) if dr else 0.0)
+        offset = (i - n_models / 2 + 0.5) * w_d
+        ax_pos.bar(x_d + offset, avg_pe, w_d, label=d["label"], color=model_colors[i],
+                   edgecolor="white", linewidth=0.5)
+        ax_rot.bar(x_d + offset, avg_re, w_d, label=d["label"], color=model_colors[i],
+                   edgecolor="white", linewidth=0.5)
+
+    ax_pos.axhline(0.05, color="red", linestyle="--", alpha=0.6)
+    ax_pos.set_ylabel("Avg Position Error (m)")
+    ax_pos.set_title("Avg Position Error by Difficulty")
+    ax_pos.set_xticks(x_d)
+    ax_pos.set_xticklabels([d.title() for d in difficulties])
+    ax_pos.legend(fontsize=8)
+    ax_pos.grid(axis="y", alpha=0.3)
+
+    ax_rot.axhline(0.2, color="red", linestyle="--", alpha=0.6)
+    ax_rot.set_ylabel("Avg Rotation Error (rad)")
+    ax_rot.set_title("Avg Rotation Error by Difficulty")
+    ax_rot.set_xticks(x_d)
+    ax_rot.set_xticklabels([d.title() for d in difficulties])
+    ax_rot.legend(fontsize=8)
+    ax_rot.grid(axis="y", alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(args.out_dir, "avg_error_by_difficulty.png"), dpi=150)
+    plt.close(fig)
+    print(f"[OK] avg_error_by_difficulty.png saved")
+
     # ── Per-test comparison table as text ─────────────────────────────────────
     table_path = os.path.join(args.out_dir, "per_test_comparison.txt")
     with open(table_path, "w") as f:
         header = f"{'Test':>4s} {'Name':15s} {'Type':8s} " + "  ".join(f"{l:>18s}" for l in model_labels)
         f.write(header + "\n")
         f.write("-" * len(header) + "\n")
-        for test_idx in range(1, get_test_count() + 1):
-            from asyncDualPlayPPO.tasks.utils.validation_configs import get_test_config
-            cfg = get_test_config(test_idx)
-            if cfg is None:
-                continue
-            line = f"{test_idx:4d} {cfg.name:15s} {cfg.test_type:8s} "
+        _test_meta = {}
+        for d in all_data:
+            for r in d["rows"]:
+                tid = int(r["test_index"])
+                if tid not in _test_meta:
+                    _test_meta[tid] = (r["test_name"].split(" #")[0], r.get("test_type", ""))
+        for test_idx in sorted(_test_meta.keys()):
+            tname, ttype = _test_meta[test_idx]
+            line = f"{test_idx:4d} {tname:15s} {ttype:8s} "
             for d in all_data:
                 r = [r for r in d["rows"] if int(r["test_index"]) == test_idx]
                 if r:
@@ -325,11 +494,6 @@ def main():
     print(f"[OK] Summary markdown saved to {md_path}")
 
     print(f"\n[Done] All plots saved to {args.out_dir}/")
-
-
-def get_test_count() -> int:
-    from asyncDualPlayPPO.tasks.utils.validation_configs import get_test_count as _gtc
-    return _gtc()
 
 
 if __name__ == "__main__":
