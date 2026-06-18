@@ -184,6 +184,7 @@ python scripts/test_train_quick.py --headless --steps 300
 
 # Validate checkpoint (SB3 .zip or skrl .pt)
 python scripts/validate_throw.py --checkpoint path/to/agent_200_steps.zip --fast --headless
+python scripts/validate_throw.py --checkpoint path/to/agent_200_steps.zip --fast --headless --seed 123
 
 # Resubmit HPC job
 cd throwing_enviroment && sbatch hpc/train_sac_direct.slurm
@@ -385,6 +386,9 @@ sim.dt         = 1/120 s (~0.00833 s)
 decimation     = 1 (120 Hz control)
 episode_length = 5 s (600 steps)
 physics_material = friction 1.0, restitution 0.3, combine_mode "max"
+
+Determinism:
+  enable_enhanced_determinism = True   (same seed → same physics outcomes)
 
 GPU buffers:
   gpu_found_lost_pairs_capacity = 1M
@@ -1213,7 +1217,7 @@ per-env variations in `duration` and `releasing_time`:
 | Observation preprocessor | None (manual /3.0 normalization) |
 | Total timesteps | `max_iterations × num_envs` (=100K × 2048 = 204.8M) |
 | Trainer | SB3 SAC |
-| Checkpoint format | `.zip` (SB3), every 1000 iterations; `latest_checkpoint.zip` overwritten via lazy-init callback + SIGUSR1 handler |
+| Checkpoint format | `.zip` (SB3), every 1000 iterations; `latest_checkpoint.zip` overwritten via lazy-init callback + SIGTERM handler |
 
 ### SB3 VecEnv Wrapper (`tasks/sb3_vec_env.py`)
 
@@ -1316,10 +1320,10 @@ TensorBoard events and SB3 checkpoints:
     so that on resume from a checkpoint at step N, the first save doesn't
     trigger until step N + `save_freq` — preventing the stale-checkpoint loop
     where every job saves at the same step count.
-  - SIGUSR1 handler (`train_sac.py:145-154`): saves the model at its **current**
-    training state when the SLURM time-limit signal fires (120s before kill).
-    This ensures `latest_checkpoint.zip` reflects the most recent weights even
-    if the last callback save was thousands of iterations ago.
+  - SIGTERM handler (`train_sac.py:145-154`): saves the model at its **current**
+    training state when the SLURM time-limit fires (SIGTERM, sent after the
+    SIGUSR1 early-warning signal). The handler calls `sys.exit(0)` after
+    saving so the shell's EXIT trap runs before SIGKILL.
 - **`checkpoints/agent_<step>_steps.zip`** — per-step checkpoints kept
   for history/diagnostics. Saved by SB3 `CheckpointCallback`.
 
@@ -1465,7 +1469,10 @@ Renders at 60 FPS (`render_interval=2`) so the throw animation is visible.
 
 Deterministic evaluation of a trained SAC checkpoint against 10 predefined
 target positions. Runs each target 3 times (configurable) and reports per-test
-pass/fail plus overall success rate.
+pass/fail plus overall success rate. Uses a fixed `--seed` (default 42) and
+PhysX enhanced determinism (`enable_enhanced_determinism = True` in
+`throwing_direct_env_cfg.py`) so repeated runs with the same checkpoint
+produce identical results.
 
 Two modes:
 - **Default** (ManagerBased): Full IK grasping + throw primitive, slower but visual
@@ -1485,9 +1492,16 @@ python scripts/validate_throw.py --fast \
 python scripts/validate_throw.py \
     --checkpoint .../agent_6000.pt --num_tests 5 --attempts 3
 
-# Custom threshold
-python scripts/validate_throw.py --checkpoint .../agent_6000.pt --success_threshold 0.20
+# Custom threshold and seed
+python scripts/validate_throw.py --checkpoint .../agent_6000.pt --success_threshold 0.20 --seed 123
 ```
+
+**Deterministic reproducibility**: The `--seed` flag is passed through to
+`torch.manual_seed()`, `env.reset(seed=...)`, and `SAC.load(..., seed=...)`.
+Combined with `enable_enhanced_determinism` in PhysX config
+(`throwing_direct_env_cfg.py:220`), this ensures identical throw outcomes
+across multiple validation runs of the same checkpoint — critical for fair
+comparison of different training checkpoints.
 
 **Test configurations** (`tasks/throw_validation_configs.py`):
 
@@ -1540,7 +1554,7 @@ Three mechanisms ensure checkpoints are saved:
 | Mechanism | When | Output |
 |-----------|------|--------|
 | `LatestCheckpointCallback` | Every 1000 iterations during training | `log_dir/latest_checkpoint.zip` |
-| SIGUSR1/SIGTERM handler | 120s before SLURM kills job | `log_dir/latest_checkpoint.zip` |
+| SIGTERM handler | Time limit reached (SIGTERM) | `log_dir/latest_checkpoint.zip` |
 | `CheckpointCallback` | Every 1000 iterations | `checkpoints/agent_<step>_steps.zip` |
 
 **`LatestCheckpointCallback`** (`train_sac.py:59-72`) — uses lazy
@@ -1552,12 +1566,13 @@ this fix, `_last_save = -save_freq` would trigger an immediate save on
 the first step, producing an identical checkpoint at the same step count
 and stalling the chain.
 
-**SIGUSR1 handler** (`train_sac.py:145-154`) — registered before
-`model.learn()`. When the SLURM time-limit signal fires (SIGUSR1, 120
-seconds before kill), the handler saves the model at its **current**
-training state (e.g. step 6.9M). Without this, `latest_checkpoint.zip`
-would only reflect the last callback-triggered save (step 4.1M), losing
-hours of training progress.
+**SIGTERM handler** (`train_sac.py:145-154`) — registered before
+`model.learn()`. When the SLURM time-limit fires (SIGTERM), the handler
+saves the model at its **current** training state (e.g. step 6.9M) and
+calls `sys.exit(0)` to allow the shell's EXIT trap to run before SIGKILL.
+Without `sys.exit()`, the Python process stays alive past KillWait and bash
+is killed by SIGKILL before the EXIT trap fires, losing the rsync and
+resubmission.
 
 #### 2. Checkpoint Persistence (`hpc/train_sac_direct.slurm:42-58`)
 
@@ -1593,11 +1608,12 @@ On the next job with `RESUME_CHAIN=1`:
 4. **Passes** `--checkpoint <container_path>` to `train_sac.py`
 
 Inside `train_sac.py`, `SAC.load(checkpoint, env=env_wrapped)` restores
-the model including `num_timesteps` (cumulative step counter).
-`model.learn()` then sets `_num_timesteps_at_start = num_timesteps` and
-continues training. The `LatestCheckpointCallback` sees `_last_save = None`
-and initializes to the current step count, so the first save after resume
-won't trigger until another `save_freq` steps have elapsed.
+the model including `num_timesteps` (cumulative step counter). To preserve
+the counter across jobs, `model.learn()` is called with
+`reset_num_timesteps=False` when resuming (`reset_num_timesteps=True` on
+fresh starts). Without this flag, SB3 resets the counter to 0 on every
+`learn()` call, causing the `LatestCheckpointCallback` lazy-init to see 0
+instead of the loaded step count.
 
 #### End-to-End Multi-Job Flow
 
@@ -1606,8 +1622,8 @@ Job N (running)
   │
   ├─ LatestCheckpointCallback saves at step 4.1M, 8.2M, ...
   │
-  ├─ SLURM sends SIGUSR1 (120s before time limit)
-  │    └─→ handler saves latest_checkpoint.zip with CURRENT weights
+  ├─ SLURM sends SIGTERM (time limit reached)
+  │    └─→ handler saves latest_checkpoint.zip with CURRENT weights, exits
   │         (e.g. at step 6.9M — beyond last callback save)
   │
   ├─ Job exits → cleanup trap fires:
@@ -1630,10 +1646,19 @@ Job N+1 (starts)
 
 **Logs**: `logs/sac/throwing_primitive/<timestamp>_sac_sb3/`
 
+**Note on TensorBoard**: Each SLURM job creates its own timestamped log
+directory (containing TensorBoard events and checkpoints). To view the full
+training curve across a multi-job chain, point TensorBoard at the parent
+directory:
+```bash
+tensorboard --logdir logs/sac/throwing_primitive/
+```
+This aggregates all jobs' scalar logs into a single continuous view.
+
 **Features**:
 - Apptainer container (`isaac-lab.sif`) with all dependencies
 - SIGUSR1 trap for automatic resubmission on time-limit
-- SIGUSR1 handler in training script saves model before kill
+- SIGTERM handler in training script saves model before kill and exits cleanly
 - Local scratch (`$TMPDIR`) for fast I/O, synced to NFS on exit
 - Auto-resume from `latest_checkpoint.zip` via `RESUME_CHAIN=1` (no directory scanning or filename sorting needed)
 - `LatestCheckpointCallback` with lazy `_last_save` — prevents stale-checkpoint loop

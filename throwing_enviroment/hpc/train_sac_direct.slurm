@@ -21,6 +21,7 @@ MAX_ITERATIONS=100000
 SEED=42
 PLAYING_ARM="right"
 EXP_NAME="hpc_throw_sac_direct_${NUM_ENVS}env"
+MAX_RESUBMITS=50  # Safety limit: stop chaining after this many jobs
 
 PROJECT_ROOT=$(pwd)
 SIF_IMAGE="$(dirname "$PROJECT_ROOT")/asyncDualPlayPPO/isaac-lab.sif"
@@ -45,25 +46,33 @@ cleanup() {
     rsync -a --no-perms "$LOCAL_LOGS/" "$LOG_DIR/" 2>/dev/null
     echo "[INFO] Sync complete."
 
-    # Fallback: create latest_checkpoint.zip from most recent agent checkpoint
-    # (only if signal-saved latest_checkpoint.zip doesn't already exist anywhere)
-    EXISTING_LATEST=$(find "$LOG_DIR" -name "latest_checkpoint.zip" -type f 2>/dev/null | head -1)
-    if [ -z "$EXISTING_LATEST" ]; then
-        LATEST_AGENT_ZIP=$(find "$LOG_DIR" -name "agent_*_steps.zip" -type f 2>/dev/null | sort -V | tail -1)
-        if [ -n "$LATEST_AGENT_ZIP" ]; then
-            RUN_DIR=$(dirname "$(dirname "$LATEST_AGENT_ZIP")")
+    # Fallback: create latest_checkpoint.zip from the most recent agent checkpoint
+    # Only if latest_checkpoint.zip does NOT already exist (never overwrite).
+    # LatestCheckpointCallback and SIGTERM handler already save with replay buffer.
+    LATEST_AGENT_ZIP=$(find "$LOG_DIR" \( -name "agent_*_steps.zip" -o -name "agent_final.zip" \) -type f 2>/dev/null | sort -V | tail -1)
+    if [ -n "$LATEST_AGENT_ZIP" ]; then
+        RUN_DIR="${LATEST_AGENT_ZIP%/checkpoints/*}"
+        if [ ! -f "$RUN_DIR/latest_checkpoint.zip" ]; then
             cp "$LATEST_AGENT_ZIP" "$RUN_DIR/latest_checkpoint.zip"
             echo "[CKPT] Fallback: created latest_checkpoint.zip from $(basename "$LATEST_AGENT_ZIP")"
         fi
     fi
 
     if [ "$WILL_RESUBMIT" = "true" ]; then
-        SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1 "$PROJECT_ROOT/hpc/train_sac_direct.slurm" 2>&1)
-        NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
-        if [ -n "$NEXT_JOB" ]; then
-            echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
+        CHAIN_COUNT=${CHAIN_COUNT:-0}
+        CHAIN_COUNT=$((CHAIN_COUNT + 1))
+        if [ "$CHAIN_COUNT" -ge "$MAX_RESUBMITS" ]; then
+            echo "[INFO] Reached CHAIN_COUNT=$CHAIN_COUNT >= MAX_RESUBMITS=$MAX_RESUBMITS — stopping chain."
+            touch "$LOG_DIR/$EXP_NAME.done"
         else
-            echo "[ERROR] Resubmission failed. sbatch output: $SBATCH_OUT"
+            echo "[INFO] Chain count: $CHAIN_COUNT / $MAX_RESUBMITS"
+            SBATCH_OUT=$(sbatch --export=ALL,RESUME_CHAIN=1,CHAIN_COUNT="$CHAIN_COUNT" "$PROJECT_ROOT/hpc/train_sac_direct.slurm" 2>&1)
+            NEXT_JOB=$(echo "$SBATCH_OUT" | awk '/Submitted batch job/{print $4}')
+            if [ -n "$NEXT_JOB" ]; then
+                echo "[INFO] Training incomplete — chained next job: $NEXT_JOB"
+            else
+                echo "[ERROR] Resubmission failed. sbatch output: $SBATCH_OUT"
+            fi
         fi
     else
         echo "[INFO] Training complete or stop requested — no resubmission."
@@ -71,6 +80,9 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+
+# Ensure SIGTERM reaches Python inside the container so it can save before exit
+trap 'echo "[INFO] Caught SIGTERM; forwarding to child..."; kill -TERM $APPTAINER_PID 2>/dev/null; wait $APPTAINER_PID 2>/dev/null' TERM
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # AUTO-RESUME
@@ -80,9 +92,15 @@ RESUME_ARGS=""
 if [ "$RESUME_CHAIN" = "1" ] && [ -d "$LOG_DIR" ]; then
     LATEST_CKPT_HOST=$(find "$LOG_DIR" -name "latest_checkpoint.zip" -type f 2>/dev/null | sort | tail -1)
     if [ -n "$LATEST_CKPT_HOST" ]; then
-        LATEST_CKPT=$(echo "$LATEST_CKPT_HOST" | sed "s|^$PROJECT_ROOT|$CONTAINER_PROJECT|")
-        echo "[INFO] Resuming from checkpoint: $LATEST_CKPT"
-        RESUME_ARGS="--checkpoint $LATEST_CKPT"
+        # Convert host path to container path (use bash expansion, not sed regex)
+        LATEST_CKPT="$CONTAINER_PROJECT/${LATEST_CKPT_HOST#$PROJECT_ROOT/}"
+        # Integrity check: verify file is non-empty before loading
+        if [ -s "$LATEST_CKPT_HOST" ]; then
+            echo "[INFO] Resuming from checkpoint: $LATEST_CKPT"
+            RESUME_ARGS="--checkpoint $LATEST_CKPT"
+        else
+            echo "[CKPT] WARNING: Checkpoint is empty or corrupted — starting fresh."
+        fi
     fi
     rsync -a --no-perms "$LOG_DIR/" "$LOCAL_LOGS/"
 fi
@@ -136,13 +154,27 @@ apptainer exec --nv \
         --seed           "$SEED" \
         --playing_arm_side "$PLAYING_ARM" \
         $RESUME_ARGS \
-    2>&1 | tee "$LOCAL_LOGS/train_${SLURM_JOB_ID}.log"
-
+    > "$LOCAL_LOGS/train_${SLURM_JOB_ID}.log" 2>&1 &
+APPTAINER_PID=$!
+TAIL_PID=""
+if command -v tail &>/dev/null; then
+    tail --pid=$APPTAINER_PID -n +1 -f "$LOCAL_LOGS/train_${SLURM_JOB_ID}.log" &
+    TAIL_PID=$!
+fi
+wait $APPTAINER_PID
 TRAIN_EXIT=$?
+[ -n "$TAIL_PID" ] && kill $TAIL_PID 2>/dev/null
 
 if [ $TRAIN_EXIT -ne 0 ]; then
-    echo "[ERROR] Training exited with code $TRAIN_EXIT; will resubmit."
-    WILL_RESUBMIT=true
+    # 137 = SIGKILL (time limit exceeded), 143 = SIGTERM (clean kill)
+    # These are expected exit codes for preempted jobs — resubmit.
+    # Any other non-zero exit means a crash (config error, OOM, etc.) — do NOT resubmit.
+    if [ $TRAIN_EXIT -eq 137 ] || [ $TRAIN_EXIT -eq 143 ]; then
+        echo "[INFO] Training preempted (exit=$TRAIN_EXIT); will resubmit."
+        WILL_RESUBMIT=true
+    else
+        echo "[ERROR] Training crashed with code $TRAIN_EXIT — NOT resubmitting."
+    fi
 fi
 
 echo "[INFO] Training finished. Exit code: $TRAIN_EXIT"

@@ -67,7 +67,7 @@ class LatestCheckpointCallback(BaseCallback):
         if self._last_save is None:
             self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
-            self.model.save(self.save_path)
+            self.model.save(self.save_path, include=["replay_buffer"])
             self._last_save = self.num_timesteps
         return True
 
@@ -142,26 +142,29 @@ def main():
     print(f"[INFO] Total timesteps: {total_timesteps} ({args_cli.max_iterations} iterations × {cfg.scene.num_envs} envs)")
     print(f"[INFO] Checkpoint every: {ckpt_interval} timesteps ({ckpt_interval // cfg.scene.num_envs} iterations)")
 
-    # Register signal handler to save final checkpoint on SIGUSR1 / SIGTERM
+    # Register signal handler to save final checkpoint on SIGTERM
+    # (SIGUSR1 goes to bash only due to SBATCH --signal=B:USR1@120; SIGTERM reaches Python)
     latest_ckpt_path = os.path.join(log_dir, "latest_checkpoint")
 
     def _save_on_signal(signum, frame):
         print(f"\n[CKPT] Received signal {signum} — saving latest_checkpoint...")
-        model.save(latest_ckpt_path)
+        model.save(latest_ckpt_path, include=["replay_buffer"])
         print(f"[CKPT] Saved to: {latest_ckpt_path}.zip")
+        print(f"[CKPT] Exiting to let bash cleanup trap fire.")
+        sys.exit(0)
 
-    signal.signal(signal.SIGUSR1, _save_on_signal)
     signal.signal(signal.SIGTERM, _save_on_signal)
 
     model.learn(
         total_timesteps=total_timesteps,
+        reset_num_timesteps=(args_cli.checkpoint is None),
         log_interval=10,
         progress_bar=True,
         callback=[checkpoint_callback, latest_ckpt_callback],
     )
 
     ckpt_path = os.path.join(ckpt_dir, "agent_final")
-    model.save(ckpt_path)
+    model.save(ckpt_path, include=["replay_buffer"])
     print(f"[INFO] Final model saved to: {ckpt_path}.zip")
 
     env.close()
