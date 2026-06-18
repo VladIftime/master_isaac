@@ -859,7 +859,7 @@ def main():
             _obj_xy_all = full_push_obs[:, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 2]
             _obj_yaw_all = full_push_obs[:, _OBS_ROBOT_DIM + 5]
 
-            min_r = 0.02
+            min_r = 0.04
             max_r = 0.08
             max_l = 0.20
             if len(alice_indices) > 0:
@@ -1101,6 +1101,15 @@ def main():
                     completion_ids, full_push_obs,
                 )
                 bob_done_now[completion_ids] = True
+                bob_success_now[completion_ids] = True
+                _c_pos = env._get_obj_pos(full_push_obs)[completion_ids]
+                _c_goal = env._get_goal_pos(full_push_obs)[completion_ids]
+                _c_euler = env._get_obj_euler(full_push_obs)[completion_ids]
+                _c_geuler = env._get_goal_euler(full_push_obs)[completion_ids]
+                bob_pos_err_now[completion_ids] = (_c_pos - _c_goal).norm(dim=-1)
+                _rdiff = (_c_euler - _c_geuler) % (2.0 * math.pi)
+                _rdiff = torch.where(_rdiff > math.pi, 2.0 * math.pi - _rdiff, _rdiff)
+                bob_rot_err_now[completion_ids] = _rdiff.max(dim=-1)[0]
 
             _cata_early = _catastrophe & is_bob & ~bob_done_mask & ~bob_achieved_completion
             if _cata_early.any():
@@ -1401,8 +1410,12 @@ def main():
         _ik_fail_rate = _iter_ik_fails / max(1, _iter_ik_steps)
         writer.add_scalar("Metrics/IKFailRate", _ik_fail_rate, bob_updates)
 
+        _mean_pos_err = np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0
+        _mean_rot_err = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0
+
         print(
             f"[Iter {bob_updates}] SR={current_sr:.2f} | "
+            f"PosErr={_mean_pos_err:.4f}m RotErr={_mean_rot_err:.4f}rad | "
             f"Goals valid={_valid_goals} invalid={_invalid_goals} | "
             f"Bob succ={_bob_succ} fail={_bob_fail} | "
             f"IK_fail={_ik_fail_rate:.3f} | "
