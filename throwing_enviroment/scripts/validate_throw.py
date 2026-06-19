@@ -44,6 +44,8 @@ parser.add_argument("--no_plot", action="store_true", help="Skip plot generation
 parser.add_argument("--fast", action="store_true",
                     help="Use DirectRLEnv (faster, no IK overhead)")
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+parser.add_argument("--contact", action="store_true",
+                    help="Use ContactSensor to detect drink touching basket bottom (requires --fast)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -78,6 +80,9 @@ EE_BODY = "right_wrist_3_link"
 ARM_JOINT_PATTERNS = ["right_shoulder_.*", "right_elbow_.*", "right_wrist_.*"]
 OBS_MAX_NORM = 3.0
 
+BASKET_BOTTOM_Z_OFFSET = 0.004
+BOTTOM_CONTACT_TOLERANCE = 0.10
+
 
 @dataclass
 class ThrowResult:
@@ -88,6 +93,7 @@ class ThrowResult:
     distances: List[float] = field(default_factory=list)
     actions: List[List[float]] = field(default_factory=list)
     landings: List[List[float]] = field(default_factory=list)
+    contact_hits: List[bool] = field(default_factory=list)
 
     @property
     def best_distance(self):
@@ -95,7 +101,13 @@ class ThrowResult:
 
     @property
     def success_count(self):
+        if self.contact_hits:
+            return sum(1 for h in self.contact_hits if h)
         return sum(1 for d in self.distances if d < args_cli.success_threshold)
+
+    @property
+    def contact_success_count(self):
+        return sum(1 for h in self.contact_hits if h)
 
     @property
     def passed(self):
@@ -167,7 +179,7 @@ def load_sac_agent(env_wrapped, checkpoint_path, device):
     return runner.agent
 
 
-def plot_results(results: List[ThrowResult], success_threshold: float, save_path: str, show: bool = True):
+def plot_results(results: List[ThrowResult], success_threshold: float, save_path: str, show: bool = True, use_contact: bool = False):
     """Generate validation plots: bird's-eye scatter + distance bar chart."""
     import matplotlib
     if not show:
@@ -178,7 +190,8 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # ── Plot 1: Bird's-eye scatter (top-down view) ─────────────────────
-    ax1.set_title("Throw Validation — Bird's Eye View", fontsize=12)
+    mode_label = "Contact" if use_contact else f"Distance < {success_threshold}m"
+    ax1.set_title(f"Throw Validation — Bird's Eye View ({mode_label})", fontsize=12)
     ax1.set_xlabel("X (m)")
     ax1.set_ylabel("Y (m)")
     ax1.set_aspect("equal")
@@ -196,12 +209,16 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
     ax1.plot(0, 0, "ks", markersize=10, label="Robot")
 
     for r in results:
-        ax1.plot(r.target_x, r.target_y, "o", color="blue", markersize=10, alpha=0.7)
+        ax1.plot(r.target_x, r.target_y, "s", color="blue", markersize=10, alpha=0.7)
         ax1.annotate(str(r.test_id), (r.target_x, r.target_y),
                      textcoords="offset points", xytext=(5, 5), fontsize=8)
 
         for i, (landing, dist) in enumerate(zip(r.landings, r.distances)):
-            color = "green" if dist < success_threshold else "red"
+            if use_contact and i < len(r.contact_hits):
+                is_success = r.contact_hits[i]
+            else:
+                is_success = dist < success_threshold
+            color = "green" if is_success else "red"
             ax1.plot(landing[0], landing[1], "x", color=color, markersize=6, alpha=0.7)
             ax1.plot(
                 [r.target_x, landing[0]], [r.target_y, landing[1]],
@@ -212,7 +229,7 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
     ax1.set_ylim(-0.2, 1.8)
 
     legend_elements = [
-        mpatches.Patch(color="blue", alpha=0.7, label="Target"),
+        plt.Line2D([0], [0], marker="s", color="blue", linestyle="None", markersize=8, alpha=0.7, label="Target"),
         plt.Line2D([0], [0], marker="x", color="green", linestyle="None", markersize=8, label="Success"),
         plt.Line2D([0], [0], marker="x", color="red", linestyle="None", markersize=8, label="Fail"),
         plt.Line2D([0], [0], marker="s", color="black", linestyle="None", markersize=8, label="Robot"),
@@ -230,10 +247,7 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
     colors = ["green" if r.passed else "red" for r in results]
 
     bars = ax2.bar(test_ids, best_dists, color=colors, alpha=0.7, edgecolor="black", linewidth=0.5)
-    ax2.axhline(y=success_threshold, color="blue", linestyle="--", linewidth=1.5,
-                label=f"Threshold ({success_threshold}m)")
     ax2.set_xticks(test_ids)
-    ax2.legend(fontsize=10)
     ax2.set_ylim(0, max(best_dists) * 1.2 if best_dists else 1.0)
     ax2.grid(True, alpha=0.3, axis="y")
 
@@ -248,15 +262,34 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
 
 def _run_fast_validation():
     """Fast validation using DirectRLEnv (no IK, no ManagerBased overhead)."""
-    from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg, TABLE_Z as DTABLE_Z
+    from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg, ThrowingDirectSceneCfg, TABLE_Z as DTABLE_Z
     from tasks.throwing_direct_env import ThrowingDirectEnv
     from tasks.sb3_vec_env import DirectRLVecEnv
+
+    use_contact = args_cli.contact
+
+    if use_contact:
+        from isaaclab.sensors import ContactSensorCfg
+        from isaaclab.utils import configclass as il_configclass
+
+        @il_configclass
+        class _ValidationSceneCfg(ThrowingDirectSceneCfg):
+            contact_sensor: ContactSensorCfg = ContactSensorCfg(
+                prim_path="{ENV_REGEX_NS}/Target",
+                update_period=0.0,
+                history_length=3,
+                track_contact_points=True,
+                filter_prim_paths_expr=["{ENV_REGEX_NS}/Milk"],
+            )
 
     headless = args_cli.headless
 
     cfg = ThrowingDirectEnvCfg()
     cfg.scene.num_envs = 1
     cfg.playing_arm_side = PLAYING_SIDE
+
+    if use_contact:
+        cfg.scene = _ValidationSceneCfg(num_envs=1, env_spacing=3.0)
 
     torch.manual_seed(args_cli.seed)
     env = ThrowingDirectEnv(cfg=cfg)
@@ -367,12 +400,29 @@ def _run_fast_validation():
             distance = env._last_distances[0].item()
             landing = env._last_milk_pos[0].cpu().tolist()
 
+            contact_hit = False
+            if use_contact:
+                sensor = env.scene.sensors["contact_sensor"]
+                force = sensor.data.force_matrix_w
+                if force is not None:
+                    has_contact = torch.norm(force[:, 0, 0, :], dim=-1) > 1.0
+                    contact_z = sensor.data.contact_pos_w[:, 0, 0, 2]
+                    target_z = env.scene["target"].data.root_pos_w[:, 2]
+                    basket_bottom_z = target_z + BASKET_BOTTOM_Z_OFFSET
+                    is_bottom = ~torch.isnan(contact_z) & (contact_z < basket_bottom_z + BOTTOM_CONTACT_TOLERANCE)
+                    contact_hit = (has_contact & is_bottom)[0].item()
+
             params_t = map_action_to_params(action_clamped, side=PLAYING_SIDE)
             result.distances.append(distance)
             result.actions.append(action_np.tolist())
             result.landings.append(landing[:2])
+            if use_contact:
+                result.contact_hits.append(contact_hit)
 
-            status = "HIT" if distance < args_cli.success_threshold else "miss"
+            if use_contact:
+                status = "CONTACT HIT" if contact_hit else "miss"
+            else:
+                status = "HIT" if distance < args_cli.success_threshold else "miss"
             print(
                 f"  Attempt {attempt+1}/{args_cli.attempts}: "
                 f"action=[{action_np[0]:+.2f},{action_np[1]:+.2f},{action_np[2]:.2f},{action_np[3]:.2f}] "
@@ -380,8 +430,12 @@ def _run_fast_validation():
                 f"dist={distance:.3f}m [{status}]"
             )
 
-            if distance < args_cli.success_threshold:
-                break
+            if use_contact:
+                if contact_hit:
+                    break
+            else:
+                if distance < args_cli.success_threshold:
+                    break
 
         results.append(result)
         pass_str = "PASS" if result.passed else "FAIL"
@@ -391,13 +445,18 @@ def _run_fast_validation():
     sr = n_passed / len(results) * 100 if results else 0
     avg_best = np.mean([r.best_distance for r in results]) if results else 0
 
+    mode_str = "contact sensor" if use_contact else f"distance < {args_cli.success_threshold}m"
     print(f"\n{'='*60}")
     print(f"  THROW VALIDATION RESULTS (DirectRLEnv — fast)")
+    print(f"  Success mode: {mode_str}")
     print(f"{'='*60}")
     for r in results:
         status = "PASS" if r.passed else "FAIL"
-        print(f"  Test {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m | "
-              f"{r.success_count}/{len(r.distances)} attempts | {status}")
+        extra = ""
+        if use_contact:
+            extra = f" | contact={r.contact_success_count}/{len(r.contact_hits)}"
+        print(f"  Test {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m"
+              f"{extra} | {r.success_count}/{len(r.distances)} attempts | {status}")
     print(f"{'='*60}")
     print(f"  Passed: {n_passed}/{len(results)} ({sr:.1f}%) | Avg best: {avg_best:.3f}m")
     print(f"{'='*60}")
@@ -406,7 +465,7 @@ def _run_fast_validation():
         from datetime import datetime
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{sr:.0f}pct_{ts}.png")
-        plot_results(results, args_cli.success_threshold, plot_path, show=not headless)
+        plot_results(results, args_cli.success_threshold, plot_path, show=not headless, use_contact=use_contact)
 
     env.close()
 
@@ -421,8 +480,13 @@ def main():
     print(f"  Tests             : {args_cli.num_tests}")
     print(f"  Attempts/test     : {args_cli.attempts}")
     print(f"  Success threshold : {args_cli.success_threshold}m")
+    print(f"  Success mode      : {'contact sensor' if args_cli.contact else 'distance'}")
     print(f"  Seed              : {args_cli.seed}")
     print(f"{'='*60}\n")
+
+    if args_cli.contact and not args_cli.fast:
+        print("[ERROR] --contact requires --fast (ContactSensor only works with DirectRLEnv)")
+        return
 
     if args_cli.fast:
         _run_fast_validation()
