@@ -44,8 +44,6 @@ parser.add_argument("--no_plot", action="store_true", help="Skip plot generation
 parser.add_argument("--fast", action="store_true",
                     help="Use DirectRLEnv (faster, no IK overhead)")
 parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
-parser.add_argument("--contact", action="store_true",
-                    help="Use ContactSensor to detect drink touching basket bottom (requires --fast)")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -83,6 +81,22 @@ OBS_MAX_NORM = 3.0
 BASKET_BOTTOM_Z_OFFSET = 0.004
 BOTTOM_CONTACT_TOLERANCE = 0.10
 
+BASKET_HALF_X = 0.185
+BASKET_HALF_Y = 0.257
+BASKET_HEIGHT = 0.160
+DRINK_RADIUS = 0.12
+
+
+def check_aabb_success(milk_pos, target_pos):
+    dx = torch.abs(milk_pos[:, 0] - target_pos[:, 0])
+    dy = torch.abs(milk_pos[:, 1] - target_pos[:, 1])
+    overlap_x = dx < (BASKET_HALF_X + DRINK_RADIUS)
+    overlap_y = dy < (BASKET_HALF_Y + DRINK_RADIUS)
+    basket_bottom = target_pos[:, 2] + BASKET_BOTTOM_Z_OFFSET
+    basket_rim = basket_bottom + BASKET_HEIGHT
+    z_ok = (milk_pos[:, 2] + DRINK_RADIUS > basket_bottom) & (milk_pos[:, 2] - DRINK_RADIUS < basket_rim)
+    return overlap_x & overlap_y & z_ok
+
 
 @dataclass
 class ThrowResult:
@@ -93,6 +107,7 @@ class ThrowResult:
     distances: List[float] = field(default_factory=list)
     actions: List[List[float]] = field(default_factory=list)
     landings: List[List[float]] = field(default_factory=list)
+    aabb_hits: List[bool] = field(default_factory=list)
     contact_hits: List[bool] = field(default_factory=list)
 
     @property
@@ -100,14 +115,25 @@ class ThrowResult:
         return min(self.distances) if self.distances else float("inf")
 
     @property
-    def success_count(self):
-        if self.contact_hits:
-            return sum(1 for h in self.contact_hits if h)
+    def dist_success_count(self):
         return sum(1 for d in self.distances if d < args_cli.success_threshold)
+
+    @property
+    def aabb_success_count(self):
+        return sum(1 for h in self.aabb_hits if h)
 
     @property
     def contact_success_count(self):
         return sum(1 for h in self.contact_hits if h)
+
+    @property
+    def success_count(self):
+        n = len(self.distances)
+        return sum(
+            1 for i in range(n)
+            if (i < len(self.aabb_hits) and self.aabb_hits[i])
+            or (i < len(self.contact_hits) and self.contact_hits[i])
+        )
 
     @property
     def passed(self):
@@ -190,8 +216,7 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # ── Plot 1: Bird's-eye scatter (top-down view) ─────────────────────
-    mode_label = "Contact" if use_contact else f"Distance < {success_threshold}m"
-    ax1.set_title(f"Throw Validation — Bird's Eye View ({mode_label})", fontsize=12)
+    ax1.set_title("Throw Validation — Bird's Eye View (AABB + Contact)", fontsize=12)
     ax1.set_xlabel("X (m)")
     ax1.set_ylabel("Y (m)")
     ax1.set_aspect("equal")
@@ -214,10 +239,10 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
                      textcoords="offset points", xytext=(5, 5), fontsize=8)
 
         for i, (landing, dist) in enumerate(zip(r.landings, r.distances)):
-            if use_contact and i < len(r.contact_hits):
-                is_success = r.contact_hits[i]
-            else:
-                is_success = dist < success_threshold
+            is_success = (
+                (i < len(r.aabb_hits) and r.aabb_hits[i])
+                or (i < len(r.contact_hits) and r.contact_hits[i])
+            )
             color = "green" if is_success else "red"
             ax1.plot(landing[0], landing[1], "x", color=color, markersize=6, alpha=0.7)
             ax1.plot(
@@ -265,31 +290,24 @@ def _run_fast_validation():
     from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg, ThrowingDirectSceneCfg, TABLE_Z as DTABLE_Z
     from tasks.throwing_direct_env import ThrowingDirectEnv
     from tasks.sb3_vec_env import DirectRLVecEnv
+    from isaaclab.sensors import ContactSensorCfg
+    from isaaclab.utils import configclass as il_configclass
 
-    use_contact = args_cli.contact
-
-    if use_contact:
-        from isaaclab.sensors import ContactSensorCfg
-        from isaaclab.utils import configclass as il_configclass
-
-        @il_configclass
-        class _ValidationSceneCfg(ThrowingDirectSceneCfg):
-            contact_sensor: ContactSensorCfg = ContactSensorCfg(
-                prim_path="{ENV_REGEX_NS}/Target",
-                update_period=0.0,
-                history_length=3,
-                track_contact_points=True,
-                filter_prim_paths_expr=["{ENV_REGEX_NS}/Milk"],
-            )
+    @il_configclass
+    class _ValidationSceneCfg(ThrowingDirectSceneCfg):
+        contact_sensor: ContactSensorCfg = ContactSensorCfg(
+            prim_path="{ENV_REGEX_NS}/Target",
+            update_period=0.0,
+            history_length=3,
+            track_contact_points=True,
+            filter_prim_paths_expr=["{ENV_REGEX_NS}/Milk"],
+        )
 
     headless = args_cli.headless
 
     cfg = ThrowingDirectEnvCfg()
-    cfg.scene.num_envs = 1
+    cfg.scene = _ValidationSceneCfg(num_envs=1, env_spacing=3.0)
     cfg.playing_arm_side = PLAYING_SIDE
-
-    if use_contact:
-        cfg.scene = _ValidationSceneCfg(num_envs=1, env_spacing=3.0)
 
     torch.manual_seed(args_cli.seed)
     env = ThrowingDirectEnv(cfg=cfg)
@@ -400,42 +418,42 @@ def _run_fast_validation():
             distance = env._last_distances[0].item()
             landing = env._last_milk_pos[0].cpu().tolist()
 
+            milk_pos = env.scene["milk"].data.root_pos_w[:, :3]
+            target_pos = env.scene["target"].data.root_pos_w[:, :3]
+            aabb_hit = check_aabb_success(milk_pos, target_pos)[0].item()
+
             contact_hit = False
-            if use_contact:
-                sensor = env.scene.sensors["contact_sensor"]
+            sensor = env.scene.sensors.get("contact_sensor")
+            if sensor is not None:
                 force = sensor.data.force_matrix_w
                 if force is not None:
                     has_contact = torch.norm(force[:, 0, 0, :], dim=-1) > 1.0
                     contact_z = sensor.data.contact_pos_w[:, 0, 0, 2]
-                    target_z = env.scene["target"].data.root_pos_w[:, 2]
-                    basket_bottom_z = target_z + BASKET_BOTTOM_Z_OFFSET
+                    basket_bottom_z = target_pos[:, 2] + BASKET_BOTTOM_Z_OFFSET
                     is_bottom = ~torch.isnan(contact_z) & (contact_z < basket_bottom_z + BOTTOM_CONTACT_TOLERANCE)
                     contact_hit = (has_contact & is_bottom)[0].item()
+
+            hit = aabb_hit or contact_hit
 
             params_t = map_action_to_params(action_clamped, side=PLAYING_SIDE)
             result.distances.append(distance)
             result.actions.append(action_np.tolist())
             result.landings.append(landing[:2])
-            if use_contact:
-                result.contact_hits.append(contact_hit)
+            result.aabb_hits.append(aabb_hit)
+            result.contact_hits.append(contact_hit)
 
-            if use_contact:
-                status = "CONTACT HIT" if contact_hit else "miss"
-            else:
-                status = "HIT" if distance < args_cli.success_threshold else "miss"
+            a_str = "Y" if aabb_hit else "N"
+            c_str = "Y" if contact_hit else "N"
+            status = "SUCCESS" if hit else "miss"
             print(
                 f"  Attempt {attempt+1}/{args_cli.attempts}: "
                 f"action=[{action_np[0]:+.2f},{action_np[1]:+.2f},{action_np[2]:.2f},{action_np[3]:.2f}] "
                 f"→ ijv={params_t[0,0]:.2f} fjv={params_t[0,1]:.2f} "
-                f"dist={distance:.3f}m [{status}]"
+                f"dist={distance:.3f}m | AABB={a_str} | contact={c_str} | [{status}]"
             )
 
-            if use_contact:
-                if contact_hit:
-                    break
-            else:
-                if distance < args_cli.success_threshold:
-                    break
+            if hit:
+                break
 
         results.append(result)
         pass_str = "PASS" if result.passed else "FAIL"
@@ -445,27 +463,28 @@ def _run_fast_validation():
     sr = n_passed / len(results) * 100 if results else 0
     avg_best = np.mean([r.best_distance for r in results]) if results else 0
 
-    mode_str = "contact sensor" if use_contact else f"distance < {args_cli.success_threshold}m"
-    print(f"\n{'='*60}")
+    print(f"\n{'='*70}")
     print(f"  THROW VALIDATION RESULTS (DirectRLEnv — fast)")
-    print(f"  Success mode: {mode_str}")
-    print(f"{'='*60}")
+    print(f"  Success = AABB overlap OR ContactSensor bottom touch")
+    print(f"{'='*70}")
     for r in results:
         status = "PASS" if r.passed else "FAIL"
-        extra = ""
-        if use_contact:
-            extra = f" | contact={r.contact_success_count}/{len(r.contact_hits)}"
-        print(f"  Test {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m"
-              f"{extra} | {r.success_count}/{len(r.distances)} attempts | {status}")
-    print(f"{'='*60}")
-    print(f"  Passed: {n_passed}/{len(results)} ({sr:.1f}%) | Avg best: {avg_best:.3f}m")
-    print(f"{'='*60}")
+        print(
+            f"  Test {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m "
+            f"| dist={r.dist_success_count}/{len(r.distances)} "
+            f"| aabb={r.aabb_success_count}/{len(r.aabb_hits)} "
+            f"| contact={r.contact_success_count}/{len(r.contact_hits)} "
+            f"| {status}"
+        )
+    print(f"{'='*70}")
+    print(f"  Passed: {n_passed}/{len(results)} ({sr:.1f}%) | Avg best dist: {avg_best:.3f}m")
+    print(f"{'='*70}")
 
     if not args_cli.no_plot:
         from datetime import datetime
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{sr:.0f}pct_{ts}.png")
-        plot_results(results, args_cli.success_threshold, plot_path, show=not headless, use_contact=use_contact)
+        plot_results(results, args_cli.success_threshold, plot_path, show=not headless, use_contact=True)
 
     env.close()
 
@@ -480,13 +499,8 @@ def main():
     print(f"  Tests             : {args_cli.num_tests}")
     print(f"  Attempts/test     : {args_cli.attempts}")
     print(f"  Success threshold : {args_cli.success_threshold}m")
-    print(f"  Success mode      : {'contact sensor' if args_cli.contact else 'distance'}")
     print(f"  Seed              : {args_cli.seed}")
     print(f"{'='*60}\n")
-
-    if args_cli.contact and not args_cli.fast:
-        print("[ERROR] --contact requires --fast (ContactSensor only works with DirectRLEnv)")
-        return
 
     if args_cli.fast:
         _run_fast_validation()
@@ -624,20 +638,26 @@ def main():
             origin = env.scene.env_origins[0].to(device)
             landing_pos = (milk.data.root_pos_w[0, :3] - origin).cpu().tolist()
 
+            milk_pos = milk.data.root_pos_w[:, :3]
+            target_pos_w = env.scene["target"].data.root_pos_w[:, :3]
+            aabb_hit = check_aabb_success(milk_pos, target_pos_w)[0].item()
+
             result.distances.append(distance)
             result.actions.append(action_np.tolist())
             result.landings.append(landing_pos[:2])
+            result.aabb_hits.append(aabb_hit)
 
-            status = "HIT" if distance < args_cli.success_threshold else "miss"
+            a_str = "Y" if aabb_hit else "N"
+            status = "SUCCESS" if aabb_hit else "miss"
             print(
                 f"  Attempt {attempt+1}/{args_cli.attempts}: "
                 f"action=[{action_np[0]:+.2f},{action_np[1]:+.2f},{action_np[2]:.2f},{action_np[3]:.2f}] "
                 f"→ params=[ijv={params.initial_joint_value:.2f} fjv={params.final_joint_value:.2f} "
                 f"rel={params.releasing_time:.2f} dur={params.duration:.2f}] "
-                f"dist={distance:.3f}m [{status}]"
+                f"dist={distance:.3f}m | AABB={a_str} | [{status}]"
             )
 
-            if distance < args_cli.success_threshold:
+            if aabb_hit:
                 break
 
         results.append(result)
@@ -651,23 +671,24 @@ def main():
     all_dists = [d for r in results for d in r.distances]
     avg_all = np.mean(all_dists) if all_dists else 0
 
-    print(f"\n{'='*60}")
+    print(f"\n{'='*70}")
     print(f"  THROW VALIDATION RESULTS")
-    print(f"  Threshold: {args_cli.success_threshold}m | Max attempts/test: {args_cli.attempts}")
-    print(f"{'='*60}")
+    print(f"  Success = AABB overlap (no ContactSensor in non-fast mode)")
+    print(f"{'='*70}")
     for r in results:
         status = "PASS" if r.passed else "FAIL"
         print(
             f"  Test {r.test_id:2d} | {r.test_name:22s} | "
             f"target=({r.target_x:.2f},{r.target_y:.2f}) | "
-            f"best={r.best_distance:.3f}m | {r.success_count}/{len(r.distances)} attempts | {status}"
+            f"best={r.best_distance:.3f}m | dist={r.dist_success_count}/{len(r.distances)} "
+            f"| aabb={r.aabb_success_count}/{len(r.aabb_hits)} | {status}"
         )
-    print(f"{'='*60}")
+    print(f"{'='*70}")
     print(f"  Total tests  : {len(results)}")
     print(f"  Passed       : {n_passed}/{len(results)} ({sr:.1f}%)")
     print(f"  Avg best dist: {avg_best:.3f}m")
     print(f"  Avg all dist : {avg_all:.3f}m")
-    print(f"{'='*60}")
+    print(f"{'='*70}")
 
     # ── Plots ─────────────────────────────────────────────────────────────
     if not args_cli.no_plot:

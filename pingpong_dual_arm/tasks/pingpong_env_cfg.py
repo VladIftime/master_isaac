@@ -440,7 +440,7 @@ class PingPongDualArmEnvCfg(ManagerBasedRLEnvCfg):
 
     contact_threshold: float = 0.06
 
-    scene: PingPongSceneCfg = PingPongSceneCfg(num_envs=4, env_spacing=3.0)
+    scene: PingPongSceneCfg = PingPongSceneCfg(num_envs=4, env_spacing=6.5)
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
     events: EventCfg = EventCfg()
