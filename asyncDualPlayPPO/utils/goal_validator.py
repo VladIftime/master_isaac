@@ -20,6 +20,7 @@ def validate_goal(
     rot_threshold: float = 0.2,
     min_meaningful_disp: float = 0.10,
     require_all_moved: bool = False,
+    skip_shallow_penalty: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
     """
     Validate goals set by Alice.
@@ -34,6 +35,9 @@ def validate_goal(
         min_meaningful_disp: Distance below which a valid goal is considered "shallow"
         require_all_moved: If True, ALL objects must individually move past thresholds
                           (used for multi-object mode — Alice must manipulate every block)
+        skip_shallow_penalty: If True, shallow goals receive +1 (same as valid) instead of -1.
+                             Used with time-based Alice reward where easy goals are naturally
+                             penalised by small t_B - t_A.
 
     Returns:
         valid: Boolean tensor (batch,) - True if goal is valid
@@ -133,6 +137,7 @@ def validate_goal(
                & (max_displacement < min_meaningful_disp))
     is_valid = all_on_table & any_moved & all_stable & ~any_outside_placement
 
+    _shallow_reward = 1.0 if skip_shallow_penalty else -1.0
     rewards = torch.where(
         off_table,
         torch.full((batch_size,), -3.0, device=initial_state.device),
@@ -147,7 +152,7 @@ def validate_goal(
                     torch.full((batch_size,), -3.0, device=initial_state.device),
                     torch.where(
                         shallow,
-                        torch.full((batch_size,), -1.0, device=initial_state.device),
+                        torch.full((batch_size,), _shallow_reward, device=initial_state.device),
                         torch.ones(batch_size, device=initial_state.device),
                     ),
                 ),
@@ -168,7 +173,8 @@ def validate_goal(
         elif out_of_zone[i]:
             reasons[i] = "Out of Zone (-3.0)"
         elif shallow[i]:
-            reasons[i] = f"Shallow (−1.0) max_disp={max_displacement[i]:.3f}m < {min_meaningful_disp:.2f}m"
+            _sr = "+1.0" if skip_shallow_penalty else "−1.0"
+            reasons[i] = f"Shallow ({_sr}) max_disp={max_displacement[i]:.3f}m < {min_meaningful_disp:.2f}m"
         else:
             reasons[i] = "Valid Goal (+1.0)"
 
