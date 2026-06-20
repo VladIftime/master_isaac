@@ -22,6 +22,123 @@ import sys
 from typing import List, Optional, Dict, Tuple
 
 
+def generate_single_run_plot(results, test_cfgs, save_path,
+                             pos_threshold_cm=5.0, rot_threshold_rad=0.2):
+    import math
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Polygon as MplPolygon, Patch
+    from matplotlib.gridspec import GridSpec
+
+    CB_BLUE = "#0072B2"
+    CB_VERMILION = "#D55E00"
+    CB_SKY = "#56B4E9"
+    CB_ORANGE = "#E69F00"
+    CB_GREEN = "#009E73"
+    CB_GRAY = "#999999"
+
+    def _t_verts(cx, cy, yaw, scale=0.04):
+        raw = np.array([
+            [-0.50, 0.50], [0.50, 0.50], [0.50, 0.20], [0.15, 0.20],
+            [0.15, -0.50], [-0.15, -0.50], [-0.15, 0.20], [-0.50, 0.20],
+        ]) * scale
+        c, s = math.cos(yaw), math.sin(yaw)
+        rot = np.array([[c, -s], [s, c]])
+        pts = raw @ rot.T
+        pts[:, 0] += cx
+        pts[:, 1] += cy
+        return pts
+
+    n = len(results)
+    if n == 0:
+        return
+
+    fig = plt.figure(figsize=(max(16, n * 1.0), 14))
+    gs = GridSpec(3, 1, height_ratios=[2, 2, 1.8], hspace=0.30, figure=fig)
+
+    test_labels = [f"T{r['test_index']}" for r in results]
+    pos_errs_cm = [r['final_pos_error'] * 100.0 for r in results]
+    rot_errs = [r['final_rot_error'] for r in results]
+    colors = [CB_BLUE if r['success'] else CB_VERMILION for r in results]
+
+    x = np.arange(n)
+    bar_w = 0.65
+
+    ax1 = fig.add_subplot(gs[0])
+    ax1.bar(x, pos_errs_cm, bar_w, color=colors, edgecolor="black", linewidth=0.4)
+    ax1.axhline(y=pos_threshold_cm, color=CB_GREEN, linestyle="--", linewidth=1.2,
+                label=f"Threshold ({pos_threshold_cm:.0f} cm)")
+    for i, r in enumerate(results):
+        tag = "PASS" if r["success"] else "FAIL"
+        y_off = max(pos_errs_cm) * 0.02 + 0.3
+        ax1.text(i, pos_errs_cm[i] + y_off, tag, ha="center", va="bottom",
+                 fontsize=6, fontweight="bold", color=colors[i])
+    ax1.set_ylabel("Position Error (cm)")
+    ax1.set_title("Best Position Error per Test", fontweight="bold")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(test_labels, fontsize=7)
+    ax1.legend(fontsize=8, loc="upper right")
+    ax1.grid(axis="y", alpha=0.25)
+
+    ax2 = fig.add_subplot(gs[1])
+    ax2.bar(x, rot_errs, bar_w, color=colors, edgecolor="black", linewidth=0.4)
+    ax2.axhline(y=rot_threshold_rad, color=CB_GREEN, linestyle="--", linewidth=1.2,
+                label=f"Threshold ({rot_threshold_rad:.1f} rad)")
+    for i, r in enumerate(results):
+        tag = "PASS" if r["success"] else "FAIL"
+        y_off = max(rot_errs) * 0.02 + 0.01
+        ax2.text(i, rot_errs[i] + y_off, tag, ha="center", va="bottom",
+                 fontsize=6, fontweight="bold", color=colors[i])
+    ax2.set_ylabel("Rotation Error (rad)")
+    ax2.set_title("Best Rotation Error per Test", fontweight="bold")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(test_labels, fontsize=7)
+    ax2.legend(fontsize=8, loc="upper right")
+    ax2.grid(axis="y", alpha=0.25)
+
+    gs_btm = gs[2].subgridspec(1, n, wspace=0.15)
+    for i, (r, cfg) in enumerate(zip(results, test_cfgs)):
+        ax = fig.add_subplot(gs_btm[0, i])
+        ax.add_patch(plt.Rectangle((-0.50, 0.25), 1.0, 0.45,
+                     fill=False, edgecolor=CB_GRAY, linewidth=0.5, linestyle=":"))
+        sv = _t_verts(cfg["start_x"], cfg["start_y"], 0.0, scale=0.04)
+        ax.add_patch(MplPolygon(sv, closed=True, facecolor=CB_SKY,
+                     edgecolor="black", linewidth=0.5, alpha=0.8))
+        gv = _t_verts(cfg["goal_x"], cfg["goal_y"], cfg["goal_yaw"], scale=0.04)
+        ax.add_patch(MplPolygon(gv, closed=True, facecolor=CB_ORANGE,
+                     edgecolor="black", linewidth=0.5, alpha=0.8))
+        dx = cfg["goal_x"] - cfg["start_x"]
+        dy = cfg["goal_y"] - cfg["start_y"]
+        if math.hypot(dx, dy) > 0.01:
+            ax.annotate("", xy=(cfg["goal_x"], cfg["goal_y"]),
+                        xytext=(cfg["start_x"], cfg["start_y"]),
+                        arrowprops=dict(arrowstyle="->", color=CB_GRAY, lw=0.7))
+        ax.set_xlim(-0.55, 0.55)
+        ax.set_ylim(0.20, 0.75)
+        ax.set_aspect("equal")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(test_labels[i], fontsize=6, pad=2)
+        for spine in ax.spines.values():
+            spine.set_edgecolor(CB_BLUE if r["success"] else CB_VERMILION)
+            spine.set_linewidth(1.5)
+
+    legend_elems = [
+        Patch(facecolor=CB_BLUE, edgecolor="black", label="PASS"),
+        Patch(facecolor=CB_VERMILION, edgecolor="black", label="FAIL"),
+        Patch(facecolor=CB_SKY, edgecolor="black", label="Start"),
+        Patch(facecolor=CB_ORANGE, edgecolor="black", label="Goal"),
+    ]
+    fig.legend(handles=legend_elems, loc="lower center", ncol=4, fontsize=9,
+              bbox_to_anchor=(0.5, -0.01))
+
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Plot] Saved to {save_path}")
+
+
 def load_csv(path: str) -> list:
     import csv
     rows = []

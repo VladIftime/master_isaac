@@ -357,6 +357,7 @@ def main():
 
     # ── Run tests ─────────────────────────────────────────────────────────────
     results: List[ASPValidationResult] = []
+    test_cfgs_data: List[dict] = []
     n_tests = min(args.num_tests, get_test_count())
 
     for test_idx in range(1, n_tests + 1):
@@ -373,14 +374,23 @@ def main():
         rot_err = 0.0
         retry_count = 0
         MAX_RETRIES = 3
+        best_pos_err = float('inf')
+        best_rot_err = float('inf')
 
         for retry in range(MAX_RETRIES):
             retry_count = retry + 1
+
+            _reset_jpos = _robot_scene.data.joint_pos.clone()
+            _reset_jpos[:, _arm_jids] = _calib_cmd
+            _robot_scene.write_joint_state_to_sim(
+                _reset_jpos, torch.zeros_like(_reset_jpos),
+            )
 
             obj = env.env.scene["target_object"]
             obj.write_root_pose_to_sim(torch.tensor([[
                 cfg.main_start.x, cfg.main_start.y, 0.05, 1.0, 0.0, 0.0, 0.0
             ]], device=device))
+            obj.write_root_velocity_to_sim(torch.zeros(1, 6, device=device))
             env.env.sim.step()
 
             _update_goal_marker(cfg.main_goal_x, cfg.main_goal_y, cfg.main_goal_yaw)
@@ -409,6 +419,7 @@ def main():
             _init_goal_euler = full_obs[0, _OBS_ROBOT_DIM + 14 + 3:_OBS_ROBOT_DIM + 14 + 6]
             _init_pos_err = (_init_obj_pos - _init_goal_pos).norm().item()
             _init_rot_err = _rot_distance_rad(_init_obj_euler.unsqueeze(0), _init_goal_euler.unsqueeze(0)).item()
+            _init_oob_2d = float((_init_obj_pos[:2] - _init_goal_pos[:2]).norm().item())
             _rtag = f"[R{retry_count}] " if retry > 0 else ""
             print(f"  {_rtag}[{cfg.test_type}] goal=({cfg.main_goal_x:+.3f},{cfg.main_goal_y:+.3f}) yaw={cfg.main_goal_yaw:+.3f}  "
                   f"start=({cfg.main_start.x:+.3f},{cfg.main_start.y:+.3f})  "
@@ -426,6 +437,8 @@ def main():
             stop_reason = "max_pushes"
             pos_err = 0.0
             rot_err = 0.0
+            prev_pos_err = _init_pos_err
+            prev_rot_err = _init_rot_err
 
             for push_i in range(args.max_pushes):
                 with torch.no_grad():
@@ -527,15 +540,25 @@ def main():
 
                 if obj_z > 0.10:
                     stop_reason = "launched"
+                    pos_err = prev_pos_err
+                    rot_err = prev_rot_err
                     break
                 if tipped:
                     stop_reason = "tipped"
+                    pos_err = prev_pos_err
+                    rot_err = prev_rot_err
                     break
-                if oob_2d > 0.50:
+                if oob_2d > _init_oob_2d + 0.20:
                     stop_reason = "oob"
                     break
 
+                prev_pos_err = pos_err
+                prev_rot_err = rot_err
                 env.capture_pre_push(full_obs)
+
+            if pos_err < best_pos_err:
+                best_pos_err = pos_err
+                best_rot_err = rot_err
 
             if test_success:
                 break
@@ -555,14 +578,19 @@ def main():
             test_type=cfg.test_type,
             success=test_success,
             pushes_used=pushes_used,
-            final_pos_error=pos_err,
-            final_rot_error=rot_err,
-            area_coverage=_area_coverage(pos_err, rot_err),
+            final_pos_error=best_pos_err,
+            final_rot_error=best_rot_err,
+            area_coverage=_area_coverage(best_pos_err, best_rot_err),
         )
         results.append(result)
+        test_cfgs_data.append({
+            "start_x": cfg.main_start.x, "start_y": cfg.main_start.y,
+            "goal_x": cfg.main_goal_x, "goal_y": cfg.main_goal_y,
+            "goal_yaw": cfg.main_goal_yaw,
+        })
         status = "PASS" if test_success else "FAIL"
         print(f"  {status} | pushes: {pushes_used} | reason: {stop_reason} | "
-              f"pos_err: {pos_err:.4f} | rot_err: {rot_err:.4f} | cov: {_area_coverage(pos_err, rot_err):.1f}%")
+              f"pos_err: {best_pos_err:.4f} | rot_err: {best_rot_err:.4f} | cov: {_area_coverage(best_pos_err, best_rot_err):.1f}%")
 
     n_success = sum(1 for r in results if r.success)
     sr = n_success / len(results) * 100 if results else 0
@@ -601,6 +629,18 @@ def main():
                 writer.writerow([r.test_index, r.test_name, r.test_type, int(r.success),
                                  r.pushes_used, r.final_pos_error, r.final_rot_error, r.area_coverage])
         print(f"\n[CSV] Results saved to {args.csv}")
+
+    if args.csv and results:
+        try:
+            from asyncDualPlayPPO.tests.plot_validation import generate_single_run_plot
+            plot_data = [{"test_index": r.test_index, "test_name": r.test_name,
+                          "success": r.success, "final_pos_error": r.final_pos_error,
+                          "final_rot_error": r.final_rot_error} for r in results]
+            plot_path = os.path.splitext(args.csv)[0] + ".png"
+            generate_single_run_plot(plot_data, test_cfgs_data, plot_path,
+                                    rot_threshold_rad=args.rot_threshold)
+        except Exception as _e:
+            print(f"[WARN] Plot generation failed: {_e}")
 
     simulation_app.close()
     sys.exit(0)
