@@ -91,6 +91,8 @@ class PushASPEnvWrapper:
         dpose_threshold: float = 0.06,
         obj_spawn_z: float = 0.05,
         obj_settled_z: float = 0.023,
+        time_based_alice: bool = False,
+        alice_reward_scale: float = 0.5,
         device: str = "cuda",
     ):
         self.env = env
@@ -105,6 +107,8 @@ class PushASPEnvWrapper:
         self.dpose_threshold = dpose_threshold
         self.obj_spawn_z = obj_spawn_z
         self.obj_settled_z = obj_settled_z
+        self.time_based_alice = time_based_alice
+        self.alice_reward_scale = alice_reward_scale
 
         self.robot_dim = _OBS_ROBOT_DIM
         self.obj_state_dim = _OBS_OBJ_STATE_DIM
@@ -196,12 +200,14 @@ class PushASPEnvWrapper:
 
         # Push counter (per env, counts within current phase)
         self.push_count = torch.zeros(env.num_envs, dtype=torch.long, device=device)
+        self.alice_phase_push_count = torch.zeros(env.num_envs, dtype=torch.long, device=device)
         # Object pose snapshots for reward computation
         self.prev_obj_pos = torch.zeros(env.num_envs, 3, device=device)
         self.prev_obj_euler = torch.zeros(env.num_envs, 3, device=device)
 
         print(f"[PushASP Wrapper] Initialized: Alice {alice_pushes} pushes, "
-              f"Bob {bob_pushes} pushes, max_goals={max_goals_per_episode}")
+              f"Bob {bob_pushes} pushes, max_goals={max_goals_per_episode}"
+              f"{' TIME-BASED γ_sp=' + str(alice_reward_scale) if time_based_alice else ''}")
         _obs_tag = " (dpose L={:.3f} thr={:.3f})".format(char_length, dpose_threshold) if dpose_obs else \
                    " (rel_obs)" if rel_obs else ""
         print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D{_obs_tag}")
@@ -332,6 +338,7 @@ class PushASPEnvWrapper:
         self.episode_manager.reset_episode(env_ids, reason="Global Manual Reset")
         self.delayed_alice_reward[env_ids] = 0.0
         self.push_count[env_ids] = 0
+        self.alice_phase_push_count[env_ids] = 0
         self._bob_progress_captured[env_ids] = False
         self._bob_at_goal[env_ids] = False
         self._bob_gave_completion[env_ids] = False
@@ -589,6 +596,8 @@ class PushASPEnvWrapper:
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Handle completion of Alice's push phase.
         Returns (valid_ids, invalid_ids)."""
+        self.alice_phase_push_count[env_ids] = self.episode_manager.phase_step[env_ids].long()
+
         goal_state = self._extract_object_states(push_obs)
         initial_state = self.episode_manager.initial_states
 
@@ -601,6 +610,7 @@ class PushASPEnvWrapper:
             pos_threshold=0.05, rot_threshold=0.25,
             min_meaningful_disp=0.10,
             require_all_moved=(self.num_objects >= 2),
+            skip_shallow_penalty=self.time_based_alice,
         )
 
         self.delayed_alice_reward[env_ids] = val_reward
@@ -738,11 +748,16 @@ class PushASPEnvWrapper:
         self._iter_stats["bob_failures"] += n_failure
 
         # Alice outcome reward
-        outcome_rewards = torch.where(
-            success,
-            torch.tensor(reward_utils.ALICE_BOB_SUCCESS_REWARD, device=self.device),
-            torch.tensor(reward_utils.ALICE_BOB_FAIL_REWARD, device=self.device),
-        )
+        if self.time_based_alice:
+            t_A = self.alice_phase_push_count[env_ids].float()
+            t_B = self.episode_manager.phase_step[env_ids].float()
+            outcome_rewards = self.alice_reward_scale * torch.clamp(t_B - t_A, min=0.0)
+        else:
+            outcome_rewards = torch.where(
+                success,
+                torch.tensor(reward_utils.ALICE_BOB_SUCCESS_REWARD, device=self.device),
+                torch.tensor(reward_utils.ALICE_BOB_FAIL_REWARD, device=self.device),
+            )
         self.delayed_alice_reward[env_ids] += outcome_rewards
 
         # Position/rotation error for logging
@@ -831,10 +846,15 @@ class PushASPEnvWrapper:
 
         self._iter_stats["bob_successes"] += len(env_ids)
 
-        alice_success_penalty = torch.full(
-            (len(env_ids),), reward_utils.ALICE_BOB_SUCCESS_REWARD, device=self.device,
-        )
-        self.delayed_alice_reward[env_ids] += alice_success_penalty
+        if self.time_based_alice:
+            t_A = self.alice_phase_push_count[env_ids].float()
+            t_B = self.episode_manager.phase_step[env_ids].float()
+            alice_outcome = self.alice_reward_scale * torch.clamp(t_B - t_A, min=0.0)
+        else:
+            alice_outcome = torch.full(
+                (len(env_ids),), reward_utils.ALICE_BOB_SUCCESS_REWARD, device=self.device,
+            )
+        self.delayed_alice_reward[env_ids] += alice_outcome
 
         can_continue = (
             self.episode_manager.goal_count[env_ids] < self.episode_manager.max_goals

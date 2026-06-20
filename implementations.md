@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-18 (Model E/F d_pose, workspace/table/bounds fixes, absolute OOB termination)
+**Last updated**: 2026-06-19 (Model G/H time-based ASP, planned I/J/K/L)
 
 ---
 
@@ -41,6 +41,12 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 8 | **PBRS Model D** — Model C with GoalEncoder ablated (PI-encoder only for Bob) | `train_push_pbrs_asp_no_ge.py` |
 | 9 | **PBRS Model E** — Model C with SE(2) d_pose metric (T-block) | `train_push_pbrs_asp_dpose.py` |
 | 10 | **PBRS Model F** — Model E with disc object (position-only d_pose) | `train_push_pbrs_asp_disc.py` |
+| 11 | **PBRS Model G** — Model E with Sukhbaatar time-based Alice reward (T-block) | `train_push_pbrs_tasp_dpose.py` |
+| 12 | **PBRS Model H** — Model F with Sukhbaatar time-based Alice reward (Disc) | `train_push_pbrs_tasp_disc.py` |
+| 13 | **PBRS Model I** *(planned)* — Model G + Bob time penalty R_B += -gamma_sp*t_B | — |
+| 14 | **PBRS Model J** *(planned)* — Model H + Bob time penalty R_B += -gamma_sp*t_B | — |
+| 15 | **PBRS Model K** *(planned)* — Model G + ABC enabled (beta=0.5) | — |
+| 16 | **PBRS Model L** *(planned)* — Model H + ABC enabled (beta=0.5) | — |
 
 ### Stack Versions
 
@@ -183,6 +189,9 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-18 | **Fix P79 (placement_bounds aligned to IK workspace)** — `placement_bounds` X∈[-0.75,0.75]→[-0.50,0.50], Y∈[0.20,1.00]→[0.25,0.70] — now identical to IK workspace. `table_bounds` tightened to match new table: X∈[-1.0,1.0]→[-0.70,0.70], Y∈[-0.5,1.5]→[-0.10,0.90]. Goals outside IK workspace are now invalid. `wrapper_push_asp.py`, `wrapper.py`, `train_curobo.py`. |
 | 2026-06-18 | **Fix P80 (absolute workspace OOB termination)** — Old OOB check used relative distance from goal (`‖obj−goal‖ > 0.5m`); object 0.49m from goal but outside IK workspace was not detected. Replaced with absolute IK workspace bounds check `_oob_ws = (obj_x < -0.50) ∣ (obj_x > 0.50) ∣ (obj_y < 0.25) ∣ (obj_y > 0.70)`. For Bob: feeds into existing catastrophe detection → −10 penalty, early phase end. For Alice: new `_alice_oob` block immediately resets the episode with −3.0 penalty when object leaves IK workspace during Alice's phase (object unreachable). Applied to all four PBRS ASP scripts: Models C, D, E, F. |
 | 2026-06-18 | **Fix P81 (approach radius tuned per object)** — T-block scripts (Models C, D, E): `min_r` 0.02→0.03m. Disc script (Model F): `min_r` 0.02→0.06m, `max_r` 0.08→0.12m. The disc has radius 0.05m — old `min_r=0.02` placed the push start inside the disc. New `min_r=0.06` keeps the gripper 1cm outside the disc surface. `max_r=0.12` gives the agent room to build speed before contact. T-block `min_r=0.03` adds 1cm safety margin from the narrowest part of the T-block stem. `train_push_pbrs_asp.py`, `train_push_pbrs_asp_dpose.py`, `train_push_pbrs_asp_disc.py`, `train_push_pbrs_asp_no_ge.py`. |
+| 2026-06-19 | **PBRS Model G (T-block + time-based ASP)** — Replaces outcome-based Alice reward (+5 fail/−1 succeed, Plappert 2021) with Sukhbaatar's time-based reward `R_A = γ_sp · max(0, t_B − t_A)` where `t_A` = Alice's push count at phase end, `t_B` = Bob's push count at phase end or early completion, `γ_sp = 0.5`. Scale chosen to match Bob's +5 completion bonus: `γ_sp = 5 / max(t_B − t_A) = 5/9 ≈ 0.5`. Restores Sukhbaatar's self-regulating curriculum: Alice is incentivized to find goals she can create efficiently (fewer pushes) that Bob takes many pushes to solve — naturally sitting at the frontier of Bob's capability. Shallow goal penalty removed (`skip_shallow_penalty=True` in `validate_goal()`) — time-based reward makes it redundant since easy goals yield small `t_B − t_A`. Bob reward unchanged (PBRS d_pose). ABC disabled. `wrapper_push_asp.py` gains `time_based_alice`, `alice_reward_scale`, `alice_phase_push_count` (backward-compatible). `goal_validator.py` gains `skip_shallow_penalty` flag. `train_push_pbrs_tasp_dpose.py`, `hpc/train_push_pbrs_tasp_dpose.slurm`. |
+| 2026-06-19 | **PBRS Model H (Disc + time-based ASP)** — Fork of Model G with disc object. `char_length=0.0`, `dpose_threshold=0.05`. Same time-based Alice reward. Tests whether Sukhbaatar's self-regulation prevents the toxic curriculum collapse observed in Model F (Alice creating impossibly hard goals for Bob while Bob's SR declined from 29% to 6.5%). `train_push_pbrs_tasp_disc.py`, `hpc/train_push_pbrs_tasp_disc.slurm`. |
+| 2026-06-19 | **Future models planned** — Model I/J: G/H + Bob time penalty `R_B += −γ_sp · t_B` (full Sukhbaatar reward for both agents, adds urgency for Bob to solve quickly). Model K/L: G/H + ABC enabled (`β=0.5`, PPO-style BC clipping per Plappert 2021) to test whether time-based Alice + ABC produces stronger curriculum than either alone. |
 
 ---
 
