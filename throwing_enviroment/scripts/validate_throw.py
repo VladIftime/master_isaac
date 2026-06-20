@@ -81,10 +81,10 @@ OBS_MAX_NORM = 3.0
 BASKET_BOTTOM_Z_OFFSET = 0.004
 BOTTOM_CONTACT_TOLERANCE = 0.10
 
-BASKET_HALF_X = 0.185
-BASKET_HALF_Y = 0.257
-BASKET_HEIGHT = 0.160
-DRINK_RADIUS = 0.12
+BASKET_HALF_X = 0.185 * 1.3
+BASKET_HALF_Y = 0.257 * 1.3
+BASKET_HEIGHT = 0.160 / 1.3
+DRINK_RADIUS = 0.0
 
 
 def check_aabb_success(milk_pos, target_pos):
@@ -216,7 +216,7 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # ── Plot 1: Bird's-eye scatter (top-down view) ─────────────────────
-    ax1.set_title("Throw Validation — Bird's Eye View (AABB + Contact)", fontsize=12)
+    ax1.set_title("Throw Validation — Bird's Eye View (mean landing)", fontsize=12)
     ax1.set_xlabel("X (m)")
     ax1.set_ylabel("Y (m)")
     ax1.set_aspect("equal")
@@ -238,16 +238,19 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
         ax1.annotate(str(r.test_id), (r.target_x, r.target_y),
                      textcoords="offset points", xytext=(5, 5), fontsize=8)
 
-        for i, (landing, dist) in enumerate(zip(r.landings, r.distances)):
-            is_success = (
-                (i < len(r.aabb_hits) and r.aabb_hits[i])
-                or (i < len(r.contact_hits) and r.contact_hits[i])
-            )
-            color = "green" if is_success else "red"
-            ax1.plot(landing[0], landing[1], "x", color=color, markersize=6, alpha=0.7)
+        in_ws = [
+            (lx, ly) for lx, ly in r.landings
+            if table_x_range[0] <= lx <= table_x_range[1]
+            and table_y_range[0] <= ly <= table_y_range[1]
+        ]
+        if in_ws:
+            mean_x = sum(p[0] for p in in_ws) / len(in_ws)
+            mean_y = sum(p[1] for p in in_ws) / len(in_ws)
+            color = "green" if r.passed else "red"
+            ax1.plot(mean_x, mean_y, "o", color=color, markersize=8, alpha=0.85)
             ax1.plot(
-                [r.target_x, landing[0]], [r.target_y, landing[1]],
-                "--", color=color, alpha=0.3, linewidth=0.8,
+                [r.target_x, mean_x], [r.target_y, mean_y],
+                "--", color=color, alpha=0.5, linewidth=1.0,
             )
 
     ax1.set_xlim(-0.6, 0.8)
@@ -255,25 +258,32 @@ def plot_results(results: List[ThrowResult], success_threshold: float, save_path
 
     legend_elements = [
         plt.Line2D([0], [0], marker="s", color="blue", linestyle="None", markersize=8, alpha=0.7, label="Target"),
-        plt.Line2D([0], [0], marker="x", color="green", linestyle="None", markersize=8, label="Success"),
-        plt.Line2D([0], [0], marker="x", color="red", linestyle="None", markersize=8, label="Fail"),
+        plt.Line2D([0], [0], marker="o", color="green", linestyle="None", markersize=8, label="Mean (pass)"),
+        plt.Line2D([0], [0], marker="o", color="red", linestyle="None", markersize=8, label="Mean (fail)"),
         plt.Line2D([0], [0], marker="s", color="black", linestyle="None", markersize=8, label="Robot"),
     ]
     ax1.legend(handles=legend_elements, loc="upper left", fontsize=9)
     ax1.grid(True, alpha=0.3)
 
     # ── Plot 2: Distance bar chart ─────────────────────────────────────
-    ax2.set_title("Best Distance per Test", fontsize=12)
-    ax2.set_xlabel("Test ID")
+    ax2.set_title("Best & Mean Distance per Test No.", fontsize=12)
+    ax2.set_xlabel("Test No.")
     ax2.set_ylabel("Distance to Target (m)")
 
     test_ids = [r.test_id for r in results]
     best_dists = [r.best_distance for r in results]
-    colors = ["green" if r.passed else "red" for r in results]
+    mean_dists = [np.mean(r.distances) if r.distances else 0 for r in results]
+    colors_best = ["green" if r.passed else "red" for r in results]
 
-    bars = ax2.bar(test_ids, best_dists, color=colors, alpha=0.7, edgecolor="black", linewidth=0.5)
-    ax2.set_xticks(test_ids)
-    ax2.set_ylim(0, max(best_dists) * 1.2 if best_dists else 1.0)
+    x = np.arange(len(test_ids))
+    w = 0.35
+    ax2.bar(x - w / 2, best_dists, w, color=colors_best, alpha=0.7, edgecolor="black", linewidth=0.5, label="Best")
+    ax2.bar(x + w / 2, mean_dists, w, color="steelblue", alpha=0.6, edgecolor="black", linewidth=0.5, label="Mean")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(test_ids)
+    all_vals = best_dists + mean_dists
+    ax2.set_ylim(0, max(all_vals) * 1.2 if all_vals else 1.0)
+    ax2.legend(fontsize=9)
     ax2.grid(True, alpha=0.3, axis="y")
 
     plt.tight_layout()
@@ -290,23 +300,12 @@ def _run_fast_validation():
     from tasks.throwing_direct_env_cfg import ThrowingDirectEnvCfg, ThrowingDirectSceneCfg, TABLE_Z as DTABLE_Z
     from tasks.throwing_direct_env import ThrowingDirectEnv
     from tasks.sb3_vec_env import DirectRLVecEnv
-    from isaaclab.sensors import ContactSensorCfg
-    from isaaclab.utils import configclass as il_configclass
-
-    @il_configclass
-    class _ValidationSceneCfg(ThrowingDirectSceneCfg):
-        contact_sensor: ContactSensorCfg = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/Target",
-            update_period=0.0,
-            history_length=3,
-            track_contact_points=True,
-            filter_prim_paths_expr=["{ENV_REGEX_NS}/Milk"],
-        )
 
     headless = args_cli.headless
 
     cfg = ThrowingDirectEnvCfg()
-    cfg.scene = _ValidationSceneCfg(num_envs=1, env_spacing=3.0)
+    cfg.scene = ThrowingDirectSceneCfg(num_envs=1, env_spacing=3.0)
+    cfg.scene.target.spawn.scale = (0.4 * 1.3, 0.4 * 1.3, 0.4 / 1.3)
     cfg.playing_arm_side = PLAYING_SIDE
 
     torch.manual_seed(args_cli.seed)
@@ -377,7 +376,7 @@ def _run_fast_validation():
             test_id=test_cfg.test_id, test_name=test_cfg.name,
             target_x=test_cfg.target_x, target_y=test_cfg.target_y,
         )
-        print(f"\n[Test {test_idx}/{n_tests}] {test_cfg.name} — target=({test_cfg.target_x:.2f}, {test_cfg.target_y:.2f})")
+        print(f"\n[Test No. {test_idx}/{n_tests}] {test_cfg.name} — target=({test_cfg.target_x:.2f}, {test_cfg.target_y:.2f})")
 
         for attempt in range(args_cli.attempts):
             torch.manual_seed(args_cli.seed)
@@ -416,44 +415,41 @@ def _run_fast_validation():
             env.step(action_clamped)
 
             distance = env._last_distances[0].item()
-            landing = env._last_milk_pos[0].cpu().tolist()
+            milk_pos = env._last_milk_pos.clone()
+            target_pos = env._last_target_pos.clone()
+            landing = milk_pos[0].cpu().tolist()
 
-            milk_pos = env.scene["milk"].data.root_pos_w[:, :3]
-            target_pos = env.scene["target"].data.root_pos_w[:, :3]
             aabb_hit = check_aabb_success(milk_pos, target_pos)[0].item()
 
-            contact_hit = False
-            sensor = env.scene.sensors.get("contact_sensor")
-            if sensor is not None:
-                force = sensor.data.force_matrix_w
-                if force is not None:
-                    has_contact = torch.norm(force[:, 0, 0, :], dim=-1) > 1.0
-                    contact_z = sensor.data.contact_pos_w[:, 0, 0, 2]
-                    basket_bottom_z = target_pos[:, 2] + BASKET_BOTTOM_Z_OFFSET
-                    is_bottom = ~torch.isnan(contact_z) & (contact_z < basket_bottom_z + BOTTOM_CONTACT_TOLERANCE)
-                    contact_hit = (has_contact & is_bottom)[0].item()
+            dx = torch.abs(milk_pos[0, 0] - target_pos[0, 0]).item()
+            dy = torch.abs(milk_pos[0, 1] - target_pos[0, 1]).item()
+            dz_milk = milk_pos[0, 2].item()
+            dz_tgt = target_pos[0, 2].item()
+            print(
+                f"    DEBUG: milk=({milk_pos[0,0]:.3f},{milk_pos[0,1]:.3f},{milk_pos[0,2]:.3f}) "
+                f"tgt=({target_pos[0,0]:.3f},{target_pos[0,1]:.3f},{target_pos[0,2]:.3f}) "
+                f"dx={dx:.3f}(<{BASKET_HALF_X+DRINK_RADIUS:.3f}) "
+                f"dy={dy:.3f}(<{BASKET_HALF_Y+DRINK_RADIUS:.3f}) "
+                f"z_ok={dz_milk:.3f} in [{dz_tgt+BASKET_BOTTOM_Z_OFFSET:.3f},{dz_tgt+BASKET_BOTTOM_Z_OFFSET+BASKET_HEIGHT:.3f}]"
+            )
 
+            contact_hit = False
             hit = aabb_hit or contact_hit
 
             params_t = map_action_to_params(action_clamped, side=PLAYING_SIDE)
             result.distances.append(distance)
             result.actions.append(action_np.tolist())
-            result.landings.append(landing[:2])
+            result.landings.append(landing[:3])
             result.aabb_hits.append(aabb_hit)
-            result.contact_hits.append(contact_hit)
 
             a_str = "Y" if aabb_hit else "N"
-            c_str = "Y" if contact_hit else "N"
-            status = "SUCCESS" if hit else "miss"
+            status = "SUCCESS" if aabb_hit else "miss"
             print(
                 f"  Attempt {attempt+1}/{args_cli.attempts}: "
                 f"action=[{action_np[0]:+.2f},{action_np[1]:+.2f},{action_np[2]:.2f},{action_np[3]:.2f}] "
                 f"→ ijv={params_t[0,0]:.2f} fjv={params_t[0,1]:.2f} "
-                f"dist={distance:.3f}m | AABB={a_str} | contact={c_str} | [{status}]"
+                f"dist={distance:.3f}m | AABB={a_str} | [{status}]"
             )
-
-            if hit:
-                break
 
         results.append(result)
         pass_str = "PASS" if result.passed else "FAIL"
@@ -465,24 +461,48 @@ def _run_fast_validation():
 
     print(f"\n{'='*70}")
     print(f"  THROW VALIDATION RESULTS (DirectRLEnv — fast)")
-    print(f"  Success = AABB overlap OR ContactSensor bottom touch")
+    print(f"  Success = AABB overlap")
     print(f"{'='*70}")
     for r in results:
         status = "PASS" if r.passed else "FAIL"
         print(
-            f"  Test {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m "
+            f"  Test No. {r.test_id:2d} | {r.test_name:22s} | best={r.best_distance:.3f}m "
             f"| dist={r.dist_success_count}/{len(r.distances)} "
             f"| aabb={r.aabb_success_count}/{len(r.aabb_hits)} "
-            f"| contact={r.contact_success_count}/{len(r.contact_hits)} "
             f"| {status}"
         )
     print(f"{'='*70}")
     print(f"  Passed: {n_passed}/{len(results)} ({sr:.1f}%) | Avg best dist: {avg_best:.3f}m")
     print(f"{'='*70}")
 
+    from datetime import datetime
+    import csv
+    ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    csv_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{sr:.0f}pct_{ts}.csv")
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "test_no", "test_name", "target_x", "target_y",
+            "attempt", "action_0", "action_1", "action_2", "action_3",
+            "landing_x", "landing_y", "landing_z", "distance", "aabb_hit",
+        ])
+        for r in results:
+            for i in range(len(r.distances)):
+                act = r.actions[i] if i < len(r.actions) else [0, 0, 0, 0]
+                land = r.landings[i] if i < len(r.landings) else [0, 0, 0]
+                aabb = r.aabb_hits[i] if i < len(r.aabb_hits) else False
+                writer.writerow([
+                    r.test_id, r.test_name, f"{r.target_x:.4f}", f"{r.target_y:.4f}",
+                    i + 1,
+                    f"{act[0]:.4f}", f"{act[1]:.4f}", f"{act[2]:.4f}", f"{act[3]:.4f}",
+                    f"{land[0]:.4f}", f"{land[1]:.4f}", f"{land[2]:.4f}",
+                    f"{r.distances[i]:.4f}", int(aabb),
+                ])
+    print(f"[INFO] CSV saved to: {csv_path}")
+
     if not args_cli.no_plot:
-        from datetime import datetime
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         plot_path = os.path.join(_PROJECT_ROOT, "logs", f"validation_results_fast_{sr:.0f}pct_{ts}.png")
         plot_results(results, args_cli.success_threshold, plot_path, show=not headless, use_contact=True)
 
@@ -597,7 +617,7 @@ def main():
             target_y=test_cfg.target_y,
         )
 
-        print(f"\n[Test {test_idx}/{n_tests}] {test_cfg.name} — target=({test_cfg.target_x:.2f}, {test_cfg.target_y:.2f})")
+        print(f"\n[Test No. {test_idx}/{n_tests}] {test_cfg.name} — target=({test_cfg.target_x:.2f}, {test_cfg.target_y:.2f})")
 
         for attempt in range(args_cli.attempts):
             torch.manual_seed(args_cli.seed)
@@ -657,9 +677,6 @@ def main():
                 f"dist={distance:.3f}m | AABB={a_str} | [{status}]"
             )
 
-            if aabb_hit:
-                break
-
         results.append(result)
         pass_str = "PASS" if result.passed else "FAIL"
         print(f"  Result: {pass_str} | best={result.best_distance:.3f}m | success={result.success_count}/{len(result.distances)} attempts")
@@ -678,7 +695,7 @@ def main():
     for r in results:
         status = "PASS" if r.passed else "FAIL"
         print(
-            f"  Test {r.test_id:2d} | {r.test_name:22s} | "
+            f"  Test No. {r.test_id:2d} | {r.test_name:22s} | "
             f"target=({r.target_x:.2f},{r.target_y:.2f}) | "
             f"best={r.best_distance:.3f}m | dist={r.dist_success_count}/{len(r.distances)} "
             f"| aabb={r.aabb_success_count}/{len(r.aabb_hits)} | {status}"
