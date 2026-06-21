@@ -1,30 +1,35 @@
 """
-Validate a trained push-PPO model against test configurations.
+Validate a trained Diffusion-Policy push model against test configurations.
 
-Uses the pre-defined test scenes from validation_configs.py to measure push
-success rate, steps-to-solve, and push count across multiple scenarios.
-Visual markers show goal position and push arrows.  Airborne/tipped/OOB
-objects are detected and terminate the test early.
+Same stop rules as ``validate_push_asp.py`` (the 30 predefined scenes from
+``validation_configs.py``, retries, physics/tipped/launched/oob termination,
+CSV + plots), but the actor is a Diffusion Policy that outputs the **same 4D
+push primitive** as Push-PPO.
+
+Success logging: position-only OR orientation-only achievement is logged as a
+success, but does NOT stop the episode early — the policy keeps pushing through
+its full budget to try to satisfy both.  If the object leaves the workspace, the
+environment is reset and the attempt is retried.
+
+The diffusion policy is action-agnostic: it is trained to regress the continuous
+push primitive ``[Xs, Ys, length, theta]`` (theta encoded as ``sin/cos`` ->
+action_dim 5, or raw -> action_dim 4) conditioned on the 28D push observation.
+At eval the sampled primitive is fed straight into ``compute_push_waypoints``,
+reusing the entire cuRobo IK / waypoint / scoring machinery from validate_push.
 
 Usage:
-  # Original Push-PPO (absolute actions):
-  python -m asyncDualPlayPPO.tests.validate_push \
-      --chkpt runs/push_ppo_baseline/agent/model_best.pt \
-      --num_tests 10 --headless
-
-  # PBRS Models A/B (object-relative obs+actions):
-  python -m asyncDualPlayPPO.tests.validate_push \
-      --chkpt runs/long_runs/hpc_pbrs_simp_528env/agent/model_best.pt \
-      --rel-obs --rel-act --num_tests 10 --headless --csv results.csv
+  python -m asyncDualPlayPPO.tests.validate_push_diffusion \
+      --chkpt data/outputs/.../checkpoints/latest.ckpt \
+      --num_tests 30 --headless --csv dp_results.csv
 """
 
 import argparse
 import os
 import sys
-import time
 import math
+from collections import deque
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -47,13 +52,19 @@ import torch.optim      # noqa
 from isaaclab.app import AppLauncher
 
 from asyncDualPlayPPO.tasks.utils.validation_configs import (
-    ALL_TESTS, get_test_config, get_test_count, PushTestConfig,
+    get_test_config, get_test_count,
 )
 
 _ARM_JOINT_NAMES = [
     "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
     "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
 ]
+
+# Primitive ranges (must match action_push.decode_push_action defaults that the
+# demonstrations were generated with) — used only to clamp out-of-range samples.
+_MAX_XS = 0.50
+_MIN_YS, _MAX_YS = 0.25, 0.70
+_MAX_LEN = 0.20
 
 
 @dataclass
@@ -80,28 +91,88 @@ def _area_coverage(pos_err, rot_err):
     return pc * rc * 100.0
 
 
+def _load_diffusion_policy(chkpt_path, device, dp_repo):
+    """Load a diffusion_policy checkpoint and return its (eval-mode) policy.
+
+    Instantiates the policy directly from ``cfg.policy`` and loads the (EMA)
+    weights from the checkpoint, avoiding the training Workspace import (which
+    pulls in training-only deps that may be absent in the IsaacLab venv).
+    """
+    if dp_repo and dp_repo not in sys.path:
+        sys.path.insert(0, dp_repo)
+    try:
+        import dill
+        import hydra
+    except ModuleNotFoundError as e:
+        print(f"[ERROR] diffusion_policy deps missing ({e}). "
+              f"pip install dill hydra-core diffusers, or pass --dp_repo.")
+        sys.exit(1)
+
+    payload = torch.load(open(chkpt_path, "rb"), pickle_module=dill, map_location="cpu")
+    cfg = payload["cfg"]
+    try:
+        use_ema = bool(cfg.training.use_ema)
+    except Exception:  # noqa: BLE001
+        use_ema = True
+
+    policy = hydra.utils.instantiate(cfg.policy)
+    sds = payload.get("state_dicts", {})
+    key = "ema_model" if (use_ema and "ema_model" in sds) else "model"
+    if key not in sds:
+        raise KeyError(f"checkpoint has no '{key}' state_dict (have: {list(sds.keys())})")
+    policy.load_state_dict(sds[key])
+
+    policy.to(device)
+    policy.eval()
+    return policy, cfg
+
+
+def _decode_dp_action(act, theta_encoding, clamp):
+    """Decode a (1, Da) primitive sample -> (Xs, Ys, length, theta)."""
+    Xs = act[:, 0]
+    Ys = act[:, 1]
+    length = act[:, 2]
+    if theta_encoding == "sincos":
+        theta = torch.atan2(act[:, 3], act[:, 4])
+    else:
+        theta = act[:, 3]
+    if clamp:
+        Xs = Xs.clamp(-_MAX_XS, _MAX_XS)
+        Ys = Ys.clamp(_MIN_YS, _MAX_YS)
+    length = length.clamp(min=0.0, max=_MAX_LEN)
+    return Xs, Ys, length, theta
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Validate Push-PPO Model")
-    parser.add_argument("--chkpt", type=str, required=True, help="Path to trained checkpoint")
-    parser.add_argument("--num_tests", type=int, default=10, help="Number of test scenes to run")
-    parser.add_argument("--max_pushes", type=int, default=15, help="Max pushes per test")
+    parser = argparse.ArgumentParser(description="Validate Diffusion-Policy Push Model")
+    parser.add_argument("--chkpt", type=str, required=True, help="Path to DP .ckpt")
+    parser.add_argument("--num_tests", type=int, default=30, help="Number of test scenes to run")
+    parser.add_argument("--max_pushes", type=int, default=30, help="Max pushes per test")
     parser.add_argument("--rot_threshold", type=float, default=0.2,
                         help="Rotation success threshold in radians (default 0.2)")
-    parser.add_argument("--rel-obs", action="store_true", dest="rel_obs",
-                        help="Use object-relative observation (30D instead of 28D)")
-    parser.add_argument("--rel-act", action="store_true", dest="rel_act",
-                        help="Decode actions as object-relative (r, phi, len, theta)")
+    parser.add_argument("--theta_encoding", type=str, default="auto",
+                        choices=["auto", "sincos", "raw"],
+                        help="How theta is encoded in the action (auto -> 5D=sincos, 4D=raw)")
+    parser.add_argument("--no_clamp", action="store_true",
+                        help="Disable clamping of decoded Xs/Ys to workspace ranges")
+    parser.add_argument("--dp_repo", type=str, default=None,
+                        help="Path to the diffusion_policy repo root (auto-detected if omitted)")
     parser.add_argument("--csv", type=str, default=None,
                         help="Save validation results to CSV file")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+
+    if args.dp_repo is None:
+        # sibling of asyncDualPlayPPO: master_isaac/diffusion_policy
+        _master = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        args.dp_repo = os.path.join(_master, "diffusion_policy")
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
 
     chkpt_run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.chkpt)))
     if args.csv is None:
-        args.csv = os.path.join(chkpt_run_dir, "validation_results.csv")
+        args.csv = os.path.join(chkpt_run_dir, "validation_results_diffusion.csv")
     elif not os.path.isabs(args.csv):
         args.csv = os.path.join(chkpt_run_dir, args.csv)
 
@@ -110,22 +181,57 @@ def main():
     import isaaclab.sim as sim_utils
     from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
     from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
+    from isaaclab.utils import configclass
+    from isaaclab.assets import RigidObjectCfg
+    from isaaclab.managers import SceneEntityCfg
     from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push import PushEnvWrapper, _euler_to_quat
-    from asyncDualPlayPPO.tasks.utils.action_push import (
-        decode_push_action, compute_push_waypoints,
+    from asyncDualPlayPPO.tasks.utils.action_push import compute_push_waypoints
+    from asyncDualPlayPPO.tasks.utils.observations import (
+        ee_poses as _obs_ee_poses,
+        object_states as _obs_object_states,
+        goal_states as _obs_goal_states,
+        goal_distance as _obs_goal_distance,
     )
-    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
-        decode_push_action_relative,
-    )
-    from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
-    from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
-    from asyncDualPlayPPO.algorithms.rl.ppo.storage import RolloutStorage
-    import gymnasium as gym_mc
     import numpy as np
 
-    # ── Environment ────────────────────────────────────────────────────────────
-    env_cfg = PushTaskCuRoboEnvCfg()
+    # ── Environment (T-block + disc, identical to validate_push_asp.py) ─────────
+    @configclass
+    class ValidateEnvCfg(PushTaskCuRoboEnvCfg):
+        @configclass
+        class ValidateSceneCfg(PushTaskCuRoboEnvCfg.PushTaskSceneCfg):
+            disc_object = RigidObjectCfg(
+                prim_path="{ENV_REGEX_NS}/DiscObject",
+                init_state=RigidObjectCfg.InitialStateCfg(
+                    pos=[0.0, 0.0, -1.0],
+                    rot=[0.0, 0.0, 0.0, 1.0],
+                ),
+                spawn=sim_utils.CylinderCfg(
+                    radius=0.05,
+                    height=0.06,
+                    rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                        disable_gravity=False,
+                        solver_position_iteration_count=16,
+                        solver_velocity_iteration_count=4,
+                        max_linear_velocity=1000.0,
+                        max_angular_velocity=1000.0,
+                        max_depenetration_velocity=10000.0,
+                    ),
+                    collision_props=sim_utils.CollisionPropertiesCfg(),
+                    mass_props=sim_utils.MassPropertiesCfg(density=300.0),
+                    physics_material=sim_utils.RigidBodyMaterialCfg(
+                        static_friction=0.6,
+                        dynamic_friction=0.6,
+                        restitution=0.1,
+                    ),
+                    visual_material=sim_utils.PreviewSurfaceCfg(
+                        diffuse_color=(0.2, 0.6, 0.9),
+                    ),
+                ),
+            )
+        scene: ValidateSceneCfg = ValidateSceneCfg(num_envs=1, env_spacing=2.5)
+
+    env_cfg = ValidateEnvCfg()
     env_cfg.scene.num_envs = 1  # single env for validation
 
     env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
@@ -139,8 +245,22 @@ def main():
     env = PushEnvWrapper(
         env=base_env, device=device, num_objects=1,
         max_pushes_per_episode=args.max_pushes,
-        rel_obs=args.rel_obs,
+        rel_obs=False,
     )
+
+    # ── Observation builder (active object: T-block or disc) ────────────────────
+    _ee_cfg = SceneEntityCfg("robot", body_names="wrist_3_link")
+    _tblock_obj_cfg = SceneEntityCfg("target_object")
+    _tblock_grip_cfg = SceneEntityCfg("robot", body_names="wrist_3_link")
+    _disc_obj_cfg = SceneEntityCfg("disc_object")
+
+    def _build_obs(obj_type="tblock"):
+        obj_cfg = _disc_obj_cfg if obj_type == "disc" else _tblock_obj_cfg
+        ee = _obs_ee_poses(env.env, _ee_cfg)
+        obj = _obs_object_states(env.env, obj_cfg, _tblock_grip_cfg, None)
+        goal = _obs_goal_states(env.env, obj_cfg)
+        dist = _obs_goal_distance(env.env, obj_cfg)
+        return torch.cat([ee, obj, goal, dist], dim=-1)
 
     # ── Visual markers ─────────────────────────────────────────────────────────
     _goal_viz = VisualizationMarkers(
@@ -151,6 +271,18 @@ def main():
                     usd_path=os.path.join(
                         os.path.dirname(os.path.dirname(__file__)), "assets/blocks/t_shape.usda"),
                     scale=(2.0, 2.0, 0.01),
+                    visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
+                ),
+            },
+        )
+    )
+    _goal_viz_disc = VisualizationMarkers(
+        VisualizationMarkersCfg(
+            prim_path="/Visuals/GoalMarkerDisc",
+            markers={
+                "disc": sim_utils.CylinderCfg(
+                    radius=0.05,
+                    height=0.001,
                     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.6, 0.0)),
                 ),
             },
@@ -179,13 +311,20 @@ def main():
     )
     _ident_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]], dtype=torch.float32)
 
-    def _update_goal_marker(gx, gy, gyaw=0.0):
+    def _update_goal_marker(gx, gy, gyaw=0.0, obj_type="tblock"):
         origins = env.env.scene.env_origins
         pos = torch.tensor([[gx, gy, 0.001]], device=device) + origins
         euler = torch.zeros(1, 3, device=device)
         euler[0, 2] = gyaw
         quat = _euler_to_quat(euler)
-        _goal_viz.visualize(translations=pos, orientations=quat)
+        hide_pos = torch.tensor([[0.0, 0.0, -1.0]], device=device) + origins
+        hide_quat = _QUAT_TOOL_DOWN.expand(1, 4)
+        if obj_type == "disc":
+            _goal_viz_disc.visualize(translations=pos, orientations=quat)
+            _goal_viz.visualize(translations=hide_pos, orientations=hide_quat)
+        else:
+            _goal_viz.visualize(translations=pos, orientations=quat)
+            _goal_viz_disc.visualize(translations=hide_pos, orientations=hide_quat)
 
     def _update_push_markers(Xs, Ys, Xf, Yf, angle):
         N = 1
@@ -230,6 +369,9 @@ def main():
     _WS_X = (-0.50, 0.50)
     _WS_Y = (0.25, 0.70)
     _WS_Z = (0.25, 0.55)
+    # Object workspace bounds — if the object leaves these, reset the env.
+    _OBJ_WS_X = (-0.55, 0.55)
+    _OBJ_WS_Y = (0.20, 0.78)
     print("[Setup] Calibrating IK→physics error...")
     _calib_pos = torch.zeros(1, 3, device=device)
     _calib_pos[:, 1] = 0.60
@@ -251,51 +393,31 @@ def main():
     print(f"[Setup] IK error = ({float(_TOTAL_IK_ERROR[0,0]):+.3f}, "
           f"{float(_TOTAL_IK_ERROR[0,1]):+.3f}, {float(_TOTAL_IK_ERROR[0,2]):+.3f})")
 
-    # ── Load checkpoint ────────────────────────────────────────────────────────
-    num_cat_dims = 4
-    num_bins = 21
+    # ── Load diffusion policy ──────────────────────────────────────────────────
+    policy, dp_cfg = _load_diffusion_policy(args.chkpt, device, args.dp_repo)
+    To = int(getattr(policy, "n_obs_steps", 2))
+    Da = int(getattr(policy, "action_dim", 5))
+    policy_obs_dim = int(getattr(policy, "obs_dim", env.obs_dim))
 
-    _mc_space = gym_mc.spaces.Box(
-        low=0.0, high=float(num_bins - 1), shape=(num_cat_dims,), dtype=np.float32,
-    )
+    if args.theta_encoding == "auto":
+        theta_encoding = "sincos" if Da >= 5 else "raw"
+    else:
+        theta_encoding = args.theta_encoding
 
-    agent_cfg = {
-        "learn": {
-            "nsteps": 32, "noptepochs": 3, "nminibatches": 4,
-            "cliprange": 0.2, "ent_coef": 0.01, "gamma": 0.998, "lam": 0.95,
-            "optim_stepsize": 3e-4, "init_noise_std": 0.3,
-            "value_loss_coef": 1.0, "max_grad_norm": 1.0,
-        },
-        "policy": {
-            "use_multicategorical": True, "num_cat_dims": 4, "num_bins": 21,
-            "use_lstm": True, "lstm_hidden_size": 256,
-            "pi_hid_sizes": [512, 256, 128],
-            "vf_hid_sizes": [512, 256, 128],
-            "activation": "relu",
-        },
-    }
+    if policy_obs_dim != env.obs_dim:
+        print(f"[WARN] Policy obs_dim={policy_obs_dim} != env obs_dim={env.obs_dim}. "
+              f"Observation layout mismatch — results will be invalid.")
 
-    agent = PPO(
-        vec_env=env, cfg_train=agent_cfg, device=device,
-        sampler="sequential", log_dir="/tmp/validate_push",
-        asymmetric=False,
-    )
-    agent.observation_space = env.observation_space
-    agent.state_space = env.state_space
-    agent.action_space = _mc_space
-    agent.desired_kl = None
+    print(f"[Validate] Loaded diffusion policy from {args.chkpt}")
+    print(f"[Validate] To={To}  action_dim={Da}  theta_encoding={theta_encoding}  "
+          f"obs_dim={policy_obs_dim}  rot_threshold={args.rot_threshold:.3f} rad  "
+          f"max_pushes={args.max_pushes}")
 
-    agent.actor_critic = ActorCriticPush(
-        agent.observation_space.shape, agent.state_space.shape,
-        agent.action_space.shape, agent.init_noise_std, agent.model_cfg,
-        asymmetric=False,
-    ).to(device)
-
-    agent.load(args.chkpt)
-    agent.actor_critic.eval()
-    print(f"[Validate] Loaded model from {args.chkpt}")
-    print(f"[Validate] Mode: rel_obs={args.rel_obs}, rel_act={args.rel_act}, "
-          f"rot_threshold={args.rot_threshold:.3f} rad, max_pushes={args.max_pushes}")
+    def _predict_primitive(obs_window):
+        with torch.no_grad():
+            out = policy.predict_action({"obs": obs_window})
+        act = out["action"][:, 0]  # first action step -> (1, Da)
+        return _decode_dp_action(act, theta_encoding, clamp=not args.no_clamp)
 
     # ── Run tests ─────────────────────────────────────────────────────────────
     results: List[ValidationResult] = []
@@ -308,6 +430,9 @@ def main():
             continue
 
         _obj_type = getattr(cfg, "object_type", "tblock")
+        _active_obj_name = "disc_object" if _obj_type == "disc" else "target_object"
+        _inactive_obj_name = "target_object" if _obj_type == "disc" else "disc_object"
+        _spawn_z = 0.03 if _obj_type == "disc" else 0.05
 
         print(f"\n[Test {test_idx}/{n_tests}] {cfg.name} #{cfg.test_id}")
 
@@ -331,16 +456,22 @@ def main():
             env.goal_pos_euler[0, 3:5] = 0.0
             env.goal_pos_euler[0, 5] = cfg.main_goal_yaw
             env._update_goal_in_extras()
-            _update_goal_marker(cfg.main_goal_x, cfg.main_goal_y, cfg.main_goal_yaw)
+            _update_goal_marker(cfg.main_goal_x, cfg.main_goal_y, cfg.main_goal_yaw, _obj_type)
 
-            obj = env.env.scene["target_object"]
-            obj.write_root_pose_to_sim(torch.tensor([[
-                cfg.main_start.x, cfg.main_start.y, 0.02, 1.0, 0.0, 0.0, 0.0
+            _active_obj = env.env.scene[_active_obj_name]
+            _inactive_obj = env.env.scene[_inactive_obj_name]
+            _active_obj.write_root_pose_to_sim(torch.tensor([[
+                cfg.main_start.x, cfg.main_start.y, _spawn_z, 1.0, 0.0, 0.0, 0.0
             ]], device=device))
-            obj.write_root_velocity_to_sim(torch.zeros(1, 6, device=device))
+            _inactive_obj.write_root_pose_to_sim(torch.tensor([[
+                0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 0.0
+            ]], device=device))
+            _active_obj.write_root_velocity_to_sim(torch.zeros(1, 6, device=device))
+            _inactive_obj.write_root_velocity_to_sim(torch.zeros(1, 6, device=device))
 
             env.env.sim.step()
-            obs = env._get_push_obs()
+            env._update_goal_in_extras()
+            obs = _build_obs(_obj_type)
             env._capture_prev_obj(obs)
 
             _init_obj_pos = obs[0, env.robot_dim:env.robot_dim + 3]
@@ -357,10 +488,12 @@ def main():
                   f"start=({cfg.main_start.x:+.3f},{cfg.main_start.y:+.3f})  "
                   f"init_pos_err={_init_pos_err:.4f}m  init_rot_err={_init_rot_err:.3f}rad")
 
-            hidden = [
-                torch.zeros(1, agent.actor_critic.lstm_hidden_size, device=device),
-                torch.zeros(1, agent.actor_critic.lstm_hidden_size, device=device),
-            ]
+            # Diffusion policies are stateless across calls; reset any internal buffers.
+            if hasattr(policy, "reset"):
+                policy.reset()
+
+            # Rolling observation window (B=1, To, obs_dim).
+            obs_deque = deque([obs.clone() for _ in range(To)], maxlen=To)
 
             ee_pos_local = _tcp_pos_local()
             ee_quat_w = _QUAT_TOOL_DOWN.expand(1, 4).clone()
@@ -375,26 +508,8 @@ def main():
             prev_rot_err = _init_rot_err
 
             for push_i in range(args.max_pushes):
-                with torch.no_grad():
-                    actions, _, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
-                        obs, None, (hidden[0], hidden[1]),
-                    )
-                    if new_h is not None:
-                        hidden[0] = new_h[0]
-                        hidden[1] = new_h[1]
-
-                if args.rel_act:
-                    obj_x = obs[0, env.robot_dim]
-                    obj_y = obs[0, env.robot_dim + 1]
-                    obj_yaw = obs[0, env.robot_dim + 5]
-                    Xs, Ys, length, theta = decode_push_action_relative(
-                        actions,
-                        torch.stack([obj_x, obj_y]).unsqueeze(0),
-                        obj_yaw.unsqueeze(0),
-                        num_bins=num_bins,
-                    )
-                else:
-                    Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
+                obs_window = torch.stack(list(obs_deque), dim=1)  # (1, To, obs_dim)
+                Xs, Ys, length, theta = _predict_primitive(obs_window)
 
                 Xf = Xs + length * torch.cos(theta)
                 Yf = Ys + length * torch.sin(theta)
@@ -444,7 +559,9 @@ def main():
                 ee_pos_local = _tcp_pos_local()
                 ee_quat_w = _QUAT_TOOL_DOWN.expand(1, 4).clone()
                 prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
-                obs = env._get_push_obs()
+                env._update_goal_in_extras()
+                obs = _build_obs(_obj_type)
+                obs_deque.append(obs.clone())
 
                 cur_obj_pos = obs[0, env.robot_dim:env.robot_dim + 3]
                 cur_obj_euler = obs[0, env.robot_dim + 3:env.robot_dim + 6]
@@ -460,10 +577,9 @@ def main():
                 tipped = (abs(float(cur_obj_euler[0])) > 0.3 or abs(float(cur_obj_euler[1])) > 0.3)
                 oob_2d = float((cur_obj_pos[:2] - goal_pos[:2]).norm())
 
-                r_dec = float(torch.sqrt((Xs - obj_x.detach())**2 + (Ys - obj_y.detach())**2).item()) if args.rel_act else float(Xs.item())
                 _cov = _area_coverage(pos_err, rot_err)
-                print(f"  push {push_i:2d}: bins=({', '.join(f'{int(actions[0,i].item()):2d}' for i in range(4))})  "
-                      f"r={r_dec:.3f} len={float(length.item()):.3f} θ={math.degrees(float(theta.item())):.0f}°  "
+                print(f"  push {push_i:2d}: Xs={float(Xs.item()):+.3f} Ys={float(Ys.item()):+.3f} "
+                      f"len={float(length.item()):.3f} θ={math.degrees(float(theta.item())):.0f}°  "
                       f"pos={pos_err:.4f}m rot={rot_err:.3f}rad z={obj_z:.3f} cov={_cov:.1f}%")
 
                 if terminated[0]:
@@ -473,7 +589,12 @@ def main():
                 if _obj_type == "disc":
                     _success_check = pos_err < 0.05
                 else:
-                    _success_check = pos_err < 0.05 and rot_err < args.rot_threshold
+                    # Partial achievement (position-only OR orientation-only) is
+                    # logged as success, but we DO NOT stop early — let the policy
+                    # use its full push budget to try to satisfy both.
+                    _pos_ok = pos_err < 0.05
+                    _rot_ok = rot_err < args.rot_threshold
+                    _success_check = _pos_ok or _rot_ok
                 if _success_check:
                     test_success = True
 
@@ -489,6 +610,15 @@ def main():
                     break
                 if oob_2d > _init_oob_2d + 0.20:
                     stop_reason = "oob"
+                    break
+                obj_x_w = float(cur_obj_pos[0])
+                obj_y_w = float(cur_obj_pos[1])
+                if not (_OBJ_WS_X[0] <= obj_x_w <= _OBJ_WS_X[1]
+                        and _OBJ_WS_Y[0] <= obj_y_w <= _OBJ_WS_Y[1]):
+                    stop_reason = "out_of_ws"
+                    pos_err = prev_pos_err
+                    rot_err = prev_rot_err
+                    env.reset()
                     break
 
                 if pos_err < best_pos_err:
@@ -506,7 +636,7 @@ def main():
 
             if test_success:
                 break
-            if stop_reason in ("max_pushes", "physics"):
+            if stop_reason == "max_pushes":
                 break
             if retry < MAX_RETRIES - 1:
                 pass
@@ -550,7 +680,7 @@ def main():
     avg_cov = np.mean([r.area_coverage for r in results]) if results else 0
 
     print(f"\n{'='*60}")
-    print(f"VALIDATION RESULTS")
+    print(f"VALIDATION RESULTS (Diffusion Policy)")
     print(f"{'='*60}")
     print(f"  Total tests:   {len(results)}")
     print(f"  Successes:     {n_success}")
@@ -584,7 +714,8 @@ def main():
                           "final_rot_error": r.final_rot_error} for r in results]
             plot_path = os.path.splitext(args.csv)[0] + ".png"
             generate_single_run_plot(plot_data, test_cfgs_data, plot_path,
-                                    rot_threshold_rad=args.rot_threshold)
+                                     rot_threshold_rad=args.rot_threshold,
+                                     policy_label="Diffusion Policy")
         except Exception as _e:
             print(f"[WARN] Plot generation failed: {_e}")
 

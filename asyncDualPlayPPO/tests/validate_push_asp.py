@@ -522,6 +522,8 @@ def main():
             _init_goal_euler = full_obs[0, _OBS_ROBOT_DIM + 14 + 3:_OBS_ROBOT_DIM + 14 + 6]
             _init_pos_err = (_init_obj_pos - _init_goal_pos).norm().item()
             _init_rot_err = _rot_distance_rad(_init_obj_euler.unsqueeze(0), _init_goal_euler.unsqueeze(0)).item()
+            if _obj_type == "disc":
+                _init_rot_err = 0.0
             _init_oob_2d = float((_init_obj_pos[:2] - _init_goal_pos[:2]).norm().item())
             _rtag = f"[R{retry_count}] " if retry > 0 else ""
             print(f"  {_rtag}[{cfg.test_type}] goal=({cfg.main_goal_x:+.3f},{cfg.main_goal_y:+.3f}) yaw={cfg.main_goal_yaw:+.3f}  "
@@ -624,6 +626,8 @@ def main():
                 rot_err = _rot_distance_rad(
                     cur_obj_euler.unsqueeze(0), goal_euler.unsqueeze(0)
                 ).item()
+                if _obj_type == "disc":
+                    rot_err = 0.0
 
                 obj_z = float(full_obs[0, _OBS_ROBOT_DIM + 2])
                 tipped = (abs(float(cur_obj_euler[0])) > 0.3 or abs(float(cur_obj_euler[1])) > 0.3)
@@ -645,8 +649,6 @@ def main():
                     _success_check = pos_err < 0.05 and rot_err < args.rot_threshold
                 if _success_check:
                     test_success = True
-                    stop_reason = "success"
-                    break
 
                 if obj_z > 0.10:
                     stop_reason = "launched"
@@ -662,6 +664,9 @@ def main():
                     stop_reason = "oob"
                     break
 
+                if pos_err < best_pos_err:
+                    best_pos_err = pos_err
+                    best_rot_err = rot_err
                 prev_pos_err = pos_err
                 prev_rot_err = rot_err
                 env.capture_pre_push(full_obs)
@@ -669,6 +674,8 @@ def main():
             if pos_err < best_pos_err:
                 best_pos_err = pos_err
                 best_rot_err = rot_err
+            if test_success:
+                stop_reason = "success"
 
             if test_success:
                 break
@@ -698,6 +705,7 @@ def main():
             "start_x": cfg.main_start.x, "start_y": cfg.main_start.y,
             "goal_x": cfg.main_goal_x, "goal_y": cfg.main_goal_y,
             "goal_yaw": cfg.main_goal_yaw,
+            "object_type": cfg.object_type,
         })
         status = "PASS" if test_success else "FAIL"
         print(f"  {status} | pushes: {pushes_used} | reason: {stop_reason} | "

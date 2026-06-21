@@ -23,13 +23,15 @@ from typing import List, Optional, Dict, Tuple
 
 
 def generate_single_run_plot(results, test_cfgs, save_path,
-                             pos_threshold_cm=5.0, rot_threshold_rad=0.2):
+                             pos_threshold_cm=5.0, rot_threshold_rad=0.2,
+                             policy_label=""):
     import math
+    _suffix = f"  [{policy_label}]" if policy_label else ""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
-    from matplotlib.patches import Polygon as MplPolygon, Patch
+    from matplotlib.patches import Polygon as MplPolygon, Patch, Circle
     from matplotlib.gridspec import GridSpec
 
     CB_BLUE = "#0072B2"
@@ -39,7 +41,7 @@ def generate_single_run_plot(results, test_cfgs, save_path,
     CB_GREEN = "#009E73"
     CB_GRAY = "#999999"
 
-    def _t_verts(cx, cy, yaw, scale=0.04):
+    def _t_verts(cx, cy, yaw, scale=0.06):
         raw = np.array([
             [-0.50, 0.50], [0.50, 0.50], [0.50, 0.20], [0.15, 0.20],
             [0.15, -0.50], [-0.15, -0.50], [-0.15, 0.20], [-0.50, 0.20],
@@ -55,60 +57,160 @@ def generate_single_run_plot(results, test_cfgs, save_path,
     if n == 0:
         return
 
-    fig = plt.figure(figsize=(max(16, n * 1.0), 14))
-    gs = GridSpec(3, 1, height_ratios=[2, 2, 1.8], hspace=0.30, figure=fig)
+    base, ext = os.path.splitext(save_path)
+    errors_path = f"{base}_errors{ext}"
+    layout_path = f"{base}_layout{ext}"
 
     test_labels = [f"T{r['test_index']}" for r in results]
-    pos_errs_cm = [r['final_pos_error'] * 100.0 for r in results]
-    rot_errs = [r['final_rot_error'] for r in results]
-    colors = [CB_BLUE if r['success'] else CB_VERMILION for r in results]
-
+    pos_errs_cm = [r["final_pos_error"] * 100.0 for r in results]
+    rot_errs = [r["final_rot_error"] for r in results]
+    colors = [CB_BLUE if r["success"] else CB_VERMILION for r in results]
     x = np.arange(n)
     bar_w = 0.65
 
-    ax1 = fig.add_subplot(gs[0])
-    ax1.bar(x, pos_errs_cm, bar_w, color=colors, edgecolor="black", linewidth=0.4)
+    fig_e, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(18, n * 0.7), 7), sharex=True)
+
+    pos_colors = []
+    for i, r in enumerate(results):
+        if r["success"]:
+            pos_colors.append(CB_BLUE)
+        elif pos_errs_cm[i] < pos_threshold_cm:
+            pos_colors.append(CB_GREEN)
+        else:
+            pos_colors.append(CB_VERMILION)
+
+    ax1.bar(x, pos_errs_cm, bar_w, color=pos_colors, edgecolor="black", linewidth=0.4)
     ax1.axhline(y=pos_threshold_cm, color=CB_GREEN, linestyle="--", linewidth=1.2,
                 label=f"Threshold ({pos_threshold_cm:.0f} cm)")
     for i, r in enumerate(results):
-        tag = "PASS" if r["success"] else "FAIL"
+        if r["success"]:
+            tag, clr = "PASS", CB_BLUE
+        elif pos_errs_cm[i] < pos_threshold_cm:
+            tag, clr = "POS \u2713", CB_GREEN
+        else:
+            tag, clr = "FAIL", CB_VERMILION
         y_off = max(pos_errs_cm) * 0.02 + 0.3
         ax1.text(i, pos_errs_cm[i] + y_off, tag, ha="center", va="bottom",
-                 fontsize=6, fontweight="bold", color=colors[i])
+                 fontsize=6, fontweight="bold", color=clr)
     ax1.set_ylabel("Position Error (cm)")
-    ax1.set_title("Best Position Error per Test", fontweight="bold")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(test_labels, fontsize=7)
+    ax1.set_title("Best Position Error per Test" + _suffix, fontweight="bold")
+    ax1.set_xlim(-0.5, n - 0.5)
+    _pos_max = max(max(pos_errs_cm) * 1.15, 10)
+    ax1.set_yticks(np.arange(0, _pos_max + 5, 5))
+    ax1.set_ylim(0, _pos_max)
     ax1.legend(fontsize=8, loc="upper right")
     ax1.grid(axis="y", alpha=0.25)
 
-    ax2 = fig.add_subplot(gs[1])
-    ax2.bar(x, rot_errs, bar_w, color=colors, edgecolor="black", linewidth=0.4)
+    rot_colors = []
+    for i, r in enumerate(results):
+        if test_cfgs[i].get("object_type", "tblock") == "disc":
+            rot_colors.append(CB_GRAY)
+        elif r["success"]:
+            rot_colors.append(CB_BLUE)
+        elif rot_errs[i] < rot_threshold_rad:
+            rot_colors.append(CB_GREEN)
+        else:
+            rot_colors.append(CB_VERMILION)
+
+    ax2.bar(x, rot_errs, bar_w, color=rot_colors, edgecolor="black", linewidth=0.4)
     ax2.axhline(y=rot_threshold_rad, color=CB_GREEN, linestyle="--", linewidth=1.2,
                 label=f"Threshold ({rot_threshold_rad:.1f} rad)")
     for i, r in enumerate(results):
-        tag = "PASS" if r["success"] else "FAIL"
+        is_disc = test_cfgs[i].get("object_type", "tblock") == "disc"
+        if is_disc:
+            tag, clr = "N/A", CB_GRAY
+        elif r["success"]:
+            tag, clr = "PASS", CB_BLUE
+        elif rot_errs[i] < rot_threshold_rad:
+            tag, clr = "ROT \u2713", CB_GREEN
+        else:
+            tag, clr = "FAIL", CB_VERMILION
         y_off = max(rot_errs) * 0.02 + 0.01
         ax2.text(i, rot_errs[i] + y_off, tag, ha="center", va="bottom",
-                 fontsize=6, fontweight="bold", color=colors[i])
+                 fontsize=6, fontweight="bold", color=clr)
     ax2.set_ylabel("Rotation Error (rad)")
-    ax2.set_title("Best Rotation Error per Test", fontweight="bold")
+    ax2.set_title("Best Rotation Error per Test" + _suffix, fontweight="bold")
     ax2.set_xticks(x)
-    ax2.set_xticklabels(test_labels, fontsize=7)
+    ax2.set_xticklabels([""] * n)
+    ax2.tick_params(axis="x", length=0)
     ax2.legend(fontsize=8, loc="upper right")
     ax2.grid(axis="y", alpha=0.25)
 
-    gs_btm = gs[2].subgridspec(1, n, wspace=0.15)
-    for i, (r, cfg) in enumerate(zip(results, test_cfgs)):
-        ax = fig.add_subplot(gs_btm[0, i])
+    def _group_label(cfg):
+        if cfg.get("object_type", "tblock") == "disc":
+            return "Disc"
+        elif abs(cfg.get("goal_yaw", 0.0)) < 1e-6:
+            return "Position Only (T-block)"
+        return "Position + Rotation (T-block)"
+
+    groups = [_group_label(c) for c in test_cfgs]
+    group_spans = []
+    cur_g, g_start = groups[0], 0
+    for gi in range(1, n):
+        if groups[gi] != cur_g:
+            group_spans.append((g_start, gi - 1, cur_g))
+            cur_g, g_start = groups[gi], gi
+    group_spans.append((g_start, n - 1, cur_g))
+
+    from matplotlib.transforms import blended_transform_factory
+    trans = blended_transform_factory(ax2.transData, ax2.transAxes)
+    for si, (gs, ge, gl) in enumerate(group_spans):
+        if gs > 0:
+            ax1.axvline(x=gs - 0.5, color="black", linewidth=0.6, alpha=0.3)
+            ax2.axvline(x=gs - 0.5, color="black", linewidth=0.6, alpha=0.3)
+        mid = (gs + ge) / 2.0
+        ax2.text(mid, -0.10, gl, ha="center", va="top", fontsize=9,
+                 fontweight="bold", transform=trans)
+
+    legend_err = [
+        Patch(facecolor=CB_BLUE, edgecolor="black", label="PASS"),
+        Patch(facecolor=CB_GREEN, edgecolor="black", label="Metric met"),
+        Patch(facecolor=CB_VERMILION, edgecolor="black", label="FAIL"),
+        Patch(facecolor=CB_GRAY, edgecolor="black", label="N/A (disc)"),
+    ]
+    fig_e.legend(handles=legend_err, loc="lower center", ncol=4, fontsize=9,
+                 bbox_to_anchor=(0.5, -0.01))
+    fig_e.tight_layout(pad=0.5, rect=[0, 0.03, 1, 1])
+    fig_e.savefig(errors_path, dpi=150, bbox_inches="tight")
+    plt.close(fig_e)
+    print(f"[Plot] Saved to {errors_path}")
+
+    ncols = min(n, 10)
+    nrows = math.ceil(n / ncols)
+    cell_w = 2.2
+    cell_h = 1.8
+    fig_l, axes = plt.subplots(nrows, ncols,
+                               figsize=(ncols * cell_w, nrows * cell_h + 0.6))
+    if nrows == 1 and ncols == 1:
+        axes = np.array([[axes]])
+    elif nrows == 1:
+        axes = axes[np.newaxis, :]
+    elif ncols == 1:
+        axes = axes[:, np.newaxis]
+
+    for idx in range(nrows * ncols):
+        row, col = divmod(idx, ncols)
+        ax = axes[row, col]
+        if idx >= n:
+            ax.set_visible(False)
+            continue
+        r, cfg = results[idx], test_cfgs[idx]
         ax.add_patch(plt.Rectangle((-0.50, 0.25), 1.0, 0.45,
                      fill=False, edgecolor=CB_GRAY, linewidth=0.5, linestyle=":"))
-        sv = _t_verts(cfg["start_x"], cfg["start_y"], 0.0, scale=0.04)
-        ax.add_patch(MplPolygon(sv, closed=True, facecolor=CB_SKY,
-                     edgecolor="black", linewidth=0.5, alpha=0.8))
-        gv = _t_verts(cfg["goal_x"], cfg["goal_y"], cfg["goal_yaw"], scale=0.04)
-        ax.add_patch(MplPolygon(gv, closed=True, facecolor=CB_ORANGE,
-                     edgecolor="black", linewidth=0.5, alpha=0.8))
+        obj_type = cfg.get("object_type", "tblock")
+        if obj_type == "disc":
+            _disc_r = 0.035
+            ax.add_patch(Circle((cfg["start_x"], cfg["start_y"]), _disc_r,
+                         facecolor=CB_SKY, edgecolor="black", linewidth=0.5, alpha=0.8))
+            ax.add_patch(Circle((cfg["goal_x"], cfg["goal_y"]), _disc_r,
+                         facecolor=CB_ORANGE, edgecolor="black", linewidth=0.5, alpha=0.8))
+        else:
+            sv = _t_verts(cfg["start_x"], cfg["start_y"], 0.0)
+            ax.add_patch(MplPolygon(sv, closed=True, facecolor=CB_SKY,
+                         edgecolor="black", linewidth=0.5, alpha=0.8))
+            gv = _t_verts(cfg["goal_x"], cfg["goal_y"], cfg["goal_yaw"])
+            ax.add_patch(MplPolygon(gv, closed=True, facecolor=CB_ORANGE,
+                         edgecolor="black", linewidth=0.5, alpha=0.8))
         dx = cfg["goal_x"] - cfg["start_x"]
         dy = cfg["goal_y"] - cfg["start_y"]
         if math.hypot(dx, dy) > 0.01:
@@ -120,23 +222,24 @@ def generate_single_run_plot(results, test_cfgs, save_path,
         ax.set_aspect("equal")
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title(test_labels[i], fontsize=6, pad=2)
+        ax.set_title(test_labels[idx], fontsize=7, pad=2)
         for spine in ax.spines.values():
             spine.set_edgecolor(CB_BLUE if r["success"] else CB_VERMILION)
             spine.set_linewidth(1.5)
 
-    legend_elems = [
+    legend_layout = [
         Patch(facecolor=CB_BLUE, edgecolor="black", label="PASS"),
         Patch(facecolor=CB_VERMILION, edgecolor="black", label="FAIL"),
         Patch(facecolor=CB_SKY, edgecolor="black", label="Start"),
         Patch(facecolor=CB_ORANGE, edgecolor="black", label="Goal"),
     ]
-    fig.legend(handles=legend_elems, loc="lower center", ncol=4, fontsize=9,
-              bbox_to_anchor=(0.5, -0.01))
-
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Plot] Saved to {save_path}")
+    fig_l.legend(handles=legend_layout, loc="lower center", ncol=4, fontsize=9,
+                 bbox_to_anchor=(0.5, -0.01))
+    fig_l.suptitle("Start / Goal Positions" + _suffix, fontweight="bold", fontsize=11)
+    fig_l.tight_layout(rect=[0, 0.03, 1, 0.96])
+    fig_l.savefig(layout_path, dpi=150, bbox_inches="tight")
+    plt.close(fig_l)
+    print(f"[Plot] Saved to {layout_path}")
 
 
 def load_csv(path: str) -> list:
@@ -181,13 +284,54 @@ def difficulty_from_name(test_name: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Plot validation results")
-    parser.add_argument("--csvs", type=str, nargs="+", required=True,
-                        help="CSV files to compare")
+    parser.add_argument("--csvs", type=str, nargs="+", default=None,
+                        help="CSV files to compare (multi-model mode)")
+    parser.add_argument("--single", type=str, default=None,
+                        help="Single CSV file for per-test error + layout plots")
     parser.add_argument("--labels", type=str, nargs="+", default=None,
                         help="Labels for each CSV (same order)")
-    parser.add_argument("-o", "--out-dir", type=str, default="validation_plots",
+    parser.add_argument("-o", "--out-dir", type=str, default=None,
                         help="Output directory for plots")
+    parser.add_argument("--rot-threshold", type=float, default=0.2,
+                        help="Rotation threshold in rad (default 0.2)")
     args = parser.parse_args()
+
+    if args.single:
+        from asyncDualPlayPPO.tasks.utils.validation_configs import get_test_config
+        rows = load_csv(args.single)
+        results_data = []
+        cfgs_data = []
+        for row in rows:
+            tid = int(row["test_index"])
+            cfg = get_test_config(tid)
+            results_data.append({
+                "test_index": tid,
+                "test_name": row["test_name"],
+                "success": row["success"] == "1",
+                "final_pos_error": float(row["pos_err"]),
+                "final_rot_error": float(row["rot_err"]),
+            })
+            cfgs_data.append({
+                "start_x": cfg.main_start.x,
+                "start_y": cfg.main_start.y,
+                "goal_x": cfg.main_goal_x,
+                "goal_y": cfg.main_goal_y,
+                "goal_yaw": cfg.main_goal_yaw,
+                "object_type": getattr(cfg, "object_type", "tblock"),
+            } if cfg else {
+                "start_x": 0, "start_y": 0.4, "goal_x": 0, "goal_y": 0.5,
+                "goal_yaw": 0, "object_type": "tblock",
+            })
+        save_path = os.path.splitext(args.single)[0] + ".png"
+        generate_single_run_plot(results_data, cfgs_data, save_path,
+                                 rot_threshold_rad=args.rot_threshold)
+        return
+
+    if not args.csvs:
+        parser.error("Either --single or --csvs is required")
+
+    if args.out_dir is None:
+        args.out_dir = "validation_plots"
 
     try:
         import matplotlib
