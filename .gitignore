@@ -16,3 +16,6 @@ curobo_overlay.imgcurobo_repo/
 *.img
 logs
 *.dat
+*.ckpt
+*.pt
+
