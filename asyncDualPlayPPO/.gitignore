@@ -1,19 +1,31 @@
-*.sif
-*.log
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- Virtual envs / caches ----
+.venv/
+.master_venv/
+.isaac_cache/
+curobo/
+curobo_repo/
+
+# ---- Training artifacts (regenerated, not part of the published source) ----
+runs/
+logs/
 *.pt
+*.log
 *.out
 *.dat
-runs/
-asyncDualPlayPPO/logs/
-*.pyc
-__pycache__/
 *.lock
-*.mp4
-asyncDualPlayPPO/__pycache__
-asyncDualPlayPPO/paper-async.master_venv/
-curobo/
-.master_venv/
-curobo_overlay.imgcurobo_repo/
+
+# ---- HPC / container images ----
+*.sif
 *.img
-logs
-.isaac_cache/*
+
+# ---- Media artifacts ----
+*.mp4
+tests/videos/
+
+# ---- Reference papers (copyright; own notes moved to ../docs/design/) ----
+paper-async/

@@ -1,1120 +1,152 @@
-# Network Architecture: Paper vs. Current Implementation
+# Network & Pipeline Reference
+
+Architecture reference for the push-primitive PBRS models (current research), the two push
+baselines, and the reference cuRobo-IK ASP implementation. Chronological history is in
+[`implementations.md`](implementations.md); usage is in [`README.md`](README.md).
+
+All policies use a **MultiCategorical** head and an **LSTM** trunk. Observations use ZYX
+Euler angles (quaternions from Isaac Sim are converted in `observations.py`).
 
 ---
 
-## Original OpenAI ASP Network
-<!-- add reference to the paper -->
+## 1. Push-primitive PBRS models (A–H) — current research
 
+### Action space — 4D × 21 bins, object-relative
+Decoded by `action_push_relative.py`:
 
-### Input Vectors
+| Dim | Param | Range | Meaning |
+|---|---|---|---|
+| 0 | `r` | 0.02–0.08 m (T-block) / 0.06–0.12 m (disc) | radial approach offset from object center |
+| 1 | `φ` | [−π, π] | approach angle in object frame |
+| 2 | `length` | 0–0.20 m | push distance (0 = hold) |
+| 3 | `θ` | [−π, π] | push direction in world frame |
 
-```
-robot_joint_position = [joint1, joint2, joint3, joint4, joint5, joint6]
-                         6 arm joint angles (radians)
+`Xs = obj_x + r·cos(obj_yaw+φ)`, `Ys = obj_y + r·sin(obj_yaw+φ)`,
+`Xf = Xs + length·cos θ`, `Yf = Ys + length·sin θ`. `r` near the object guarantees contact;
+world-frame `θ` makes goal-reaching translation trivial. `compute_push_waypoints()` expands
+this into ~72 IK substeps per push.
 
-gripper_position     = [tcp_x, tcp_y, tcp_z, tcp_roll, tcp_pitch, tcp_yaw, finger_position]
-                         EE Cartesian pose (metres + radians) + finger opening
+### Reward — Potential-Based Reward Shaping (Ng et al. 1999)
+Dense per-push reward `F = Φ(s′) − Φ(s)`, `γ_shaping = 1.0` (episodic). Preserves the
+optimal policy and produces zero-sum cycles (no reward for loitering).
 
-object_state         = [pos_x, pos_y, pos_z,
-                         rot_roll, rot_pitch, rot_yaw,          ← Euler angles (3D)
-                         vel_x, vel_y, vel_z,
-                         rotvel_x, rotvel_y, rotvel_z,
-                         gripper_distance, gripper_contact]     = 14D per object
+- **Models A–D** (separate potentials): `Φ = w_pos·exp(−k_p·d_pos²) + w_rot·exp(−k_r·d_rot²)`,
+  `k_p = 30, k_r = 5, w_pos = w_rot = 10`; `d_rot` is cosine angular distance.
+- **Models E–H** (SE(2) metric): `d_pose = √(dx² + dy² + L²·dθ²)`, `Φ = w·exp(−k·d_pose²)`,
+  `L = 0.07 m` (T-block) or `0` (disc — rotation observed but unrewarded).
 
-goal_state (Bob only) = [desired_pos_x, desired_pos_y, desired_pos_z,
-                          desired_rot_roll, desired_rot_pitch, desired_rot_yaw,  ← Euler (3D)
-                          relative_distance]                    = 7D per object
-```
+Layered sparse: `+5` position gate, `+2` full threshold (terminates), `−10` for
+launched / tipped / out-of-workspace / through-table.
 
-### Forward Pass
+### Time-based Alice reward (Models G/H, Sukhbaatar 2018)
+`R_A = γ_sp · max(0, t_B − t_A)`, `γ_sp = 0.5` — Alice is rewarded for goals she builds
+quickly (`t_A`) that Bob takes long to solve (`t_B`), self-regulating the curriculum.
 
-```
-robot_joint_position (6D)   →  Embedding Linear(6→256)   → LayerNorm(256)  ─┐
-gripper_position     (7D)   →  Embedding Linear(7→256)   → LayerNorm(256)  ─┤
-                                                                              Sum*
-object_state (14D × N)      →  PI Embedding:                                 │
-                                 shared Linear(14→512) → ReLU                │
-                                 shared Linear(512→512) → ReLU               │
-                                 sum-pool over N objects                      │
-                                 LayerNorm(512)                             ──┤
-                                                                              Sum*
-goal_state (7D × N) [Bob]  →   PI Embedding (same structure as object)     ──┘
+### Observations (Alice / Bob; single-agent A,B use Bob's layout)
+| Component | Dims | Alice | Bob | Contents |
+|---|---|---|---|---|
+| `ee_pose` | 6 | ✓ | ✓ | EE `[x,y,z, roll,pitch,yaw]` (Euler, env-local; no gripper) |
+| `obj_state` | 14 | ✓ | ✓ | `[pos(3), euler(3), linvel(3), angvel(3), ee_dist, contact]` |
+| `goal_pose` | 6 | — | ✓ | desired `[pos(3), euler(3)]` |
+| `goal_dist` | 2 | — | ✓ | slot, repurposed per mode (below) |
+| **Total** | | **20D** | **28D** | |
 
-Sum* (256+256+512[+512 Bob]) → ReLU → MLP → LSTM → Actor head / Value head
-```
+`goal_dist(2)` slot: baseline `[pos_dist, rot_dist]` · `--rel-obs` `[goal_xy − obj_xy]` ·
+`d_pose` (E–H) `[d_pose, bearing]`, `bearing = atan2(dy, dx)`.
 
----
+### Model matrix
+| Model | Agents | Object | Reward metric | Alice reward | GoalEncoder |
+|---|---|---|---|---|---|
+| A | single | T-block | PBRS pos + rot | — | — |
+| B | single | T-block | PBRS pos + rot (pos→rot curriculum) | — | — |
+| C | Alice+Bob | T-block | PBRS pos + rot | outcome (+5/−1) | yes |
+| D | Alice+Bob | T-block | PBRS pos + rot | outcome | ablated |
+| E | Alice+Bob | T-block | `d_pose` (L=0.07) | outcome | yes |
+| F | Alice+Bob | disc | `d_pose` (L=0) | outcome | yes |
+| G | Alice+Bob | T-block | `d_pose` (L=0.07) | time-based | yes |
+| H | Alice+Bob | disc | `d_pose` (L=0) | time-based | yes |
 
-## Current Implementation
+### Networks
+- **Single-agent (A, B)** — `ActorCriticPush` (`module_push.py`): flat MLP
+  `obs→512→256` → `LSTMCell(256)` → actor `Linear(256→4×21)`; separate MLP critic.
+- **ASP Bob (C, E–H)** — `ActorCritic` (`module.py`): per-object PI-encoder (`14→512→512`,
+  max-pool, LayerNorm) + GoalEncoder latent injected additively into the first trunk layer;
+  same LSTM + 4×21 head. Model **D** drops the GoalEncoder (PI-encoder reads the full
+  per-object chunk). **Alice** uses the same trunk with no goal input.
 
-### Input Vectors
-
-```
-ee_pose         = [ee_x, ee_y, ee_z, roll, pitch, yaw]
-                    EE position (metres, env-local) + ZYX Euler angles
-                    ─── Euler matches paper
-
-gripper_state   = [finger_joint_angle]
-                    Raw finger joint position (radians)
-
-     robot_state (7D) = concat(ee_pose(6), gripper_state(1))
-     ─── No joint angles: RMPFlow handles IK internally ───
-
-object_state    = [pos_x, pos_y, pos_z,
-                    roll, pitch, yaw,                          ← ZYX Euler (3D, not quat)
-                    vel_x, vel_y, vel_z,
-                    angvel_x, angvel_y, angvel_z,
-                    gripper_distance, gripper_contact]         = 14D per object
-
-goal_state (Bob only)
-                = [desired_pos_x, desired_pos_y, desired_pos_z,
-                    desired_roll, desired_pitch, desired_yaw]  = 6D per object (Euler, not quat)
-
-goal_distance (Bob only)
-                = [pos_dist,   ← L2(current_pos, goal_pos) in metres
-                    rot_dist]  ← max |Euler diff| with wraparound, range [0, π]
-                                                                             = 2D per object
-```
-
-**Assembled observation vectors:**
-
-```
-Alice obs = [robot_state(7) | obj1_state(14) | obj2_state(14)]          = 35D
-Bob obs   = [robot_state(7) | obj1_state(14) | obj1_goal(6) | obj1_dist(2)
-                            | obj2_state(14) | obj2_goal(6) | obj2_dist(2)]  = 51D
-```
-*(Interleaved per-object layout: each 22D chunk = state+goal+dist for one object.
- This matches the `view(batch, num_objects, 22)` reshape in `_encode_obs`.)*
-*(num_objects=1 mode: Alice=21D, Bob=29D — single T-block scene matching push baseline)*
-
-### Forward Pass (Alice)
-
-```
-robot_state (7D) ───────────────────────────────────────────────────────────┐
-                                                                             │
-object_state (14D × 2 objects) →  PI Embedding (PermInvEncoder):           │ concat
-                                     shared Linear(14→512) → LayerNorm → ReLU
-                                     shared Linear(512→512) → LayerNorm → ReLU
-                                     max-pool over 2 objects               │
-                                     LayerNorm(512)  ← post-pool norm      │
-                                                                            ─┘
-                          concat [robot(7) | PI_pooled(512)] = 519D
-                                     ↓
-              actor_trunk: Linear(519→512) → ReLU → Linear(512→256) → ReLU → Linear(256→128)
-                                     ↓
-                          LSTMCell(128→256)
-                                     ↓
-              ┌────────────────────────────────┐
-              ▼                                ▼
-       Actor head                       Value head
-       Linear(256→6×11=66)              Linear(21→512) → ReLU
-       MultiCategorical                 → Linear(512→256) → ReLU
-       (6 action dims × 11 bins)        → Linear(256→128) → ReLU → Linear(128→1)
-```
-
-**Action bins:**
-```
-dims 0-2: XYZ Cartesian delta   → (bin − 5) / 5 × max_delta_m        [max_delta_m = 0.02 m]
-dims 3-4: Rx, Ry rotation delta → (bin − 5) / 5 × max_delta_rot       [max_delta_rot = 0.05 rad, clamped ±0.1 rad]
-dim  5:   Gripper               → sticky: bins 0-2 → close (−1), bins 8-10 → open (+1), center → hold
-```
-
-### Forward Pass (Bob)
-
-```
-robot_state (7D) ───────────────────────────────────────────────────────────┐
-                                                                             │
-GoalEncoder (φ MLP, shared across objects):                                 │
-  input per object: current_pose(6D) + goal_pose(6D)                       │
-  φ: Linear(6→64) → Tanh → Linear(64→K=8)   ← no final activation        │
-  g_i = φ(goal_i) − φ(current_i)  [difference variant]                    │
-  g_pooled = sum-pool(g_0, g_1)              → 8D  (additive injection)    │
-                                                                             │
-PI Embedding (PermInvEncoder):                                              │
-  input: ONLY obj_states (14D each) — goal enters via additive injection   │ concat
-  shared Linear(14→512) → LayerNorm → ReLU                                 │
-  shared Linear(512→512) → LayerNorm → ReLU                                │
-  max-pool over 2 objects                                                   │
-  LayerNorm(512)  ← post-pool norm                                         │
-                                                                            ─┘
-                    concat [robot(7) | PI_pooled(512)] = 519D
-                                     ↓
-  h₁ = Linear(519→512)(enc) + Linear(8→512, no bias)(g_pooled)  ← additive goal injection
-  h₁ = ReLU(LayerNorm(h₁))
-                                     ↓
-       actor_trunk_rest: Linear(512→256) → ReLU → Linear(256→128)
-                                     ↓
-                          LSTMCell(128→256)
-                                     ↓
-              ┌────────────────────────────────┐
-              ▼                                ▼
-       Actor head                       Value head
-        Linear(256→6×11=66)              Linear(29→512) → ReLU
-        MultiCategorical                 → Linear(512→256) → ReLU
-                                         → Linear(256→128) → ReLU → Linear(128→1)
-                                         (dimensions shown for num_objects=1; multiply by 22D per extra object)
-```
+### Files
+`train_a_pbrs_simple.py` … `train_h_tasp_disc.py`; envs `tasks/push_task_curobo.py`
+(T-block) / `push_task_curobo_disc.py` (disc); wrappers `tasks/utils/wrapper_push.py`
+(A, B) / `wrapper_push_asp.py` (C–H); reward `tasks/utils/reward_pbrs.py`; one
+`hpc/train_[a-h]_*.slurm` per model.
 
 ---
 
-## Differences: Paper vs. Current
+## 2. Push baselines (`train_push.py`, `train_push_asp.py`)
 
-| | Paper | Current |
-|--|-------|---------|
-| **Robot arm state** | Joint angles (6D) | ❌ Removed — RMPFlow handles IK |
-| **Gripper / EE state** | EE Cartesian pose + finger (7D) | EE Euler pose + finger (7D) |
-| **Object rotation** | Euler angles (3D) | **Euler angles (3D)** — matches paper |
-| **Object state dims** | 14D per object | **14D** per object |
-| **Goal rotation** | Euler angles (3D) | **Euler angles (3D)** — matches paper |
-| **Goal state dims** | 7D (3D pos + 3D euler + 1 scalar dist) | **6D** goal pose + **2D** dist (separate term) |
-| **Goal encoding** | Raw PI embedding on goal states | **GoalEncoder → K=8 latent** per object |
-| **GoalEncoder φ activation** | — | **Tanh** (paper §2.4) |
-| **GoalEncoder input** | — | **6D Euler pose** (pos3 + euler3) |
-| **GoalEncoder pooling** | — | **Sum-pool** (g = Σ g_i; "AND" semantics — all objects contribute) |
-| **Additive goal injection** | ❌ | ✅ `h = ReLU(LN(W·enc + Wg·g))` |
-| **PI encoder per-obj input** | 14D obj state | **14D obj state only** (goal separated out) |
-| **Pooling (PI encoder)** | Sum-pool | **Max-pool** (more robust, standard DeepSets) |
-| **Post-pool norm** | LayerNorm ✅ | LayerNorm ✅ |
-| **Alice obs dim** | — | **35D** |
-| **Bob obs dim** | — | **51D** |
-| **Actor trunk** | MLP → LSTM | **Linear(519→512)→ReLU→(256)→(128) → LSTMCell(128→256)** |
-| **Action space** | Continuous Gaussian | **MultiCategorical: 6 dims × 11 bins** |
-| **IK failure** | Operational-space control (always valid) | Alice: terminate -1; Bob: hold position |
+Same 4D × 21 push action and ~72-substep primitive as above.
+
+- **Push-PPO** (`train_push.py`): single agent, 28D obs
+  `[ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)]` (30D with `--rel-obs`),
+  flat MLP + LSTM, normalised fractional-improvement reward (Fix P63). No ASP/ABC.
+- **Push-ASP** (`train_push_asp.py`): ASP two-phase loop with the object-relative push
+  primitive. Alice obs 20D `[ee_pose(6) | obj_state(14)]`; Bob obs 25D adds
+  `rel_goal(5) = [Δx, Δy, rel_yaw, pos_dist, rot_dist]`. Bob uses the GoalEncoder + LSTM.
+
+The object-relative parameterization raises contact probability per push from ~2%
+(absolute) to ~95%+, which is what lets Alice bootstrap.
 
 ---
 
-## Rotation Representation Note
-
-The current implementation uses ZYX Euler angles (roll, pitch, yaw) at observation time,
-matching the paper's Appendix A.2 ("three Euler angles on three dimensions").
-Quaternions are produced by IsaacSim but converted in `observations.py` before the
-policy ever sees them.
-
-The GoalEncoder's φ MLP therefore receives 6D inputs (pos3 + euler3) and computes
-difference embeddings `φ(goal) − φ(current)` that are meaningful under linear arithmetic
-
-# cuRobo Training Pipeline (`train_curobo.py`)
-
-This section documents the full training pipeline for the cuRobo-IK variant of ASP, covering the DRL loop, the IK action pipeline, and all adaptive controllers.
-
----
-
-## 1. Environment and Solver Setup
-
-### Import ordering constraint
-
-cuRobo must be imported **before** `AppLauncher`. Isaac Sim's `AppLauncher` prepends its own pip bundle to `sys.path`; importing cuRobo after would pick up Isaac Sim's incompatible torch. Additionally, `torch._dynamo`, `torch._C`, and `torch.optim` must be cached in `sys.modules` before `AppLauncher` runs to prevent dynamo conflicts.
-
-```python
-# CORRECT order:
-from curobo.wrap.reacher.ik_solver import IKSolver, IKSolverConfig
-import torch, torch._dynamo, torch._C, torch.optim  # lock correct versions
-from isaaclab.app import AppLauncher
-```
-
-### Action space replacement (DiffIK → JointPositionActionCfg)
-
-In `train_diffik.py` / `train.py`, the environment action is a 6D Cartesian delta processed by Isaac Lab's internal DiffIK controller. In the cuRobo variant, cuRobo computes joint positions externally, so the environment action is replaced with direct joint positions:
-
-```python
-env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
-    asset_name="robot",
-    joint_names=_ARM_JOINT_NAMES,   # 6 UR5e joints
-    scale=1.0,
-    use_default_offset=False,       # action IS joint position in radians
-)
-```
-
-The 7D `env_full` action vector contains `[q0..q5 (arm joints), gripper]`.
-
-### cuRobo IK solver initialization
-
-```python
-_ur5e_yaml = curobo_load_yaml(join_path(get_robot_configs_path(), "ur5e.yml"))
-_robot_cfg  = RobotConfig.from_dict(_ur5e_yaml["robot_cfg"], _tensor_args)
-_ik_config  = IKSolverConfig.load_from_robot_config(_robot_cfg, world_model=None, tensor_args=_tensor_args)
-ik_solver   = IKSolver(_ik_config)
-```
-
-**CUDA graph warm-up**: cuRobo traces a CUDA graph on the first `solve_batch()` call for a given batch size. A dummy warm-up call with `num_envs` is made at startup so all subsequent rollout calls reuse the graph (latency: ~3 ms cold → ~0.5 ms warm).
-
-### Accumulated EE targets
-
-Two per-env tensors accumulate the arm's target pose across steps:
-
-| Tensor | Shape | Init | Meaning |
-|--------|-------|------|---------|
-| `ee_target_local` | `(N, 3)` | wrist_3_link pos − env_origin | EE position in env-local frame |
-| `ee_target_quat_w` | `(N, 4)` | `[0, 1, 0, 0]` wxyz (tool-down) | EE orientation in world frame |
-
-These are **integrals** — each step's decoded delta is added onto the running target. cuRobo then solves IK to that absolute target, not to a delta.
-
----
-
-## 2. Action Decoding: Bins → IK Targets
-
-The policy outputs `(N, 6)` integer bin indices from the MultiCategorical head. The decoder `_bins_to_xyz_rxy_gripper` maps them to continuous deltas:
-
-```
-Dim layout (11 bins, bin 5 = zero):
-    0-2: XYZ    → (bin − 5) / 5 × max_delta_m        [max_delta_m = 0.04 m]
-    3-4: Rx, Ry → (bin − 5) / 5 × max_delta_rot       [max_delta_rot = 0.05 rad, clamped to ±0.1 rad]
-    5:   Gripper → sticky: bins 0-2 → close (−1), bins 8-10 → open (+1), center → hold
-```
-
-The gripper state is **sticky**: it holds its last value unless a decisive bin is selected. Gripper state is reset to open (1.0) on phase boundary or episode done.
-
----
-
-## 3. Per-Step cuRobo IK Pipeline
-
-Executed every rollout step for all `N` environments simultaneously.
-
-**Step 1 — Decode actions**
-```python
-xyz, rxry, gripper_state = _bins_to_xyz_rxy_gripper(bin_indices, gripper_state)
-```
-
-**Step 2 — Accumulate EE position target**
-```python
-ee_target_local[envs] += xyz           # integrate delta onto running target
-ee_target_local.clamp_(WS_X, WS_Y, WS_Z)  # clamp to workspace
-```
-Workspace limits (env-local frame): X ∈ [−0.50, 0.50], Y ∈ [0.25, 0.70], Z ∈ [0.00, 0.55].
-EE home position applied at every phase sync: (X+0.02, Y=0.50, Z=0.05) — centres the arm over the T-block spawn at (0.0, 0.5).
-
-**Step 3 — Accumulate EE orientation target**
-
-Convert (Rx, Ry) deltas to a delta quaternion and compose with the running orientation:
-```python
-q_delta = quat_mul(q_ry, q_rx)        # Ry applied first, then Rx
-ee_target_quat_w = quat_mul(ee_target_quat_w, q_delta)
-ee_target_quat_w = normalize(ee_target_quat_w)
-```
-Quaternion composition avoids gimbal lock and makes phase sync trivial (just reset to `QUAT_TOOL_DOWN = [0, 1, 0, 0]` wxyz).
-
-**Step 4 — TCP offset correction**
-
-cuRobo targets the `wrist_3_link` frame; the gripper fingertip midpoint is ~5 cm ahead. The offset is computed live from current physics body positions so it tracks any orientation change:
-```python
-tcp_offset = (lf_w + rf_w) / 2 − w3_w    # finger midpoint minus wrist_3 (world frame)
-ik_target  = ee_target_local − tcp_offset  # wrist_3 target needed to place TCP at goal
-```
-Note: `ee_target_local` and `tcp_offset` are both relative to the same origin, so `env_origins` cancel — this subtraction is valid.
-
-**Step 5 — Batch IK solve**
-```python
-result = ik_solver.solve_batch(
-    CuroboPose(position=ik_target, quaternion=ee_target_quat_w),
-    seed_config=prev_joint_cmd.unsqueeze(1),   # (N, 1, 6) — warm-start from last command
-    retract_config=prev_joint_cmd,              # (N, 6)
-)
-```
-Seeding from `_prev_joint_cmd` (not physics joint positions) keeps cuRobo finding solutions along the already-smoothed trajectory.
-
-**Step 6 — IK failure handling**
-
-If `result.success[i]` is False for env `i`:
-- **Alice**: arm locked to current joint position with gripper open; episode terminated immediately with -1 penalty (prevents the EE accumulator from drifting into unrecoverable workspace). Episode manager reset, ghost hidden.
-- **Bob**: revert `ee_target_local[i]` and `ee_target_quat_w[i]` to their pre-step snapshot; fall back to `raw_cmd[i] = cur_joints[i]` (hold current physics state). No termination — Bob continues trying.
-
-IK fail rate is logged to TensorBoard each iteration as `Metrics/IKFailRate`.
-
-**Step 7 — EMA joint smoothing + assemble 7D command**
-```python
-smoothed = 0.2 * raw_cmd + 0.8 * prev_joint_cmd   # α = 0.2
-env_full[:, :6] = smoothed                         # arm joints
-env_full[:, 6]  = gripper_state                    # finger width
-```
-The EMA blends 20% of the new IK solution each step, giving inertia similar to RMPFlow's integrated velocity.
-
----
-
-## 4. Phase Sync (After `env.step()`)
-
-After each `env.step()`, Isaac Lab's PhysX state is fresh. Any environment where the phase transitioned (Alice→Bob or Bob→Alice) or an episode ended must have its IK accumulators snapped to the current physics state to prevent target drift:
-
-```python
-needs_sync = phase_changed | dones
-if needs_sync.any():
-    tcp_sync = (lf_w[sync_ids] + rf_w[sync_ids]) / 2
-    ee_target_local[sync_ids]  = tcp_sync − env_origins[sync_ids]  # re-anchor position, then apply home offset (X+0.02, Y=0.50, Z=0.05)
-    prev_joint_cmd[sync_ids]   = physics_joint_pos[sync_ids]        # re-anchor joints
-    ee_target_quat_w[sync_ids] = QUAT_TOOL_DOWN                     # reset orientation
-```
-
-LSTM hidden states are zeroed on the same events:
-- Alice hidden → zeroed when `dones[alice_ids]` or `_alice_just_ended[alice_ids]`
-- Bob hidden → zeroed when `dones[bob_ids]` or `_bob_just_ended[bob_ids]`
-
----
-
-## 5. Training Loop Structure
-
-```
-while bob_updates < max_iterations:
-
-    ┌─ ROLLOUT (rollout_length = alice_timesteps + bob_timesteps steps) ─────────────┐
-    │  for t in range(300):                                                           │
-    │    ① Alice acts  (80% current policy + 20% historical snapshot)               │
-    │    ② Bob acts    (80% current policy + 20% historical snapshot)               │
-    │    ③ Record Alice trajectory for ABC (obs, act, traj_len per env)             │
-    │    ④ cuRobo IK pipeline → 7D joint command                                    │
-    │    ⑤ env.step(env_full) → obs, rewards, dones, extras                        │
-    │    ⑥ Phase sync (on transition or done)                                       │
-    │    ⑦ Add to Alice storage / Bob storage                                       │
-    │    ⑧ On bob_done & ~bob_success & goal_valid → add to ABC buffer             │
-    └────────────────────────────────────────────────────────────────────────────────┘
-
-     ┌─ CONTROLLERS ──────────────────────────────────────────────────────────────────┐
-     │  Alice entropy coef: fixed 0.05 (paper Table 2)                                │
-     │  Alice LR: cosine decay lr_max=3e-4 → lr_min=5e-5                              │
-     │  Bob abc_coef: fixed 0.5 (paper Table 2)                                       │
-     └────────────────────────────────────────────────────────────────────────────────┘
-
-    ┌─ PPO UPDATES ──────────────────────────────────────────────────────────────────┐
-    │  Alice: standard PPO (3 epochs, 4 minibatches)                                 │
-    │  Bob:   PPOABC = PPO + clipped ABC loss + aux GoalEncoder loss                 │
-    └────────────────────────────────────────────────────────────────────────────────┘
-
-    ┌─ CHECKPOINT (every save_interval iters) ───────────────────────────────────────┐
-    │  model_{iter}.pt, abc_buffer.pt, episode_manager_{iter}.pt, train_state.pt     │
-    └────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Rollout timing
-- `alice_timesteps = 100` steps per Alice phase (goal-setting)
-- `bob_timesteps = 200` steps per Bob phase (goal-replication)
-- `rollout_length = 300` total steps per iteration
-- Episodes are staggered at startup across envs so not all envs reset simultaneously.
-
-### Historical policy pool
-- `HIST_FRAC = 0.2` → for each policy's active env subset, 20% use a past snapshot.
-- Snapshot saved every `HIST_SAVE_INTERVAL` iterations to `HistoricalPolicyPool`.
-- `sample_policy()` reuses a persistent `_hist_clone` (load_state_dict, not deepcopy).
-
----
-
-## 6. ABC Buffer Population
-
-Gate condition (checked every step):
-```python
-just_failed_bob = bob_done_this_step & (~bob_success) & goal_valid
-```
-
-For each gated env:
-1. Retrieve Alice's recorded trajectory `(obs[0:T], act[0:T])` for this episode.
-2. Reject if `T < max(10, alice_timesteps // 2)` (too short to be a valid demo).
-3. Construct Bob's BC observation: `bc_obs = construct_bob_observation(alice_obs, goal_states)` — repackages Alice's obs with the goal appended to each timestep.
-4. Compute `old_log_prob` for the trajectory under current Bob policy (batch evaluate).
-5. Store `(bc_obs, traj_acts, old_lp)` in `GPUDemonstrationBuffer` (sliding window, `traj_maxlen=500`).
-
-Old trajectories are evicted as new failures arrive, keeping BC signal relevant to Alice's current task distribution.
-
----
-
-## 7. Fixed Controllers
-
-All controllers use fixed values per paper Table 2 (Fix 1, Fix 2).  They are set once
-per iteration, after the rollout and before the PPO updates.
-
-### Alice entropy coef
-
-Fixed at the YAML value (`ent_coef: 0.05` per `ppo_continuous.yaml`).  The two-phase
-SR-coupled controller (exponential decay + PI controller) has been removed to prevent
-a vicious feedback loop causing premature mode collapse.
-
-### Alice learning rate
-
-Cosine decay over the full training run:
-```
-alice_lr = alice_lr_min + 0.5 × (lr_max − lr_min) × (1 + cos(π × iter/max_iter))
-```
-Range: `lr_max = 3e-4` → `lr_min = 5e-5`.
-
-### Bob abc_coef
-
-Fixed at the paper Table 2 value (β = 0.5).  The inverse-SR controller
-(`target_abc = abc_coef_start × (1 − bob_sr)`) has been removed — it injected a
-parasitic second-order feedback loop that destroyed the trust region.
-
----
-
-## 8. PPO Updates
-
-### Alice update (standard PPO)
-- `noptepochs = 3`, `nminibatches = 4`, `cliprange = 0.2`
-- Entropy bonus: `ent_coef × H(π)` (fixed, see controller above)
-- No ABC or aux loss.
-
-### Bob update (PPOABC)
-
-**PPO loss** (clipped surrogate + value):
-```
-L_PPO = −min(r·A, clip(r, 1−ε, 1+ε)·A) + vf_coef × (V − R)²
-```
-
-**ABC loss** (clipped behavioral cloning, sequential LSTM evaluation):
-
-Trajectories sampled from `GPUDemonstrationBuffer` are evaluated sequentially through the LSTM (not batched) to maintain correct hidden state dependencies:
-```python
-for t in range(max_T):
-    logits, (h, c) = actor_forward(obs[t], (h, c), detach_goal_encoder=True)
-    lp = MultiCategorical(logits).log_prob(acts[t])
-bc_ratio = exp(lp − old_lp)
-L_BC = −mean(min(bc_ratio, clip(bc_ratio, 1−ε, 1+ε)))   # PPO-clipped NLL
-```
-`detach_goal_encoder=True` prevents ABC from distorting the latent goal representation.
-
-**Auxiliary distance loss** (GoalEncoder regularizer):
-```
-L_aux = aux_coef × GoalEncoder.aux_loss(goal_poses, current_poses)
-```
-Trains the encoder to also predict position and rotation distances — adds a geometric inductive bias without a separate training phase.
-
-**Total Bob loss**:
-```
-L_total = L_PPO + abc_coef × L_BC + aux_coef × L_aux
-```
-
----
-
-## 9. Observation Layouts
-
-### Alice obs (flat, `alice_obs_dim`)
-```
-[robot_state(7) | obj1_state(14)] = 21D (1 object — T-block)
-```
-`num_objects=1` is the default for cuRobo training.
-No goal info. `robot_state` = `[ee_pose(6), gripper(1)]` (ZYX Euler, env-local frame).
-
-### Bob obs (flat, `bob_obs_dim`)
-```
-[robot_state(7) | obj1_state(14) + goal1_pose(6) + dist1(2) | obj2_state(14) + goal2_pose(6) + dist2(2)]
-= 7 + 2×22 = 51D (2 objects)
-```
-`obj_state(14)` = `[pos(3), euler(3), linvel(3), angvel(3), dist(1), contact(1)]`.
-`goal_pose(6)` = `[pos(3), euler(3)]`.
-`dist(2)` = `[pos_dist(1), rot_dist(1)]`.
-
----
-
-## 10. Network Forward Pass (cuRobo training, no architectural changes)
-
-The network architecture is identical to the DiffIK variant — cuRobo only replaces the IK controller outside the policy.
-
-### Alice forward pass
-```
-alice_obs (35D)
-    │
-    ├─ robot_state (7D) ─────────────────────────────────────────────┐
-    │                                                                  │
-    └─ obj_features (28D → 2×14D) → PermInvEncoder                   │
-           shared MLP: 14→512→512 (LN+ReLU each)                     │
-           max-pool across 2 objects                                   │
-           pool_norm (LayerNorm)                                       │
-           concat robot_state → (7+512 = 519D)                        │
-               │                                                        │
-               └──────────────────────────────────────────────────────┘
-                                    │ (519D)
-                               actor_trunk
-                               Linear(519→512)→ReLU
-                               Linear(512→256)→ReLU
-                               (no goal injection — Alice has no goal)
-                                    │ (256D)
-                               LSTMCell(256→256)
-                                    │ (256D)
-                               actor_head: Linear(256→66)   [6 dims × 11 bins]
-                               reshape → (batch, 6, 11) → MultiCategorical
-```
-
-### Bob forward pass (with GoalEncoder + additive injection)
-```
-bob_obs (51D)
-    │
-    ├─ robot_state (7D)
-    │
-    ├─ per-object chunks: 2 × [obj_state(14) + goal_pose(6) + dist(2)]
-    │       │                           │
-    │       │ obj_state (14D)           │ goal_pose (6D) + current_pose (6D from obj_state)
-    │       │     │                     │
-    │       │     │              GoalEncoder.encode_per_object()
-    │       │     │              MLP variant (default: "difference")
-    │       │     │              per-object embedding: (batch, 2, K=8)
-    │       │     │              sum-pool across objects → g_pooled (batch, 8)
-    │       │     │
-    │       └─ obj_state (14D×2) → PermInvEncoder (same as Alice)
-    │              shared MLP: 14→512→512
-    │              max-pool + pool_norm
-    │              concat robot_state → (519D)
-    │
-    │ (519D from PI encoder)
-    actor_trunk_layer1: Linear(519→512)       ← first layer split out
-    h1 = ReLU(h1)
-    h1 = LayerNorm(h1 + goal_proj(g_pooled))  ← additive goal injection
-    actor_trunk_rest: Linear(512→256)→ReLU   ← remaining trunk layers
-    │ (256D)
-    LSTMCell(256→256)
-    │ (256D)
-    actor_head: Linear(256→66) → (batch, 6, 11) → MultiCategorical
-
-critic (no bottleneck, always full raw obs):
-    obs (51D) → MLP(51→512→256→128→1)
-```
-
-Goal projection: `_goal_proj = Linear(8→512, bias=False)` scaled down by ×0.1 at init to avoid ReLU saturation before training begins.
-
----
-
-## 11. Checkpoint Files
-
-Each checkpoint saves four artifacts:
-
-| File | Contents |
-|------|----------|
-| `bob/model_{iter}.pt` | Bob ActorCritic weights + optimizer state |
-| `alice/model_{iter}.pt` | Alice ActorCritic weights + optimizer state |
-| `bob/abc_buffer.pt` | GPUDemonstrationBuffer trajectory store |
-| `bob/episode_manager_{iter}.pt` | Phase step counters, goal states |
-| `bob/train_state_{iter}.pt` | `entropy_coef`, `abc_coef`, `bob_success_buf` (deque) |
-
-On `SIGTERM`, the same set is written immediately before exit (emergency checkpoint).
-
-Resume: `--resume_path bob/model_{iter}.pt` loads both Alice and Bob weights, optimizer state, and train_state from the matching iteration.
-
----
-
-# Bug Fixes Applied — Post-run Analysis (2026-05-08)
-
-Four fixes applied based on analysis of `curobo_train512_1obj.txt` (Run A, job 28838810,
-resumed from iter 3230) and `slurm-28838828-curobo.out` (Run B, fresh 230 iters).
-
-## Fix 1 (P0) — ABC Gate Disables Imitation Learning on Negative Alice Reward
-
-### The bug
-
-`ppo_abc.py:116`:
-
-```python
-if alice_mean_rew < self.abc_warmup_threshold:  # threshold = 0.0
-    effective_abc_coef = 0.0
-```
-
-`alice_mean_rew` is `last_alice_mean_rew` — the raw (non-EMA) per-iteration mean.
-Alice gets −3.0 for every early termination (`objects_off_table`, `robot_through_table`).
-With 167+ `robot_through_table` events per iteration, her raw mean reward easily goes
-negative → `−1.5 < 0.0` is True → ABC silently disabled.
-
-**Logging mismatch**: `train_curobo.py:1305` used `ema_alice_rew >= 0` for the warm
-display, while the actual gate used the raw `last_alice_mean_rew`. The log could show
-"ABC warm: YES" while ABC was actually disabled.
-
-### The fix
-
-**`ppo_abc.py:115-117`** — Remove the gate entirely (Fix 9 already declared ABC always active):
-
-```python
-# BEFORE:
-effective_abc_coef = self.abc_coef
-if alice_mean_rew < self.abc_warmup_threshold:
-    effective_abc_coef = 0.0
-
-# AFTER:
-effective_abc_coef = self.abc_coef  # always active per Fix 9
-```
-
-**`train_curobo.py:1305`** — Fix the warm display to match reality:
-
-```python
-# BEFORE:
-_abc_warm = 1.0 if ema_alice_rew >= bob_ppo.abc_warmup_threshold else 0.0
-
-# AFTER:
-_abc_warm = 1.0 if bob_ppo.abc_buffer.size > 0 else 0.0
-```
-
----
-
-## Fix 2 (P0) — `ALICE_BOB_SUCCESS_REWARD = 0` Instead of −1
-
-### The bug
-
-`rewards.py:14`:
-
-```python
-ALICE_BOB_SUCCESS_REWARD: float = 0.0  # Bob succeeded → Alice gets nothing
-```
-
-Per the ASP paper, Alice should get a **negative** reward when Bob succeeds so she is
-pushed to find harder goals. With 0.0, there is no adversarial pressure — Alice has no
-reason to ever make goals harder.
-
-**Secondary bug**: The early-success path in `wrapper.py:491-497` (Bob achieves
-completion mid-episode) reads `delayed_alice_reward` **without** first applying the
-outcome reward (unlike the normal `_handle_bob_completion` path at line 687).
-
-### The fix
-
-**`rewards.py:14`** — Give Alice a penalty when Bob succeeds:
-
-```python
-# BEFORE:
-ALICE_BOB_SUCCESS_REWARD: float = 0.0  # Bob succeeded
-
-# AFTER:
-ALICE_BOB_SUCCESS_REWARD: float = -1.0  # Bob succeeded — Alice gets penalty
-```
-
-**`wrapper.py:491-497`** — Apply outcome reward before reading in early-success path:
-
-```python
-# ADD_BEFORE the extras["alice_total_reward"] assignment:
-alice_success_penalty = torch.full(
-    (len(completion_ids),),
-    reward_utils.ALICE_BOB_SUCCESS_REWARD,
-    device=self.device,
-)
-self.delayed_alice_reward[completion_ids] += alice_success_penalty
-```
-
----
-
-## Fix 3 (P1) — Diagnostic: Alice Contact-Manipulation Shaping
-
-### Context
-
-90%+ of Alice episodes end with 0 reward (object not moved). PPO gets a diffuse
-negative advantage but no directional signal toward contact. This is a classic
-sparse-reward exploration failure.
-
-### Procedure
-
-1. **Run `--alice_sandbox`** to isolate Alice from the adversarial loop:
-
-   ```bash
-   python train_curobo.py --num_envs 64 --max_iterations 200 \
-     --exp_name "diag_sandbox_post_fix" --alice_sandbox --headless
-   ```
-
-2. **Run diagnostic** on the output:
-
-   ```bash
-   python -m asyncDualPlayPPO.diagnostics.test_alice_sandbox \
-     --log_dir "runs/diag_sandbox_post_fix/summary"
-   ```
-
-3. **If ValidGoals still declines** → the problem is kinematic (PPO can't learn
-   contact with 0 per-step reward). Enable the diagnostic shaping flag to confirm:
-
-   ```bash
-   python train_curobo.py --num_envs 64 --max_iterations 200 \
-     --exp_name "diag_shaping_test" --alice_sandbox --diag_alice_shaping --headless
-   ```
-
-4. **Remove diagnostic shaping after confirming** — it is NOT intended as a
-   permanent addition. It violates Fix 3 (Alice gets zero per-step reward).
-
-### Code added
-
-**`train_curobo.py:174-178`** — New flag `--diag_alice_shaping`:
-
-```
-parser.add_argument("--diag_alice_shaping", action="store_true",
-    help="Diagnostic: small per-step EE→object proximity shaping for Alice.")
-```
-
-**`train_curobo.py:361-363`** — Wire flag to wrapper:
-
-```python
-if args.diag_alice_shaping:
-    env._diag_alice_shaping = True
-```
-
-**`wrapper.py:965-978`** — Shaping logic (only executes when flag is set):
-
-```python
-if getattr(self, "_diag_alice_shaping", False):
-    obj_pos = obs_dict["object_state"][is_alice, :3]
-    ee_pos  = obs_dict["ee_pose"][is_alice, :3]
-    delta   = (obj_pos - ee_pos).norm(dim=-1)
-    shaping = 0.005 * torch.clamp(0.3 - delta, 0.0, 0.3)
-    rewards[is_alice] += shaping
-```
-
----
-
-## Fix 4 (P2) — Test A: MeanDisp3D Floor Assertion
-
-### Context
-
-MeanDisp3D is already logged to TensorBoard (`train_curobo.py:1300-1302`). The
-diagnostic suite had no assertion that Alice's mean object displacement stays above
-a minimum floor — meaning micro-displacement exploitation (Alice learning to barely
-nudge objects) could go undetected.
-
-### Code added
-
-**`diagnostics/test_alice_sandbox.py:106-114`** — Check 6:
-
-```python
-# 6. MeanDisp3D floor — Alice must be moving objects, not exploiting micro-displacement
-disp3d = df[df["tag"] == "Metrics/Alice/MeanDisp3D"]["value"]
-if len(disp3d) >= 20:
-    late_disp = disp3d.values[-20:].mean()
-    if late_disp <= 0.04:
-        failures.append(
-            f"FAIL: MeanDisp3D floor violated: {late_disp:.4f}m (need > 0.04m). "
-            "Alice is exploiting micro-displacement — objects are not meaningfully moved."
-        )
-```
-
----
-
-## Summary of Files Changed
-
-| Fix | File | Lines | Change |
-|-----|------|-------|--------|
-| 1 | `ppo_abc.py` | 115-117 | Removed `alice_mean_rew < 0.0` gate; ABC always active |
-| 1 | `train_curobo.py` | 1305 | Warm display uses buffer size, not EMA reward |
-| 2 | `rewards.py` | 14 | `ALICE_BOB_SUCCESS_REWARD` 0.0 → −1.0 |
-| 2 | `wrapper.py` | 494-497 | Added outcome reward in early-success path |
-| 3 | `train_curobo.py` | 174-178 | New `--diag_alice_shaping` flag |
-| 3 | `train_curobo.py` | 361-363 | Wire flag to wrapper attribute |
-| 3 | `wrapper.py` | 965-978 | EE→object proximity shaping (conditional on flag) |
-| 4 | `test_alice_sandbox.py` | 106-114 | Test A: MeanDisp3D > 0.04m floor assertion |
-
----
-
-# Push-PPO Baseline (`train_push.py`)
-
-This section documents the single-agent PPO baseline that uses **push primitive
-macro-actions** instead of per-step EE delta control.  No ASP, no Alice/Bob, no
-ABC — a minimal PPO agent learns to push a single object to a target position.
-
----
-
-## 1. Architecture Overview
-
-```
-Agent (Push-PPO)
-    │
-    │  obs (28D): [ee_pose(6)|obj_state(14)|goal_pose(6)|goal_dist(2)]
-    ▼
-┌──────────────────────────────────────────────────────────┐
-│  ActorCriticPush                                          │
-│                                                            │
-│  obs (28D)                                                 │
-│    │                                                       │
-│    ├─ Linear(28→512)→ReLU                                 │
-│    ├─ Linear(512→256)→ReLU                                │
-│    ├─ LSTMCell(256→256)                                   │
-│    │                                                       │
-│    ├─ Actor: Linear(256→84) → (4,21) → MultiCategorical    │
-│    └─ Critic: Linear(28→512)→ReLU→256→ReLU→128→ReLU→1    │
-└──────────────────────────────────────────────────────────┘
-    │
-     │  push params (4D): [Xs, Ys, length, theta]
-    ▼
-┌──────────────────────────────────────────────────────────┐
-│  Push Primitive (action_push.py)                          │
-│                                                            │
-│  Multi-phase trajectory:                                   │
-│    1. Approach (5 steps): EE→above object, tool-down      │
-│    2. Orient   (3 steps): rotate to target yaw            │
-│    3. Descend  (3 steps): move down to surface contact    │
-│    4. Engage   (1 step):  close gripper                   │
-│    5. Push     (12 steps): move in push direction         │
-│    6. Release  (1 step):  open gripper                    │
-│    7. Retract  (3 steps): move up                         │
-│                                                            │
-│  Total: 28 substeps per push macro-action                  │
-│  Each substep: cuRobo IK → joint positions → env.step()   │
-└──────────────────────────────────────────────────────────┘
-    │
-    │  cumulative reward after push completes
-    ▼
-┌──────────────────────────────────────────────────────────┐
-│  Dense Reward (wrapper_push.py)                           │
-│                                                            │
-│  reward = 10.0 · (d_prev − d_now) − 0.5 · d_now          │
-│           + 5.0 · completion_bonus                        │
-│                                                            │
-│  d_prev = L2 distance before push                          │
-│  d_now  = L2 distance after push                          │
-│  completion: object within 0.05m pos / 0.035rad rot       │
-└──────────────────────────────────────────────────────────┘
-```
-
----
-
-## 2. Observation Layout (Push Agent)
-
-```
-push_obs (28D) = [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_distance(2)]
-
-ee_pose(6)       = [pos_x, pos_y, pos_z, roll, pitch, yaw]  — ZYX Euler, local frame
-obj_state(14)    = [pos(3)|euler(3)|linvel(3)|angvel(3)|ee_dist(1)|contact(1)]
-goal_pose(6)     = [pos_x, pos_y, pos_z, roll, pitch, yaw]   — ZYX Euler
-goal_distance(2) = [pos_dist(1), rot_dist(1)]                 — L2 position + max-Euler diff
-```
-
-No PI encoder, no goal encoder, no gripper state — flat MLP input.
-The gripper is always closed for push primitive macro-actions and carries no
-useful signal for the policy.
-
----
-
-## 3. Action Space (Push Parameters)
-
-MultiCategorical: **6D × 11 bins**.  Decoded to push parameters via `decode_push_action()`.
-
-| Dim | Parameter | Range | Description |
-|-----|-----------|-------|-------------|
-| 0 | `offset_x` | [-0.15, 0.15] m | Gripper approach offset X from object |
-| 1 | `offset_y` | [-0.15, 0.15] m | Gripper approach offset Y from object |
-| 2 | `push_dx` | [-0.30, 0.30] m | Push direction X (from contact point) |
-| 3 | `push_dy` | [-0.30, 0.30] m | Push direction Y (from contact point) |
-| 4 | `yaw` | [-π, π] rad | Gripper yaw angle (rotation around Z) |
-| 5 | `push_dz` | [-0.03, 0.03] m | Push vertical component |
-
----
-
-## 4. Network Forward Pass (Push Agent)
-
-```
-obs (28D)
-    │
-    ├─ actor_trunk: Linear(28→512)→ReLU → Linear(512→256)→ReLU
-    │      │ (256D)
-    │   LSTMCell(256→256)
-    │      │ (256D)
-    │   actor_head: Linear(256→84) → reshape(4,21) → MultiCategorical
-    │
-    └─ critic: Linear(28→512)→ReLU → Linear(512→256)→ReLU
-                → Linear(256→128)→ReLU → Linear(128→1)
-```
-
-Simpler than the ASP model: no PI encoder, no goal encoder, no additive injection.
-The LSTM is preserved for learning sequential push strategies (multiple pushes
-per episode).
-
----
-
-## 5. Training Loop
-
-```
-while iteration < max_iterations:
-    ┌─ ROLLOUT (push_nsteps = 32 pushes per env) ──────────────────────────┐
-    │  for push_step in range(32):                                          │
-    │    ① Agent predicts push params (6D bins)                            │
-    │    ② Decode → push parameters                                        │
-    │    ③ compute_push_waypoints() → 28-waypoint trajectory              │
-    │    ④ for each waypoint:                                              │
-    │         cuRobo IK → joint positions → env.step()                     │
-    │    ⑤ compute_push_reward() → dense improvement reward               │
-    │    ⑥ storage.add_transitions() → one transition per push            │
-    │    ⑦ handle done envs (reset, clear LSTM hidden)                    │
-    └──────────────────────────────────────────────────────────────────────┘
-
-    ┌─ PPO UPDATE ─────────────────────────────────────────────────────────┐
-    │  compute_returns() → standard PPO update (3 epochs, 4 minibatches)   │
-    └──────────────────────────────────────────────────────────────────────┘
-
-    ┌─ LOGGING ────────────────────────────────────────────────────────────┐
-    │  Loss/Agent/Value, Loss/Agent/Surrogate                               │
-    │  Reward/Mean, Metrics/SuccessRate, Metrics/IKFailRate                │
-    └──────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 6. Key Differences from ASP Model
-
-| | ASP (`train_curobo.py`) | Push-PPO (`train_push.py`) |
+## 3. Reference cuRobo-IK ASP (`train_curobo.py`)
+
+Step-based EE-delta ASP — the canonical cuRobo-IK-in-Isaac-Lab example, not a paper result.
+
+### Observations (Alice / Bob; N = num_objects)
+| Component | Dims | Alice | Bob | Contents |
+|---|---|---|---|---|
+| `robot_state` | 7 | ✓ | ✓ | `ee_pose(6 Euler)` + `gripper(1)` |
+| `obj_state` | 14×N | ✓ | ✓ | `[pos(3), euler(3), linvel(3), angvel(3), ee_dist, contact]` |
+| `goal_pose` | 6×N | — | ✓ | desired `[pos(3), euler(3)]` |
+| `dist` | 2×N | — | ✓ | `[pos_dist, rot_dist]` |
+| **Total (N=1 / N=2)** | | **21D / 35D** | **29D / 51D** | |
+
+Bob's per-object data is interleaved as 22D chunks `[obj_state(14) | goal_pose(6) | dist(2)]`.
+
+### Action space — 6D × 11 bins (bin 5 = zero)
+Dims 0–2: XYZ delta `(bin−5)/5 · max_delta_m` (0.04 m); dims 3–4: Rx,Ry delta
+(0.05 rad, clamped ±0.1); dim 5: sticky gripper (close / hold / open). Targets are
+**integrated** (`ee_target_local += Δ`, clamped to the workspace) and solved to absolute
+joint positions by cuRobo.
+
+### Network
+PI-encoder over objects (`14→512→512`, max-pool, LayerNorm) concatenated with
+`robot_state` → trunk `Linear(519→512)→256→128` → `LSTMCell` → actor `Linear(→6×11)`;
+critic is a separate MLP on the raw observation. **Bob** adds a GoalEncoder φ-MLP
+(`Linear(6→64)→Tanh→Linear(64→8)`, difference variant `φ(goal)−φ(current)`, sum-pooled)
+injected additively into the first trunk layer: `h₁ = ReLU(LN(W·enc + Wg·g))`.
+
+### Per-step IK pipeline
+Decode bins → integrate EE position/orientation targets → TCP offset correction
+(finger-midpoint vs `wrist_3_link`) → `ik_solver.solve_batch()` warm-started from the
+previous command → EMA joint smoothing (α=0.2). cuRobo must be imported **before**
+`AppLauncher` (torch version lock). IK failure: Alice terminates (−1, arm locked); Bob
+reverts the target and holds. Fail rate logged as `Metrics/IKFailRate`.
+
+### Training loop
+Two-phase rollout (Alice 100 steps, Bob 100–200 steps). 80% current policy / 20%
+historical snapshot per agent. On phase transition or done, IK accumulators re-anchor to
+physics state and LSTM hidden states zero. Alice: standard PPO. Bob: PPOABC =
+PPO + clipped ABC imitation loss (β=0.5, sequential LSTM eval, GoalEncoder detached) +
+auxiliary GoalEncoder distance loss. Failed-Bob Alice trajectories feed a sliding-window
+`GPUDemonstrationBuffer`. Checkpoints save Alice/Bob weights+optimizer, ABC buffer,
+episode manager, and train state.
+
+### Paper vs current (key deltas)
+| | Plappert 2021 | Current |
 |---|---|---|
-| **Agents** | Alice + Bob (adversarial) | Single agent |
-| **Action type** | EE delta (6D, per-step) | Push parameters (4D, macro-action) |
-| **Action frequency** | Every physics step | Every 72 physics steps (one push) |
-| **Controller** | Alice/Bob phases, ABC, historical pool | None — pure PPO |
-| **Network** | PI encoder + GoalEncoder + LSTM | Flat MLP + LSTM |
-| **Observation** | 35D (Alice) / 51D (Bob) | 28D |
-| **Reward** | Sparse {+1/−1/+5} per physics step | Dense improvement reward per push |
-| **Objects** | 1–2 objects | 1 object |
-
----
-
-## 7. Files
-
-```
-asyncDualPlayPPO/
-├── train_push.py                        # Training entry point
-├── tasks/
-│   ├── push_task_curobo.py              # Env config (scene, observations, actions)
-│   └── utils/
-│       ├── wrapper_push.py              # Push env wrapper (obs, reward, reset, goals)
-│       └── action_push.py               # Push primitive (waypoints + IK)
-├── algorithms/rl/ppo/
-│   └── module_push.py                  # ActorCriticPush (flat MLP + LSTM)
-└── tests/
-    └── validate_push.py                 # Validation against test configs
-```
-
----
-
-## 8. Validation
-
-Uses the same `validation_configs.py` test suite as the ASP evaluation:
-
-```bash
-python -m asyncDualPlayPPO.tests.validate_push \
-    --chkpt runs/push_ppo_baseline/agent/model_best.pt \
-    --num_tests 10 --headless
-```
-
-Reports success rate, average pushes per test, and per-test position/rotation errors.
-Comparable metrics to the ASP evaluation for direct A/B comparison.
-
----
-
-# Push-ASP with Object-Relative Actions (`train_push_asp.py`)
-
-This section documents the Push-ASP variant that combines Asymmetric Self-Play with
-push-primitive macro-actions using an **object-relative action parameterization** to
-guarantee contact on every push.
-
----
-
-## 1. Problem with Absolute Action Space
-
-The original Push-ASP used absolute world-frame coordinates `(Xs, Ys, length, theta)`
-for push start position.  With random actions over workspace `[-0.50, 0.50] × [0.25, 0.70]`
-and a T-block at `(0.0, 0.5)` spanning ~4cm, the probability of contact per push was ~2%.
-Alice could not bootstrap — she almost never moved the object and received no reward signal.
-
-## 2. Object-Relative Action Space (Fix P48)
-
-```
-Action: 4D MultiCategorical × 21 bins
-
-dim 0: r     — radial offset from object center    [0.02, 0.08] m
-dim 1: φ     — approach angle in object's frame    [-π, π] rad
-dim 2: length — push distance                       [0.0, 0.20] m
-dim 3: θ     — push direction in WORLD frame       [-π, π] rad (decoupled from approach)
-```
-
-Conversion to world coordinates (inside `decode_push_action_relative()`):
-```
-world_angle = obj_yaw + φ
-Xs = obj_x + r × cos(world_angle)    ← push start always near object
-Ys = obj_y + r × sin(world_angle)
-Xf = Xs + length × cos(θ)            ← push direction independent of approach
-Yf = Ys + length × sin(θ)
-```
-
-Key properties:
-- **Guaranteed contact**: `r ∈ [0.02, 0.08]` places gripper 2-8cm from object center
-- **Decoupled approach/push**: policy can approach from one side, push in any direction
-- **World-frame θ**: translation goal-reaching is trivial (θ ≈ atan2(goal_y-obj_y, goal_x-obj_x))
-- **Object-frame φ**: rotation control via choosing contact point relative to T-block geometry
-- **Unchanged waypoint generator**: `compute_push_waypoints()` still receives (Xs, Ys, length, theta)
-
-## 3. Observation Layout (Push-ASP, Object-Relative)
-
-### Alice obs (single object)
-```
-[ee_pose(6) | obj_state(14)] = 20D
-
-ee_pose(6)    = [pos_x, pos_y, pos_z, roll, pitch, yaw]  — no gripper (always closed)
-obj_state(14) = [pos(3)|euler(3)|linvel(3)|angvel(3)|ee_dist(1)|contact(1)]
-```
-
-### Bob obs (single object, with relative goal)
-```
-[ee_pose(6) | obj_state(14) | rel_goal(5)] = 25D
-
-rel_goal(5) = [delta_x, delta_y, rel_yaw, pos_dist, rot_dist]
-  delta_x    = goal_x - obj_x    (world frame, aligns with world-frame θ)
-  delta_y    = goal_y - obj_y    (world frame)
-  rel_yaw    = wrap_to_pi(goal_yaw - obj_yaw)  (sign = rotation direction)
-  pos_dist   = L2(delta_xy)
-  rot_dist   = |rel_yaw|
-```
-
-Bob's `delta_x, delta_y` are world-frame so the policy can directly map them to θ.
-`rel_yaw` uses `atan2(sin, cos)` wrapping for shortest-path — no mirror ambiguity.
-
-## 4. Network Architecture (Push-ASP)
-
-```
-Alice (20D obs → 4D×21 = 84 output):
-  obs(20) → Linear(20→512) → ReLU → Linear(512→256) → ReLU
-           → LSTMCell(256→256)
-           → actor_head: Linear(256→84) → reshape(4, 21) → MultiCategorical
-
-  critic: Linear(20→512) → ReLU → Linear(512→256) → ReLU
-          → Linear(256→128) → ReLU → Linear(128→1)
-
-Bob (25D obs → 4D×21 = 84 output, with GoalEncoder):
-  GoalEncoder φ-MLP:
-    input: current_pose(6D) + goal_pose(6D) per object
-    φ: Linear(6→64) → Tanh → Linear(64→K=8)
-    g = φ(goal) − φ(current)  [difference variant]
-
-  obs(25) → Linear(25→512)
-  h1 = ReLU(h1 + goal_proj(g))  ← additive injection
-  → Linear(512→256) → ReLU
-  → LSTMCell(256→256)
-  → actor_head: Linear(256→84) → reshape(4, 21) → MultiCategorical
-
-  critic: Linear(25→512) → ReLU → Linear(512→256) → ReLU
-          → Linear(256→128) → ReLU → Linear(128→1)
-```
-
-## 5. Action Decode Pipeline
-
-```
-Policy bins (4D)          Object pose from obs
-     │                         │
-     ▼                         ▼
-decode_push_action_relative(bins, obj_xy, obj_yaw)
-     │
-     ├── r     = bin[0] → [0.02, 0.08]
-     ├── φ     = bin[1] → [-π, π]         (approach angle, object frame)
-     ├── length = bin[2] → [0.0, 0.20]
-     └── θ     = bin[3] → [-π, π]         (push direction, world frame)
-     │
-     │  Xs = obj_x + r × cos(obj_yaw + φ)
-     │  Ys = obj_y + r × sin(obj_yaw + φ)
-     │
-     ▼
-compute_push_waypoints(Xs, Ys, length, theta, ...)   ← UNCHANGED
-     │
-     ▼
-72 waypoints → cuRobo IK → env.step() × 72
-```
-
-## 6. Comparison: Absolute vs Object-Relative
-
-| | Absolute (`action_push.py`) | Object-Relative (`action_push_relative.py`) |
-|---|---|---|
-| P(contact per push) | ~2% | ~95%+ |
-| Alice bootstraps | No (sparse reward failure) | Yes (nearly every push contacts) |
-| Translation learning | Hard (must discover object position) | Easy (θ ≈ direction to goal) |
-| Rotation learning | N/A (never contacts) | Medium (choose φ for torque) |
-| Equivariance | None | Positional (via r, φ); partial rotational (φ in obj frame) |
-| Waypoint generator | Unchanged | Unchanged |
-
-## 7. Files
-
-```
-asyncDualPlayPPO/
-├── train_push_asp.py                              # Training script (uses relative decode)
-├── tasks/utils/
-│   ├── action_push_relative.py                    # NEW: object-relative decode
-│   ├── action_push.py                             # Waypoint generator (unchanged)
-│   └── wrapper_push_asp.py                        # ASP phase wrapper
-├── algorithms/rl/ppo/
-│   └── module_push.py                             # Flat MLP + LSTM (obs dim updated)
-└── hpc/
-    └── train_push_asp.slurm                       # HPC submission script
-```
+| Robot state | joint angles (6D) | EE Euler pose + gripper (7D) |
+| Goal encoding | raw PI embedding | GoalEncoder → 8D latent, additive injection |
+| PI pooling | sum-pool | max-pool (DeepSets) |
+| Action | continuous Gaussian | MultiCategorical 6×11 |
+| IK failure | OSC (always valid) | Alice terminate −1 / Bob hold |

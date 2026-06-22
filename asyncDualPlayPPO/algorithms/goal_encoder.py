@@ -225,20 +225,3 @@ class GoalEncoder(nn.Module):
             f"num_objects={self.num_objects}, K_per_obj={self.K_per_obj}, "
             f"variant={self.variant!r}, pose_dim={self.pose_dim}"
         )
-
-
-def build_goal_encoder(
-    num_objects: int = 2,
-    K_per_obj: int = 6,
-    hidden_dim: int = 64,
-    variant: Literal["difference", "absolute"] = "difference",
-    device: str = "cuda",
-) -> GoalEncoder:
-    """Convenience factory: build and move encoder to device."""
-    enc = GoalEncoder(
-        num_objects=num_objects,
-        K_per_obj=K_per_obj,
-        hidden_dim=hidden_dim,
-        variant=variant,
-    )
-    return enc.to(device)

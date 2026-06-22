@@ -1,224 +1,110 @@
-# Asymmetric Self-Play with Goal Encoders for Robotic Manipulation
+# Asymmetric Self-Play with Goal Encoders and PBRS for Robotic Pushing
 
-Combines two papers to train dual-arm manipulation policies via adversarial self-play
-in Isaac Lab / Isaac Sim.
+Tabletop-pushing policies trained in Isaac Lab / Isaac Sim, combining Asymmetric
+Self-Play (Plappert et al. 2021), Goal Embeddings (Sukhbaatar et al. 2018), and
+Potential-Based Reward Shaping (Ng et al. 1999) on a UR5e arm with a push-primitive
+macro-action and cuRobo IK.
 
----
+The research line is the **PBRS push models (A–H)**. Two push baselines and a cuRobo-IK
+reference are kept; older controllers live in [`asyncDualPlayPPO/archive/`](asyncDualPlayPPO/archive).
+History: [`implementations.md`](implementations.md). Network/pipeline details: [`net.md`](net.md).
 
-## Papers
+## Models
 
-### 1. Asymmetric Self-Play (OpenAI, Plappert et al. 2021)
+All models share the push action (4D × 21 bins → object-relative `(r, φ, length, θ)`,
+~72 IK substeps per push) and cuRobo IK. They differ in reward, curriculum, object, and
+whether ASP is used.
 
-Two agents — **Alice** and **Bob** — play an adversarial game:
-
-- **Alice** (100 steps): manipulates objects freely to construct a goal configuration.
-- **Bob** (100 steps): observes the goal and must reproduce it from a fresh reset.
-- Goals repeat across 5 sub-goals per episode.
-- **ABC**: when Bob fails, Alice's trajectory is stored as a demonstration for Bob
-  to clone via clipped imitation loss (β = 0.5).
-- **Historical pool**: 20% of episodes pit each agent against a past policy snapshot
-  (last 5 saved every 50 iters).
-
-**Alice rewards** (per goal, at phase end):
-| Outcome | Reward |
-|---|---|
-| Valid goal (>0.10m displacement) | +1 |
-| Shallow goal (0.05–0.10m) | −1 |
-| Out-of-zone / invalid | −3 |
-| Bob fails | +5 at Bob phase end |
-| Bob succeeds | −1 at Bob phase end |
-| Off-table / IK fail | −3 / −1 (early termination) |
-
-**Bob rewards** (per step + phase end):
-| Event | Reward |
-|---|---|
-| Object enters goal threshold | +1 |
-| Object leaves goal threshold | −1 |
-| All objects at goal simultaneously | +5 (episode ends) |
-| Phase-end progress | clamp(0.6·Δpos/init + 0.4·Δrot/init, −1, +1) |
-
-The phase-end progress reward mirrors Alice's episodic feedback structure — Bob
-gets a grade on every trial, not just the 2–4% where sparse thresholds fire.
-Per-step dense delta rewards were tested (v2–v5) and reverted (Fix P27): they
-produced zero-mean noise that killed both agents' gradient flow.
-
-### 2. Goal Embeddings via Self-Play (Sukhbaatar et al. 2018)
-
-A **GoalEncoder** φ-MLP compresses `(goal_pose, current_pose)` into an 8D latent
-vector, injected additively into Bob's first trunk layer:
-`h₁ = ReLU(LN(W·enc + Wg·g_pooled))`. Difference variant: `g_i = φ(goal_i) − φ(current_i)`.
-
-### 3. Single-object T-block variant (this implementation)
-
-OpenAI's 2021 paper used 200 Bob steps for multi-block stacking tasks. For
-single-object tabletop pushing, Bob's horizon is halved to 100 steps — credit
-assignment is the bottleneck, not task complexity.
-
----
-
-## Architecture
-
-```
-Alice (PPO, ent_coef=0.005):
-    Obs: EE pose(6 Euler) + gripper(1) + obj_state(14) = 21D (1 T-block)
-    Acts: MultiCategorical 6D × 11 bins → cuRobo IK → joint positions
-    Role: explore and construct interesting goal configurations
-
-Bob (PPOABC + GoalEncoder, abc_coef=0.5):
-    Obs: robot(7) + obj_state(14) + goal_pose(6) + goal_dist(2) = 29D
-    GoalEncoder: difference variant, K=8, max-pool
-    Acts: same action space as Alice
-    Role: reproduce the goal Alice left behind
-
-Push-PPO Baseline (single-agent, no ASP no ABC):
-    Obs: 28D flat vector (ee_pose + obj_state + goal_pose + goal_dist, no gripper)
-    Acts: MultiCategorical 4D × 21 bins → push primitive macro-action (72 substeps)
-    Reward: dense improvement per push + completion bonus
-```
-
-**Kinematic pipeline** (cuRobo):
-```
-Policy bins → XYZ/RxRy delta → accumulated ee_target ± TCP offset → solve_batch(N) → joints
-```
-
----
-
-## Key Hyperparameters
-
-| Parameter | Value | Notes |
+| Model | Script | Description |
 |---|---|---|
-| `ent_coef` | 0.005 | Both agents (was 0.05 — Fix P23) |
-| `optim_stepsize` | 3e-4 | Alice LR; cosine decay → 5e-5 |
-| `cliprange` | 0.2 | PPO ε-clip |
-| `gamma` | 0.998 | Discount |
-| `lam` | 0.95 | GAE lambda |
-| `abc_coef` | 0.5 | Fixed (paper Table 2) |
-| `abc_traj_maxlen` | 500 | ABC buffer capacity |
-| `abc_n_trajs` | 16 | Trajectories sampled per Bob update |
-| `aux_coef` | 0.1 | GoalEncoder auxiliary distance loss |
-| `alice_timesteps` | 100 | Steps per Alice phase |
-| `bob_timesteps` | 100 | Steps per Bob phase (was 200 — Fix P28) |
-| `max_goals_per_episode` | 5 | |
-| `num_objects` | 1 or 2 | Two T-blocks at non-overlapping spawns: (0, 0.5) and (−0.25, 0.7) |
-| `num_bins` | 11 | Per MultiCategorical dim (ASP) |
-| `lstm_hidden_size` | 256 | |
-| Success threshold | 0.05 m / 0.2 rad | |
+| A | `train_a_pbrs_simple.py` | Single-agent PPO, PBRS, no curriculum |
+| B | `train_b_pbrs_curriculum.py` | A + position→rotation curriculum |
+| C | `train_c_pbrs_asp.py` | PBRS + ASP (Alice/Bob), GoalEncoder |
+| D | `train_d_pbrs_asp_noge.py` | C with GoalEncoder ablated |
+| E | `train_e_pbrs_asp_dpose.py` | C with SE(2) `d_pose` potential (T-block) |
+| F | `train_f_pbrs_asp_disc.py` | E with rotationally-symmetric disc |
+| G | `train_g_tasp_dpose.py` | E + time-based Alice reward (T-block) |
+| H | `train_h_tasp_disc.py` | F + time-based Alice reward (disc) |
 
----
+Each model has a matching `hpc/<script>.slurm`. Baselines: `train_push.py` (Push-PPO),
+`train_push_asp.py` (Push-ASP). Reference cuRobo-IK ASP: `train_curobo.py`.
+
+## Method
+
+- **ASP**: Alice builds a goal; Bob reproduces it from a reset. Optional ABC (Bob clones
+  Alice on failure, β=0.5) and a historical-policy pool.
+- **GoalEncoder**: φ-MLP compresses `(goal, current)` poses into an 8D latent injected
+  into Bob's trunk (difference variant). Model D ablates it.
+- **PBRS**: dense reward `F = Φ(s′) − Φ(s)`, `Φ(s) = exp(−k·d²)`, `γ_shaping = 1.0`.
+  Models A–D use separate position/rotation potentials; E–H use a single SE(2)
+  `d_pose = √(dx² + dy² + L²·dθ²)` (`L = 0.07 m` T-block, `0` disc).
+- **Time-based Alice** (G/H): `R_A = γ_sp · max(0, t_B − t_A)`, `γ_sp = 0.5`.
+
+## Key hyperparameters
+
+`num_envs 528`, `max_iterations 3000`, `k_p 30`, `k_r 5`, `w_pos = w_rot 10`,
+`gamma_shaping 1.0`, success `d_pose < 0.055` (E/G) / `0.05` (F/H), `ent_coef 0.005`,
+`gamma 0.998`, `lam 0.95`, `abc_coef 0.5`. Full configs: `cfg/ppo/ppo_continuous.yaml`,
+`cfg/task/AsyncDualPlay.yaml`.
 
 ## Stack
 
-| Component | Version |
-|---|---|
-| Isaac Sim | 5.1.0 |
-| Isaac Lab | 2.3.0 |
-| cuRobo | 0.7.5 |
-| PyTorch | 2.7.0+cu128 |
-| Python | 3.11.5 |
-| HPC container | `nvcr.io/nvidia/isaac-lab:2.3.0` (Apptainer) |
-| HPC GPU | RTX Pro 6000 (96 GB) |
-
----
+Isaac Sim 5.1.0 · Isaac Lab 2.3.0 · cuRobo 0.7.5 · PyTorch 2.7.0+cu128 · Python 3.11.5.
+HPC: Apptainer `nvcr.io/nvidia/isaac-lab:2.3.0`, RTX Pro 6000 (96 GB).
 
 ## Running
 
-### Local
-
 ```bash
-source /home/vlad/env_isaaclab/bin/activate
-cd /home/vladi/IsaacLab/master_isaac
+source .venv/bin/activate
 
-# Smoke test
-python -m asyncDualPlayPPO.train_curobo --num_envs 16 --max_iterations 10 --headless
+# Local smoke test (Model C)
+python -m asyncDualPlayPPO.train_c_pbrs_asp \
+    --num_envs 16 --max_iterations 50 --exp_name pbrs_c_smoke --headless
 
-# Full local
-python -m asyncDualPlayPPO.train_curobo --num_envs 64 --max_iterations 1000 \
-    --exp_name curobo_local --headless
-
-# Resume
-python -m asyncDualPlayPPO.train_curobo --num_envs 64 --max_iterations 2000 \
-    --chkpt_alice runs/curobo_local/alice/model_500.pt \
-    --chkpt_bob   runs/curobo_local/bob/model_500.pt \
-    --resume_iteration 500 --headless
+# HPC (auto-resumes via SIGUSR1 chaining)
+sbatch asyncDualPlayPPO/hpc/train_e_pbrs_asp_dpose.slurm
 ```
 
-### HPC
+Runs write `latest_checkpoint.pt`, `latest_iter.txt`, and `model_best.pt`. Resume:
 
 ```bash
-cd /home/<you>/master_isaac
-
-# One-time setup (see implementations.md §5)
-#   apptainer pull isaac-lab.sif
-#   apptainer overlay create --size 8192 curobo_overlay.img
-#   install cuRobo inside overlay
-
-# Submit job (512 envs, auto-resume)
-sbatch asyncDualPlayPPO/hpc/train_curobo.slurm
-
-# Monitor
-tail -f slurm-<JOBID>-curobo.out
+python -m asyncDualPlayPPO.train_c_pbrs_asp --exp_name <name> \
+    --chkpt runs/<name>/agent/latest_checkpoint.pt \
+    --resume_iteration $(cat runs/<name>/agent/latest_iter.txt) --headless
 ```
 
-### Diagnostics
+Validation (`tests/validation_configs.py` scenes, plots via `tests/plot_validation.py`):
 
 ```bash
-bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh          # all 4 tests
-python -m asyncDualPlayPPO.train_curobo --test_reward_pipeline # Test 1
-python -m asyncDualPlayPPO.train_curobo --alice_sandbox        # Test 2
-python -m asyncDualPlayPPO.train_curobo --test_hparams          # hyperparameter audit
+python -m asyncDualPlayPPO.tests.validate_push     --chkpt runs/<name>/agent/model_best.pt --headless  # A, B, baselines
+python -m asyncDualPlayPPO.tests.validate_push_asp --chkpt runs/<name>/bob/model_best.pt   --headless  # C–H
 ```
 
----
-
-## File Structure
+## Layout
 
 ```
 asyncDualPlayPPO/
-├── train_curobo.py                  # Main training (cuRobo IK, ASP)
-├── train_push.py                    # Push-PPO baseline
-├── train_diffik.py / train.py       # Legacy controllers
-├── cfg/
-│   ├── ppo/ppo_continuous.yaml      # PPO + ABC hyperparameters
-│   └── task/AsyncDualPlay.yaml      # Episode structure
-├── algorithms/
-│   ├── goal_encoder.py              # GoalEncoder φ-MLP
-│   └── rl/ppo/
-│       ├── module.py                # ActorCritic, PermInvEncoder
-│       ├── module_push.py           # Flat MLP network (push baseline)
-│       ├── ppo.py                   # Base PPO (Alice)
-│       ├── ppo_abc.py               # PPOABC (Bob)
-│       └── storage.py               # RolloutStorage + GPUDemonstrationBuffer
-├── tasks/utils/
-│   ├── wrapper.py                   # ASP env wrapper (phases, rewards)
-│   ├── wrapper_push.py              # Push env wrapper
-│   ├── observations.py / rewards.py # Observation & reward logic
-│   └── terminations.py / events.py  # Termination & reset logic
-├── utils/
-│   ├── episode_manager.py           # Phase tracking, goal storage
-│   ├── goal_validator.py            # Goal displacement validation
-│   ├── historical_pool.py           # Policy snapshot ring buffer
-│   └── profiler.py                  # Per-section timing
-├── diagnostics/                     # 4-test diagnostic suite
-├── tests/                           # Validation + cuRobo tests
-├── hpc/                             # Slurm scripts
-└── extras/                          # Log analysis / plotting
+├── train_a_pbrs_simple.py … train_h_tasp_disc.py   # Models A–H
+├── train_push.py / train_push_asp.py / train_curobo.py
+├── cfg/{ppo,task}/                                  # hyperparameters
+├── algorithms/{goal_encoder.py, rl/ppo/}           # GoalEncoder, PPO/PPOABC, networks
+├── tasks/{push_task_curobo*.py, utils/}            # envs, wrappers, actions, reward_pbrs.py
+├── utils/                                           # episode_manager, goal_validator, historical_pool
+├── hpc/                                             # one SLURM per model + baselines
+├── tests/ · extras/ · data_analysis/               # validation · log tools · thesis figures
+└── archive/                                         # legacy controllers (RMPFlow, DiffIK, SAC)
 ```
-
-Full documentation: `implementations.md`, `net.md`.
-
----
 
 ## References
 
 ```bibtex
 @article{plappert2021asymmetric,
   title={Asymmetric self-play for automatic goal discovery in robotic manipulation},
-  author={Plappert, Matthias and Rajeswaran, Aravind and others},
-  journal={arXiv preprint arXiv:2101.04882}, year={2021}
-}
+  author={Plappert, Matthias and others}, journal={arXiv:2101.04882}, year={2021}}
 @article{sukhbaatar2018learning,
   title={Learning Goal Embeddings via Self-Play for Hierarchical RL},
-  author={Sukhbaatar, Sainbayar and Lin, Zeming and others},
-  journal={arXiv preprint arXiv:1811.09083}, year={2018}
-}
+  author={Sukhbaatar, Sainbayar and others}, journal={arXiv:1811.09083}, year={2018}}
+@inproceedings{ng1999policy,
+  title={Policy invariance under reward transformations: Theory and application to reward shaping},
+  author={Ng, Andrew Y and Harada, Daishi and Russell, Stuart}, booktitle={ICML}, year={1999}}
 ```
