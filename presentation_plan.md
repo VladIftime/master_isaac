@@ -77,14 +77,14 @@ the central results table is not backed by the experiments on disk (see §4).
 ### C5 — Negative results confounded by a massive bug-fix history
 - **[SUP]** `implementations.md` lists fixes P1–P81+, several ASP-breaking (P55 "PPO update never called → Iteration 0 forever," P64 wrong dense formula until 2026-06-08, P65 false-positive termination on 45–55% of pushes). Were the ASP "collapse" numbers produced on the fixed code? If not, the finding is an artifact.
 - **[ASK]** Explain this problem.
-- **[FIND]** **All saved runs post-date the fixes.** Earliest checkpoints are **2026-06-11**; P55/P64/P65 are dated ≤2026-06-08. PBRS ASP runs are 06-15 → 06-19. So the headline ASP-collapse numbers were produced on **post-fix** code — defensible. Caveat: the deeper Alice-reward-disconnect documented in the **05-19 diagnostic** was in the *old* `train_curobo.py` path, not the final PBRS `wrapper_push_asp.py` (which is correctly wired, see C1).
+- **[FIND]** **All saved runs post-date the fixes.** Earliest checkpoints are **2026-06-11**; P55/P64/P65 are dated ≤2026-06-08. PBRS ASP runs are 06-15 → 06-19. So the headline ASP-collapse numbers were produced on **post-fix** code — defensible. Caveat: the deeper Alice-reward-disconnect documented in the **05-19 diagnostic** was in the *old* `train_curobo.py` path, not the final PBRS `wrapper_push_asp.py` (which is correctly wired, see C1). **Separately, Model B's negative result IS a remaining artifact:** its curriculum trigger never fired by construction (see §3.1) — so its "failure" is a code bug, not a scientific finding.
 - **[FIX]** Add an explicit slide/footnote: "All reported runs use code after fixes P63–P81 (≥2026-06-11); pre-fix runs are excluded." Cite the checkpoint dates. This *defuses* the confound rather than ignoring it.
 
 ### C6 — "Same reward" isn't a clean ablation
 - **[SUP]** Model A and Model C differ in goal distribution (fixed-random vs adversarial), episode budget (15 vs ≤50 pushes), and agent count. The collapse could be "harder/non-stationary goals," not "the curriculum mechanism." You admit distribution shift is the cause — which means RQ2/RQ3 aren't cleanly isolating "curriculum."
 - **[ASK]** How could I change the argument to be better?
-- **[FIND]** True: A and C differ on ≥3 axes at once (goal distribution, budget, agent count). Archive configs: A = 15 pushes single-agent fixed-random; C = Alice 5 + Bob 10 adversarial, 2 agents. The deck's "independence" claim over-reaches.
-- **[FIX]** (1) State explicitly that ASP changes *three* things together, so it isolates **"self-play as implemented," not "the curriculum mechanism."** (2) Optional controlled experiment (approved): single-agent PPO + **scripted hard-goal distribution** (same budget, same agent count) to isolate distribution-shift from the two-agent machinery — see §5 / Tier 2.
+- **[FIND]** True: A and C differ on ≥3 axes at once (goal distribution, budget, agent count). Archive configs: A = 15 pushes single-agent fixed-random; C = Alice 5 + Bob 10 adversarial, 2 agents. The deck's "independence" claim over-reaches. **Model B is also not a clean curriculum test:** its Phase‑2 trigger never fired (see §3.1), so Model B measures "a curriculum that never turned on," not "PBRS+curriculum vs PBRS."
+- **[FIX]** (1) State explicitly that ASP changes *three* things together, so it isolates **"self-play as implemented," not "the curriculum mechanism."** (2) Reframe Model B honestly as a **mis-specified trigger** (§3.1), not "PBRS made curriculum unnecessary." (3) Optional controlled experiment (approved): single-agent PPO + **scripted hard-goal distribution** (same budget, same agent count) to isolate distribution-shift from the two-agent machinery — see §5 / Tier 2.
 
 ### C7 — No statistical rigor in the main comparison
 - **[SUP]** Single numbers, vague ranges ("0–3%"), no seeds/variance/CIs for the headline table. "3 runs" is mentioned only for PBRS robustness.
@@ -122,6 +122,53 @@ the central results table is not backed by the experiments on disk (see §4).
 6. **"disc 100%" for Model A is unbacked** — Model A (T-block-trained) was never evaluated on the disc env. (→ C3, C10)
 7. **Seeds exist for training SR** (A: 5 chains; ad-hoc: 7 abs + 4 rel_full) but **not for validation** (single CSV per config). (→ C7)
 8. **05-19 diagnostic root causes (OLD path, context for C5):** Alice reward = pure geometry (not Bob outcome); ABC silently disabled (`warm=NO` when `alice_mean_rew<0`); Bob sparse reward in a contact task; ABC buffer starvation from short truncated trajectories. These were the *old* `train_curobo.py` pathologies; the final PBRS path fixed the wiring (item 2).
+9. **Model B curriculum never triggered by construction** — the Phase‑2 trigger thresholds a quantity that cannot reach the threshold. Full mechanism in §3.1. (→ C5, C6)
+
+### 3.1 Model B — Why the curriculum never triggered <a name="modelb"></a>
+
+**File:** `asyncDualPlayPPO/train_b_pbrs_curriculum.py`.
+
+**The trigger (lines 880–886):** Phase 2 activates only if **all 50** of the most recent
+iterations have `mean_pos_err < CURRICULUM_POS_THRESHOLD` (= **0.08 m**, line 497;
+`CURRICULUM_LOOKBACK = 50`, line 498):
+```python
+ema_pos_err_hist.append(mean_pos_err)                                  # 881
+if not curriculum_active and len(ema_pos_err_hist) == CURRICULUM_LOOKBACK:
+    if all(e < CURRICULUM_POS_THRESHOLD for e in ema_pos_err_hist):    # 0.08, ALL 50
+        curriculum_active = True
+```
+
+**The bug — `mean_pos_err` is the wrong quantity:**
+- Line 686: `pos_err_buf.extend(pbrs_result["pos_err"]…)` runs **inside the push loop** →
+  records object→goal distance **after every push, for every env** (15 pushes × `num_envs`).
+- Line 837: `mean_pos_err = np.mean(pos_err_buf)` → **mean per‑push position error over the
+  whole iteration**, dominated by early/mid‑episode pushes far from a freshly randomized goal.
+
+Objects spawn 0.1–0.45 m from the goal (random spawn + ≤0.45 m filter) with only
+`max_pushes_per_episode = 5`, so the per‑push mean has a **structural floor well above 0.08 m**.
+Sanity check: the **best** model's *validation* avg PosErr is **0.202 m** (26.06.18) — i.e. the
+trigger demands the iteration‑mean per‑push error be **< ~0.4× of what the best model ever
+achieves**, for 50 consecutive iterations. **Unreachable by construction.**
+
+Two compounding factors:
+1. **Wrong metric** — should key on a "position is solved" signal (episodic position‑SR
+   `env.episode_successes`, or terminal error of completed episodes), not the mean of *all*
+   per‑push errors.
+2. **Brittle AND over 50 iters** — `all(e < 0.08 …)`; one noisy iteration ≥ 0.08 resets the streak.
+
+**Consequence:** `curriculum_active` stays `False` forever → line 893 keeps `w_rot = 0.0`, and
+line 648 (`enable_rot_sparse=curriculum_active`) keeps the **+2 rotation bonus gated off**.
+Rotation gets zero signal the whole run → matches observed RotErr 0.503 / pos+rot SR ~10–20%.
+
+**Defense framing fix (Slide 7):** the deck says *"PBRS was so effective the EMA never
+stabilized."* That is a mischaracterization. Honest statement: **the curriculum trigger was
+mis‑specified (0.08 m on iteration‑mean per‑push error, below even the best model's performance,
+with a brittle 50‑iteration AND), so Phase 2 was unreachable by construction** — an
+implementation artifact, **not** evidence that "curriculum is useless when reward is informative."
+
+**Corrected trigger (if re-running Model B):** gate on **episodic position‑only SR ≥ τ**
+(e.g. τ≈0.6) sustained over a lookback window with **hysteresis** (enter at τ_hi, don't reset on
+single dips), or on the terminal pos_err of *completed* episodes — not the per‑push mean.
 
 ---
 
@@ -193,6 +240,7 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 - T0.6 Add scale caveat (~2 days/run; Berner = months → support). (C2)
 - T0.7 Density cut to ~18–20 slides; placeholder register. (C10)
 - T0.8 Remove/mark Models G/H as "not run" or drop. (C10)
+- T0.9 Reframe Slide 7 (Model B): "mis-specified trigger, never fired" not "PBRS made curriculum unnecessary" (§3.1). (C5, C6)
 
 ### TIER 1 — Stronger arguments from existing data (light)
 - T1.1 Training-SR mean ± 95% CI from archive chains; error bars. (C7)
@@ -215,6 +263,8 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 | RQ notes (176) | "80% … 4.6×" | replace with same-protocol numbers |
 | 2b (229) | "Max 15 pushes" | keep; ensure consistency w/ ASP budget statement |
 | 6c (545) | "80% (24/30)", "best-of-3", disc 100% | rebuild from 30-scene re-eval (or state 60%/20) |
+| 7 (634) | "Curriculum NEVER activated" + "PBRS too effective → EMA never stabilizes" cause | reframe: **mis-specified trigger, unreachable by construction** (§3.1), not "PBRS made curriculum unnecessary" |
+| 7b (662) | Model B 40% + "independence" evidence | use 15% (saved); state Model B is **not** a clean curriculum test (trigger never fired) |
 | 8a (697) | Alice 15 / Bob ≤50 | reconcile with archive (Alice 5 / Bob 10) |
 | 8b (732) | 0.07% vs 66/65 framing | reframe as gate artifact (C4) |
 | 8c-ii (777) | G/H rows | mark "not run" or remove |
