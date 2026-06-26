@@ -494,9 +494,10 @@ def main():
     curriculum_active = False
     curriculum_ramp_start = None
     CURRICULUM_RAMP_ITERS = 200
-    CURRICULUM_POS_THRESHOLD = 0.08
-    CURRICULUM_LOOKBACK = 50
-    ema_pos_err_hist = deque(maxlen=CURRICULUM_LOOKBACK)
+    CURRICULUM_ENTER_THRESHOLD = 0.5
+    CURRICULUM_LOOKBACK = 20
+    pos_ep_sr_buf = deque(maxlen=CURRICULUM_LOOKBACK)
+    pos_ep_oks: list = []
     w_pos = PBRS_W_POS
     w_rot = 0.0
     pos_term_threshold = 0.05
@@ -757,6 +758,7 @@ def main():
                         status = "SUCCESS" if s else "fail"
                         gi = min(i, len(done_ids) - 1)
                         eid = done_ids[gi]
+                        pos_ep_oks.append(float(done_reasons["pos_only"][eid] or done_reasons["success"][eid]))
                         g_pos = goal_pos_done[gi]
                         g_rot = goal_euler_done[gi]
                         o_pos = obj_pos_done[gi]
@@ -877,21 +879,25 @@ def main():
         writer.add_scalar("Curriculum/phase",        2 if curriculum_active else 1, iteration)
         writer.add_scalar("Curriculum/pos_term_threshold", pos_term_threshold, iteration)
 
-        # ── Curriculum check ──────────────────────────────────────────────────
-        ema_pos_err_hist.append(mean_pos_err)
-        if not curriculum_active and len(ema_pos_err_hist) == CURRICULUM_LOOKBACK:
-            if all(e < CURRICULUM_POS_THRESHOLD for e in ema_pos_err_hist):
+        # ── Curriculum check: episodic position-only SR ───────────────────────
+        pos_ep_sr_this = sum(pos_ep_oks) / max(1, len(pos_ep_oks)) if pos_ep_oks else 0.0
+        writer.add_scalar("Curriculum/PosEpisodicSR", pos_ep_sr_this, iteration)
+        pos_ep_oks.clear()
+        pos_ep_sr_buf.append(pos_ep_sr_this)
+
+        if not curriculum_active and len(pos_ep_sr_buf) == CURRICULUM_LOOKBACK:
+            if all(sr >= CURRICULUM_ENTER_THRESHOLD for sr in pos_ep_sr_buf):
                 curriculum_active = True
                 curriculum_ramp_start = iteration
-                _pr(f"[Curriculum] Phase 2: rotation reward ramp started at iter {iteration}")
+                pos_term_threshold = 0.0
+                _pr(f"[Curriculum] Phase 2: rotation reward ramp started at iter {iteration} "
+                    f"(pos SR window: {min(pos_ep_sr_buf):.3f}–{max(pos_ep_sr_buf):.3f})")
 
         if curriculum_active:
             ramp_progress = min(1.0, (iteration - curriculum_ramp_start) / CURRICULUM_RAMP_ITERS)
             w_rot = PBRS_W_ROT * ramp_progress
-            pos_term_threshold = 0.05 - 0.03 * ramp_progress
         else:
             w_rot = 0.0
-            pos_term_threshold = 0.05
         w_pos = PBRS_W_POS
 
         # Single compact iteration line — machine-parseable
@@ -903,6 +909,7 @@ def main():
             f"Loss={loss_surr:.4f}{trend} | Val={loss_val:.4f} | "
             f"Rew={mean_rew:+.4f} (EMA {ema_rew:+.4f}) | "
             f"PosErr={mean_pos_err:.4f} | RotErr={mean_rot_err:.4f} | SR={sr:.4f} | RotSR={rot_sr:.4f} | "
+            f"PosEpiSR={pos_ep_sr_this:.3f} | "
             f"IK_fail={ik_fail_rate:.3f} | "
             f"AvgPushes={avg_pushes_str} | Epi={n_episodes} | "
             f"BestSR={best_success_rate:.4f} | {_mode}"

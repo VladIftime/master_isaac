@@ -1,7 +1,7 @@
-# Implementation Record — ASP + GoalEncoder + Push-PPO Baseline
+# Implementation Record — ASP + GoalEncoder + Push-PPO Baseline + SAC/HER
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-19 (Model G/H time-based ASP, planned I/J/K/L)
+**Last updated**: 2026-06-26 (Fix P82 — Model B curriculum trigger fixed, SAC/HER baseline)
 
 ---
 
@@ -15,6 +15,7 @@
 6. [Push-PPO Baseline](#push-ppo)
 7. [Push Primitive Test](#push-primitive-test)
 8. [Validation Evaluation Suite](#validation-suite)
+9. [SAC + HER Push Baseline (DirectRLEnv)](#sac-her)
 
 ---
 
@@ -47,6 +48,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 14 | **PBRS Model J** *(planned)* — Model H + Bob time penalty R_B += -gamma_sp*t_B | — |
 | 15 | **PBRS Model K** *(planned)* — Model G + ABC enabled (beta=0.5) | — |
 | 16 | **PBRS Model L** *(planned)* — Model H + ABC enabled (beta=0.5) | — |
+| 17 | **SAC+HER Push Baseline** — SAC (Haarnoja et al.) + HER (Andrychowicz et al.) push primitive, DirectRLEnv + SB3 | `train_push_sac_her.py` |
 
 ### Stack Versions
 
@@ -57,6 +59,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | **cuRobo** | **0.7.5** — last release with `IKSolver`/`solve_batch`/`Pose` API |
 | PyTorch | 2.7.0+cu128 |
 | Python | 3.11.5 |
+| **Stable-Baselines3** | **2.7.0** — SAC + HerReplayBuffer for goal-conditioned push |
 | Container (HPC) | `nvcr.io/nvidia/isaac-lab:2.3.0` (Apptainer `.sif`) |
 | GPU (HPC) | RTX Pro 6000 (96 GB VRAM) |
 
@@ -167,7 +170,7 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-08 | **Fix P66 (Push-ASP --rel-obs for Bob)** — Bob's 28D observation `[ee_pose(6) | obj(14) | goal(6) | dist(2)]` required the LSTM+MLP to learn `atan2(goal_y−obj_y, goal_x−obj_x)` internally to predict the correct push θ. Same issue as Push-PPO Fix P50, solved differently here to avoid breaking `module.py`'s structured observation slicing (`_encode_obs` chunks by `_ge_raw_per_obj=22D`): when `--rel-obs` is on, `_get_push_obs()` replaces the `goal_dist(2)` slot (pos_dist, rot_dist) with `[rel_dx, rel_dy] = goal_xy − obj_xy`. Same 28D dimension — no model architecture changes. World-frame push direction θ is now trivially inferable from the observation. Backward-compatible (off by default). | `wrapper_push_asp.py:240-256`, `train_push_asp.py:120-123,202` |
 | 2026-06-12 | **PBRS reward redesign** — Three new standalone training scripts implementing Potential-Based Reward Shaping (Ng et al. 1999, Grzes & Kudenko 2009) as a thesis experiment. Replaces the fractional improvement formula (`α·Δd/d_prev`) with bounded exponential potentials (`Φ(s)=exp(-k·d²)`) using `gamma_shaping=1.0` (valid for episodic MDPs). Key parameters: `k_p=30, k_r=5, w_pos=w_rot=10.0`. Cosine angular distance replaces `_yaw_distance_rad` for smooth rotation metric. Episode terminates on both-threshold (pos<0.05m AND cos_rot<0.01) not position-only. Arm-through-table detection added. New files: `tasks/utils/reward_pbrs.py`, `train_push_pbrs_a.py` (Model A: PBRS only), `train_push_pbrs_b.py` (Model B: PBRS + pos→rot curriculum ramp), `train_push_pbrs_c.py` (Model C: PBRS + ASP with bug fixes). HPC scripts: `hpc/train_push_pbrs_{a,b,c}.slurm`. Design documented in `thesis_impl.md`. |
 | 2026-06-12 | **PBRS Model A** — Single-agent PPO with PBRS dense reward. Hardcoded `rel_obs=True, rel_act=True`. Dense: `F=Φ(s')−Φ(s)` (zero-sum cycles, no near-goal negativity). Sparse: +5 pos-only (no termination), +2 both (terminates). Penalties: −5 tip/launch/OOB/table (terminates). Per-env PBRS logging when `num_envs≤50`. `train_push_pbrs_a.py` (836 lines). |
-| 2026-06-12 | **PBRS Model B** — Model A + forced curriculum controller. Phase 1: `w_rot=0`, position-only termination (fast cycles). Phase 2 (triggered by `ema_pos_err<0.08m` for 50 iters): `w_rot` ramps 0→10 over 200 iters, `pos_term_threshold` fades 0.05→0.0 (smooth termination regime change). Phase 3: full multi-objective. `train_push_pbrs_b.py` (899 lines). |
+| 2026-06-12 | **PBRS Model B** — Model A + forced curriculum controller. Phase 1: `w_rot=0`, position-only termination at `pos_term_threshold=0.05` (fast cycles). Phase 2 (triggered by episodic position-only SR ≥ 0.5 for 20 consecutive iters; fixed 2026-06-26): `w_rot` ramps 0→10 over 200 iters, `pos_term_threshold` set to 0.0 on trigger (disables pos-only termination so rotation can be practiced). Phase 3: full multi-objective. `train_push_pbrs_curr.py`. |
 | 2026-06-12 | **PBRS Model C** — Fork of `train_push_asp.py` with PBRS for Bob. Fixes: `bob_done_now` set on early completion, LSTM zeroed on early completion, `_bob_gave_rot_bonus` buffer added, progress reward removed (redundant with PBRS). Bob sparse changed: +5 position-only gate (was both-threshold), +2 both-threshold (terminates phase). Approach params tightened: `min_r=0.02, max_r=0.08, max_l=0.20`. Phase-end logs use `_prev_initial` snapshot for correct start positions. `train_push_pbrs_asp.py`. |
 | 2026-06-16 | **PBRS Model D (GoalEncoder ablation)** — Fork of Model C with Bob's GoalEncoder removed. Bob config: `use_goal_encoder=False`, `pi_obj_dim=22` (PI-encoder sees full 22D per-object chunk: obj_state 14D + goal_pose 6D + dist 2D). Bob still uses PI-encoder + LSTM + MultiCategorical 4D×21 bins + PPOABC. Alice unchanged. Purpose: isolate whether the GoalEncoder's 8D latent compression bottleneck prevents Bob from learning translation under PBRS + adversarial Alice curriculum. If Bob translates without GoalEncoder, the 8D bottleneck was the cause. If not, the issue lies in ASP dynamics or PI-encoder inductive bias. `train_push_pbrs_asp_no_ge.py`, `hpc/train_push_pbrs_asp_noge.slurm`. |
 | 2026-06-12 | **Fix P67 (Model B missing push_count increment)** — `env.push_count += 1` was absent from Model B's push loop. `check_done_pbrs` never triggered `max_push_done` → episodes had no budget cap, `episode_push_counts` always reported 0, `gave_completion`/`gave_rot_bonus` never reset between logical episodes. Added `env.push_count += 1` before `check_done_pbrs`. `train_push_pbrs_curr.py`. |
@@ -192,6 +195,11 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-19 | **PBRS Model G (T-block + time-based ASP)** — Replaces outcome-based Alice reward (+5 fail/−1 succeed, Plappert 2021) with Sukhbaatar's time-based reward `R_A = γ_sp · max(0, t_B − t_A)` where `t_A` = Alice's push count at phase end, `t_B` = Bob's push count at phase end or early completion, `γ_sp = 0.5`. Scale chosen to match Bob's +5 completion bonus: `γ_sp = 5 / max(t_B − t_A) = 5/9 ≈ 0.5`. Restores Sukhbaatar's self-regulating curriculum: Alice is incentivized to find goals she can create efficiently (fewer pushes) that Bob takes many pushes to solve — naturally sitting at the frontier of Bob's capability. Shallow goal penalty removed (`skip_shallow_penalty=True` in `validate_goal()`) — time-based reward makes it redundant since easy goals yield small `t_B − t_A`. Bob reward unchanged (PBRS d_pose). ABC disabled. `wrapper_push_asp.py` gains `time_based_alice`, `alice_reward_scale`, `alice_phase_push_count` (backward-compatible). `goal_validator.py` gains `skip_shallow_penalty` flag. `train_push_pbrs_tasp_dpose.py`, `hpc/train_push_pbrs_tasp_dpose.slurm`. |
 | 2026-06-19 | **PBRS Model H (Disc + time-based ASP)** — Fork of Model G with disc object. `char_length=0.0`, `dpose_threshold=0.05`. Same time-based Alice reward. Tests whether Sukhbaatar's self-regulation prevents the toxic curriculum collapse observed in Model F (Alice creating impossibly hard goals for Bob while Bob's SR declined from 29% to 6.5%). `train_push_pbrs_tasp_disc.py`, `hpc/train_push_pbrs_tasp_disc.slurm`. |
 | 2026-06-19 | **Future models planned** — Model I/J: G/H + Bob time penalty `R_B += −γ_sp · t_B` (full Sukhbaatar reward for both agents, adds urgency for Bob to solve quickly). Model K/L: G/H + ABC enabled (`β=0.5`, PPO-style BC clipping per Plappert 2021) to test whether time-based Alice + ABC produces stronger curriculum than either alone. |
+| 2026-06-26 | **Fix P82 (Model B curriculum trigger fixed)** — The old Phase‑2 trigger thresholded `mean_pos_err` (iteration‑mean of *all* per‑push position errors) against `CURRICULUM_POS_THRESHOLD=0.08m` with a brittle 50‑iteration AND gate. The per‑push mean was dominated by early/mid‑episode pushes far from a freshly randomised goal and contaminated by catastrophe envs (launched/tipped/OOB), creating a structural floor well above 0.08m. `curriculum_active` stayed `False` forever, `w_rot=0.0` permanently, and rotation received zero reward signal. Fix: (1) Replaced metric with **episodic position‑only SR** (= episodes terminated by `pos_only` or `success` / total episodes per iteration), computed from `done_reasons["pos_only"] | done_reasons["success"]` in the done‑handling block. (2) Trigger fires when all 20 consecutive iterations have `pos_ep_sr ≥ 0.5` (`CURRICULUM_ENTER_THRESHOLD=0.5`, `CURRICULUM_LOOKBACK=20`). (3) On trigger, `pos_term_threshold` is set to `0.0` (disables pos‑only termination), so episodes run to `max_pushes` and rotation can be practiced. (4) Phase‑2 ramp: `w_rot` 0→10 over 200 iters; `pos_term_threshold` stays at 0.0 (no fade). Phase‑2 Model B is now identical to Model A except the staged ramp — a clean "curriculum vs no curriculum" comparison. `train_push_pbrs_curr.py` (lines 493‑503,759‑761,880‑901,912). SLURM updated: `SEED=42`, `MAX_ITERATIONS=2600`, `EXP_NAME` → `hpc_pbrs_curr_${NUM_ENVS}env_fixed`. |
+| 2026-06-25 | **SAC+HER Push Baseline planning** — Designed DirectRLEnv push environment based on `throwing_enviroment` architecture (macro-action decimation, SB3 `model.learn()` delegation, custom `DirectRLVecEnv`). Objective: off-policy SAC with hindsight relabeling as external calibration baseline vs published planar-pushing results (Haarnoja 2018, Andrychowicz 2017). |
+| 2026-06-26 | **SAC+HER Push Baseline implemented** — Created `tasks/push_direct_env.py` (553 lines, `PushDirectEnv(DirectRLEnv)`), `tasks/push_direct_env_cfg.py` (240 lines, `PushDirectEnvCfg`), `tasks/sb3_vec_env.py` (128 lines, `DirectRLVecEnv(VecEnv)`), `tasks/utils/action_push_continuous.py` (78 lines), `train_push_sac_her.py` (182 lines), `hpc/train_push_sac_her.slurm` (155 lines), `tests/validate_push_sac.py` (579 lines). One outer step = one complete push macro-action (72 substeps via cuRobo IK inside `_apply_action()`). Observation: dict with `desired_goal`/`achieved_goal` for SB3 `HerReplayBuffer`. No ManagerBasedRLEnv overhead. |
+| 2026-06-26 | **SAC+HER Fix S1 (Q-function divergence)** — First HPC run (528 envs, 3000 iters) revealed SAC critic loss exploding (56.5 → 1130) and actor loss diverging (−2.53 → 79.3). Root causes: (a) `gamma=0.99` too high for 5-step episodes — all pushes got near-equal weight in return, making credit assignment impossible. (b) `completion_bonus=5.0` + `dense_alpha=3.0` produced per-push rewards exceeding 6.0, causing Q-target variance. Fixes: `gamma 0.99→0.95`, `completion_bonus 5.0→2.0`, `dense_alpha 3.0→1.0`, `buffer_size 200K→100K`. |
+| 2026-06-26 | **SAC+HER Fix S2 (TensorBoard async crash)** — SB3's TensorBoard `SummaryWriter` background thread crashed with `FileNotFoundError` on the TMPDIR-bind-mounted events file mid-training, killing `model.learn()` at 626K/1.58M timesteps (40%). Fixed: `tensorboard_log=None` (disabled TB entirely), wrapped `model.learn()` in `try/except FileNotFoundError` as safety net. |
 
 ---
 
@@ -355,7 +363,7 @@ bash asyncDualPlayPPO/diagnostics/run_diagnostics.sh
 | `train_push_rel_full.slurm` | Push-PPO baseline + `--rel-obs --rel-act` (full object-relative: obs + actions) |
 | `train_push_asp.slurm` | Push-ASP — object-relative push primitives with Alice/Bob self-play |
 | `train_push_pbrs_simp.slurm` | PBRS Model A — PBRS only, 528 envs, 3000 iters |
-| `train_push_pbrs_curr.slurm` | PBRS Model B — PBRS + forced curriculum, 528 envs, 3000 iters |
+| `train_push_pbrs_curr.slurm` | PBRS Model B — PBRS + episodic-pos-SR curriculum, 528 envs, 2600 iters, seed=42 |
 | `train_push_pbrs_asp.slurm` | PBRS Model C — PBRS + ASP, 528 envs, 3000 iters |
 | `train_push_pbrs_asp_noge.slurm` | PBRS Model D — PBRS + ASP, GoalEncoder ablated, 528 envs, 3000 iters |
 | `train_push_pbrs_asp_dpose.slurm` | PBRS Model E — T-block + SE(2) d_pose, 528 envs, 3000 iters |
@@ -1491,3 +1499,128 @@ Non-headless by default (`HEADLESS = False`). The evaluation viewport shows:
 | `tests/validate_push_asp.py` | Simpler ASP Bob validator — same features, loads GoalEncoder |
 | `tests/plot_validation.py` | Reads CSVs from validate scripts, generates comparison plots + markdown summary |
 | `tasks/utils/validation_configs.py` | 20 predefined test scenes (easy/medium/hard) |
+
+---
+
+## 9. SAC + HER Push Baseline (DirectRLEnv) <a name="sac-her"></a>
+
+> Implemented 2026-06-26.  Provides an off-policy continuous-action comparison point
+> against all PPO push baselines.  Uses SB3 SAC with `HerReplayBuffer` for
+> hindsight goal relabeling, running on `DirectRLEnv` (no manager overhead).
+
+### 9.1 Motivation
+
+Prior push baselines (Models 3–16) were all PPO variants with discrete 4D×21-bin
+multi-categorical actions.  The reviewer noted: *"Missing the obvious working
+baselines. No HER (the standard sparse goal-conditioned pushing baseline), no SAC
+(despite citing Haarnoja). So '80% is good' has no external calibration vs
+published planar-pushing results."*
+
+SAC + HER addresses both gaps: SAC (Haarnoja et al. 2018) is the standard
+off-policy continuous-action algorithm, and HER (Andrychowicz et al. 2017) is the
+standard sparse-goal pushing baseline.  Together they provide a published-aligned
+comparison point that calibrates the thesis's 80% SR claims.
+
+### 9.2 Architecture
+
+The architecture follows the `throwing_enviroment` project's proven
+`DirectRLEnv` + SB3 SAC pattern, adapted for push with cuRobo IK:
+
+```
+SB3 SAC agent (4D Box action)
+  → env.step(action)  ←── one push macro-action (72 decorrelated substeps)
+    → _pre_physics_step(): decode (Xs, Ys, length, theta), build 72 waypoints
+    → _apply_action() × 72: cuRobo solve_batch(N_envs) → joint targets → physics step
+    → _get_dones(): max_pushes, at_goal, launched, tipped, OOB
+    → _get_rewards(): dense fractional improvement + completion bonus + tip penalty
+    → _get_observations(): dict {observation, achieved_goal, desired_goal} for HER
+```
+
+**Key design decisions:**
+
+| Decision | Rationale |
+|----------|-----------|
+| `DirectRLEnv` not `ManagerBasedRLEnv` | Eliminates 792 wasted manager calls per push (72 substeps × 11 manager pipelines, all outputs discarded). `throwing_enviroment` runs 4096 envs with this pattern. |
+| `decimation=72` | One env step = one complete push across all 72 waypoint substeps. No external training loop orchestration. |
+| cuRobo IK in `_apply_action()` | IK solver is an env member, warm-up once with `N=num_envs`. Each `_apply_action()` call advances one waypoint via `solve_batch` seeded from `prev_joint_cmd`. |
+| Dict observations for HER | `_get_observations()` returns `{"observation": obs22D, "achieved_goal": [obj_xy, obj_yaw], "desired_goal": [goal_xy, goal_yaw]}`. SB3's `HerReplayBuffer` uses `goal_selection_strategy="future"` with `n_sampled_goal=4`. |
+| Continuous action space | 4D `Box(-1,1)` decoded via `action_push_continuous.py` → `(Xs,Ys,len,theta)`. Object-relative decode (`decode_push_action_relative_continuous`) available via `--rel-act`. |
+| `DirectRLVecEnv` wrapper | Custom `VecEnv` subclass (128 lines, copied from `throwing_enviroment/tasks/sb3_vec_env.py`). Wraps one `DirectRLEnv` instance that handles N envs internally. Converts numpy ↔ torch. |
+| SB3 `model.learn()` delegation | No custom training loop. SB3 handles replay buffer, SAC gradient updates, logging. `LatestCheckpointCallback` + SIGTERM handler for HPC preemption. |
+
+### 9.3 Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `tasks/push_direct_env_cfg.py` | 240 | `PushDirectEnvCfg(DirectRLEnvCfg)` — scene, MDP, reward, IK config |
+| `tasks/push_direct_env.py` | 553 | `PushDirectEnv(DirectRLEnv)` — `_apply_action` IK state machine, obs/reward/done methods, `compute_reward` for HER |
+| `tasks/sb3_vec_env.py` | 128 | `DirectRLVecEnv(VecEnv)` — SB3 compatibility wrapper |
+| `tasks/utils/action_push_continuous.py` | 78 | `decode_push_action_continuous()`, `decode_push_action_relative_continuous()` — Box action → push params |
+| `train_push_sac_her.py` | 182 | Training launcher: `PushDirectEnv` → `DirectRLVecEnv` → `SAC(MultiInputPolicy, ...)` with `HerReplayBuffer` |
+| `hpc/train_push_sac_her.slurm` | 155 | SLURM job: 528 envs, 3000 iters, 4h, auto-resume chain |
+| `tests/validate_push_sac.py` | 579 | Validation: loads SB3 SAC checkpoint, runs against 20 test scenes |
+| `tests/record_push_video.py` | 538 | Video recorder (reuses PPO checkpoints, same physics pathway) |
+
+### 9.4 Reward Function
+
+Fractional improvement reward (same formula as Push-PPO Fix P63, with adjusted scales):
+
+```
+d_prev = ‖obj_xy_prev − goal_xy‖,   d_now = ‖obj_xy_now − goal_xy‖
+y_prev = |yaw_prev − goal_yaw|,      y_now = |yaw_now − goal_yaw|
+
+pos_imp  = α · (d_prev − d_now) / d_prev     (α=1.0, clamped ±5.0)
+rot_imp  = α · (y_prev − y_now) / y_prev     (α=1.0, clamped ±4.0)
+penalty  = −β · d_now                          (β=0.5, clamped [−2.0, 0])
+rot_pen  = −β_rot · y_now                      (β_rot=0.25, clamped [−1.0, 0])
+
+r_dense  = pos_imp + rot_imp + penalty + rot_pen
+r_sparse = +2.0  if pos_err < 0.05                (completion bonus)
+         = +2.0  if pos_err < 0.05 AND rot_err < 0.2  (rotation sub-bonus)
+         = −5.0  if tipped (|roll|>0.3 or |pitch|>0.3)
+```
+
+**HER compatibility note**: `compute_reward(achieved_goal, desired_goal, infos)` is
+implemented on `PushDirectEnv` and delegated from `DirectRLVecEnv`.  It recomputes
+the dense fractional improvement using `prev_achieved_goal` from `info` dict,
+supporting SB3's hindsight relabeling with sparse + dense reward terms.
+
+### 9.5 SAC Hyperparameters
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| `learning_rate` | 3e-4 | Standard SB3 default |
+| `buffer_size` | 100,000 | Sufficient for 5-step episodes (100K transitions ≈ 20K episodes at 5 pushes each) |
+| `batch_size` | 256 | Standard SB3 default |
+| `tau` | 0.005 | Polyak averaging for target networks |
+| `gamma` | 0.95 | Matches PPO baselines; 1/(1−0.95)=20-step effective horizon vs 5-step episodes |
+| `ent_coef` | `"auto"` | SAC auto-tunes entropy coefficient |
+| `net_arch` | `[256, 256]` | MLP with ReLU activations |
+| HER `n_sampled_goal` | 4 | Standard HER setting |
+| HER `goal_selection_strategy` | `"future"` | Relabels with goals from later steps in same episode |
+
+### 9.6 Known Issues
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| **Q-function divergence at gamma=0.99** | **Fixed (Fix S1)** | `completion_bonus=5.0` + `dense_alpha=3.0` + `gamma=0.99` caused critic loss 56.5→1130 and actor loss −2.53→79.3 within 626K steps. Reduced to `completion_bonus=2.0`, `dense_alpha=1.0`, `gamma=0.95`. |
+| **TensorBoard async writer crash** | **Fixed (Fix S2)** | SB3's `SummaryWriter` background thread lost file descriptor to TMPDIR-bind-mounted events file → `FileNotFoundError` → killed `model.learn()`. Disabled via `tensorboard_log=None`. |
+| **`push_count` in wrong lifecycle method** | Open | Incremented in `_get_rewards()` which runs *after* `_get_dones()` in `DirectRLEnv.step()`. Practically gives 1 extra push before max-push termination (5 pushes instead of 4+done). Minor — does not affect learning. |
+| **`observation_space=22` in config is misleading** | Open | Config declares `int` but env returns `Dict`. `DirectRLVecEnv` auto-detects dict from `_get_observations()` output, so training works. Cosmetic. |
+| **Cannot run smoke test locally without container** | Open | Isaac Lab requires Isaac Sim container. Local testing needs `docker pull nvcr.io/nvidia/isaac-lab:2.3.0` + `pip install curobo==0.7.5`. |
+
+### 9.7 Observation Layout
+
+Flat observation for the policy (22D with `rel_obs=True`):
+
+```
+[ee_pos(3) | ee_euler(3) | obj_pos(3) | obj_euler(3) | obj_linvel(3) |
+ obj_angvel(3) | dist_to_ee(1) | contact(1) | rel_dx(1) | rel_dy(1)] = 22D
+```
+
+HER goal tensors (3D each):
+
+```
+achieved_goal = [obj_x, obj_y, obj_yaw]        ← actually achieved
+desired_goal  = [goal_x, goal_y, goal_yaw]     ← from sampled goal
+```

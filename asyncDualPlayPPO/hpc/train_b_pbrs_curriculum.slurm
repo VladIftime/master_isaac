@@ -12,9 +12,10 @@ trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=t
 set -o pipefail
 
 NUM_ENVS=528
-MAX_ITERATIONS=3000
+MAX_ITERATIONS=2600
 SAVE_INTERVAL=100
-EXP_NAME="hpc_pbrs_curr_${NUM_ENVS}env"
+SEED=42
+EXP_NAME="hpc_pbrs_curr_${NUM_ENVS}env_fixed"
 
 SIF_IMAGE="isaac-lab.sif"
 CURBO_OVERLAY="curobo_overlay.img"
@@ -61,7 +62,7 @@ echo "[INFO] Max iterations target:  $MAX_ITERATIONS"
 echo "[INFO] Job ID:        $SLURM_JOB_ID"
 echo "[INFO] Node:          $SLURMD_NODENAME"
 echo "[INFO] Envs:          $NUM_ENVS"
-echo "[INFO] Model:         PBRS Model B (with curriculum)"
+echo "[INFO] Model:         PBRS Model B (curriculum, fixed trigger)"
 echo "[INFO] Local runs:    $LOCAL_RUNS"
 
 if [ ! -f "$SIF_IMAGE" ]; then
@@ -87,6 +88,7 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     --num_envs       "$NUM_ENVS" \
     --max_iterations "$MAX_ITERATIONS" \
     --save_interval  "$SAVE_INTERVAL" \
+    --seed           "$SEED" \
     --exp_name       "$EXP_NAME" \
     --headless \
     $RESUME_ARGS \
