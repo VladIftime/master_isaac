@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import atexit
 import os
 import sys
 import math
@@ -76,6 +77,7 @@ def main():
                         help="Number of test scenes to run")
     parser.add_argument("--max_pushes", type=int, default=15,
                         help="Max pushes per test")
+    parser.add_argument("--max_tries", type=int, default=3, help="Max retries per test")
     parser.add_argument("--rot_threshold", type=float, default=0.2,
                         help="Rotation success threshold in radians (default 0.2)")
     parser.add_argument("--rel-act", action="store_true", dest="rel_act",
@@ -87,6 +89,7 @@ def main():
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
+    atexit.register(simulation_app.close)
 
     chkpt_run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.chkpt)))
     if args.csv is None:
@@ -321,7 +324,7 @@ def main():
         pos_err = 0.0
         rot_err = 0.0
         retry_count = 0
-        MAX_RETRIES = 3
+        MAX_RETRIES = args.max_tries
         best_pos_err = float('inf')
         best_rot_err = float('inf')
 
