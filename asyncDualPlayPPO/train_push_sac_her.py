@@ -114,6 +114,7 @@ def main():
             replay_buffer_kwargs=dict(
                 n_sampled_goal=4,
                 goal_selection_strategy="future",
+                env=env_wrapped,
             ),
             policy_kwargs={
                 "net_arch": [256, 256],
