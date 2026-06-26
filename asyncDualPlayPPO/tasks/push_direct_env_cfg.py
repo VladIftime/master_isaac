@@ -200,10 +200,10 @@ class PushDirectEnvCfg(DirectRLEnvCfg):
 
     push_success_threshold_pos: float = 0.05
     push_success_threshold_rot: float = 0.2
-    dense_alpha: float = 3.0
+    dense_alpha: float = 1.0
     dense_beta: float = 0.5
     dense_rot_beta: float = 0.25
-    completion_bonus: float = 5.0
+    completion_bonus: float = 2.0
     rotation_sub_bonus: float = 2.0
     tip_penalty: float = -5.0
     catastrophe_penalty: float = -10.0

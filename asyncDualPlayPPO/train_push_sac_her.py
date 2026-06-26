@@ -96,18 +96,18 @@ def main():
         print(f"[INFO] Loading checkpoint: {args_cli.checkpoint}")
         model = SAC.load(
             args_cli.checkpoint, env=env_wrapped,
-            tensorboard_log=log_dir, seed=args_cli.seed,
+            tensorboard_log=None, seed=args_cli.seed,
         )
     else:
         model = SAC(
             "MultiInputPolicy",
             env_wrapped,
             learning_rate=3e-4,
-            buffer_size=200000,
+            buffer_size=100000,
             learning_starts=1000,
             batch_size=256,
             tau=0.005,
-            gamma=0.99,
+            gamma=0.95,
             ent_coef="auto",
             target_entropy="auto",
             replay_buffer_class=HerReplayBuffer,
@@ -119,7 +119,7 @@ def main():
                 "net_arch": [256, 256],
                 "activation_fn": torch.nn.ReLU,
             },
-            tensorboard_log=log_dir,
+            tensorboard_log=None,
             seed=args_cli.seed,
             verbose=1,
         )
@@ -144,7 +144,7 @@ def main():
     print(f"[INFO] Total timesteps: {total_timesteps} "
           f"({args_cli.max_iterations} iters x {cfg.scene.num_envs} envs)")
     print(f"[INFO] Checkpoint interval: {ckpt_interval} timesteps")
-    print(f"[INFO] Replay buffer size: {200000}")
+    print(f"[INFO] Replay buffer size: {100000}")
     print(f"[INFO] HER n_sampled_goal: 4, strategy: future")
     sys.stdout.flush()
 
@@ -158,13 +158,17 @@ def main():
 
     signal.signal(signal.SIGTERM, _save_on_signal)
 
-    model.learn(
-        total_timesteps=total_timesteps,
-        reset_num_timesteps=(args_cli.checkpoint is None),
-        log_interval=4,
-        progress_bar=True,
-        callback=[checkpoint_callback, latest_ckpt_callback],
-    )
+    try:
+        model.learn(
+            total_timesteps=total_timesteps,
+            reset_num_timesteps=(args_cli.checkpoint is None),
+            log_interval=4,
+            progress_bar=True,
+            callback=[checkpoint_callback, latest_ckpt_callback],
+        )
+    except FileNotFoundError:
+        print("[WARN] TensorBoard async writer lost file during shutdown — "
+              "training completed, ignoring.", flush=True)
 
     ckpt_path = os.path.join(ckpt_dir, "agent_final")
     model.save(ckpt_path, include=["replay_buffer"])
