@@ -32,8 +32,8 @@ import numpy as np
 import torch
 
 SCALE = 750.0
-ARENA_SIZE = 750
-TABLE_CENTER_Y_METERS = 0.475
+ARENA_WIDTH = 1050
+ARENA_HEIGHT = 750
 APPROACH_STEPS = 40
 PUSH_STEPS = 60
 APPROACH_THRESHOLD_PX = 5.0
@@ -60,14 +60,14 @@ class ValidationResult:
 
 
 def meter_to_pixel(mx: float, my: float) -> Tuple[float, float]:
-    px = mx * SCALE + ARENA_SIZE / 2
-    py = (my - TABLE_CENTER_Y_METERS) * SCALE + ARENA_SIZE / 2
+    px = (mx + 0.70) * SCALE
+    py = (my + 0.10) * SCALE
     return px, py
 
 
 def pixel_to_meter(px: float, py: float) -> Tuple[float, float]:
-    mx = (px - ARENA_SIZE / 2) / SCALE
-    my = (py - ARENA_SIZE / 2) / SCALE + TABLE_CENTER_Y_METERS
+    mx = px / SCALE - 0.70
+    my = py / SCALE - 0.10
     return mx, my
 
 
@@ -162,18 +162,16 @@ def execute_push(env, Xs_m, Ys_m, length_m, theta_rad, cv=None, render_delay=5):
     Xf_px = Xs_px + float(length_m) * SCALE * math.cos(float(theta_rad))
     Yf_px = Ys_px + float(length_m) * SCALE * math.sin(float(theta_rad))
 
-    Xf_px = max(15.0, min(ARENA_SIZE - 15, float(Xf_px)))
-    Yf_px = max(15.0, min(ARENA_SIZE - 15, float(Yf_px)))
-    Xs_px = max(15.0, min(ARENA_SIZE - 15, float(Xs_px)))
-    Ys_px = max(15.0, min(ARENA_SIZE - 15, float(Ys_px)))
+    Xf_px = max(15.0, min(ARENA_WIDTH - 15, float(Xf_px)))
+    Yf_px = max(15.0, min(ARENA_HEIGHT - 15, float(Yf_px)))
+    Xs_px = max(15.0, min(ARENA_WIDTH - 15, float(Xs_px)))
+    Ys_px = max(15.0, min(ARENA_HEIGHT - 15, float(Ys_px)))
 
     obs = None
     for step in range(APPROACH_STEPS):
         obs, _, _, _, _ = env.step(np.array([Xs_px, Ys_px], dtype=np.float32))
         if cv and step % 3 == 0:
-            frame = env.render()
-            cv.imshow("gym-pusht", cv.cvtColor(frame, cv.COLOR_RGB2BGR))
-            cv.waitKey(render_delay)
+            env.render()
         agent_x, agent_y = float(obs[0]), float(obs[1])
         dist = math.sqrt((agent_x - Xs_px) ** 2 + (agent_y - Ys_px) ** 2)
         if dist < APPROACH_THRESHOLD_PX:
@@ -182,9 +180,7 @@ def execute_push(env, Xs_m, Ys_m, length_m, theta_rad, cv=None, render_delay=5):
     for step in range(PUSH_STEPS):
         obs, _, _, _, _ = env.step(np.array([Xf_px, Yf_px], dtype=np.float32))
         if cv and step % 3 == 0:
-            frame = env.render()
-            cv.imshow("gym-pusht", cv.cvtColor(frame, cv.COLOR_RGB2BGR))
-            cv.waitKey(render_delay)
+            env.render()
 
     block_x, block_y = float(obs[2]), float(obs[3])
     block_angle = float(obs[4])
@@ -282,14 +278,11 @@ def main():
 
     # ── Create gym-pusht environment ───────────────────────────────────────────
     from gym_pusht.envs.pusht import PushTEnv
-    env = PushTEnv(arena_width=ARENA_SIZE, arena_height=ARENA_SIZE, obs_type="state")
+    env = PushTEnv(arena_width=ARENA_WIDTH, arena_height=ARENA_HEIGHT, obs_type="state",
+                   render_mode="human" if args.render else None)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     signal.signal(signal.SIGINT, lambda *_: os._exit(1))
-
-    _cv2 = None
-    if args.render:
-        import cv2 as _cv2
 
     # ── Load checkpoint ────────────────────────────────────────────────────────
     num_cat_dims = 4
@@ -479,8 +472,9 @@ def main():
         best_coverage = 0.0
 
         for trial in range(TRIAL_COUNT):
-            agent_spawn_x = start_px + 80
-            agent_spawn_y = start_py + 120 if start_py < ARENA_SIZE / 2 else start_py - 120
+            agent_spawn_x = min(start_px + 80, ARENA_WIDTH - 20)
+            agent_spawn_y = max(20.0, min(ARENA_HEIGHT - 20,
+                                          start_py + 120 if start_py < ARENA_HEIGHT / 2 else start_py - 120))
             state = np.array([agent_spawn_x, agent_spawn_y, start_px, start_py, 0.0])
             obs, _ = env.reset(options={"reset_to_state": state})
             env.goal_pose = np.array([goal_px, goal_py, goal_angle])
@@ -556,7 +550,7 @@ def main():
                 Yf = Ys + length * torch.sin(theta)
 
                 obs, coverage, pos_err, rot_err = execute_push(
-                    env, Xs, Ys, length, theta, cv=_cv2, render_delay=args.render_delay,
+                    env, Xs, Ys, length, theta, cv=args.render, render_delay=args.render_delay,
                 )
 
                 pushes_used += 1
@@ -575,6 +569,12 @@ def main():
                     print(f"  push {push_i:2d}: bins=({', '.join(f'{int(actions[0,i].item()):2d}' for i in range(4))})  "
                           f"len={float(length.item()):.3f} θ={math.degrees(float(theta.item())):.0f}°  "
                           f"pos={pos_err:.4f}m rot={rot_err:.3f}rad cov={coverage:.2f}")
+
+                block_px, block_py = float(obs[2]), float(obs[3])
+                block_mx, block_my = pixel_to_meter(block_px, block_py)
+                if block_mx < -0.55 or block_mx > 0.55 or block_my < 0.20 or block_my > 0.75:
+                    print(f"  [OOB] block=({block_mx:.3f},{block_my:.3f})m outside workspace")
+                    break
 
                 if coverage >= 0.95:
                     trial_ok = True
@@ -677,8 +677,12 @@ def main():
             print(f"[WARN] Plot generation failed: {_e}")
 
     env.close()
-    if _cv2 is not None:
-        _cv2.destroyAllWindows()
+    if args.render:
+        try:
+            import pygame
+            pygame.quit()
+        except Exception:
+            pass
     os._exit(0)
 
 
