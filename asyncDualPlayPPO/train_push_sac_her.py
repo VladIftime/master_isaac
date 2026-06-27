@@ -9,7 +9,6 @@ import argparse
 import os
 import signal
 import sys
-from datetime import datetime
 
 PROJ_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PROJ_ROOT)
@@ -58,7 +57,7 @@ class LatestCheckpointCallback(BaseCallback):
         if self._last_save is None:
             self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
-            self.model.save(self.save_path, exclude=["replay_buffer"])
+            self.model.save(self.save_path, include=["replay_buffer"])
             self._last_save = self.num_timesteps
         return True
 
@@ -87,8 +86,8 @@ def main():
     env = PushDirectEnv(cfg=cfg)
     env_wrapped = DirectRLVecEnv(env)
 
-    log_root = os.path.abspath(os.path.join("runs", "sac", "push_primitive"))
-    log_dir = os.path.join(log_root, datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + "_sac_her")
+    log_root = os.path.abspath(os.path.join("runs", "sac"))
+    log_dir = os.path.join(log_root, args_cli.exp_name)
     os.makedirs(log_dir, exist_ok=True)
     print(f"[INFO] Logging to: {log_dir}")
 
@@ -153,7 +152,7 @@ def main():
 
     def _save_on_signal(signum, frame):
         print(f"\n[CKPT] Received signal {signum} - saving latest_checkpoint...")
-        model.save(latest_ckpt_path, exclude=["replay_buffer"])
+        model.save(latest_ckpt_path, include=["replay_buffer"])
         print(f"[CKPT] Saved to: {latest_ckpt_path}.zip")
         sys.exit(0)
 
@@ -172,7 +171,7 @@ def main():
               "training completed, ignoring.", flush=True)
 
     ckpt_path = os.path.join(ckpt_dir, "agent_final")
-    model.save(ckpt_path, exclude=["replay_buffer"])
+    model.save(ckpt_path)
     print(f"[INFO] Final model saved to: {ckpt_path}.zip")
 
     env.close()

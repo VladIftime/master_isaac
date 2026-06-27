@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=push_sac_her
-#SBATCH --time=04:00:00
+#SBATCH --time=03:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1
 #SBATCH --cpus-per-task=16
@@ -52,7 +52,7 @@ cleanup() {
     # LatestCheckpointCallback and SIGTERM handler already save with replay buffer.
     LATEST_AGENT_ZIP=$(find "$PROJECT_ROOT/runs/sac" \( -name "agent_*_steps.zip" -o -name "agent_final.zip" \) -type f 2>/dev/null | sort -V | tail -1)
     if [ -n "$LATEST_AGENT_ZIP" ]; then
-        RUN_DIR="$(dirname "$LATEST_AGENT_ZIP")"
+        RUN_DIR="${LATEST_AGENT_ZIP%/checkpoints/*}"
         if [ ! -f "$RUN_DIR/latest_checkpoint.zip" ]; then
             cp "$LATEST_AGENT_ZIP" "$RUN_DIR/latest_checkpoint.zip"
             echo "[CKPT] Fallback: created latest_checkpoint.zip from $(basename "$LATEST_AGENT_ZIP")"

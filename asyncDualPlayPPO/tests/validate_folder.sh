@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 usage() {
-    echo "Usage: $0 <folder_path> [--num-tests N] [--max-pushes N] [--max-tries N] [--timeout HOURS] [--out-dir DIR]"
+    echo "Usage: $0 <folder_path> [--num-tests N] [--max-pushes N] [--max-tries N] [--timeout HOURS] [--out-dir DIR] [--gym]"
     echo ""
     echo "  folder_path   Path to a run date folder (e.g. runs/ppo_pbrs_reward/26.06.24)"
     echo "  --num-tests   Number of test scenes to run (default: 30)"
@@ -13,6 +13,7 @@ usage() {
     echo "  --max-tries   Max retries per test (default: 20)"
     echo "  --timeout     Timeout in hours per model (default: 2)"
     echo "  --out-dir     Output directory (default: validation_results_YYMMDD inside folder)"
+    echo "  --gym         Validate using gym-pusht 2D environment instead of Isaac Lab"
     exit 1
 }
 
@@ -22,6 +23,7 @@ MAX_TRIES=20
 TIMEOUT_HOURS=2
 OUT_DIR=""
 FOLDER_PATH=""
+GYM_MODE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
         --max-tries)   MAX_TRIES="$2";   shift 2 ;;
         --timeout)     TIMEOUT_HOURS="$2"; shift 2 ;;
         --out-dir)     OUT_DIR="$2";     shift 2 ;;
+        --gym)         GYM_MODE=1;       shift ;;
         -h|--help)     usage ;;
         -*)
             echo "Unknown option: $1"
@@ -153,11 +156,15 @@ done
 cd "$ROOT"
 TIMEOUT_SEC=$((TIMEOUT_HOURS * 3600))
 
+ABORT=0
+trap 'echo; echo "[ABORT] Interrupted. Stopping after current model."; ABORT=1' INT TERM
+
 CSV_FILES=()
 LABELS=()
 FAILED_MODELS=()
 
 for i in "${!MODELS[@]}"; do
+    [[ $ABORT -eq 1 ]] && break
     model="${MODELS[$i]}"
     type="${MODEL_TYPES[$i]}"
     chkpt="${CHKPT_PATHS[$i]}"
@@ -171,32 +178,50 @@ for i in "${!MODELS[@]}"; do
     echo "============================================"
 
     if [[ "$type" == "asp" ]]; then
-        set +e
-        timeout "$TIMEOUT_SEC" python -m asyncDualPlayPPO.tests.validate_push_asp \
-            --chkpt_bob "$chkpt" \
-            --num_tests "$NUM_TESTS" --max_pushes "$MAX_PUSHES" --max_tries "$MAX_TRIES" \
-            --headless --csv "$csv_file"
-        rc=$?
-        set -e
+        if [[ "$GYM_MODE" -eq 1 ]]; then
+            cmd="timeout \"$TIMEOUT_SEC\" python -m asyncDualPlayPPO.tests.validate_pusht_gym \
+                --chkpt-bob \"$chkpt\" \
+                --num-tests \"$NUM_TESTS\" --max-pushes \"$MAX_PUSHES\" --max-tries \"$MAX_TRIES\" \
+                --csv \"$csv_file\""
+        else
+            cmd="timeout \"$TIMEOUT_SEC\" python -m asyncDualPlayPPO.tests.validate_push_asp \
+                --chkpt_bob \"$chkpt\" \
+                --num_tests \"$NUM_TESTS\" --max_pushes \"$MAX_PUSHES\" --max_tries \"$MAX_TRIES\" \
+                --headless --csv \"$csv_file\""
+        fi
     elif [[ "$type" == "ppo" ]]; then
-        set +e
-        timeout "$TIMEOUT_SEC" python -m asyncDualPlayPPO.tests.validate_push \
-            --chkpt "$chkpt" \
-            --rel-obs --rel-act \
-            --num_tests "$NUM_TESTS" --max_pushes "$MAX_PUSHES" --max_tries "$MAX_TRIES" \
-            --headless --csv "$csv_file"
-        rc=$?
-        set -e
+        if [[ "$GYM_MODE" -eq 1 ]]; then
+            cmd="timeout \"$TIMEOUT_SEC\" python -m asyncDualPlayPPO.tests.validate_pusht_gym \
+                --chkpt \"$chkpt\" \
+                --num_tests \"$NUM_TESTS\" --max_pushes \"$MAX_PUSHES\" --max_tries \"$MAX_TRIES\" \
+                --csv \"$csv_file\""
+        else
+            cmd="timeout \"$TIMEOUT_SEC\" python -m asyncDualPlayPPO.tests.validate_push \
+                --chkpt \"$chkpt\" \
+                --rel-obs --rel-act \
+                --num_tests \"$NUM_TESTS\" --max_pushes \"$MAX_PUSHES\" --max_tries \"$MAX_TRIES\" \
+                --headless --csv \"$csv_file\""
+        fi
     elif [[ "$type" == "sac" ]]; then
-        set +e
-        timeout "$TIMEOUT_SEC" python -m asyncDualPlayPPO.tests.validate_push_sac \
-            --chkpt "$chkpt" \
-            --rel-act \
-            --num_tests "$NUM_TESTS" --max_pushes "$MAX_PUSHES" --max_tries "$MAX_TRIES" \
-            --headless --csv "$csv_file"
-        rc=$?
-        set -e
+        if [[ "$GYM_MODE" -eq 1 ]]; then
+            cmd="timeout \"$TIMEOUT_SEC\" python -m asyncDualPlayPPO.tests.validate_pusht_gym \
+                --chkpt-sac \"$chkpt\" \
+                --num_tests \"$NUM_TESTS\" --max_pushes \"$MAX_PUSHES\" --max_tries \"$MAX_TRIES\" \
+                --csv \"$csv_file\""
+        else
+            cmd="timeout \"$TIMEOUT_SEC\" python -m asyncDualPlayPPO.tests.validate_push_sac \
+                --chkpt \"$chkpt\" \
+                --rel-act \
+                --num_tests \"$NUM_TESTS\" --max_pushes \"$MAX_PUSHES\" --max_tries \"$MAX_TRIES\" \
+                --headless --csv \"$csv_file\""
+        fi
     fi
+    echo "  CMD: $cmd"
+
+    set +e
+    eval "$cmd"
+    rc=$?
+    set -e
 
     if [[ "$rc" -eq 0 ]] && [[ -f "$csv_file" ]]; then
         CSV_FILES+=("$csv_file")

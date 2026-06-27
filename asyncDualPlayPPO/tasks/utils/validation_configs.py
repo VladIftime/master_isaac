@@ -34,18 +34,18 @@ class PushTestConfig:
 
 ALL_TESTS: List[PushTestConfig] = [
     # ═══════════════════════════════════════════════════════════════════════
-    # DISC — PURE TRANSLATION (position-only, disc object)
+    # T-BLOCK — ROTATION-HEAVY (large yaw changes, mixed translation)
     # ═══════════════════════════════════════════════════════════════════════
-    PushTestConfig("D_Forward",  1, "easy",   "disc_pos", "disc", StartPos(+0.00,+0.35), +0.00,+0.55, 0.0),
-    PushTestConfig("D_Right",    2, "easy",   "disc_pos", "disc", StartPos(-0.15,+0.48), +0.05,+0.48, 0.0),
-    PushTestConfig("D_Left",     3, "easy",   "disc_pos", "disc", StartPos(+0.15,+0.48), -0.05,+0.48, 0.0),
-    PushTestConfig("D_Diag_FR",  4, "medium", "disc_pos", "disc", StartPos(-0.10,+0.38), +0.10,+0.58, 0.0),
-    PushTestConfig("D_Diag_FL",  5, "medium", "disc_pos", "disc", StartPos(+0.10,+0.38), -0.10,+0.58, 0.0),
-    PushTestConfig("D_Back",     6, "medium", "disc_pos", "disc", StartPos(+0.00,+0.60), +0.00,+0.35, 0.0),
-    PushTestConfig("D_Wide_R",   7, "hard",   "disc_pos", "disc", StartPos(-0.30,+0.48), +0.10,+0.48, 0.0),
-    PushTestConfig("D_Wide_L",   8, "hard",   "disc_pos", "disc", StartPos(+0.30,+0.48), -0.10,+0.48, 0.0),
-    PushTestConfig("D_Long_F",   9, "hard",   "disc_pos", "disc", StartPos(+0.00,+0.30), +0.00,+0.65, 0.0),
-    PushTestConfig("D_Cross",   10, "hard",   "disc_pos", "disc", StartPos(-0.20,+0.60), +0.20,+0.35, 0.0),
+    PushTestConfig("R_Pivot90",   1, "easy",   "pos_rot", "tblock", StartPos(+0.00,+0.50), +0.03,+0.53, +1.57),
+    PushTestConfig("R_HalfTurn",  2, "easy",   "pos_rot", "tblock", StartPos(+0.00,+0.45), +0.00,+0.55, +3.14),
+    PushTestConfig("R_QuarterL",  3, "medium", "pos_rot", "tblock", StartPos(+0.15,+0.55), -0.10,+0.50, +1.05),
+    PushTestConfig("R_QuarterR",  4, "medium", "pos_rot", "tblock", StartPos(-0.15,+0.45), +0.10,+0.50, -0.79),
+    PushTestConfig("R_DiagTurn",  5, "medium", "pos_rot", "tblock", StartPos(-0.12,+0.42), +0.12,+0.58, +2.09),
+    PushTestConfig("R_Reverse",   6, "medium", "pos_rot", "tblock", StartPos(+0.00,+0.60), +0.00,+0.35, +1.57),
+    PushTestConfig("R_SpinCross", 7, "hard",   "pos_rot", "tblock", StartPos(-0.30,+0.40), +0.30,+0.65, -2.62),
+    PushTestConfig("R_WideSpin",  8, "hard",   "pos_rot", "tblock", StartPos(+0.35,+0.55), -0.35,+0.50, +2.36),
+    PushTestConfig("R_LongSpin",  9, "hard",   "pos_rot", "tblock", StartPos(+0.00,+0.30), +0.00,+0.70, +3.00),
+    PushTestConfig("R_Corner",   10, "hard",   "pos_rot", "tblock", StartPos(-0.30,+0.60), +0.30,+0.30, -1.57),
 
     # ═══════════════════════════════════════════════════════════════════════
     # T-BLOCK — POSITION-ONLY (goal_yaw=0 — object starts at yaw=0 too)

@@ -14,7 +14,7 @@ Usage:
 """
 
 import argparse
-import atexit
+import signal
 import os
 import sys
 import math
@@ -65,6 +65,8 @@ class ASPValidationResult:
     final_pos_error: float
     final_rot_error: float
     area_coverage: float
+    trial_count: int = 1
+    success_count: int = 0
 
 
 def _euler_xyz_to_quat_local(euler):
@@ -106,7 +108,7 @@ def main():
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
-    atexit.register(simulation_app.close)
+    signal.signal(signal.SIGINT, lambda *_: (simulation_app.close(), os._exit(1)))
 
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
@@ -469,18 +471,13 @@ def main():
 
         print(f"\n[Test {test_idx}/{n_tests}] {cfg.name} #{cfg.test_id}")
 
-        test_success = False
-        pushes_used = 0
-        stop_reason = "max_pushes"
-        pos_err = 0.0
-        rot_err = 0.0
-        retry_count = 0
-        MAX_RETRIES = args.max_tries
+        TRIAL_COUNT = args.max_tries
+        trial_successes = 0
+        trial_pushes = []
         best_pos_err = float('inf')
         best_rot_err = float('inf')
 
-        for retry in range(MAX_RETRIES):
-            retry_count = retry + 1
+        for trial in range(TRIAL_COUNT):
 
             _reset_jpos = _robot_scene.data.joint_pos.clone()
             _reset_jpos[:, _arm_jids] = _calib_cmd
@@ -528,8 +525,7 @@ def main():
             if _obj_type == "disc":
                 _init_rot_err = 0.0
             _init_oob_2d = float((_init_obj_pos[:2] - _init_goal_pos[:2]).norm().item())
-            _rtag = f"[R{retry_count}] " if retry > 0 else ""
-            print(f"  {_rtag}[{cfg.test_type}] goal=({cfg.main_goal_x:+.3f},{cfg.main_goal_y:+.3f}) yaw={cfg.main_goal_yaw:+.3f}  "
+            print(f"  [{cfg.test_type}] goal=({cfg.main_goal_x:+.3f},{cfg.main_goal_y:+.3f}) yaw={cfg.main_goal_yaw:+.3f}  "
                   f"start=({cfg.main_start.x:+.3f},{cfg.main_start.y:+.3f})  "
                   f"init_pos_err={_init_pos_err:.4f}m  init_rot_err={_init_rot_err:.3f}rad")
 
@@ -540,7 +536,7 @@ def main():
             bob_hidden[0].zero_()
             bob_hidden[1].zero_()
 
-            test_success = False
+            trial_ok = False
             pushes_used = 0
             stop_reason = "max_pushes"
             pos_err = 0.0
@@ -651,7 +647,7 @@ def main():
                 else:
                     _success_check = pos_err < 0.05 and rot_err < args.rot_threshold
                 if _success_check:
-                    test_success = True
+                    trial_ok = True
 
                 if obj_z > 0.10:
                     stop_reason = "launched"
@@ -674,34 +670,28 @@ def main():
                 prev_rot_err = rot_err
                 env.capture_pre_push(full_obs)
 
+            if trial_ok:
+                trial_successes += 1
+            trial_pushes.append(pushes_used)
             if pos_err < best_pos_err:
                 best_pos_err = pos_err
                 best_rot_err = rot_err
-            if test_success:
-                stop_reason = "success"
 
-            if test_success:
-                break
-            if stop_reason == "max_pushes":
-                break
-            if retry < MAX_RETRIES - 1:
-                pass
-            else:
-                break
-
-        if retry_count > 1:
-            stop_reason += f"_r{retry_count}"
+        avg_pushes = int(np.mean(trial_pushes)) if trial_pushes else 0
+        sr_pct = trial_successes / TRIAL_COUNT * 100
 
         result = ASPValidationResult(
             test_index=test_idx,
             test_name=f"{cfg.name} #{cfg.test_id}",
             test_type=cfg.test_type,
             object_type=_obj_type,
-            success=test_success,
-            pushes_used=pushes_used,
+            success=(trial_successes > 0),
+            pushes_used=avg_pushes,
             final_pos_error=best_pos_err,
             final_rot_error=best_rot_err,
             area_coverage=_area_coverage(best_pos_err, best_rot_err),
+            trial_count=TRIAL_COUNT,
+            success_count=trial_successes,
         )
         results.append(result)
         test_cfgs_data.append({
@@ -710,20 +700,28 @@ def main():
             "goal_yaw": cfg.main_goal_yaw,
             "object_type": cfg.object_type,
         })
-        status = "PASS" if test_success else "FAIL"
-        print(f"  {status} | pushes: {pushes_used} | reason: {stop_reason} | "
+        status = "PASS" if trial_successes > 0 else "FAIL"
+        print(f"  {status} | {trial_successes}/{TRIAL_COUNT} = {sr_pct:.0f}% | avg_pushes: {avg_pushes} | "
               f"pos_err: {best_pos_err:.4f} | rot_err: {best_rot_err:.4f} | cov: {_area_coverage(best_pos_err, best_rot_err):.1f}%")
 
-    n_success = sum(1 for r in results if r.success)
-    sr = n_success / len(results) * 100 if results else 0
+    total_trials = sum(r.trial_count for r in results)
+    total_successes = sum(r.success_count for r in results)
+    sr = total_successes / total_trials * 100 if total_trials > 0 else 0
+    n_tests_passed = sum(1 for r in results if r.success_count > 0)
     avg_pushes = np.mean([r.pushes_used for r in results]) if results else 0
 
     disc_tests = [r for r in results if r.test_type == "disc_pos"]
     pos_only = [r for r in results if r.test_type == "pos_only"]
     pos_rot  = [r for r in results if r.test_type == "pos_rot"]
-    sr_disc = sum(1 for r in disc_tests if r.success) / len(disc_tests) * 100 if disc_tests else 0
-    sr_po = sum(1 for r in pos_only if r.success) / len(pos_only) * 100 if pos_only else 0
-    sr_pr = sum(1 for r in pos_rot if r.success) / len(pos_rot) * 100 if pos_rot else 0
+    disc_trials = sum(r.trial_count for r in disc_tests)
+    disc_successes = sum(r.success_count for r in disc_tests)
+    po_trials = sum(r.trial_count for r in pos_only)
+    po_successes = sum(r.success_count for r in pos_only)
+    pr_trials = sum(r.trial_count for r in pos_rot)
+    pr_successes = sum(r.success_count for r in pos_rot)
+    sr_disc = disc_successes / disc_trials * 100 if disc_trials > 0 else 0
+    sr_po = po_successes / po_trials * 100 if po_trials > 0 else 0
+    sr_pr = pr_successes / pr_trials * 100 if pr_trials > 0 else 0
 
     avg_cov = np.mean([r.area_coverage for r in results]) if results else 0
 
@@ -731,7 +729,7 @@ def main():
     print(f"ASP BOB VALIDATION RESULTS")
     print(f"{'='*60}")
     print(f"  Total tests:   {len(results)}")
-    print(f"  Successes:     {n_success}")
+    print(f"  Tests passed:  {n_tests_passed}")
     print(f"  Success rate:  {sr:.1f}%")
     print(f"  Disc SR:       {sr_disc:.1f}% ({len(disc_tests)} tests)")
     print(f"  Pos-only SR:   {sr_po:.1f}% ({len(pos_only)} tests)")
@@ -741,7 +739,7 @@ def main():
     print(f"{'='*60}")
 
     for r in results:
-        status = "PASS" if r.success else "FAIL"
+        status = "PASS" if r.success_count > 0 else "FAIL"
         print(f"  {status:5s} | Test {r.test_index:2d} | {r.test_name:30s} | pushes={r.pushes_used:2d}")
 
     if args.csv:
@@ -749,11 +747,13 @@ def main():
         with open(args.csv, "w", newline="") as _f:
             writer = _csv.writer(_f)
             writer.writerow(["test_index", "test_name", "test_type", "object_type", "success",
-                             "pushes_used", "pos_err", "rot_err", "area_coverage"])
+                             "pushes_used", "pos_err", "rot_err", "area_coverage",
+                             "trial_count", "success_count"])
             for r in results:
                 writer.writerow([r.test_index, r.test_name, r.test_type, r.object_type,
                                  int(r.success), r.pushes_used, r.final_pos_error,
-                                 r.final_rot_error, r.area_coverage])
+                                 r.final_rot_error, r.area_coverage,
+                                 r.trial_count, r.success_count])
         print(f"\n[CSV] Results saved to {args.csv}")
 
     if args.csv and results:
@@ -769,7 +769,7 @@ def main():
             print(f"[WARN] Plot generation failed: {_e}")
 
     simulation_app.close()
-    sys.exit(0)
+    os._exit(0)
 
 
 if __name__ == "__main__":
