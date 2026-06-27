@@ -93,4 +93,6 @@ apptainer exec \
       $RESUME_ARGS \
       2>&1 | grep --line-buffered -v -e "pkg_resources is deprecated" -e "Hello from the pygame community"
 TRAIN_EXIT=$?
-[ $TRAIN_EXIT -ne 0 ] && { echo "[ERROR] training command failed; will resubmit."; WILL_RESUBMIT=true; }
+# Resubmit ONLY on the SIGUSR1 time-limit signal (WILL_RESUBMIT set by the trap).
+# A non-zero exit here is a crash/error — do NOT resubmit (avoids an infinite crash loop).
+[ $TRAIN_EXIT -ne 0 ] && echo "[ERROR] training failed (exit $TRAIN_EXIT) — NOT auto-resubmitting; fix and resubmit manually."
