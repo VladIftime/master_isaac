@@ -57,7 +57,7 @@ class LatestCheckpointCallback(BaseCallback):
         if self._last_save is None:
             self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
-            self.model.save(self.save_path, include=["replay_buffer"])
+            self.model.save(self.save_path)
             self._last_save = self.num_timesteps
         return True
 
@@ -152,7 +152,7 @@ def main():
 
     def _save_on_signal(signum, frame):
         print(f"\n[CKPT] Received signal {signum} - saving latest_checkpoint...")
-        model.save(latest_ckpt_path, include=["replay_buffer"])
+        model.save(latest_ckpt_path)
         print(f"[CKPT] Saved to: {latest_ckpt_path}.zip")
         sys.exit(0)
 

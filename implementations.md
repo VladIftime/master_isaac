@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline + SAC/HER
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-26 (Fix P82 — Model B curriculum trigger fixed, SAC/HER baseline)
+**Last updated**: 2026-06-27 (gym-pusht controlled testbed — Models A/B/C ported; "Isaac Lab is the right sim for ASP" measured)
 
 ---
 
@@ -16,6 +16,7 @@
 7. [Push Primitive Test](#push-primitive-test)
 8. [Validation Evaluation Suite](#validation-suite)
 9. [SAC + HER Push Baseline (DirectRLEnv)](#sac-her)
+10. [gym-pusht Controlled Testbed (Models A/B/C)](#gym-testbed)
 
 ---
 
@@ -49,6 +50,9 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 15 | **PBRS Model K** *(planned)* — Model G + ABC enabled (beta=0.5) | — |
 | 16 | **PBRS Model L** *(planned)* — Model H + ABC enabled (beta=0.5) | — |
 | 17 | **SAC+HER Push Baseline** — SAC (Haarnoja et al.) + HER (Andrychowicz et al.) push primitive, DirectRLEnv + SB3 | `train_push_sac_her.py` |
+| 18 | **gym-pusht Model A** — PBRS single-agent in gym-pusht (controlled CPU testbed) | `train_a_gym_pbrs_simple.py` |
+| 19 | **gym-pusht Model B** — PBRS + P82 pos→rot curriculum in gym-pusht | `train_b_gym_pbrs_curriculum.py` |
+| 20 | **gym-pusht Model C** — PBRS + ASP (Alice/Bob) in gym-pusht | `train_c_gym_pbrs_asp.py` |
 
 ### Stack Versions
 
@@ -200,6 +204,10 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-26 | **SAC+HER Push Baseline implemented** — Created `tasks/push_direct_env.py` (553 lines, `PushDirectEnv(DirectRLEnv)`), `tasks/push_direct_env_cfg.py` (240 lines, `PushDirectEnvCfg`), `tasks/sb3_vec_env.py` (128 lines, `DirectRLVecEnv(VecEnv)`), `tasks/utils/action_push_continuous.py` (78 lines), `train_push_sac_her.py` (182 lines), `hpc/train_push_sac_her.slurm` (155 lines), `tests/validate_push_sac.py` (579 lines). One outer step = one complete push macro-action (72 substeps via cuRobo IK inside `_apply_action()`). Observation: dict with `desired_goal`/`achieved_goal` for SB3 `HerReplayBuffer`. No ManagerBasedRLEnv overhead. |
 | 2026-06-26 | **SAC+HER Fix S1 (Q-function divergence)** — First HPC run (528 envs, 3000 iters) revealed SAC critic loss exploding (56.5 → 1130) and actor loss diverging (−2.53 → 79.3). Root causes: (a) `gamma=0.99` too high for 5-step episodes — all pushes got near-equal weight in return, making credit assignment impossible. (b) `completion_bonus=5.0` + `dense_alpha=3.0` produced per-push rewards exceeding 6.0, causing Q-target variance. Fixes: `gamma 0.99→0.95`, `completion_bonus 5.0→2.0`, `dense_alpha 3.0→1.0`, `buffer_size 200K→100K`. |
 | 2026-06-26 | **SAC+HER Fix S2 (TensorBoard async crash)** — SB3's TensorBoard `SummaryWriter` background thread crashed with `FileNotFoundError` on the TMPDIR-bind-mounted events file mid-training, killing `model.learn()` at 626K/1.58M timesteps (40%). Fixed: `tensorboard_log=None` (disabled TB entirely), wrapped `model.learn()` in `try/except FileNotFoundError` as safety net. |
+| 2026-06-27 | **gym-pusht testbed: Models A/B/C ported** — Native gym-pusht counterparts of PBRS Models A/B/C, to get a fast, controlled CPU testbed that isolates the *reward/curriculum* question from the robotic-task confounds (compute mismatch, IK gating, contact). Reuses the SAME custom `PPO`/`PPOABC`/`ActorCriticPush` + `EpisodeManager` + `validate_goal` + `reward_pbrs` unchanged — only the environment differs. New files: `tasks/utils/gym_push_primitive_env.py` (smart `gym.Env`: 1 step = 1 push macro, PBRS reward + thesis-gate done computed inside; never signals terminated/truncated, self-resets, reports via `info`; `TorchVecAdapter` wraps `AsyncVectorEnv` for the custom-PPO tensor contract), `tasks/utils/gym_push_asp_env.py` (single-process ASP env reusing EpisodeManager/validate_goal/PBRS), `train_{a,b,c}_gym_pbrs_*.py`. A/B use AsyncVectorEnv (CPU-parallel); C is single-process (ASP's Alice↔Bob cross-phase delayed reward forces central orchestration). All run in `.master_venv` (no Isaac/cuRobo). See §10. |
+| 2026-06-27 | **gym freeze fix + thread caps + benchmark** — A debug benchmark **froze the desktop**: a missing `if __name__=="__main__"` guard made `spawn` workers re-import `__main__` and recursively re-spawn (a spawn fork-bomb), compounded by `fork` + torch's 6-threads-per-process default (32 workers × 6 ≈ 192 threads on 12 logical CPUs). The *training* scripts already guard env creation inside `main()` (unaffected); added `OMP/MKL/OPENBLAS/NUMEXPR=1` + `torch.set_num_threads(1)` thread caps to all gym scripts + the env module as defence, and `AsyncVectorEnv(autoreset_mode=DISABLED, context="spawn")`. Benchmark (Ryzen 5 5600X, 6c/12t): N=6 AsyncVectorEnv = **91 push-macros/s**; single-process ASP (C) = **22.4 push/s**. |
+| 2026-06-27 | **gym A diagnostic: compute-starved at N=6, not broken** — A local 11k-iter A-gym run showed flat PosErr (~0.26 m) / Best SR ~0.006. Oracle-push probe proved the env is fine: an ideal goal-directed push moves the object **+0.23 m goal-ward at any approach radius**, and the trained checkpoint moved it **+0.029 m/push vs +0.002 random (15× learning)** — but slowly because N=6 gives a tiny PPO batch (6×15=90 samples/update vs Isaac's 7920) and only ~144k pushes (~1% of Isaac's stabilization budget). Added `--push_nsteps` arg (bigger batch without more processes). Decision: **move gym A/B/C to HPC** (many CPU cores → big batch → faithful `k_p=30` learns). New HPC scripts `hpc/train_gym_{a,b,c}.slurm` (CPU partition, `isaac-lab.sif` + `gym_overlay.img` + bound `gym-pusht`, `num_envs=$SLURM_CPUS_PER_TASK`, `device=cpu`, auto-resubmit). |
+| 2026-06-27 | **"Isaac Lab is the right sim for ASP" — measured** — Controlled throughput (one continuous slurm segment, 528-env): single-agent **A**, curriculum **B**, and ASP **C** all run at **~0.022 it/s (~172 push-macros/s)** — ASP's 2-agent machinery (2 PPO updates, GoalEncoder, ABC, historical pool) adds **~0 per-iteration wall-clock** (the shared 528-env cuRobo-IK/physics dominates), so the Isaac A-vs-ASP comparison is genuinely **compute-matched**. Isaac reaches 1M pushes in **~1.6 h** (batch 7920); single-process gym ASP in **~12.4 h (~7.7× slower)** — ASP parallelises for free on GPU-batched sim but is forced single-process on CPU. Resolves critique **C2** (≈**1.6 days / 3000 iters**, not "a few hours"). Distinct from the Slide-11 ManagerBasedRLEnv-vs-DirectRLEnv API-overhead claim. |
 
 ---
 
@@ -1624,3 +1632,183 @@ HER goal tensors (3D each):
 achieved_goal = [obj_x, obj_y, obj_yaw]        ← actually achieved
 desired_goal  = [goal_x, goal_y, goal_yaw]     ← from sampled goal
 ```
+
+---
+
+## 10. gym-pusht Controlled Testbed (Models A/B/C) <a name="gym-testbed"></a>
+
+**Branch**: `asp_goal_encoder`  
+**Last updated**: 2026-06-27  
+
+Native gym-pusht counterparts of PBRS Models A/B/C to get a **fast, controlled CPU testbed**
+that isolates the **reward/curriculum question** from the Isaac robotic-task confounds
+(compute mismatch between single-agent and ASP runs, IK gating, contact physics).
+All three models reuse the **identical custom PPO/PPOABC/ActorCriticPush
++ EpisodeManager + validate_goal + reward_pbrs** as the Isaac models; only the
+environment (gym-pusht 2D point-pusher) differs.
+
+### 10.1 Rationale
+
+The Isaac runs are the **headline** evidence (robotic UR5e, cuRobo IK, contact-rich).
+But the Isaac A-vs-ASP comparison is confounded: ASP changed 3 things at once
+(goal distribution, budget, agent count; critique **C6**), and the single-agent
+checkpoints were compute-mismatched vs the ASP runs.  The gym testbed fixes this
+by running A, B, and C in **one identical, fast environment at one identical budget**,
+reusing the same learner — only the curriculum (none vs forced vs ASP) differs.
+
+A/B answer the **reward/curriculum** question cleanly in hours.  
+ASP (C) is single-process on CPU (~22 push/s) and needs days for the same
+experience; the ASP evidence at scale comes from the **Isaac runs** (GPU-batched,
+identical compute to the single-agent).  This env split is principled and
+strengthens critique **C2** (scale) and **C9** (overhead).
+
+### 10.2 Files (new, no Isaac/cuRobo dependency)
+
+| File | Role |
+|---|---|
+| `tasks/utils/gym_push_primitive_env.py` | Smart `gym.Env` for A/B: 1-step push + PBRS + done. `TorchVecAdapter` wraps `AsyncVectorEnv`. |
+| `tasks/utils/gym_push_asp_env.py` | Single-process ASP env for C (reuses `EpisodeManager` + `validate_goal` + PBRS). |
+| `train_a_gym_pbrs_simple.py` | Model A-gym (single-agent PBRS, no curriculum). |
+| `train_b_gym_pbrs_curriculum.py` | Model B-gym (PBRS + P82 pos→rot curriculum via `set_curriculum`). |
+| `train_c_gym_pbrs_asp.py` | Model C-gym (ASP: Alice PPO + Bob PPOABC/GoalEncoder/ABC/historical pool). |
+| `hpc/train_gym_a.slurm` | SLURM for gym-A on HPC (CPU partition). |
+| `hpc/train_gym_b.slurm` | SLURM for gym-B on HPC. |
+| `hpc/train_gym_c.slurm` | SLURM for gym-C on HPC (single-process, slow). |
+
+### 10.3 Smart gym.Env design (A/B)
+
+`GymPushPrimitiveEnv(gym.Env)` — one `step(action_bins)` = one macro push:
+
+1. Decode 4D×21 bins → object-relative push `(r, φ, len, θ)` → (Xs,Ys,Xf,Yf) in meters.
+2. Execute the push: `APPROACH_STEPS=40` + `PUSH_STEPS=60` PD-control steps on the underlying gym‑pusht `PushTEnv`.
+3. Build the 30‑D observation (`rel_obs` layout: `[ee(6)|obj(14)|goal(6)|goal_dist(2)|rel_goal(2)]`).
+4. Compute **PBRS reward** (`compute_pbrs_reward`) + `check_done_pbrs` with `terminated=False` always.
+5. **Self‑reset on done** — sample new block+goal, return the reset observation.
+6. `done`, `pos_err`, `cos_rot_err`, `at_goal`, `pos_only`, `success` all go into `info`.
+
+The env **never signals `terminated`/`truncated` to the vector wrapper**, so
+`AsyncVectorEnv(autoreset_mode=DISABLED)` does not interfere.  Curriculum B
+calls `env.set_curriculum(w_rot, pos_term, enable_rot_sparse)` each iteration
+via `AsyncVectorEnv.call`; Model A runs with defaults (w_rot=10, no curriculum).
+
+**TorchVecAdapter** wraps `gym.vector.AsyncVectorEnv` (`context="spawn"`,
+`autoreset=DISABLED`), numpy↔torch, exposes the custom‑PPO `vec_env` tensor contract.
+
+### 10.4 ASP env design (C)
+
+`GymPushASPEnv` is **single-process synchronous** — the Alice↔Bob cross‑phase delayed
+reward forces central ASP orchestration on a batched `EpisodeManager(num_envs=N)`.
+It ports `PushASPEnvWrapper`'s methods to gym‑pusht physics:
+
+- Object read/write → pymunk `block.position/angle` + `env.reset(reset_to_state)`.
+- Observation build → 28‑D (Alice 20‑D, Bob 28‑D, same as Isaac PBRS-C).
+- Reuses `EpisodeManager` + `validate_goal` + `PBRS` verbatim (env‑agnostic).
+- `execute_push(Xs,Ys,len,θ)` loops N pymunk envs serially each push‑step.
+
+**Training script** (`train_c_gym_pbrs_asp.py`) mirrors `train_c_pbrs_asp.py`
+with the cuRobo/IK inner loop replaced by `env.execute_push(...)`.  All ASP
+machinery — Alice/Bob phase routing, delayed reward attribution to Alice's
+last valid transition, ABC buffer, historical pool, two separate PPO updates —
+are copied faithfully from `train_c_pbrs_asp.py`.
+
+### 10.5 Freeze fix + safe benchmark
+
+**Root cause:** a debug benchmark script lacked `if __name__ == "__main__":`,
+so `spawn` workers re‑imported `__main__` and recursively created a `TorchVecAdapter`
+→ **recursive process spawning** (a spawn fork‑bomb).  Compounded by `fork` +
+torch's 6‑threads‑per‑process default (32 workers × 6 ≈ 192 threads on 12 logical
+CPUs) → **system freeze**.  The training scripts are unaffected (guard is in place).
+
+**Fix:** added thread caps to all gym scripts + the env module:
+```
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+...
+torch.set_num_threads(1)
+```
+
+**Benchmark** (Ryzen 5 5600X, 6c/12t, 31 GB RAM):
+
+| Config | push-macros/s | time to 1M pushes |
+|---|---|---|
+| gym AsyncVectorEnv N=6 (A/B) | 91 | ~3.0 h |
+| gym single-process ASP (C) | 22.4 | ~12.4 h |
+
+### 10.6 Diagnostic findings
+
+**Oracle‑push probe** (approach behind the object centroid along the obj→goal
+axis, push toward goal): the object moves **+0.23 m goal‑ward at every approach
+radius** r ∈ {0.03…0.16 m} — the push primitive works fine; contact is not the issue.
+
+**Random‑policy probe:** mean per‑push goal‑ward displacement = **+0.002 m**
+(pure noise), mean |displacement| = 0.07 m.
+
+**Trained checkpoint eval** (A‑gym, iter 1916, N=6, push_nsteps=15, 144k pushes):
+per‑push goal‑ward = **+0.029 m → 15× the random baseline.**  The policy IS
+learning, but **very slowly** because:
+- N=6 gives a tiny PPO batch (6×15=90 samples/update vs Isaac's 7920) → noisy updates.
+- Only 144k pushes (~1% of Isaac's 12M‑push stabilization budget at k_p=30).
+- Faithful k_p=30 makes Φ essentially flat beyond ~0.25 m, so dense gradient is
+  weak until the object gets close — requiring many pushes to bootstrap.
+
+**Action:** added `--push_nsteps` arg (bigger PPO batch without more processes)
+and moved A/B/C to HPC (many CPU cores → PPO batch scales → faithful k_p=30
+learns in hours).
+
+### 10.7 HPC setup (one-time, Habrók login node)
+
+Build a writable overlay with the extra Python deps gym needs (the isaac‑lab.sif
+container already has torch + numpy + yaml + tensorboard):
+
+```bash
+cd $PROJECT_ROOT                         # asyncDualPlayPPO (where isaac-lab.sif lives)
+
+# NOTE: the container exposes python ONLY via /workspace/isaaclab/isaaclab.sh -p
+#       (bare `python`/`pip` are NOT on $PATH in the container).
+
+# 1. Create the overlay — let it FINISH (~20-30s zeroing; do NOT Ctrl-C):
+apptainer overlay create --size 2048 gym_overlay.img
+
+# 2. Install gym deps into the overlay. PIN pymunk==6.11.0 — pymunk 7.x removed
+#    space.add_collision_handler(), which gym-pusht's _setup() calls (crash otherwise):
+apptainer exec --overlay gym_overlay.img:rw isaac-lab.sif \
+  /workspace/isaaclab/isaaclab.sh -p -m pip install \
+  'pymunk==6.11.0' pygame shapely opencv-python-headless
+
+# 3. gym-pusht (modified arena_width) is provided as the BOUND SOURCE via PYTHONPATH
+#    (the slurm sets PYTHONPATH=$CROOT/gym-pusht) — no pip install of gym_pusht needed.
+#    Just clone/rsync master_isaac/gym-pusht onto HPC at $PROJECT_ROOT/../gym-pusht.
+
+# 4. Verify — construct + RESET the env (the crash site that needs pymunk 6.x):
+apptainer exec --overlay gym_overlay.img:ro \
+  --bind "$PROJECT_ROOT/../gym-pusht":/ws/gp --env PYTHONPATH=/ws/gp \
+  isaac-lab.sif /workspace/isaaclab/isaaclab.sh -p -c \
+  "import pymunk; print('pymunk', pymunk.version); from gym_pusht.envs.pusht import PushTEnv; e=PushTEnv(obs_type='state'); e.reset(); print('reset OK')"
+```
+
+**Run** (once `gym_overlay.img` + `gym-pusht` are in place):
+```bash
+sbatch hpc/train_gym_a.slurm      # Model A (single-agent)
+sbatch hpc/train_gym_b.slurm      # Model B (curriculum)
+sbatch hpc/train_gym_c.slurm      # Model C (ASP; slow, many resubmit chains)
+```
+
+Each SLURM script uses `gym_overlay.img`, binds the modified `gym-pusht` source,
+sets `SDL_VIDEODRIVER=dummy`, and calls `isaaclab.sh -p train_*_gym.py` (the
+container's proven Python with torch).  Time limits 12h per job + auto‑resubmit
+on `SIGUSR1` for long runs.  Checkpoints under `runs/{exp_name}/` are rsynced
+to `PROJECT_ROOT/runs` at cleanup.
+
+### 10.8 Measured Isaac-vs-gym throughput (controlled)
+
+| Sim (hardware) | parallelism | push‑macros/s | **1M pushes** | batch/update | ASP overhead vs A |
+|---|---|---|---|---|---|
+| **Isaac Lab** (1 GPU, 528 env) | GPU‑batched | **172** | **~1.6 h** | 7920 | **~1.0× (none)** |
+| gym‑pusht (desktop, 6 CPU, A/B) | 6 CPU procs | 91 | ~3.0 h | 90–360 | — |
+| gym‑pusht ASP (single‑proc) | 1 CPU proc | 22.4 | ~12.4 h | ~480 | ~7.7× *slower* |
+
+**Key findings:**
+- Isaac single‑agent A, curriculum B, and ASP C all run at **~0.022 it/s (~172 push/s)** — the 2‑agent ASP machinery adds **~no per‑iteration wall‑clock** (the shared 528‑env cuRobo‑IK/physics dominates). So the Isaac A‑vs‑ASP comparison is genuinely **compute‑matched** (same hardware, same it/s, same 528 envs).
+- Isaac reaches ASP‑scale experience (~10M pushes) in ~16h (batch 7920); gym single‑process ASP in ~124h (~5 days).  ASP parallelises for free on GPU‑batched sim but is forced single‑process on CPU.
+- **Conclusion:** Isaac Lab is the appropriate environment to evaluate ASP — it gives ASP its best shot on a single‑GPU budget (identical compute to the winning single‑agent), providing the large batch the non‑stationary two‑agent objective needs (Makoviychuk et al. 2021; Rudin et al. 2022). That ASP still collapses to 0–7% there is strong evidence the failure is **structural, not under‑resourcing.**  The `5–10× overhead` claim on Slide 11 refers to the **ManagerBasedRLEnv‑vs‑DirectRLEnv** API overhead (a separate, valid claim; not refuted by this data).
+- Resolves supervisor critique **C2**: ~1.6 days / 3000 iters, not "a few hours."  The deck should show a **new slide** ("Why Isaac Lab is a good sim for robotic tasks") with the 3 pillars — GPU‑batched parallelism, robotic fidelity, time‑to‑scale for ASP — backed by this measured table. See `presentation_plan.md` §4 for the narrative revision.

@@ -17,7 +17,7 @@ set -o pipefail
 # ═══════════════════════════════════════════════════════════════════════════════
 
 NUM_ENVS=528
-MAX_ITERATIONS=3000
+MAX_ITERATIONS=12000
 SEED=42
 EXP_NAME="hpc_push_sac_her_${NUM_ENVS}env"
 MAX_RESUBMITS=50

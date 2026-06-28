@@ -2,7 +2,7 @@
 
 **Deck**: `literature/paper-async/presentation/presentation.tex` (1200 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-06-25
+**Last updated**: 2026-06-27 (gym-pusht controlled testbed; "Isaac Lab is the right sim for ASP" measured — see §11)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
 > **SINGLE SOURCE OF TRUTH (decision pending).** The deck's headline numbers
@@ -241,6 +241,7 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 - T0.7 Density cut to ~18–20 slides; placeholder register. (C10)
 - T0.8 Remove/mark Models G/H as "not run" or drop. (C10)
 - T0.9 Reframe Slide 7 (Model B): "mis-specified trigger, never fired" not "PBRS made curriculum unnecessary" (§3.1). (C5, C6)
+- T0.10 **NEW slide "Why Isaac Lab is a good sim for robotic tasks"** (3 pillars: GPU-batched parallelism, robotic fidelity, time-to-scale for ASP) backed by the measured Isaac-vs-gym throughput table. Argues ASP is evaluated in the scale-appropriate venue and still fails → structural. Keep Slide 11 (Manager-vs-DirectRL API overhead) separate/untouched. (C2; see §11)
 
 ### TIER 1 — Stronger arguments from existing data (light)
 - T1.1 Training-SR mean ± 95% CI from archive chains; error bars. (C7)
@@ -345,3 +346,79 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 4. Rebuild deck tables (Slides 6c, 8c, 10, 12, 15) + soften claims (Slides 13) from new numbers.
 5. Density pass: cut to ~18–20 slides; record or remove clip placeholders.
 6. (If time) run E3 controlled curriculum ablation.
+
+---
+
+## 11. gym-pusht Testbed & "Isaac Lab is the right sim for ASP" (2026-06-27) <a name="gym-isaac"></a>
+
+New work that changes the deck narrative. Full implementation detail in
+`implementations.md` §10.
+
+### 11.1 gym-pusht controlled testbed (Models A/B/C)
+
+To answer critique **C6** (the Isaac A-vs-C comparison changed 3 things at once)
+and the compute-mismatch problem, Models A/B/C were ported to **gym-pusht**, a
+fast 2D CPU testbed, reusing the **identical custom PPO/PPOABC/ActorCriticPush +
+EpisodeManager + validate_goal + reward_pbrs** — only the environment differs.
+
+- **A vs B in gym** = the clean **curriculum-vs-no-curriculum** comparison
+  (settles the "is Model B's failure the concept or the P82 trigger bug?" question)
+  in one identical fast env at one identical budget. A/B parallelise via
+  `AsyncVectorEnv` (CPU). **This is the high-value payoff of the gym effort.**
+- **C (ASP) in gym** is single-process (the Alice↔Bob cross-phase delayed reward
+  forces central orchestration) → ~22 push/s → days for ~10M pushes. The ASP
+  evidence at scale comes from the **Isaac** runs instead (see §11.2).
+- Files: `train_{a,b,c}_gym_pbrs_*.py`, `tasks/utils/gym_push_{primitive,asp}_env.py`,
+  `hpc/train_gym_{a,b,c}.slurm`.
+- Diagnostic: the env + push primitive are fine (oracle push moves the object
+  +0.23 m goal-ward; trained policy 15× the random baseline); slow learning at
+  low core counts is a **PPO-batch / sample-efficiency** issue, not a bug → moved
+  to HPC with many CPU cores (large batch → faithful k_p=30 learns).
+
+### 11.2 "Isaac Lab is the right sim for ASP" — NEW SLIDE (addresses C2)
+
+**Measured controlled throughput** (one continuous slurm segment, 528-env Isaac
+vs gym-pusht):
+
+| Sim (hardware) | parallelism | push-macros/s | 1M pushes | batch/update | ASP overhead vs A |
+|---|---|---|---|---|---|
+| **Isaac Lab** (1 GPU, 528 env) | GPU-batched | **172** | **~1.6 h** | 7920 | **~1.0× (none)** |
+| gym (desktop, 6 CPU, A/B) | 6 CPU procs | 91 | ~3.0 h | 90–360 | — |
+| gym ASP (single-proc, C) | 1 CPU proc | 22.4 | ~12.4 h | ~480 | ~7.7× *slower* |
+
+**Argument (3 pillars) for the new slide "Why Isaac Lab is a good sim for robotic tasks":**
+1. **GPU-batched parallelism** — 528 envs/step → 7920-sample batches on one GPU
+   (Makoviychuk et al. 2021 *Isaac Gym*; Rudin et al. 2022). The non-stationary
+   two-agent ASP objective needs a large batch for a stable gradient.
+2. **Robotic fidelity** — UR5e + contact-rich 3D physics + cuRobo IK = the actual
+   SE(2) task; gym-pusht is a 2D abstraction (diagnostic for the reward question only).
+3. **Time-to-scale (ASP)** — ASP parallelises *for free* on GPU-batched sim but is
+   forced single-process on CPU (~7.7× slower); Isaac reaches ASP-scale experience
+   (~10M pushes) in ~16 h vs ~5 days on CPU.
+
+**Framing ("fair venue, still fails"):** Isaac gives ASP its **best shot on a
+single-GPU budget at compute matched to the winning single-agent**, and ASP **still
+collapses to 0–7%** → the failure is **structural, not under-resourcing.** This
+defuses **C2** (scale mismatch) instead of conceding it.
+
+**Examiner-safe scope:** claim *fidelity + batch=7920 + ASP-single-proc-7.7×-slower*,
+NOT "Isaac beats any CPU config" (a many-core CPU gym could exceed 172 push/s for A/B).
+
+### 11.3 Correction to C9 / Slide 11 (Manager-vs-DirectRL ≠ ASP overhead)
+
+The measured data shows **ASP and the single-agent run at identical iteration cost
+in Isaac (~0.022 it/s)** — the 2-agent machinery (2 PPO updates, GoalEncoder, ABC,
+historical pool) adds **~no per-iteration wall-clock** (the shared 528-env
+cuRobo-IK/physics dominates). Implications:
+- The existing **Slide 11 "5–10× overhead"** claim is the **ManagerBasedRLEnv vs
+  DirectRLEnv** API-architecture overhead — a **separate, valid** claim. It is NOT
+  about ASP-vs-single-agent and is NOT refuted by this data. **Keep Slide 11 as-is.**
+- Do **not** claim ASP is computationally expensive *per iteration* — it isn't; it
+  simply doesn't learn. (If desired, frame ASP's cost as model/code complexity +
+  two networks + failure modes, not per-iteration compute.)
+- The Isaac-vs-gym throughput goes in the **new §11.2 slide**, not Slide 11.
+
+### 11.4 C2 number, corrected
+
+Measured: **~0.022 it/s → ~46 s/iter → ≈1.6 days / 3000 iters** (not "a few hours").
+Use this exact number for the C2 scale caveat.
