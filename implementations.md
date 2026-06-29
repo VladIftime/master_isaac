@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline + SAC/HER
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-27 (gym-pusht controlled testbed — Models A/B/C ported; "Isaac Lab is the right sim for ASP" measured)
+**Last updated**: 2026-06-29 (validation campaign complete — all 7 models evaluated on identical 30 T-block scenes; results consolidated to `results/`; P82 curriculum fix validated; A_simp 80.0% vs B_curr 76.7% definitive comparison)
 
 ---
 
@@ -17,6 +17,8 @@
 8. [Validation Evaluation Suite](#validation-suite)
 9. [SAC + HER Push Baseline (DirectRLEnv)](#sac-her)
 10. [gym-pusht Controlled Testbed (Models A/B/C)](#gym-testbed)
+11. [Validation Results (26.06.26–28)](#validation-results)
+12. [Results Directory Structure](#results-directory)
 
 ---
 
@@ -202,6 +204,10 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-26 | **Fix P82 (Model B curriculum trigger fixed)** — The old Phase‑2 trigger thresholded `mean_pos_err` (iteration‑mean of *all* per‑push position errors) against `CURRICULUM_POS_THRESHOLD=0.08m` with a brittle 50‑iteration AND gate. The per‑push mean was dominated by early/mid‑episode pushes far from a freshly randomised goal and contaminated by catastrophe envs (launched/tipped/OOB), creating a structural floor well above 0.08m. `curriculum_active` stayed `False` forever, `w_rot=0.0` permanently, and rotation received zero reward signal. Fix: (1) Replaced metric with **episodic position‑only SR** (= episodes terminated by `pos_only` or `success` / total episodes per iteration), computed from `done_reasons["pos_only"] | done_reasons["success"]` in the done‑handling block. (2) Trigger fires when all 20 consecutive iterations have `pos_ep_sr ≥ 0.5` (`CURRICULUM_ENTER_THRESHOLD=0.5`, `CURRICULUM_LOOKBACK=20`). (3) On trigger, `pos_term_threshold` is set to `0.0` (disables pos‑only termination), so episodes run to `max_pushes` and rotation can be practiced. (4) Phase‑2 ramp: `w_rot` 0→10 over 200 iters; `pos_term_threshold` stays at 0.0 (no fade). Phase‑2 Model B is now identical to Model A except the staged ramp — a clean "curriculum vs no curriculum" comparison. `train_push_pbrs_curr.py` (lines 493‑503,759‑761,880‑901,912). SLURM updated: `SEED=42`, `MAX_ITERATIONS=2600`, `EXP_NAME` → `hpc_pbrs_curr_${NUM_ENVS}env_fixed`. |
 | 2026-06-25 | **SAC+HER Push Baseline planning** — Designed DirectRLEnv push environment based on `throwing_enviroment` architecture (macro-action decimation, SB3 `model.learn()` delegation, custom `DirectRLVecEnv`). Objective: off-policy SAC with hindsight relabeling as external calibration baseline vs published planar-pushing results (Haarnoja 2018, Andrychowicz 2017). |
 | 2026-06-26 | **SAC+HER Push Baseline implemented** — Created `tasks/push_direct_env.py` (553 lines, `PushDirectEnv(DirectRLEnv)`), `tasks/push_direct_env_cfg.py` (240 lines, `PushDirectEnvCfg`), `tasks/sb3_vec_env.py` (128 lines, `DirectRLVecEnv(VecEnv)`), `tasks/utils/action_push_continuous.py` (78 lines), `train_push_sac_her.py` (182 lines), `hpc/train_push_sac_her.slurm` (155 lines), `tests/validate_push_sac.py` (579 lines). One outer step = one complete push macro-action (72 substeps via cuRobo IK inside `_apply_action()`). Observation: dict with `desired_goal`/`achieved_goal` for SB3 `HerReplayBuffer`. No ManagerBasedRLEnv overhead. |
+| 2026-06-26 | **Definitive validation campaign kickoff** — Re-evaluated all 7 Isaac models (A_simp, B_curr, E–H) on identical 30 T-block scenes using the current `validation_configs.py` (tests 1–10: R_* rotation-heavy, tests 11–20: pos_only, tests 21–30: pos_rot). B_curr validated from the P82-fixed `hpc_pbrs_curr_528env_fixed` checkpoint (iter 2600) at both 26.06.26 and 26.06.28. |
+| 2026-06-28 | **Definitive head-to-head comparison** — A_simp (26.06.20 checkpoint, iter 2400) run on the identical 30 T-block scene set used for B_curr. Clean comparison: A_simp 80.0% scene SR (100% pos-only, 70% pos+rot) vs B_curr 76.7% (100% pos-only, 65% pos+rot). Single-agent beats curriculum by 3.3pp on identical scenes. Both models fully solve position-only (100%). |
+| 2026-06-29 | **Results organization** — All validation CSVs, plots, comparison outputs, and legacy data consolidated into `/home/vladi/IsaacLab/master_isaac/results/` organized by model (A_simp, B_curr, C_asp, E_asp_dpose, F_asp_disc, G_tasp_dpose, H_tasp_disc) with a `comparison/` subfolder for cross-model plots. See §12. P82 curriculum fix confirmed working: B_curr achieves 76.7% with properly triggered Phase 1→2 progression. |
+| 2026-06-29 | **Validation config change documented** — The current `validation_configs.py` has tests 1–10 as T-block R_* rotation scenes (pos_rot). The 26.06.20 validation used an earlier version where tests 1–10 were D_* disc scenes (disc_pos). The 26.06.26/28 campaign uses the current config exclusively for fair comparison. Gym-pusht CSVs and legacy disc-protocol CSVs are preserved in `results/legacy/`. |
 | 2026-06-26 | **SAC+HER Fix S1 (Q-function divergence)** — First HPC run (528 envs, 3000 iters) revealed SAC critic loss exploding (56.5 → 1130) and actor loss diverging (−2.53 → 79.3). Root causes: (a) `gamma=0.99` too high for 5-step episodes — all pushes got near-equal weight in return, making credit assignment impossible. (b) `completion_bonus=5.0` + `dense_alpha=3.0` produced per-push rewards exceeding 6.0, causing Q-target variance. Fixes: `gamma 0.99→0.95`, `completion_bonus 5.0→2.0`, `dense_alpha 3.0→1.0`, `buffer_size 200K→100K`. |
 | 2026-06-26 | **SAC+HER Fix S2 (TensorBoard async crash)** — SB3's TensorBoard `SummaryWriter` background thread crashed with `FileNotFoundError` on the TMPDIR-bind-mounted events file mid-training, killing `model.learn()` at 626K/1.58M timesteps (40%). Fixed: `tensorboard_log=None` (disabled TB entirely), wrapped `model.learn()` in `try/except FileNotFoundError` as safety net. |
 | 2026-06-27 | **gym-pusht testbed: Models A/B/C ported** — Native gym-pusht counterparts of PBRS Models A/B/C, to get a fast, controlled CPU testbed that isolates the *reward/curriculum* question from the robotic-task confounds (compute mismatch, IK gating, contact). Reuses the SAME custom `PPO`/`PPOABC`/`ActorCriticPush` + `EpisodeManager` + `validate_goal` + `reward_pbrs` unchanged — only the environment differs. New files: `tasks/utils/gym_push_primitive_env.py` (smart `gym.Env`: 1 step = 1 push macro, PBRS reward + thesis-gate done computed inside; never signals terminated/truncated, self-resets, reports via `info`; `TorchVecAdapter` wraps `AsyncVectorEnv` for the custom-PPO tensor contract), `tasks/utils/gym_push_asp_env.py` (single-process ASP env reusing EpisodeManager/validate_goal/PBRS), `train_{a,b,c}_gym_pbrs_*.py`. A/B use AsyncVectorEnv (CPU-parallel); C is single-process (ASP's Alice↔Bob cross-phase delayed reward forces central orchestration). All run in `.master_venv` (no Isaac/cuRobo). See §10. |
@@ -1812,3 +1818,119 @@ to `PROJECT_ROOT/runs` at cleanup.
 - Isaac reaches ASP‑scale experience (~10M pushes) in ~16h (batch 7920); gym single‑process ASP in ~124h (~5 days).  ASP parallelises for free on GPU‑batched sim but is forced single‑process on CPU.
 - **Conclusion:** Isaac Lab is the appropriate environment to evaluate ASP — it gives ASP its best shot on a single‑GPU budget (identical compute to the winning single‑agent), providing the large batch the non‑stationary two‑agent objective needs (Makoviychuk et al. 2021; Rudin et al. 2022). That ASP still collapses to 0–7% there is strong evidence the failure is **structural, not under‑resourcing.**  The `5–10× overhead` claim on Slide 11 refers to the **ManagerBasedRLEnv‑vs‑DirectRLEnv** API overhead (a separate, valid claim; not refuted by this data).
 - Resolves supervisor critique **C2**: ~1.6 days / 3000 iters, not "a few hours."  The deck should show a **new slide** ("Why Isaac Lab is a good sim for robotic tasks") with the 3 pillars — GPU‑batched parallelism, robotic fidelity, time‑to‑scale for ASP — backed by this measured table. See `presentation_plan.md` §4 for the narrative revision.
+
+---
+
+## 11. Validation Results (26.06.26–28) <a name="validation-results"></a>
+
+### 11.1 Definitive Head-to-Head Comparison
+
+All 7 Isaac models evaluated on **identical 30 T-block scenes** using the current
+`validation_configs.py` (tests 1–10: R_* rotation-heavy pos_rot, tests 11–20: pos_only,
+tests 21–30: pos_rot). Success gate: `pos_err < 0.05 m AND rot_err < 0.2 rad` (thesis gate).
+Best-of-20 trials per scene, max 30 pushes.
+
+| Model | Scene SR | Pos-only | Pos+rot | PosErr | RotErr | Avg Pushes |
+|-------|----------|----------|---------|--------|--------|-----------|
+| **A_simp** (no curriculum) | **80.0%** | 100% | 70% | 0.032 m | 0.568 rad | 23.5 |
+| **B_curr** (P82 curriculum) | **76.7%** | 100% | 65% | 0.023 m | 0.663 rad | 26.7 |
+| G_tasp_dpose (TASP + d_pose) | 16.7% | 30% | 10% | 0.158 m | 1.457 rad | 12.2 |
+| H_tasp_disc (TASP + disc) | 10.0% | 30% | 0% | 0.186 m | 1.260 rad | 12.6 |
+| E_asp_dpose (ASP + d_pose) | 6.7% | 20% | 0% | 0.143 m | 1.612 rad | 12.8 |
+| F_asp_disc (ASP + disc) | 6.7% | 20% | 0% | 0.197 m | 1.576 rad | 11.9 |
+
+**Key findings:**
+
+1. **Single-agent PBRS (A_simp) beats the P82-fixed curriculum (B_curr) by 3.3pp scene SR.**
+   Both achieve 100% pos-only SR. The curriculum improves position precision (0.023m vs
+   0.032m PosErr) but slightly degrades rotation (0.663 vs 0.568 rad RotErr). The simpler
+   model wins — curriculum adds staging complexity without net gain.
+
+2. **ASP collapses across all variants.** The best ASP model (G_tasp_dpose) reaches 16.7% —
+   a 4.8× gap from single-agent. Time-based Alice (G/H) outperforms outcome-based Alice
+   (E/F) by 2-10pp. T-block (G) outperforms disc (H) by 6.7pp. All ASP models terminate
+   early (~12 pushes vs 23–27 for single-agent models) due to catastrophe detection.
+
+3. **Position-only is solved (100% for A and B).** The combined pos+rot gate is the
+   bottleneck — capping at 70% (A) / 65% (B). Rotation remains the unsolved dimension
+   across all models.
+
+4. **The P82 curriculum trigger fix produced a functional model.** B_curr went from 35% SR
+   (26.06.12, mis-specified trigger) to 76.7% (26.06.28, episodic pos-SR trigger). The
+   curriculum now activates and progresses through Phase 1→2, but the resulting model does
+   not beat the simpler no-curriculum baseline.
+
+### 11.2 Checkpoints Used
+
+| Model | Date | Checkpoint | Iter | Validated |
+|-------|------|-----------|------|-----------|
+| A_simp | 26.06.20 | `ppo_pbrs_reward/26.06.20/runs/hpc_pbrs_simp_528env/agent/latest_checkpoint.pt` | 2400 | 2026-06-28 |
+| B_curr | 26.06.26 | `hpc_pbrs_curr_528env_fixed/agent/model_best.pt` | 2600 | 2026-06-28 |
+| E_asp_dpose | 26.06.26 | `hpc_pbrs_asp_dpose_528env/bob/model_best.pt` | — | 2026-06-26 |
+| F_asp_disc | 26.06.26 | `hpc_pbrs_asp_disc_528env/bob/model_best.pt` | — | 2026-06-26 |
+| G_tasp_dpose | 26.06.26 | `hpc_pbrs_tasp_dpose_528env/bob/model_best.pt` | — | 2026-06-26 |
+| H_tasp_disc | 26.06.26 | `hpc_pbrs_tasp_disc_528env/bob/model_best.pt` | — | 2026-06-26 |
+
+### 11.3 Validation Config Compatibility
+
+The current `validation_configs.py` (post-2026-06-26) has tests 1–10 as T-block R_*
+rotation scenes (`pos_rot`). The 26.06.20 validation used an earlier version where
+tests 1–10 were D_* disc scenes (`disc_pos`, `object_type=disc`). The 26.06.26/28
+campaign uses the current config exclusively. Legacy disc-protocol CSVs are preserved
+in `results/legacy/`.
+
+Two validation protocols exist:
+- **Isaac** (thesis gate): `pos_err < 0.05m AND rot_err < 0.2 rad` — `success` column
+  computed by `validate_push.py`/`validate_push_asp.py`
+- **gym-pusht** (coverage gate): `coverage >= 0.95` — `success` column computed by
+  `validate_pusht_gym.py`
+
+SR values between protocols are not directly comparable; raw error metrics (PosErr,
+RotErr) are.
+
+---
+
+## 12. Results Directory Structure <a name="results-directory"></a>
+
+All validation results consolidated to `/home/vladi/IsaacLab/master_isaac/results/`:
+
+```
+results/
+  SUMMARY.md              — Aggregate comparison table + findings
+  A_simp/                 — PBRS single-agent (all dates/protocols)
+    20_isaac_30t.csv      — Head-to-head: 26.06.20 ckpt on current 30 T-block
+    12_isaac_20t.csv      — 26.06.12: old 20 T-block scenes
+    20_disc_isaac.csv     — 26.06.20: old disc scenes (tests 1–10 = disc)
+    20_gympusht.csv       — 26.06.20: gym-pusht
+    26_gympusht.csv       — 26.06.26: gym-pusht
+    gym_gympusht.csv      — gym-pusht trained variant
+  B_curr/                 — PBRS + curriculum
+    28_isaac_30t.csv      — Head-to-head: 26.06.28 ckpt on current 30 T-block
+    12_isaac_20t.csv      — 26.06.12: old 20 T-block (broken trigger)
+    26_gympusht.csv       — 26.06.26: gym-pusht
+  C_asp/                  — PBRS + ASP (Alice/Bob)
+    gympusht.csv          — gym-pusht: 0% SR, avg 8.9 pushes
+    12_isaac_20t.csv      — 26.06.12: old 20 T-block
+  E_asp_dpose/            — ASP + SE(2) d_pose (T-block)
+    26_isaac.csv          — 26.06.26: 6.7% SR
+    20_isaac.csv          — 26.06.20: 0% SR (early checkpoint, it 2600)
+    gympusht.csv          — gym-pusht
+  F_asp_disc/             — ASP + d_pose (disc)
+    26_isaac.csv          — 26.06.26: 6.7% SR
+    20_isaac.csv          — 26.06.20: 0% SR (early checkpoint, it 2400)
+    gympusht.csv          — gym-pusht
+  G_tasp_dpose/           — TASP + d_pose (T-block)
+    26_isaac.csv          — 26.06.26: 16.7% SR — best ASP
+    20_isaac.csv          — 26.06.20: 0% SR (early checkpoint, it 1200)
+    gympusht.csv          — gym-pusht
+  H_tasp_disc/            — TASP + d_pose (disc)
+    26_isaac.csv          — 26.06.26: 10.0% SR
+    20_isaac.csv          — 26.06.20: 0% SR (early checkpoint, it 1200)
+    gympusht.csv          — gym-pusht
+  comparison/             — Cross-model comparison plots + per_test_comparison.txt
+```
+
+**Naming convention:** `{date-short}_{protocol}_{scenes-short}.csv` — e.g.
+`28_isaac_30t.csv` = 26.06.28, Isaac protocol, 30 T-block scenes.
+
+Models **not evaluated**: D (ASP-no-GE, excluded), SAC (training incomplete).

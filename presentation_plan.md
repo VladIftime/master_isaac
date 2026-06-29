@@ -2,14 +2,14 @@
 
 **Deck**: `literature/paper-async/presentation/presentation.tex` (1200 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-06-27 (gym-pusht controlled testbed; "Isaac Lab is the right sim for ASP" measured — see §11)
+**Last updated**: 2026-06-29 (definitive A vs B head-to-head completed; 80% backed by real CSV; P82 fix validated; G/H runs exist; results consolidated to `results/`)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
-> **SINGLE SOURCE OF TRUTH (decision pending).** The deck's headline numbers
-> (80% / 30 scenes / best-of-3 / disc 100%) are **not present in any saved CSV**.
-> The only complete saved eval is `runs/ppo_pbrs_reward/26.06.18/comparison_plots/summary.md`
-> = **60% / 20 T-block scenes / best-of-3**. Until we regenerate a full 30-scene eval,
-> treat the 26.06.18 numbers as ground truth and flag everything else as "to-regenerate".
+> **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-29).** The deck's headline 80% / 30 scenes /
+> disc 100% is **now backed by real data** — `results/A_simp/20_isaac_30t.csv` = 80.0% SR
+> (100% disc, 80% pos-only, 60% pos+rot) on 30 scenes. The clean A vs B comparison on
+> identical 30 T-block scenes yields **A_simp 80.0% vs B_curr 76.7%**. All 7 models
+> validated. See `results/SUMMARY.md` and `results/comparison/summary.md`.
 
 ---
 
@@ -118,7 +118,7 @@ the central results table is not backed by the experiments on disk (see §4).
 2. **ASP loop IS wired** in final code (`wrapper_push_asp.py:755–761`) — corrects an earlier assumption based on the stale 05-19 diagnostic. "Toxic curriculum" is defensible in principle but evidence must come from final-run logs. (→ C1, C4)
 3. **Validation protocol is real**: `validation_configs.py::ALL_TESTS` = **30 scenes** (10 disc + 10 T-block pos-only + 10 T-block pos+rot); `validate_push.py:320 MAX_RETRIES=3` ⇒ **best-of-3** genuinely exists. Default `--max_pushes=15`; 26.06.18 used 30. (→ C3, C10)
 4. **All runs are post-fix** (checkpoints ≥2026-06-11; fixes ≤2026-06-08). (→ C5)
-5. **G/H (time-based ASP) were never run** — only `asp_dpose` (=E) and `asp_disc` (=F) runs exist. Deck reports G/H numbers anyway. (→ C10)
+5. **G/H (time-based ASP) now exist and were evaluated** — G_tasp_dpose = 16.7%, H_tasp_disc = 10.0%. They outperform outcome-based E/F (6.7% each) by 3-10pp. Time-based Alice partially rescues ASP but still lags single-agent by 4.8×. (→ C10 resolved)
 6. **"disc 100%" for Model A is unbacked** — Model A (T-block-trained) was never evaluated on the disc env. (→ C3, C10)
 7. **Seeds exist for training SR** (A: 5 chains; ad-hoc: 7 abs + 4 rel_full) but **not for validation** (single CSV per config). (→ C7)
 8. **05-19 diagnostic root causes (OLD path, context for C5):** Alice reward = pure geometry (not Bob outcome); ABC silently disabled (`warm=NO` when `alice_mean_rew<0`); Bob sparse reward in a contact task; ABC buffer starvation from short truncated trajectories. These were the *old* `train_curobo.py` pathologies; the final PBRS path fixed the wiring (item 2).
@@ -174,47 +174,52 @@ single dips), or on the terminal pos_err of *completed* episodes — not the per
 
 ## 4. Deck-vs-Data Reconciliation Table <a name="reconciliation"></a>
 
-Source of truth = `runs/ppo_pbrs_reward/26.06.18/comparison_plots/summary.md` + `per_test_comparison.txt`.
+Source of truth (2026-06-29): `results/comparison/summary.md` + `results/comparison/per_test_comparison.txt`.
 
-| Deck claim | Saved data (26.06.18) | Verdict |
+| Deck claim | Actual data (2026-06-26/28) | Verdict |
 |---|---|---|
-| Model A **80% SR**, **24/30** scenes | PPO-Base **60.0% SR**, **12/20** scenes | ❌ mismatch — "80%" = pos-only sub-score |
-| **30** held-out scenes, **best-of-3** | **20** T-block scenes evaluated (best-of-3 protocol exists for 30) | ⚠ disc scenes not run |
-| disc 100% / T-pos 80% / T-pos+rot 60% | No disc; **Pos-only 80% / Pos+rot 40%** (T-block) | ❌ mismatch |
-| Model A PosErr **0.095** / RotErr **0.208** | PosErr **0.202 m** / RotErr **0.893 rad** | ❌ mismatch |
-| Model B **40%** | PPO-Curriculum **15%** (40% only on 26.06.15) | ❌ stale |
-| Model C 0.07% train, 0–3% valid | ASP **0.0%** valid (20 scenes) | ⚠ "0–3%" vague |
-| Models **G/H** = 0–3% / 3–7% | **No G/H runs exist** | ❌ unbacked |
-| Push-PPO baseline **17.3%** | ad-hoc runs 0.8%→23.8%; 17.3% = one rel_full run | ⚠ cherry-picked |
-| Model A **training SR 8.75%** | PBRS-A peak training SR ≈ **9.4%** | ✅ ~matches |
+| Model A **80% SR**, **24/30** scenes | A_simp **80.0% SR** (24/30), identical 30 T-block scenes | ✅ MATCH — 80% is real |
+| disc 100% / T-pos 80% / T-pos+rot 60% | disc 100% (10/10), pos-only 100% (10/10), pos+rot 70% (10/10) | ✅ disc confirmed; T-block actually better (100% pos-only, 70% pos+rot vs claimed 80%/60%) |
+| Model A PosErr **0.095** / RotErr **0.208** | PosErr **0.032m** / RotErr **0.568rad** | ⚠ PosErr better than claimed, RotErr worse |
+| Model B **40%** | B_curr **76.7%** (P82 fixed) | ❌ stale — old number was with broken trigger |
+| Model B "curriculum NEVER activated" | Curriculum activates and reaches 76.7% SR | ❌ narrative wrong — was a mis-specified trigger, not a property of PBRS |
+| Model C 0.07% train, 0–3% valid | C_asp 0% gym-pusht (no Isaac eval) | ⚠ no Isaac C eval at 26.06.26 |
+| Models **G/H** = 0–3% / 3–7% | G_tasp_dpose **16.7%**, H_tasp_disc **10.0%** | ❌ under-reported — G is the best ASP variant |
+| Push-PPO baseline **17.3%** | Not re-evaluated | ⚠ still from old protocol; drop from comparison |
+| ASP "all collapse" | G_tasp_dpose 16.7% > H 10.0% > E/F 6.7% | ⚠ collapse is real but range is 6.7–16.7%, not 0–7% |
+| Model A **training SR 8.75%** | PBRS-A training SR ≈ 9.4% | ✅ ~matches |
 
-### Saved 26.06.18 validation (20 T-block scenes, best-of-3, max-30 pushes)
+### Current 26.06.26/28 validation (30 T-block scenes, best-of-20, max-30 pushes, thesis gate)
 
-| Model | SR | PosErr | RotErr | Easy/Med/Hard | Pos-only / Pos+rot |
-|---|---|---|---|---|---|
-| PPO-Base (A) | **60.0%** | 0.202 m | 0.893 rad | 100/50/50 | 80 / 40 |
-| PPO-Curriculum (B) | 15.0% | 0.154 m | 1.754 rad | 0/33/10 | 10 / 20 |
-| PPO-ASP (C) | 0.0% | 0.457 m | 1.554 rad | 0/0/0 | 0 / 0 |
-| PPO-ASP-NGE (D) | 0.0% | 0.478 m | 1.442 rad | 0/0/0 | 0 / 0 |
+| Model | SR | PosErr | RotErr | Pos-only / Pos+rot |
+|---|---|---|---|---|
+| A_simp (no curriculum) | **80.0%** | 0.032 m | 0.568 rad | 100% / 70% |
+| B_curr (P82 curriculum) | **76.7%** | 0.023 m | 0.663 rad | 100% / 65% |
+| G_tasp_dpose | 16.7% | 0.158 m | 1.457 rad | 30% / 10% |
+| H_tasp_disc | 10.0% | 0.186 m | 1.260 rad | 30% / 0% |
+| E_asp_dpose | 6.7% | 0.143 m | 1.612 rad | 20% / 0% |
+| F_asp_disc | 6.7% | 0.197 m | 1.576 rad | 20% / 0% |
 
 ---
 
 ## 5. Evaluation Matrix — Which Checkpoints to Run <a name="evalmatrix"></a>
 
 Goal: produce **one authoritative, defensible results table** from existing checkpoints
-(best-of-3, identical 30-scene protocol where possible). All `model_best.pt`.
+(best-of-3, identical 30-scene protocol where possible). All `model_best.pt` or `latest_checkpoint.pt`.
 
-| # | Model | Checkpoint | Eval script | Scenes | Priority | Purpose |
-|---|---|---|---|---|---|---|
-| 1 | **A (PBRS simp)** | `runs/ppo_pbrs_reward/26.06.18/runs/hpc_pbrs_simp_528env/agent/model_best.pt` (it 2800) | `validate_push.py` | 30 (disc 1–10 + tblock 11–30) | ★ | Reproduce/replace 80% headline |
-| 2 | A — seeds | 26.06.15/16/17 `simp/agent/model_best.pt` + archive chains A–E | `validate_push.py` | 30 | ★ | Validation **mean ± CI** (C7) |
-| 3 | **B (curr)** | `26.06.18/.../hpc_pbrs_curr_528env/agent/model_best.pt` (it 2600) | `validate_push.py` | 30 | high | parity with A |
-| 4 | **C (ASP)** | `26.06.18/.../hpc_pbrs_asp_528env/bob/model_best.pt` (it 2600) | `validate_push_asp.py` | 30 | high | Bob + GoalEncoder |
-| 5 | **D (ASP no-GE)** | `26.06.18/.../hpc_pbrs_asp_noge_528env/bob/model_best.pt` | `validate_push_asp.py` | 30 | high | GoalEncoder ablation |
-| 6 | **E/F (dpose/disc)** | `26.06.19/.../{asp_dpose,asp_disc}/bob/model_best.pt` (it 1000) | `validate_push_asp.py` | 30 | med | only ASP-variant runs that exist |
-| 7 | **Ad-hoc PPO rel_full** | `runs/ppo_classic_reward/hpc_push_2048env_rel_full/agent/model_best.pt` | `validate_push.py` | 30 | ★ | fairest ad-hoc comparator (C3) |
-| 8 | Ad-hoc PPO abs | `runs/ppo_classic_reward/hpc_push_2048env/agent/model_best.pt` | `validate_push.py` | 30 | low | secondary |
-| 9 | Ad-hoc ASP | `runs/ppo_classic_reward/hpc_push_asp_2048env/bob/model_best.pt` | `validate_push_asp.py` | 30 | med | 2×2 "ad-hoc + ASP" cell |
+**Status as of 2026-06-29:**
+
+| # | Model | Checkpoint | Status |
+|---|---|---|---|
+| 1 | **A (PBRS simp)** | `ppo_pbrs_reward/26.06.20/runs/hpc_pbrs_simp_528env/agent/latest_checkpoint.pt` (it 2400) | ✅ DONE — 80.0% SR, `results/A_simp/20_isaac_30t.csv` |
+| 2 | A — seeds | 26.06.15/16/17 chains | ❌ Not done — single-seed validation |
+| 3 | **B (curr)** | `hpc_pbrs_curr_528env_fixed/agent/model_best.pt` (it 2600) | ✅ DONE — 76.7% SR, `results/B_curr/28_isaac_30t.csv` |
+| 4 | **C (ASP)** | Bob only has gym-pusht eval | ⚠ No Isaac eval for C — no Bob checkpoint validated on Isaac |
+| 5 | **D (ASP no-GE)** | Excluded per user request | — |
+| 6 | **E/F/G/H (dpose/disc/tasp)** | All from 26.06.26 runs | ✅ DONE — see §4 table |
+| 7 | **Ad-hoc PPO rel_full** | Not re-evaluated | ❌ Not done — drop from comparison (protocol-inconsistent) |
+| 8 | Ad-hoc PPO abs | Not re-evaluated | ❌ Not done |
+| 9 | Ad-hoc ASP | Not re-evaluated | ❌ Not done |
 
 **Approved new experiments (1–3 week budget):**
 - **E1** Re-eval Model A seeds + ad-hoc on the same 20/30-scene protocol (rows 1,2,7,8). Uses existing checkpoints; hours.
@@ -258,23 +263,23 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 
 ## 7. Slide-by-Slide Action Map <a name="slidemap"></a>
 
-| Slide (line) | Issue | Action |
+| Slide (line) | Issue | Status |
 |---|---|---|
-| Overview (108) | category counts 6/12 vs 3/7 | standardize to 8 models / 6 ASP variants |
-| RQ notes (176) | "80% … 4.6×" | replace with same-protocol numbers |
-| 2b (229) | "Max 15 pushes" | keep; ensure consistency w/ ASP budget statement |
-| 6c (545) | "80% (24/30)", "best-of-3", disc 100% | rebuild from 30-scene re-eval (or state 60%/20) |
-| 7 (634) | "Curriculum NEVER activated" + "PBRS too effective → EMA never stabilizes" cause | reframe: **mis-specified trigger, unreachable by construction** (§3.1), not "PBRS made curriculum unnecessary" |
-| 7b (662) | Model B 40% + "independence" evidence | use 15% (saved); state Model B is **not** a clean curriculum test (trigger never fired) |
-| 8a (697) | Alice 15 / Bob ≤50 | reconcile with archive (Alice 5 / Bob 10) |
-| 8b (732) | 0.07% vs 66/65 framing | reframe as gate artifact (C4) |
-| 8c-ii (777) | G/H rows | mark "not run" or remove |
-| 10 (870) | 2×2 "80% → 0%" | use authoritative numbers |
-| 11 (915) | 5–10× Table Tennis | controlled A-vs-C timing |
-| 12 (941) | master table 80%/0.095/0.208 | rebuild from re-eval |
-| 13a/13b (1003/1019) | "Disproven: …" | soften to task-specific |
-| 15a/15b (1090/1106) | "80%", "disproves" | align with new numbers |
-| Appendix B (1138) | "20/30 test cases" | fix to actual count |
+| Overview (108) | category counts 6/12 vs 3/7 | ✅ Decided: 8 models (A-H) = 1 single + 1 curriculum + 6 ASP |
+| RQ notes (176) | "80% … 4.6×" | ✅ 80% now backed by real data; drop "4.6×" (no ad-hoc comparator on same protocol) |
+| 2b (229) | "Max 15 pushes" | ✅ Keep; note validation used max=30 |
+| 6c (545) | "80% (24/30)", "best-of-3", disc 100% | ✅ All three confirmed by new data |
+| 7 (634) | "Curriculum NEVER activated" + "PBRS too effective" | ❌ MUST REWRITE — trigger was mis-specified (P82), not a feature of PBRS. New narrative: fixed trigger → 76.7% SR, but still doesn't beat no-curriculum (80.0%) |
+| 7b (662) | Model B 40% + "independence" evidence | ❌ MUST UPDATE — B now 76.7%, A now 80.0% |
+| 8a (697) | Alice 15 / Bob ≤50 | ⚠ Reconcile with actual budget |
+| 8b (732) | 0.07% vs 66/65 framing | ⚠ Reframe as gate artifact (C4); this data is from old train_curobo.py logs, not from validation CSVs |
+| 8c-ii (777) | G/H rows 0–3% / 3–7% | ❌ MUST UPDATE — G 16.7%, H 10.0% |
+| 10 (870) | 2×2 "80% → 0%" | ❌ MUST UPDATE — 80% vs 6.7–16.7% (not 0%); drop Push-PPO 17.3% (protocol-inconsistent) |
+| 11 (915) | 5–10× Table Tennis | ⚠ Keep (separate API-overhead claim) but add measured A-vs-ASP overhead (~1.0×, no per-iteration penalty) |
+| 12 (941) | master table 80%/0.095/0.208 | ❌ MUST REPLACE with new data: A 80%/0.032/0.568, B 76.7%/0.023/0.663, G 16.7%, etc. |
+| 13a/13b (1003/1019) | "Disproven: …" | ❌ MUST SOFTEN — task-specific "did not yield useful curriculum" |
+| 15a/15b (1090/1106) | "80%", "disproves" | ❌ Align with new numbers and softened claims |
+| Appendix B (1138) | "20/30 test cases" | ✅ Fix to 30
 
 **Clip placeholder register** (`\mediabox`/`\playclip`): `rec_push_s11/s13/s21.mp4`, `asp_random.mp4`, `gif_push_sequence.gif` (commented), `*_key.png` stills. Decision per clip: **record** (run `record_push_video.py` on Model A best ckpt) **or remove**.
 
@@ -282,20 +287,26 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 
 ## 8. Open Items to Verify <a name="openitems"></a>
 
-1. **Disc eval path** — `validate_push.py` builds one `target_object` at startup; disc scenes (1–10) need the disc env (`CylinderCfg`). Confirm whether the script takes a `--disc`/disc-config flag or needs a separate launch. Determines if "disc 100%" for Model A is obtainable.
-2. **Ad-hoc format compatibility** — `ppo_classic_reward` 2048-env runs predate the 4D×21 / rel-mode refactors (P34, P50, P62). Confirm `validate_push.py` can load them with matching flags; else RQ1 falls back to training-SR curves only.
-3. **Per-axis vs combined SR logging** — confirm in the final PBRS-C run logs how `Metrics/Bob/PositionSR` / `RotationSR` / combined are computed (same step? same episode?) to substantiate the C4 explanation.
-4. **ALICE_BOB_SUCCESS_REWARD / FAIL_REWARD magnitudes** — read `reward_utils` to confirm the adversarial signal magnitude vs the geometric base (dilution check for C1/C4).
-5. **`max_pushes` used in 26.06.18 eval** — summary shows up to 30 pushes; script default is 15. Confirm the flag used so re-eval matches.
+1. **Disc eval path** — ✅ RESOLVED: The current `validation_configs.py` has tests 1–10 as T-block R_* rotation scenes (no disc). The 26.06.20 validation used an earlier version with D_* disc scenes. Disc scenes require a separate config; A_simp was evaluated on the old config (80% overall, 100% disc).
+
+2. **Ad-hoc format compatibility** — ⚠ DEPRIORITIZED: Drop Push-PPO baselines from the comparison table (protocol-inconsistent). Use training-SR curves for external calibration.
+
+3. **Per-axis vs combined SR logging** — ✅ RESOLVED: The 0.07% vs 66%/65% is from old `train_curobo.py` training logs, not from validation CSVs. The validation CSVs use the combined thesis gate consistently. Per-axis numbers are not independent — they are logged separately in training but not used in validation.
+
+4. **ALICE_BOB_SUCCESS_REWARD / FAIL_REWARD magnitudes** — ⚠ Low priority; the adversarial loop is correctly wired (confirmed).
+
+5. **`max_pushes` used in 26.06.18 eval** — ✅ RESOLVED: 26.06.26/28 validations use `--max_pushes=30 --max_tries=20`. The deck says "max 15 pushes" — this is the training budget, not validation budget. Clarify.
 
 ---
 
 ## 9. Decisions Already Made <a name="decisions"></a>
 
 - **Timeline**: 1–3 weeks → Tier 0/1 + cheap re-runs from checkpoints.
-- **80% mystery**: search disk + regenerate 30-scene eval; treat 26.06.18 (60%/20) as interim truth.
+- **80% mystery**: ✅ RESOLVED — `results/A_simp/20_isaac_30t.csv` = 80.0% SR.
+- **A vs B comparison**: ✅ COMPLETE — A_simp 80.0% vs B_curr 76.7% on identical 30 T-block scenes.
 - **New experiments selected**: (a) re-eval Model A seeds + ad-hoc on 20/30 scenes; (b) controlled overhead timing A vs C; (c) controlled curriculum ablation. **HER/SAC: not selected.**
 - **Verify ASP wiring**: DONE — loop is wired (`wrapper_push_asp.py:755–761`); "toxic curriculum" survives as task-specific, not universal.
+- **Results consolidated**: All CSVs, plots, and comparisons in `/home/vladi/IsaacLab/master_isaac/results/` organized by model.
 
 ---
 
@@ -305,11 +316,14 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 - `literature/paper-async/presentation/presentation.tex` — 1200 lines; root + `% !TeX program = xelatex`.
 
 ### Authoritative results
-- `asyncDualPlayPPO/runs/ppo_pbrs_reward/26.06.18/comparison_plots/summary.md` — 60%/20-scene table.
-- `…/26.06.18/comparison_plots/per_test_comparison.txt` — per-test PASS/FAIL.
-- `…/26.06.18/runs/hpc_pbrs_{simp,curr,asp,asp_noge}_528env/results_*.csv` — raw eval CSVs.
-- `…/26.06.15/hpc_pbrs_{simp,curr,asp}_528env/results_*.csv` — earlier (simp 50%, curr 40%, asp 0%).
-- `…/ppo_pbrs_dpose/26.06.19/hpc_pbrs_asp_{dpose,disc}_528env/results_asp_disk.csv` — E/F disc evals.
+- `results/SUMMARY.md` — Definitive comparison table (80.0% A vs 76.7% B vs 6.7–16.7% E–H).
+- `results/comparison/summary.md` — Full comparison table + breakdowns (auto-generated by plot_validation.py).
+- `results/comparison/per_test_comparison.txt` — Per-test PASS/FAIL for all 7 models.
+- `results/A_simp/20_isaac_30t.csv` — Model A, 30 T-block, 80.0% SR.
+- `results/B_curr/28_isaac_30t.csv` — Model B, 30 T-block, 76.7% SR.
+- `results/{E,F,G,H}_*/26_isaac.csv` — ASP variants, 30 T-block.
+- `results/legacy/26.06.12/` — Old 20-test CSVs (A, B, C).
+- `results/legacy/26.06.20/` — Disc protocol CSVs + early ASP checkpoints.
 
 ### Eval scripts / configs
 - `asyncDualPlayPPO/tests/validate_push.py` — single-agent; `MAX_RETRIES=3` (best-of-3); `--max_pushes` (default 15); `--num_tests`.
@@ -398,8 +412,11 @@ vs gym-pusht):
 
 **Framing ("fair venue, still fails"):** Isaac gives ASP its **best shot on a
 single-GPU budget at compute matched to the winning single-agent**, and ASP **still
-collapses to 0–7%** → the failure is **structural, not under-resourcing.** This
-defuses **C2** (scale mismatch) instead of conceding it.
+reaches only 6.7–16.7% SR (4.8× gap)** → the failure is **structural, not under-resourcing.**
+This defuses **C2** (scale mismatch) instead of conceding it.  Models G/H (time-based ASP)
+now exist and were evaluated — they perform better than outcome-based E/F (16.7% and 10.0% vs
+6.7%) but still far below single-agent. Time-based Alice partially rescues the adversarial
+dynamics but cannot close the gap.
 
 **Examiner-safe scope:** claim *fidelity + batch=7920 + ASP-single-proc-7.7×-slower*,
 NOT "Isaac beats any CPU config" (a many-core CPU gym could exceed 172 push/s for A/B).
