@@ -2,7 +2,7 @@
 
 **Deck**: `literature/paper-async/presentation/presentation.tex` (1200 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-06-29 (definitive A vs B head-to-head completed; 80% backed by real CSV; P82 fix validated; G/H runs exist; results consolidated to `results/`)
+**Last updated**: 2026-06-29 (definitive A vs B completed; 80% backed by CSV; deck rebuilt — slides 8a split, T0.10 Isaac Lab slide added, s13→s14 clip fix, compile verified 40pp clean)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
 > **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-29).** The deck's headline 80% / 30 scenes /
@@ -269,19 +269,21 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 | RQ notes (176) | "80% … 4.6×" | ✅ 80% now backed by real data; drop "4.6×" (no ad-hoc comparator on same protocol) |
 | 2b (229) | "Max 15 pushes" | ✅ Keep; note validation used max=30 |
 | 6c (545) | "80% (24/30)", "best-of-3", disc 100% | ✅ All three confirmed by new data |
-| 7 (634) | "Curriculum NEVER activated" + "PBRS too effective" | ❌ MUST REWRITE — trigger was mis-specified (P82), not a feature of PBRS. New narrative: fixed trigger → 76.7% SR, but still doesn't beat no-curriculum (80.0%) |
-| 7b (662) | Model B 40% + "independence" evidence | ❌ MUST UPDATE — B now 76.7%, A now 80.0% |
-| 8a (697) | Alice 15 / Bob ≤50 | ⚠ Reconcile with actual budget |
-| 8b (732) | 0.07% vs 66/65 framing | ⚠ Reframe as gate artifact (C4); this data is from old train_curobo.py logs, not from validation CSVs |
-| 8c-ii (777) | G/H rows 0–3% / 3–7% | ❌ MUST UPDATE — G 16.7%, H 10.0% |
-| 10 (870) | 2×2 "80% → 0%" | ❌ MUST UPDATE — 80% vs 6.7–16.7% (not 0%); drop Push-PPO 17.3% (protocol-inconsistent) |
-| 11 (915) | 5–10× Table Tennis | ⚠ Keep (separate API-overhead claim) but add measured A-vs-ASP overhead (~1.0×, no per-iteration penalty) |
-| 12 (941) | master table 80%/0.095/0.208 | ❌ MUST REPLACE with new data: A 80%/0.032/0.568, B 76.7%/0.023/0.663, G 16.7%, etc. |
-| 13a/13b (1003/1019) | "Disproven: …" | ❌ MUST SOFTEN — task-specific "did not yield useful curriculum" |
-| 15a/15b (1090/1106) | "80%", "disproves" | ❌ Align with new numbers and softened claims |
-| Appendix B (1138) | "20/30 test cases" | ✅ Fix to 30
+| 7 (634) | "Curriculum NEVER activated" + "PBRS too effective" | ✅ REWRITTEN — P82 trigger explained; 76.7% result |
+| 7b (662) | Model B 40% + "independence" evidence | ✅ UPDATED — A 80.0% vs B 76.7% comparison table |
+| 8a (697) | Too busy; diagram cramped | ✅ SPLIT — architecture text own slide; diagram+clip separate |
+| 8b (732) | 0.07% vs 66/65 framing | ✅ Reframed as gate artifact (C4) |
+| 8c-ii (777) | G/H rows 0–3% / 3–7% | ✅ UPDATED — G 16.7%, H 10.0% |
+| 10 (870) | 2×2 "80% → 0%" | ✅ UPDATED — real numbers, C6 caveat added |
+| 11 (915) | 5–10× Table Tennis | ✅ Kept; added A-vs-ASP ~1.0× measurement |
+| 11b (NEW) | Missing Isaac Lab slide (T0.10) | ✅ ADDED — throughput table + 3 pillars |
+| 12 (941) | master table 80%/0.095/0.208 | ✅ REPLACED with new data |
+| 13a/13b (1003/1019) | "Disproven: …" | ✅ SOFTENED — "What We Found — Theory vs Practice" |
+| 15a/15b (1090/1106) | "80%", "disproves" | ✅ Aligned with new numbers |
+| Appendix B (1138) | "20/30 test cases" | ✅ Fixed to 30 |
+| 6c-i2 (513) | s13 clip missing | ✅ FIXED — replaced with s14 (exists) |
 
-**Clip placeholder register** (`\mediabox`/`\playclip`): `rec_push_s11/s13/s21.mp4`, `asp_random.mp4`, `gif_push_sequence.gif` (commented), `*_key.png` stills. Decision per clip: **record** (run `record_push_video.py` on Model A best ckpt) **or remove**.
+**Clip status:** `rec_push_s11/s14/s21` ✅ exist; `asp_random` ✅ exists; `s13` → `s14` (fixed); `gif_push_sequence` still commented out.
 
 ---
 
@@ -354,12 +356,15 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 
 ## Next Actions (suggested order)
 
-1. Verify §8 open items (disc flag, ad-hoc compat, logging defs, reward magnitudes, max_pushes).
-2. Write a batch eval script over the §5 matrix → produce one authoritative `results/*.csv`.
-3. Extract A-vs-C overhead timing from slurm logs (C9).
-4. Rebuild deck tables (Slides 6c, 8c, 10, 12, 15) + soften claims (Slides 13) from new numbers.
-5. Density pass: cut to ~18–20 slides; record or remove clip placeholders.
-6. (If time) run E3 controlled curriculum ablation.
+1. ✅ Verify §8 items — resolved.
+2. ✅ Validation campaign complete — 7 models; `results_validation/clean/results/`.
+3. ✅ A-vs-C overhead measured (~1.0× in Isaac; 5–10× is Manager API, not ASP).
+4. ✅ Deck tables rebuilt; claims softened; Slide 8a split; Slide 11b added; s13→s14 fix.
+5. ⚠ Density pass — ~28 slides; could cut to ~20. Clips: s11/s14/s21 ✅; `asp_random` ✅.
+6. ❌ E3 controlled curriculum ablation — not done.
+7. ❌ Scripted-push reference baseline (§11.7) — not implemented for either sim.
+8. ❌ `tests/validate_push_pusht.py` (§11) — not implemented.
+9. ⚠ Training curves — files exist (today's timestamp) but not independently verified against new training logs.
 
 ---
 

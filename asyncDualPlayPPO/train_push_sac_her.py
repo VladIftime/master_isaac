@@ -57,7 +57,11 @@ class LatestCheckpointCallback(BaseCallback):
         if self._last_save is None:
             self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
-            self.model.save(self.save_path)
+            try:
+                self.model.save(self.save_path, include=["replay_buffer"])
+            except Exception:
+                print(f"[CKPT] save failed at step {self.num_timesteps} "
+                      f"(cloudpickle/USD stage issue) — continuing.", flush=True)
             self._last_save = self.num_timesteps
         return True
 
