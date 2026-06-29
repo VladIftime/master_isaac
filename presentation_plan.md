@@ -2,7 +2,7 @@
 
 **Deck**: `literature/paper-async/presentation/presentation.tex` (1200 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-06-29 (definitive A vs B completed; 80% backed by CSV; deck rebuilt — slides 8a split, T0.10 Isaac Lab slide added, s13→s14 clip fix, compile verified 40pp clean)
+**Last updated**: 2026-06-29 (TIER 0/1 complete: error bars, confound disaggregation, C/D footnote, independence softening; 4 new CI plots generated; Model I implemented — full symmetric Sukhbaatar reward; deck rebuilds to 42pp xelatex-clean)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
 > **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-29).** The deck's headline 80% / 30 scenes /
@@ -217,7 +217,8 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 | 4 | **C (ASP)** | Bob only has gym-pusht eval | ⚠ No Isaac eval for C — no Bob checkpoint validated on Isaac |
 | 5 | **D (ASP no-GE)** | Excluded per user request | — |
 | 6 | **E/F/G/H (dpose/disc/tasp)** | All from 26.06.26 runs | ✅ DONE — see §4 table |
-| 7 | **Ad-hoc PPO rel_full** | Not re-evaluated | ❌ Not done — drop from comparison (protocol-inconsistent) |
+| 7 | **I (Model G + Bob penalty)** | `train_i_tasp_dpose_bobpen.py` (1508 lines) | ✅ IMPLEMENTED — not yet trained/validated |
+| 8 | **Ad-hoc PPO rel_full** | Not re-evaluated | ❌ Not done — drop from comparison (protocol-inconsistent) |
 | 8 | Ad-hoc PPO abs | Not re-evaluated | ❌ Not done |
 | 9 | Ad-hoc ASP | Not re-evaluated | ❌ Not done |
 
@@ -264,24 +265,26 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 ## 7. Slide-by-Slide Action Map <a name="slidemap"></a>
 
 | Slide (line) | Issue | Status |
-|---|---|---|
+|---|---|---|---|
 | Overview (108) | category counts 6/12 vs 3/7 | ✅ Decided: 8 models (A-H) = 1 single + 1 curriculum + 6 ASP |
 | RQ notes (176) | "80% … 4.6×" | ✅ 80% now backed by real data; drop "4.6×" (no ad-hoc comparator on same protocol) |
 | 2b (229) | "Max 15 pushes" | ✅ Keep; note validation used max=30 |
 | 6c (545) | "80% (24/30)", "best-of-3", disc 100% | ✅ All three confirmed by new data |
+| 6c-ii (546) | "Validation Breakdown" — Model A only, no error bars | ✅ REDONE — multi-model comparison with error bars from best-of-20 trial data; 4 new CI plots |
 | 7 (634) | "Curriculum NEVER activated" + "PBRS too effective" | ✅ REWRITTEN — P82 trigger explained; 76.7% result |
-| 7b (662) | Model B 40% + "independence" evidence | ✅ UPDATED — A 80.0% vs B 76.7% comparison table |
+| 7b (662) | Model B 40% + "independence" evidence, no CIs | ✅ UPDATED — A 80.0% vs B 76.7% + CI note (3.3pp not significant) |
 | 8a (697) | Too busy; diagram cramped | ✅ SPLIT — architecture text own slide; diagram+clip separate |
 | 8b (732) | 0.07% vs 66/65 framing | ✅ Reframed as gate artifact (C4) |
-| 8c-ii (777) | G/H rows 0–3% / 3–7% | ✅ UPDATED — G 16.7%, H 10.0% |
-| 10 (870) | 2×2 "80% → 0%" | ✅ UPDATED — real numbers, C6 caveat added |
+| 8c-ii (777) | G/H rows 0–3% / 3–7%, C/D unmentioned | ✅ UPDATED — G 16.7%, H 10.0%; C/D exclusion footnote added |
+| 9c (844, NEW) | C6: confounded ASP ablation not addressed | ✅ ADDED — disaggregation table showing 7 axes of variation; G/H partial control noted |
+| 10 (870) | 2×2 "80% → 0%", C6 not discussed | ✅ UPDATED — real numbers, statistical significance noted, C6 caveat discussed |
 | 11 (915) | 5–10× Table Tennis | ✅ Kept; added A-vs-ASP ~1.0× measurement |
 | 11b (NEW) | Missing Isaac Lab slide (T0.10) | ✅ ADDED — throughput table + 3 pillars |
-| 12 (941) | master table 80%/0.095/0.208 | ✅ REPLACED with new data |
+| 12 (941) | master table 80%/0.095/0.208, no CIs | ✅ REPLACED — error-bar plot + CI summary table; C/D footnote |
 | 13a/13b (1003/1019) | "Disproven: …" | ✅ SOFTENED — "What We Found — Theory vs Practice" |
 | 15a/15b (1090/1106) | "80%", "disproves" | ✅ Aligned with new numbers |
 | Appendix B (1138) | "20/30 test cases" | ✅ Fixed to 30 |
-| 6c-i2 (513) | s13 clip missing | ✅ FIXED — replaced with s14 (exists) |
+| Appendix G (NEW) | No per-test error breakdown | ✅ ADDED — `val_multi_error_bars.png` with A vs B head-to-head + all 6 models
 
 **Clip status:** `rec_push_s11/s14/s21` ✅ exist; `asp_random` ✅ exists; `s13` → `s14` (fixed); `gif_push_sequence` still commented out.
 
@@ -309,6 +312,7 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 - **New experiments selected**: (a) re-eval Model A seeds + ad-hoc on 20/30 scenes; (b) controlled overhead timing A vs C; (c) controlled curriculum ablation. **HER/SAC: not selected.**
 - **Verify ASP wiring**: DONE — loop is wired (`wrapper_push_asp.py:755–761`); "toxic curriculum" survives as task-specific, not universal.
 - **Results consolidated**: All CSVs, plots, and comparisons in `/home/vladi/IsaacLab/master_isaac/results/` organized by model.
+- **Model I implemented**: `train_i_tasp_dpose_bobpen.py` (1508 lines) + `hpc/train_i_tasp_dpose_bobpen.slurm` (128 lines). Forked from Model G with Bob time penalty `R_B += -gamma_sp * t_B` — full symmetric Sukhbaatar reward. Not yet trained.
 
 ---
 
@@ -360,11 +364,17 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 2. ✅ Validation campaign complete — 7 models; `results_validation/clean/results/`.
 3. ✅ A-vs-C overhead measured (~1.0× in Isaac; 5–10× is Manager API, not ASP).
 4. ✅ Deck tables rebuilt; claims softened; Slide 8a split; Slide 11b added; s13→s14 fix.
-5. ⚠ Density pass — ~28 slides; could cut to ~20. Clips: s11/s14/s21 ✅; `asp_random` ✅.
-6. ❌ E3 controlled curriculum ablation — not done.
-7. ❌ Scripted-push reference baseline (§11.7) — not implemented for either sim.
-8. ❌ `tests/validate_push_pusht.py` (§11) — not implemented.
-9. ⚠ Training curves — files exist (today's timestamp) but not independently verified against new training logs.
+5. ✅ Error bars added — 4 new CI plots from best-of-20 trial data; `plot_comparison_with_cis.py`.
+6. ✅ Confound disaggregation — Slide 9c added; independence claim softened with C6 caveat.
+7. ✅ C/D exclusion footnoted — Slide 8c-ii + Slide 12.
+8. ✅ Deck compiles cleanly — 42 pages, xelatex, no errors.
+9. ⚠ Density pass — ~28 slides; could cut to ~20.
+10. ❌ E3 controlled curriculum ablation — not done.
+11. ❌ Scripted-push reference baseline (§11.7) — not implemented for either sim.
+12. ❌ `tests/validate_push_pusht.py` (§11) — not implemented.
+13. ⚠ Training curves — files exist (today's timestamp) but not independently verified against new training logs.
+14. ❌ C_asp Isaac 30-scene validation — mark as TODO in `implementations.md` and presentation.
+15. ❌ Model I training — implemented but not yet run on HPC.
 
 ---
 

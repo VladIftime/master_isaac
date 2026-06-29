@@ -415,6 +415,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     args = parser.parse_args()
 
+    chkpt_run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.chkpt)))
+    if args.csv is None:
+        args.csv = os.path.join(chkpt_run_dir, "validation_results_pusht.csv")
+    elif not os.path.isabs(args.csv):
+        args.csv = os.path.join(chkpt_run_dir, args.csv)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[Setup] Device: {device}")
 
@@ -760,6 +766,19 @@ def main():
                 w.writerow([r.test_index, r.test_name, r.test_type, int(r.success),
                              r.pushes_used, r.final_pos_error, r.final_rot_error, r.area_coverage])
         print(f"\n[CSV] Saved: {args.csv}")
+
+    if args.csv and results:
+        try:
+            from asyncDualPlayPPO.tests.plot_validation import generate_single_run_plot
+            plot_data = [{"test_index": r.test_index, "test_name": r.test_name,
+                          "success": r.success, "final_pos_error": r.final_pos_error,
+                          "final_rot_error": r.final_rot_error} for r in results]
+            plot_path = os.path.splitext(args.csv)[0] + ".png"
+            generate_single_run_plot(plot_data, test_cfgs, plot_path,
+                                    rot_threshold_rad=args.rot_threshold,
+                                    policy_label=f"gym-pusht {args.model_type.upper()}")
+        except Exception as _e:
+            print(f"[WARN] Plot generation failed: {_e}")
 
     env.close()
 

@@ -58,10 +58,9 @@ class LatestCheckpointCallback(BaseCallback):
             self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
             try:
-                self.model.save(self.save_path, include=["replay_buffer"])
-            except Exception:
-                print(f"[CKPT] save failed at step {self.num_timesteps} "
-                      f"(cloudpickle/USD stage issue) — continuing.", flush=True)
+                self.model.save(self.save_path)
+            except Exception as e:
+                print(f"[CKPT] save failed at step {self.num_timesteps}: {e} — continuing.", flush=True)
             self._last_save = self.num_timesteps
         return True
 
@@ -117,7 +116,6 @@ def main():
             replay_buffer_kwargs=dict(
                 n_sampled_goal=4,
                 goal_selection_strategy="future",
-                env=env_wrapped,
             ),
             policy_kwargs={
                 "net_arch": [256, 256],
@@ -145,6 +143,17 @@ def main():
         save_path=os.path.join(log_dir, "latest_checkpoint"),
     )
 
+    print(f"[TEST] Dry-run model.save() to verify checkpoint path is writable...")
+    _test_path = os.path.join(log_dir, "_save_test")
+    try:
+        model.save(_test_path)
+        print(f"[TEST] Save OK — {_test_path}.zip created ({os.path.getsize(_test_path + '.zip')} bytes)")
+        os.remove(_test_path + ".zip")
+    except Exception as e:
+        print(f"[FATAL] model.save() failed before any training: {e}")
+        env.close()
+        sys.exit(1)
+
     print(f"[INFO] Total timesteps: {total_timesteps} "
           f"({args_cli.max_iterations} iters x {cfg.scene.num_envs} envs)")
     print(f"[INFO] Checkpoint interval: {ckpt_interval} timesteps")
@@ -161,6 +170,7 @@ def main():
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _save_on_signal)
+    signal.signal(signal.SIGUSR1, _save_on_signal)
 
     try:
         model.learn(

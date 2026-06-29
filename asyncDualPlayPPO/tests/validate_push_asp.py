@@ -7,10 +7,20 @@ objects in the same scene (30 tests: 10 disc + 10 pos-only + 10 pos+rot).
 Alice is optionally loaded for reference.  Visual markers, airborne
 detection, and per-push logging.
 
+d_pose observation format is auto-detected from the checkpoint path (any
+path containing "dpose" enables d_pose mode).  Use --dpose-obs to force it
+or --char-length / --dpose-threshold to override defaults.
+
 Usage:
+  # Standard ASP:
   python -m asyncDualPlayPPO.tests.validate_push_asp \
       --chkpt_bob runs/hpc_pbrs_asp_528env/bob/model_best.pt \
       --num_tests 30 --headless --csv results_asp.csv
+
+  # d_pose ASP (auto-detected from path):
+  python -m asyncDualPlayPPO.tests.validate_push_asp \
+      --chkpt_bob runs/hpc_pbrs_asp_dpose_528env/bob/model_best.pt \
+      --num_tests 30 --headless --csv results_asp_dpose.csv
 """
 
 import argparse
@@ -103,8 +113,18 @@ def main():
     parser.add_argument("--rot_threshold", type=float, default=0.2,
                         help="Rotation success threshold in radians (default 0.2)")
     parser.add_argument("--csv", type=str, default=None, help="Save results to CSV file")
+    parser.add_argument("--dpose-obs", action="store_true",
+                        help="Use d_pose observations (for dpose-trained models)")
+    parser.add_argument("--char-length", type=float, default=0.07,
+                        help="SE(2) characteristic length L for d_pose (default 0.07)")
+    parser.add_argument("--dpose-threshold", type=float, default=0.055,
+                        help="d_pose success threshold in metres (default 0.055)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+
+    if not args.dpose_obs and "dpose" in os.path.abspath(args.chkpt_bob).lower():
+        args.dpose_obs = True
+        print("[Detect] Auto-enabled --dpose-obs from checkpoint path")
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
@@ -234,7 +254,12 @@ def main():
 
     env = PushASPEnvWrapper(
         env=base_env, alice_pushes=5, bob_pushes=args.max_pushes,
-        max_goals_per_episode=1, num_objects=1, rel_obs=True, device=device,
+        max_goals_per_episode=1, num_objects=1,
+        rel_obs=not args.dpose_obs,
+        dpose_obs=args.dpose_obs,
+        char_length=args.char_length,
+        dpose_threshold=args.dpose_threshold,
+        device=device,
     )
 
     # ── Visual markers ─────────────────────────────────────────────────────────
@@ -440,7 +465,9 @@ def main():
     else:
         alice_ppo = None
 
-    print(f"[Validate] Mode: rel_obs=True, GoalEncoder={'ON' if _has_goal_encoder else 'OFF (Model D)'}, "
+    _obs_tag = f"d_pose L={args.char_length:.3f} thr={args.dpose_threshold:.3f}" if args.dpose_obs else \
+               ("rel_obs" if args.rel_obs else "absolute")
+    print(f"[Validate] Mode: {_obs_tag}, GoalEncoder={'ON' if _has_goal_encoder else 'OFF (Model D)'}, "
           f"rot_threshold={args.rot_threshold:.3f} rad, max_pushes={args.max_pushes}")
 
     # ── Init ──────────────────────────────────────────────────────────────────
@@ -513,7 +540,10 @@ def main():
             env.episode_manager.completion_given[:] = False
 
             env._update_goal_in_extras()
-            full_obs = _build_obs(_obj_type)
+            if _obj_type == "tblock":
+                full_obs = env._get_push_obs()
+            else:
+                full_obs = _build_obs(_obj_type)
             bob_obs = full_obs.clone()
 
             _init_obj_pos = full_obs[0, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 3]
@@ -547,9 +577,8 @@ def main():
             for push_i in range(args.max_pushes):
                 with torch.no_grad():
                     h_in = (bob_hidden[0], bob_hidden[1])
-                    (b_acts, _, _, _, _, new_bh) = bob_ppo.actor_critic.act_with_hidden(
-                        bob_obs, None, h_in,
-                    )
+                    raw_logits, new_bh = bob_ppo.actor_critic._actor_forward(bob_obs, h_in)
+                    b_acts = raw_logits.view(1, num_cat_dims, num_bins).argmax(dim=-1).float()
                     if new_bh is not None:
                         bob_hidden[0] = new_bh[0]
                         bob_hidden[1] = new_bh[1]
@@ -613,7 +642,10 @@ def main():
                 ee_quat_w = _QUAT_TOOL_DOWN.expand(1, 4).clone()
                 prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
                 env._update_goal_in_extras()
-                full_obs = _build_obs(_obj_type)
+                if _obj_type == "tblock":
+                    full_obs = env._get_push_obs()
+                else:
+                    full_obs = _build_obs(_obj_type)
                 bob_obs = full_obs.clone()
 
                 cur_obj_pos = full_obs[0, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 3]
@@ -648,6 +680,7 @@ def main():
                     _success_check = pos_err < 0.05 and rot_err < args.rot_threshold
                 if _success_check:
                     trial_ok = True
+                    stop_reason = "success"
 
                 if obj_z > 0.10:
                     stop_reason = "launched"
@@ -676,6 +709,11 @@ def main():
             if pos_err < best_pos_err:
                 best_pos_err = pos_err
                 best_rot_err = rot_err
+
+            rtag = f"[R{trial+1}] " if trial > 0 else ""
+            print(f"    {rtag}pushes={pushes_used:2d} stopped={stop_reason:12s}  "
+                  f"pos_err={pos_err:.4f}m rot_err={rot_err:.3f}rad  "
+                  f"{'PASS' if trial_ok else 'FAIL'}")
 
         avg_pushes = int(np.mean(trial_pushes)) if trial_pushes else 0
         sr_pct = trial_successes / TRIAL_COUNT * 100
