@@ -72,10 +72,10 @@ def plot2():
 # PLOT 3 — Validation Failure Taxonomy (Slide 12)
 # ============================================================
 def plot3():
-    # Load validation data
-    simp = pd.read_csv(VAL_20 / "hpc_pbrs_simp_528env/results_simp.csv")
-    curr = pd.read_csv(VAL_20 / "hpc_pbrs_curr_528env/results_curr.csv")
-    simp30 = pd.read_csv(VAL_30 / "hpc_pbrs_simp_528env/results_valid_simp_dpose.csv")
+    RV = Path("/home/vlad/IsaacLab/vlad/master_isaac/results_validation")
+    simp30 = pd.read_csv(RV / "A_simp/20_isaac_30t.csv")
+    curr   = pd.read_csv(RV / "B_curr/28_isaac_30t.csv")
+    asp    = pd.read_csv(RV / "E_asp_dpose/26_isaac.csv")
 
     fig, axes = plt.subplots(1, 3, figsize=(11, 3.8))
 
@@ -101,8 +101,8 @@ def plot3():
             ax.legend(fontsize=6, loc='upper right')
 
     _scat(axes[0], simp30, 'PPO-PBRS\n80% SR', '#1f77b4')
-    _scat(axes[1], curr, 'PPO-Curriculum\n76.7% SR', '#ff7f0e')
-    _scat(axes[2], simp, 'PPO-PBRS (20-test)\n55% SR', '#2ca02c')
+    _scat(axes[1], curr,   'PPO-Curriculum\n76.7% SR', '#ff7f0e')
+    _scat(axes[2], asp,    'ASP-dPose\n6.7% SR', '#d62728')
 
     fig.suptitle('Validation Failure Taxonomy — Success Rectangle (pos<5cm, rot<0.2rad)', fontsize=11, y=1.02)
     fig.tight_layout()
