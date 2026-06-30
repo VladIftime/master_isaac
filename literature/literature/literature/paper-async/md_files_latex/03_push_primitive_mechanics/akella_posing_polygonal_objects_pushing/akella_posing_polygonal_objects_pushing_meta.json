@@ -1,0 +1,854 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Posing Polygonal Ob jects in the Plane by Pushing",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          83.671875,
+          84.3046875
+        ],
+        [
+          522.9600219726562,
+          84.3046875
+        ],
+        [
+          522.9600219726562,
+          101.3203125
+        ],
+        [
+          83.671875,
+          101.3203125
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          57.375,
+          185.23828125
+        ],
+        [
+          107.578125,
+          185.23828125
+        ],
+        [
+          107.578125,
+          193.74609375
+        ],
+        [
+          57.375,
+          193.74609375
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          57.97265625,
+          363.90234375
+        ],
+        [
+          155.98828125,
+          363.90234375
+        ],
+        [
+          155.98828125,
+          372.41015625
+        ],
+        [
+          57.97265625,
+          372.41015625
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          57.97265625,
+          636.15234375
+        ],
+        [
+          161.96484375,
+          636.15234375
+        ],
+        [
+          161.96484375,
+          644.66015625
+        ],
+        [
+          57.97265625,
+          644.66015625
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          314.96484375,
+          410.30859375
+        ],
+        [
+          416.56640625,
+          410.30859375
+        ],
+        [
+          416.56640625,
+          418.81640625
+        ],
+        [
+          314.96484375,
+          418.81640625
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          315.5625,
+          552.62109375
+        ],
+        [
+          478.125,
+          552.62109375
+        ],
+        [
+          478.125,
+          561.12890625
+        ],
+        [
+          315.5625,
+          561.12890625
+        ]
+      ]
+    },
+    {
+      "title": "3 The Mechanics of Pushing",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          315.84002685546875,
+          126.0703125
+        ],
+        [
+          517.3600463867188,
+          126.0703125
+        ],
+        [
+          517.3600463867188,
+          136.8984375
+        ],
+        [
+          315.84002685546875,
+          136.8984375
+        ]
+      ]
+    },
+    {
+      "title": "3.1 Pushing Actions",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          313.470703125,
+          151.98046875
+        ],
+        [
+          450.1200256347656,
+          151.98046875
+        ],
+        [
+          450.1200256347656,
+          162.03515625
+        ],
+        [
+          313.470703125,
+          162.03515625
+        ]
+      ]
+    },
+    {
+      "title": "3.2 The relation between pushing actions\nand polygon edges",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          314.3671875,
+          334.125
+        ],
+        [
+          565.0800170898438,
+          334.125
+        ],
+        [
+          565.0800170898438,
+          355.9599609375
+        ],
+        [
+          314.3671875,
+          355.9599609375
+        ]
+      ]
+    },
+    {
+      "title": "3.3 Ob ject Classi\fcation",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          57.97265625,
+          316.72265625
+        ],
+        [
+          221.9600067138672,
+          316.72265625
+        ],
+        [
+          221.9600067138672,
+          326.77734375
+        ],
+        [
+          57.97265625,
+          326.77734375
+        ]
+      ]
+    },
+    {
+      "title": "3.4 Stable edges and the Angle-eating",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          313.76953125,
+          248.66015625
+        ],
+        [
+          568.6400146484375,
+          248.66015625
+        ],
+        [
+          568.6400146484375,
+          267.99609375
+        ],
+        [
+          313.76953125,
+          267.99609375
+        ]
+      ]
+    },
+    {
+      "title": "4 Determining the pushes",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          314.3671875,
+          229.7109375
+        ],
+        [
+          497.6799011230469,
+          229.7109375
+        ],
+        [
+          497.6799011230469,
+          240.5390625
+        ],
+        [
+          314.3671875,
+          240.5390625
+        ]
+      ]
+    },
+    {
+      "title": "4.1 The Pose vector equation",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          313.76953125,
+          403.734375
+        ],
+        [
+          506.35992431640625,
+          403.734375
+        ],
+        [
+          506.35992431640625,
+          413.5600280761719
+        ],
+        [
+          313.76953125,
+          413.5600280761719
+        ]
+      ]
+    },
+    {
+      "title": "4.2 A Linear Programming solution",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          314.25,
+          332.19140625
+        ],
+        [
+          519.75,
+          332.19140625
+        ],
+        [
+          519.75,
+          342.24609375
+        ],
+        [
+          314.25,
+          342.24609375
+        ]
+      ]
+    },
+    {
+      "title": "5 The Pose Planner",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          57.0,
+          76.5
+        ],
+        [
+          183.779296875,
+          76.5
+        ],
+        [
+          183.779296875,
+          87.0
+        ],
+        [
+          57.0,
+          87.0
+        ]
+      ]
+    },
+    {
+      "title": "5.1 A Completeness Criterion",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          57.0,
+          513.0
+        ],
+        [
+          231.0,
+          513.0
+        ],
+        [
+          231.0,
+          524.00390625
+        ],
+        [
+          57.0,
+          524.00390625
+        ]
+      ]
+    },
+    {
+      "title": "6 Implementation and Experiments",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          314.3671875,
+          544.5
+        ],
+        [
+          533.25,
+          544.5
+        ],
+        [
+          533.25,
+          555.0
+        ],
+        [
+          314.3671875,
+          555.0
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          57.375,
+          617.58984375
+        ],
+        [
+          141.046875,
+          617.58984375
+        ],
+        [
+          141.046875,
+          626.09765625
+        ],
+        [
+          57.375,
+          626.09765625
+        ]
+      ]
+    },
+    {
+      "title": "Acknowledgments",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          319.447265625,
+          648.52734375
+        ],
+        [
+          442.4799499511719,
+          648.52734375
+        ],
+        [
+          442.4799499511719,
+          659.0799865722656
+        ],
+        [
+          319.447265625,
+          659.0799865722656
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          57.673828125,
+          76.5703125
+        ],
+        [
+          122.25,
+          76.5703125
+        ],
+        [
+          122.25,
+          87.0
+        ],
+        [
+          57.673828125,
+          87.0
+        ]
+      ]
+    },
+    {
+      "title": "Appendix: Proof of completeness",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          314.96484375,
+          123.36328125
+        ],
+        [
+          513.0,
+          123.36328125
+        ],
+        [
+          513.0,
+          135.0
+        ],
+        [
+          314.96484375,
+          135.0
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          175
+        ],
+        [
+          "Line",
+          78
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          6
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          181
+        ],
+        [
+          "Line",
+          79
+        ],
+        [
+          "ListItem",
+          11
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          186
+        ],
+        [
+          "Line",
+          75
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Picture",
+          3
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "PictureGroup",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          204
+        ],
+        [
+          "Line",
+          75
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          80
+        ],
+        [
+          "Span",
+          61
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "PictureGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          108
+        ],
+        [
+          "Span",
+          31
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          154
+        ],
+        [
+          "Line",
+          74
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          128
+        ],
+        [
+          "Span",
+          72
+        ],
+        [
+          "ListItem",
+          14
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/akella_posing_polygonal_objects_pushing"
+}

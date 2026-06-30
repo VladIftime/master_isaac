@@ -1,0 +1,544 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Automatic Curriculum Learning For Deep RL: A Short Survey",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          111.0,
+          89.25
+        ],
+        [
+          500.25,
+          89.25
+        ],
+        [
+          500.25,
+          102.48046875
+        ],
+        [
+          111.0,
+          102.48046875
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          152.103515625,
+          216.75
+        ],
+        [
+          198.75,
+          216.75
+        ],
+        [
+          198.75,
+          225.75
+        ],
+        [
+          152.103515625,
+          225.75
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          53.7890625,
+          477.75
+        ],
+        [
+          137.25,
+          477.75
+        ],
+        [
+          137.25,
+          489.0
+        ],
+        [
+          53.7890625,
+          489.0
+        ]
+      ]
+    },
+    {
+      "title": "2 Automatic Curriculum Learning for DRL",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          315.5625,
+          586.65234375
+        ],
+        [
+          546.75,
+          586.65234375
+        ],
+        [
+          546.75,
+          597.75
+        ],
+        [
+          315.5625,
+          597.75
+        ]
+      ]
+    },
+    {
+      "title": "3 Why use ACL?",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          51.99609375,
+          471.0
+        ],
+        [
+          149.25,
+          471.0
+        ],
+        [
+          149.25,
+          481.5
+        ],
+        [
+          51.99609375,
+          481.5
+        ]
+      ]
+    },
+    {
+      "title": "4 What does ACL control?",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          311.677734375,
+          510.75
+        ],
+        [
+          459.75,
+          510.75
+        ],
+        [
+          459.75,
+          520.91015625
+        ],
+        [
+          311.677734375,
+          520.91015625
+        ]
+      ]
+    },
+    {
+      "title": "4.1 ACL for Data Collection",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          312.57421875,
+          611.40234375
+        ],
+        [
+          454.5,
+          611.40234375
+        ],
+        [
+          454.5,
+          622.5
+        ],
+        [
+          312.57421875,
+          622.5
+        ]
+      ]
+    },
+    {
+      "title": "4.2 ACL for Data Exploitation",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          312.275390625,
+          226.5
+        ],
+        [
+          465.0,
+          226.5
+        ],
+        [
+          465.0,
+          237.05859375
+        ],
+        [
+          312.275390625,
+          237.05859375
+        ]
+      ]
+    },
+    {
+      "title": "5 What Does ACL Optimize?",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          312.57421875,
+          641.953125
+        ],
+        [
+          473.25,
+          641.953125
+        ],
+        [
+          473.25,
+          653.25
+        ],
+        [
+          312.57421875,
+          653.25
+        ]
+      ]
+    },
+    {
+      "title": "6 Discussion",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          52.59375,
+          203.25
+        ],
+        [
+          126.75,
+          203.25
+        ],
+        [
+          126.75,
+          213.75
+        ],
+        [
+          52.59375,
+          213.75
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          313.5,
+          286.5
+        ],
+        [
+          371.25,
+          286.5
+        ],
+        [
+          371.25,
+          295.5
+        ],
+        [
+          313.5,
+          295.5
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          105
+        ],
+        [
+          "Span",
+          88
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "PageHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          143
+        ],
+        [
+          "Line",
+          130
+        ],
+        [
+          "Text",
+          13
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          146
+        ],
+        [
+          "Line",
+          121
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          40
+        ],
+        [
+          "Line",
+          32
+        ],
+        [
+          "TableCell",
+          24
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          127
+        ],
+        [
+          "Line",
+          118
+        ],
+        [
+          "Text",
+          7
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          133
+        ],
+        [
+          "Span",
+          111
+        ],
+        [
+          "ListItem",
+          15
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          184
+        ],
+        [
+          "Line",
+          153
+        ],
+        [
+          "ListItem",
+          44
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          29
+        ],
+        [
+          "Span",
+          19
+        ],
+        [
+          "ListItem",
+          8
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/portelas2020_automatic_curriculum_deep_rl_survey"
+}

@@ -1,0 +1,1841 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Adversarial Intrinsic Motivation for Reinforcement\nLearning",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          114.75,
+          99.0
+        ],
+        [
+          495.0,
+          99.0
+        ],
+        [
+          495.0,
+          134.96484375
+        ],
+        [
+          114.75,
+          134.96484375
+        ]
+      ]
+    },
+    {
+      "title": "Ishan Durugkar",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          167.25,
+          179.82421875
+        ],
+        [
+          238.5,
+          179.82421875
+        ],
+        [
+          238.5,
+          190.5
+        ],
+        [
+          167.25,
+          190.5
+        ]
+      ]
+    },
+    {
+      "title": "Scott Niekum",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          184.5,
+          251.75390625
+        ],
+        [
+          245.25,
+          251.75390625
+        ],
+        [
+          245.25,
+          261.0
+        ],
+        [
+          184.5,
+          261.0
+        ]
+      ]
+    },
+    {
+      "title": "Mauricio Tec",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          360.0,
+          180.59765625
+        ],
+        [
+          419.25,
+          180.59765625
+        ],
+        [
+          419.25,
+          189.75
+        ],
+        [
+          360.0,
+          189.75
+        ]
+      ]
+    },
+    {
+      "title": "Peter Stone",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          370.5,
+          252.0
+        ],
+        [
+          422.25,
+          252.0
+        ],
+        [
+          422.25,
+          261.75
+        ],
+        [
+          370.5,
+          261.75
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          281.794921875,
+          346.88671875
+        ],
+        [
+          329.25,
+          346.88671875
+        ],
+        [
+          329.25,
+          357.0
+        ],
+        [
+          281.794921875,
+          357.0
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          107.25,
+          592.83984375
+        ],
+        [
+          191.25,
+          592.83984375
+        ],
+        [
+          191.25,
+          604.5
+        ],
+        [
+          107.25,
+          604.5
+        ]
+      ]
+    },
+    {
+      "title": "2 Related Work",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          107.578125,
+          561.90234375
+        ],
+        [
+          198.0,
+          561.90234375
+        ],
+        [
+          198.0,
+          571.5
+        ],
+        [
+          107.578125,
+          571.5
+        ]
+      ]
+    },
+    {
+      "title": "2.1 Intrinsic Motivation",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          106.5,
+          626.25
+        ],
+        [
+          217.5,
+          626.25
+        ],
+        [
+          217.5,
+          635.37890625
+        ],
+        [
+          106.5,
+          635.37890625
+        ]
+      ]
+    },
+    {
+      "title": "2.2 Goal-Conditioned Reinforcement Learning",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.5,
+          120.0
+        ],
+        [
+          315.0,
+          120.0
+        ],
+        [
+          315.0,
+          129.9375
+        ],
+        [
+          106.5,
+          129.9375
+        ]
+      ]
+    },
+    {
+      "title": "2.3 Adversarial Imitation Learning and Minimizing Distribution Mismatch",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.5,
+          333.75
+        ],
+        [
+          435.75,
+          333.75
+        ],
+        [
+          435.75,
+          343.5
+        ],
+        [
+          106.5,
+          343.5
+        ]
+      ]
+    },
+    {
+      "title": "3 Background",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          107.578125,
+          528.0
+        ],
+        [
+          189.75,
+          528.0
+        ],
+        [
+          189.75,
+          539.47265625
+        ],
+        [
+          107.578125,
+          539.47265625
+        ]
+      ]
+    },
+    {
+      "title": "3.1 Goal-Conditioned Reinforcement Learning",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.5,
+          586.65234375
+        ],
+        [
+          314.25,
+          586.65234375
+        ],
+        [
+          314.25,
+          597.75
+        ],
+        [
+          106.5,
+          597.75
+        ]
+      ]
+    },
+    {
+      "title": "3.2 Optimal Transport and Wasserstein-1 Distance",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          106.5,
+          293.90625
+        ],
+        [
+          330.75,
+          293.90625
+        ],
+        [
+          330.75,
+          303.1875
+        ],
+        [
+          106.5,
+          303.1875
+        ]
+      ]
+    },
+    {
+      "title": "4 Time-Step Metric",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          106.98046875,
+          654.71484375
+        ],
+        [
+          216.75,
+          654.71484375
+        ],
+        [
+          216.75,
+          666.0
+        ],
+        [
+          106.98046875,
+          666.0
+        ]
+      ]
+    },
+    {
+      "title": "5 Wasserstein-1 Distance for Goal-Conditioned Reinforcement Learning",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          106.5,
+          676.37109375
+        ],
+        [
+          486.0,
+          676.37109375
+        ],
+        [
+          486.0,
+          687.0
+        ],
+        [
+          106.5,
+          687.0
+        ]
+      ]
+    },
+    {
+      "title": "5.1 Wasserstein-1 Distance under the Time-Step Metric",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          107.578125,
+          119.8828125
+        ],
+        [
+          350.25,
+          119.8828125
+        ],
+        [
+          350.25,
+          129.1640625
+        ],
+        [
+          107.578125,
+          129.1640625
+        ]
+      ]
+    },
+    {
+      "title": "5.2 Adversarial Intrinsic Motivation to minimize Wasserstein-1 Distance",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          106.5,
+          453.62109375
+        ],
+        [
+          423.140625,
+          453.62109375
+        ],
+        [
+          423.140625,
+          462.75
+        ],
+        [
+          106.5,
+          462.75
+        ]
+      ]
+    },
+    {
+      "title": "6 Experiments",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          106.98046875,
+          327.1640625
+        ],
+        [
+          192.0,
+          327.1640625
+        ],
+        [
+          192.0,
+          338.25
+        ],
+        [
+          106.98046875,
+          338.25
+        ]
+      ]
+    },
+    {
+      "title": "7 Discussion and Future Work",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          106.98046875,
+          290.25
+        ],
+        [
+          273.0,
+          290.25
+        ],
+        [
+          273.0,
+          300.0
+        ],
+        [
+          106.98046875,
+          300.0
+        ]
+      ]
+    },
+    {
+      "title": "Acknowledgements and Funding Information",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          105.78515625,
+          71.9296875
+        ],
+        [
+          342.0,
+          71.9296875
+        ],
+        [
+          342.0,
+          82.7578125
+        ],
+        [
+          105.78515625,
+          82.7578125
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          106.98046875,
+          325.23046875
+        ],
+        [
+          165.0,
+          325.23046875
+        ],
+        [
+          165.0,
+          335.25
+        ],
+        [
+          106.98046875,
+          335.25
+        ]
+      ]
+    },
+    {
+      "title": "A Metrics and Ouasimetrics",
+      "heading_level": null,
+      "page_id": 15,
+      "polygon": [
+        [
+          107.578125,
+          72.31640625
+        ],
+        [
+          261.0,
+          72.31640625
+        ],
+        [
+          261.0,
+          82.5
+        ],
+        [
+          107.578125,
+          82.5
+        ]
+      ]
+    },
+    {
+      "title": "B Optimal Transport and Wasserstein-1 Distance",
+      "heading_level": null,
+      "page_id": 15,
+      "polygon": [
+        [
+          106.5,
+          419.203125
+        ],
+        [
+          368.25,
+          419.203125
+        ],
+        [
+          368.25,
+          429.0
+        ],
+        [
+          106.5,
+          429.0
+        ]
+      ]
+    },
+    {
+      "title": "C Lipschitz constant of Potential function",
+      "heading_level": null,
+      "page_id": 16,
+      "polygon": [
+        [
+          108.7734375,
+          535.5
+        ],
+        [
+          329.25,
+          535.5
+        ],
+        [
+          329.25,
+          546.046875
+        ],
+        [
+          108.7734375,
+          546.046875
+        ]
+      ]
+    },
+    {
+      "title": "D Proofs of Claims",
+      "heading_level": null,
+      "page_id": 17,
+      "polygon": [
+        [
+          106.083984375,
+          378.75
+        ],
+        [
+          213.0,
+          378.75
+        ],
+        [
+          213.0,
+          388.5
+        ],
+        [
+          106.083984375,
+          388.5
+        ]
+      ]
+    },
+    {
+      "title": "E Auxiliary results for Proposition 3",
+      "heading_level": null,
+      "page_id": 19,
+      "polygon": [
+        [
+          106.98046875,
+          629.19140625
+        ],
+        [
+          302.25,
+          629.19140625
+        ],
+        [
+          302.25,
+          639.75
+        ],
+        [
+          106.98046875,
+          639.75
+        ]
+      ]
+    },
+    {
+      "title": "F Grid World Experiments",
+      "heading_level": null,
+      "page_id": 20,
+      "polygon": [
+        [
+          107.279296875,
+          622.5
+        ],
+        [
+          255.0,
+          622.5
+        ],
+        [
+          255.0,
+          632.28515625
+        ],
+        [
+          107.279296875,
+          632.28515625
+        ]
+      ]
+    },
+    {
+      "title": "G Statistical Analysis of the Results on Fetch Robot Tasks",
+      "heading_level": null,
+      "page_id": 22,
+      "polygon": [
+        [
+          108.17578125,
+          187.5
+        ],
+        [
+          411.75,
+          187.5
+        ],
+        [
+          411.75,
+          199.546875
+        ],
+        [
+          108.17578125,
+          199.546875
+        ]
+      ]
+    },
+    {
+      "title": "H Details of Experiments on Fetch Robot",
+      "heading_level": null,
+      "page_id": 24,
+      "polygon": [
+        [
+          108.17578125,
+          422.25
+        ],
+        [
+          327.75,
+          422.25
+        ],
+        [
+          327.75,
+          433.5
+        ],
+        [
+          108.17578125,
+          433.5
+        ]
+      ]
+    },
+    {
+      "title": "H.1 TD3 and HER (R + HER)",
+      "heading_level": null,
+      "page_id": 25,
+      "polygon": [
+        [
+          106.5,
+          254.25
+        ],
+        [
+          244.5,
+          254.25
+        ],
+        [
+          244.5,
+          265.5
+        ],
+        [
+          106.5,
+          265.5
+        ]
+      ]
+    },
+    {
+      "title": "H.2 Dense reward TD3 and HER (dense + HER)",
+      "heading_level": null,
+      "page_id": 25,
+      "polygon": [
+        [
+          106.5,
+          496.93359375
+        ],
+        [
+          321.75,
+          496.93359375
+        ],
+        [
+          321.75,
+          507.75
+        ],
+        [
+          106.5,
+          507.75
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          80
+        ],
+        [
+          "Span",
+          47
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          7
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          63
+        ],
+        [
+          "Span",
+          12
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          62
+        ],
+        [
+          "Span",
+          49
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          91
+        ],
+        [
+          "Line",
+          63
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          85
+        ],
+        [
+          "Line",
+          62
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          64
+        ],
+        [
+          "Line",
+          62
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          71
+        ],
+        [
+          "Span",
+          46
+        ],
+        [
+          "ListItem",
+          9
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          62
+        ],
+        [
+          "Span",
+          19
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          72
+        ],
+        [
+          "Span",
+          6
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          62
+        ],
+        [
+          "Span",
+          21
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          67
+        ],
+        [
+          "Span",
+          46
+        ],
+        [
+          "ListItem",
+          10
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          78
+        ],
+        [
+          "Span",
+          52
+        ],
+        [
+          "ListItem",
+          19
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 12,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          76
+        ],
+        [
+          "Span",
+          58
+        ],
+        [
+          "ListItem",
+          20
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 13,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          82
+        ],
+        [
+          "Span",
+          55
+        ],
+        [
+          "ListItem",
+          21
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 14,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          35
+        ],
+        [
+          "Span",
+          18
+        ],
+        [
+          "ListItem",
+          8
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 15,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          101
+        ],
+        [
+          "Line",
+          58
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 16,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          78
+        ],
+        [
+          "Line",
+          56
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 17,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          47
+        ],
+        [
+          "Line",
+          44
+        ],
+        [
+          "Text",
+          13
+        ],
+        [
+          "Equation",
+          6
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 18,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          49
+        ],
+        [
+          "Line",
+          44
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 19,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          141
+        ],
+        [
+          "Line",
+          83
+        ],
+        [
+          "Code",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 20,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          51
+        ],
+        [
+          "Line",
+          43
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 21,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          63
+        ],
+        [
+          "Span",
+          23
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 22,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          48
+        ],
+        [
+          "Span",
+          18
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 23,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          45
+        ],
+        [
+          "Span",
+          19
+        ],
+        [
+          "TableCell",
+          15
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 24,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          69
+        ],
+        [
+          "Span",
+          12
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 25,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          66
+        ],
+        [
+          "Line",
+          17
+        ],
+        [
+          "Span",
+          13
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Table",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 26,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          38
+        ],
+        [
+          "Line",
+          3
+        ],
+        [
+          "Span",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/durugkar2021_adversarial_intrinsic_motivation_rl"
+}

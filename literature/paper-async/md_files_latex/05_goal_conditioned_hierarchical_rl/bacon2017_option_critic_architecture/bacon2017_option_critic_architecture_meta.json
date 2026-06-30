@@ -1,0 +1,787 @@
+{
+  "table_of_contents": [
+    {
+      "title": "The Option-Critic Architecture",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          208.5,
+          97.06640625
+        ],
+        [
+          402.75,
+          97.06640625
+        ],
+        [
+          402.75,
+          110.25
+        ],
+        [
+          208.5,
+          110.25
+        ]
+      ]
+    },
+    {
+      "title": "Pierre-Luc Bacon and Jean Harb and Doina Precup",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          168.75,
+          133.03125
+        ],
+        [
+          442.5,
+          133.03125
+        ],
+        [
+          442.5,
+          143.859375
+        ],
+        [
+          168.75,
+          143.859375
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          153.75,
+          217.5
+        ],
+        [
+          192.75,
+          217.5
+        ],
+        [
+          192.75,
+          226.6171875
+        ],
+        [
+          153.75,
+          226.6171875
+        ]
+      ]
+    },
+    {
+      "title": "Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          139.5,
+          382.5
+        ],
+        [
+          206.25,
+          382.5
+        ],
+        [
+          206.25,
+          391.5
+        ],
+        [
+          139.5,
+          391.5
+        ]
+      ]
+    },
+    {
+      "title": "Preliminaries and Notation",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          367.5,
+          512.40234375
+        ],
+        [
+          508.5,
+          512.40234375
+        ],
+        [
+          508.5,
+          523.5
+        ],
+        [
+          367.5,
+          523.5
+        ]
+      ]
+    },
+    {
+      "title": "Learning Options",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          125.25,
+          534.75
+        ],
+        [
+          219.75,
+          534.75
+        ],
+        [
+          219.75,
+          545.66015625
+        ],
+        [
+          125.25,
+          545.66015625
+        ]
+      ]
+    },
+    {
+      "title": "Algorithms and Architecture",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          363.673828125,
+          387.0
+        ],
+        [
+          513.75,
+          387.0
+        ],
+        [
+          513.75,
+          398.70703125
+        ],
+        [
+          363.673828125,
+          398.70703125
+        ]
+      ]
+    },
+    {
+      "title": "Experiments",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          404.25,
+          115.5
+        ],
+        [
+          471.75,
+          115.5
+        ],
+        [
+          471.75,
+          125.68359375
+        ],
+        [
+          404.25,
+          125.68359375
+        ]
+      ]
+    },
+    {
+      "title": "Pinball Domain",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          52.5,
+          320.25
+        ],
+        [
+          127.5,
+          320.25
+        ],
+        [
+          127.5,
+          330.0
+        ],
+        [
+          52.5,
+          330.0
+        ]
+      ]
+    },
+    {
+      "title": "Arcade Learning Environment",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          317.35546875,
+          407.25
+        ],
+        [
+          465.0,
+          407.25
+        ],
+        [
+          465.0,
+          418.81640625
+        ],
+        [
+          317.35546875,
+          418.81640625
+        ]
+      ]
+    },
+    {
+      "title": "Related Work",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          401.25,
+          295.83984375
+        ],
+        [
+          474.75,
+          295.83984375
+        ],
+        [
+          474.75,
+          306.0
+        ],
+        [
+          401.25,
+          306.0
+        ]
+      ]
+    },
+    {
+      "title": "Discussion",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          144.75,
+          446.25
+        ],
+        [
+          201.0,
+          446.25
+        ],
+        [
+          201.0,
+          456.0
+        ],
+        [
+          144.75,
+          456.0
+        ]
+      ]
+    },
+    {
+      "title": "Acknowledgements",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          388.5,
+          645.046875
+        ],
+        [
+          489.75,
+          645.046875
+        ],
+        [
+          489.75,
+          655.5
+        ],
+        [
+          388.5,
+          655.5
+        ]
+      ]
+    },
+    {
+      "title": "Appendix",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          147.75,
+          54.140625
+        ],
+        [
+          198.421875,
+          54.140625
+        ],
+        [
+          198.421875,
+          65.25
+        ],
+        [
+          147.75,
+          65.25
+        ]
+      ]
+    },
+    {
+      "title": "Augmented Process",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          51.99609375,
+          70.3828125
+        ],
+        [
+          146.42578125,
+          70.3828125
+        ],
+        [
+          146.42578125,
+          79.6640625
+        ],
+        [
+          51.99609375,
+          79.6640625
+        ]
+      ]
+    },
+    {
+      "title": "Proof of the Intra-Option Policy Gradient Theorem",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          52.5,
+          350.75390625
+        ],
+        [
+          293.44921875,
+          350.75390625
+        ],
+        [
+          293.44921875,
+          360.80859375
+        ],
+        [
+          52.5,
+          360.80859375
+        ]
+      ]
+    },
+    {
+      "title": "Proof of the Termination Gradient Theorem",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          317.953125,
+          400.5
+        ],
+        [
+          524.25,
+          400.5
+        ],
+        [
+          524.25,
+          410.25
+        ],
+        [
+          317.953125,
+          410.25
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          144.0,
+          278.25
+        ],
+        [
+          201.75,
+          278.25
+        ],
+        [
+          201.75,
+          287.33203125
+        ],
+        [
+          144.0,
+          287.33203125
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          103
+        ],
+        [
+          "Span",
+          65
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          5
+        ],
+        [
+          "PageHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          140
+        ],
+        [
+          "Line",
+          118
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "Equation",
+          4
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          102
+        ],
+        [
+          "Line",
+          96
+        ],
+        [
+          "Text",
+          13
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          118
+        ],
+        [
+          "Line",
+          101
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "Code",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          93
+        ],
+        [
+          "Span",
+          52
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Caption",
+          4
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "PictureGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          141
+        ],
+        [
+          "Span",
+          66
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          99
+        ],
+        [
+          "Span",
+          51
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          71
+        ],
+        [
+          "Span",
+          35
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Equation",
+          9
+        ],
+        [
+          "SectionHeader",
+          4
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          125
+        ],
+        [
+          "Span",
+          89
+        ],
+        [
+          "Text",
+          32
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/bacon2017_option_critic_architecture"
+}

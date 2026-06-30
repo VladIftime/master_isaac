@@ -1,0 +1,1023 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Proximal Policy Optimization Algorithms",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          155.984375,
+          145.9521484375
+        ],
+        [
+          437.7481384277344,
+          145.9521484375
+        ],
+        [
+          437.7481384277344,
+          162.75091552734375
+        ],
+        [
+          155.984375,
+          162.75091552734375
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          275.8828125,
+          244.6240234375
+        ],
+        [
+          319.0578918457031,
+          244.6240234375
+        ],
+        [
+          319.0578918457031,
+          256.0599365234375
+        ],
+        [
+          275.8828125,
+          256.0599365234375
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          69.92635345458984,
+          407.7480163574219
+        ],
+        [
+          180.10794067382812,
+          407.7480163574219
+        ],
+        [
+          180.10794067382812,
+          421.708740234375
+        ],
+        [
+          69.92635345458984,
+          421.708740234375
+        ]
+      ]
+    },
+    {
+      "title": "2 Background: Policy Optimization",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          68.3073047858942,
+          105.6611328125
+        ],
+        [
+          325.0226700251889,
+          105.6611328125
+        ],
+        [
+          325.0226700251889,
+          117.9951171875
+        ],
+        [
+          68.3073047858942,
+          117.9951171875
+        ]
+      ]
+    },
+    {
+      "title": "2.1 Policy Gradient Methods",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          69.84375,
+          130.3291015625
+        ],
+        [
+          244.70528967254407,
+          130.3291015625
+        ],
+        [
+          244.70528967254407,
+          141.7079252003562
+        ],
+        [
+          69.84375,
+          141.7079252003562
+        ]
+      ]
+    },
+    {
+      "title": "2.2 Trust Region Methods",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          68.09765625,
+          400.8544921875
+        ],
+        [
+          229.69269521410578,
+          400.8544921875
+        ],
+        [
+          229.69269521410578,
+          411.62778272484417
+        ],
+        [
+          68.09765625,
+          411.62778272484417
+        ]
+      ]
+    },
+    {
+      "title": "3 Clipped Surrogate Objective",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          68.6796875,
+          104.427734375
+        ],
+        [
+          291.24433249370276,
+          104.427734375
+        ],
+        [
+          291.24433249370276,
+          117.71504897595726
+        ],
+        [
+          68.6796875,
+          117.71504897595726
+        ]
+      ]
+    },
+    {
+      "title": "4 Adaptive KL Penalty Coefficient",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          68.3073047858942,
+          314.10546875
+        ],
+        [
+          318.2670025188917,
+          314.10546875
+        ],
+        [
+          318.2670025188917,
+          327.26171875
+        ],
+        [
+          68.3073047858942,
+          327.26171875
+        ]
+      ]
+    },
+    {
+      "title": "5 Algorithm",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          68.3073047858942,
+          637.6669921875
+        ],
+        [
+          164.38790931989922,
+          637.6669921875
+        ],
+        [
+          164.38790931989922,
+          651.6455078125
+        ],
+        [
+          68.3073047858942,
+          651.6455078125
+        ]
+      ]
+    },
+    {
+      "title": "Algorithm 1 PPO, Actor-Critic Style",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          68.09765625,
+          466.36153161175423
+        ],
+        [
+          252.2115869017632,
+          466.36153161175423
+        ],
+        [
+          252.2115869017632,
+          478.1474609375
+        ],
+        [
+          68.09765625,
+          478.1474609375
+        ]
+      ]
+    },
+    {
+      "title": "6 Experiments",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          68.3073047858942,
+          609.298828125
+        ],
+        [
+          180.15113350125944,
+          609.298828125
+        ],
+        [
+          180.15113350125944,
+          621.5654496883348
+        ],
+        [
+          68.3073047858942,
+          621.5654496883348
+        ]
+      ]
+    },
+    {
+      "title": "6.1 Comparison of Surrogate Objectives",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          68.6796875,
+          633.5556640625
+        ],
+        [
+          307.7581863979849,
+          633.5556640625
+        ],
+        [
+          307.7581863979849,
+          644.8085485307213
+        ],
+        [
+          68.6796875,
+          644.8085485307213
+        ]
+      ]
+    },
+    {
+      "title": "6.2 Comparison to Other Algorithms in the Continuous Domain",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          68.6796875,
+          615.6528015136719
+        ],
+        [
+          446.67205810546875,
+          615.6528015136719
+        ],
+        [
+          446.67205810546875,
+          627.2867584228516
+        ],
+        [
+          68.6796875,
+          627.2867584228516
+        ]
+      ]
+    },
+    {
+      "title": "6.3 Showcase in the Continuous Domain: Humanoid Running and Steering",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          69.84375,
+          429.6337890625
+        ],
+        [
+          508.114013671875,
+          429.6337890625
+        ],
+        [
+          508.114013671875,
+          441.4481201171875
+        ],
+        [
+          69.84375,
+          441.4481201171875
+        ]
+      ]
+    },
+    {
+      "title": "6.4 Comparison to Other Algorithms on the Atari Domain",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          68.6796875,
+          267.6474609375
+        ],
+        [
+          415.5703125,
+          267.6474609375
+        ],
+        [
+          415.5703125,
+          280.75714111328125
+        ],
+        [
+          68.6796875,
+          280.75714111328125
+        ]
+      ]
+    },
+    {
+      "title": "7 Conclusion",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          69.26171875,
+          531.5047912597656
+        ],
+        [
+          168.79983520507812,
+          531.5047912597656
+        ],
+        [
+          168.79983520507812,
+          545.4655151367188
+        ],
+        [
+          69.26171875,
+          545.4655151367188
+        ]
+      ]
+    },
+    {
+      "title": "8 Acknowledgements",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          69.26171875,
+          651.6455078125
+        ],
+        [
+          223.8605499267578,
+          651.6455078125
+        ],
+        [
+          223.8605499267578,
+          666.6065673828125
+        ],
+        [
+          69.26171875,
+          666.6065673828125
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          68.970703125,
+          104.8388671875
+        ],
+        [
+          143.54444885253906,
+          104.8388671875
+        ],
+        [
+          143.54444885253906,
+          119.924560546875
+        ],
+        [
+          68.970703125,
+          119.924560546875
+        ]
+      ]
+    },
+    {
+      "title": "A Hyperparameters",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          68.6796875,
+          105.25
+        ],
+        [
+          217.41062927246094,
+          105.25
+        ],
+        [
+          217.41062927246094,
+          119.924560546875
+        ],
+        [
+          68.6796875,
+          119.924560546875
+        ]
+      ]
+    },
+    {
+      "title": "B Performance on More Atari Games",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          68.6796875,
+          676.3134765625
+        ],
+        [
+          339.5389099121094,
+          676.3134765625
+        ],
+        [
+          339.5389099121094,
+          690.5718841552734
+        ],
+        [
+          68.6796875,
+          690.5718841552734
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          91
+        ],
+        [
+          "Line",
+          42
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          52
+        ],
+        [
+          "Span",
+          33
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          64
+        ],
+        [
+          "Line",
+          39
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          57
+        ],
+        [
+          "Span",
+          42
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          57
+        ],
+        [
+          "Span",
+          45
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Equation",
+          4
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Code",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          194
+        ],
+        [
+          "Line",
+          45
+        ],
+        [
+          "TableCell",
+          24
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Footnote",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          235
+        ],
+        [
+          "Line",
+          103
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          83
+        ],
+        [
+          "Line",
+          28
+        ],
+        [
+          "TableCell",
+          15
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          141
+        ],
+        [
+          "Line",
+          38
+        ],
+        [
+          "ListItem",
+          14
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          198
+        ],
+        [
+          "TableCell",
+          46
+        ],
+        [
+          "Line",
+          37
+        ],
+        [
+          "Table",
+          3
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "TableGroup",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Text",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          445
+        ],
+        [
+          "Line",
+          219
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          259
+        ],
+        [
+          "TableCell",
+          208
+        ],
+        [
+          "Line",
+          53
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/12_proximal_policy_optimization_algorithms"
+}

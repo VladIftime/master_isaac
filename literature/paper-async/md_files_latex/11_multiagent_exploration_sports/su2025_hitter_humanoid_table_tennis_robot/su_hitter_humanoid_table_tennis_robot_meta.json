@@ -1,0 +1,923 @@
+{
+  "table_of_contents": [
+    {
+      "title": "HITTER: A HumanoId Table TEnnis Robot\nvia Hierarchical Planning and Learning",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          150.0659942626953,
+          72.703125
+        ],
+        [
+          461.9359436035156,
+          72.703125
+        ],
+        [
+          461.9359436035156,
+          108.67376708984375
+        ],
+        [
+          150.0659942626953,
+          108.67376708984375
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          133.875,
+          592.83984375
+        ],
+        [
+          215.27880859375,
+          592.83984375
+        ],
+        [
+          215.27880859375,
+          603.53125
+        ],
+        [
+          133.875,
+          603.53125
+        ]
+      ]
+    },
+    {
+      "title": "II. RELATED WORK",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          392.0625,
+          397.76544189453125
+        ],
+        [
+          478.5581970214844,
+          397.76544189453125
+        ],
+        [
+          478.5581970214844,
+          407.7280578613281
+        ],
+        [
+          392.0625,
+          407.7280578613281
+        ]
+      ]
+    },
+    {
+      "title": "A. Robotic Table Tennis",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          311.080078125,
+          416.49609375
+        ],
+        [
+          412.1585388183594,
+          416.49609375
+        ],
+        [
+          412.1585388183594,
+          427.84259033203125
+        ],
+        [
+          311.080078125,
+          427.84259033203125
+        ]
+      ]
+    },
+    {
+      "title": "B. Humanoid Whole-Body Control",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          53.490234375,
+          250.59375
+        ],
+        [
+          196.39544677734375,
+          250.59375
+        ],
+        [
+          196.39544677734375,
+          260.72674560546875
+        ],
+        [
+          53.490234375,
+          260.72674560546875
+        ]
+      ]
+    },
+    {
+      "title": "III. SYSTEM OVERVIEW",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          124.013671875,
+          413.40234375
+        ],
+        [
+          228.25547790527344,
+          413.40234375
+        ],
+        [
+          228.25547790527344,
+          424.3771057128906
+        ],
+        [
+          124.013671875,
+          424.3771057128906
+        ]
+      ]
+    },
+    {
+      "title": "IV. MODEL-BASED PLANNER",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          112.359375,
+          673.2704010009766
+        ],
+        [
+          239.49754333496094,
+          673.2704010009766
+        ],
+        [
+          239.49754333496094,
+          683.2330017089844
+        ],
+        [
+          112.359375,
+          683.2330017089844
+        ]
+      ]
+    },
+    {
+      "title": "A. State Estimation",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          310.482421875,
+          54.305908203125
+        ],
+        [
+          393.34912109375,
+          54.305908203125
+        ],
+        [
+          393.34912109375,
+          64.26849365234375
+        ],
+        [
+          310.482421875,
+          64.26849365234375
+        ]
+      ]
+    },
+    {
+      "title": "B. Ball Trajectory Prediction",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          312.57421875,
+          229.32421875
+        ],
+        [
+          433.3986511230469,
+          229.32421875
+        ],
+        [
+          433.3986511230469,
+          240.25164794921875
+        ],
+        [
+          312.57421875,
+          240.25164794921875
+        ]
+      ]
+    },
+    {
+      "title": "C. Racket-ball Interaction",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          52.5,
+          595.93359375
+        ],
+        [
+          161.25,
+          595.93359375
+        ],
+        [
+          161.25,
+          605.25
+        ],
+        [
+          52.5,
+          605.25
+        ]
+      ]
+    },
+    {
+      "title": "V. LEARNING-BASED WHOLE-BODY CONTROLLER",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          325.5,
+          506.21484375
+        ],
+        [
+          544.5,
+          506.21484375
+        ],
+        [
+          544.5,
+          515.25
+        ],
+        [
+          325.5,
+          515.25
+        ]
+      ]
+    },
+    {
+      "title": "A. Human Motion References",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          311.25,
+          636.15234375
+        ],
+        [
+          435.75,
+          636.15234375
+        ],
+        [
+          435.75,
+          645.0
+        ],
+        [
+          311.25,
+          645.0
+        ]
+      ]
+    },
+    {
+      "title": "B. Markov Decision Process (MDP) Setting",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          53.7890625,
+          475.27734375
+        ],
+        [
+          234.69168090820312,
+          475.27734375
+        ],
+        [
+          234.69168090820312,
+          486.72247314453125
+        ],
+        [
+          53.7890625,
+          486.72247314453125
+        ]
+      ]
+    },
+    {
+      "title": "VI. RESULTS",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          406.107421875,
+          694.93359375
+        ],
+        [
+          464.3857727050781,
+          694.93359375
+        ],
+        [
+          464.3857727050781,
+          707.1308441162109
+        ],
+        [
+          406.107421875,
+          707.1308441162109
+        ]
+      ]
+    },
+    {
+      "title": "A. Model-based Planner",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          52.59375,
+          106.734375
+        ],
+        [
+          155.390625,
+          106.734375
+        ],
+        [
+          155.390625,
+          117.26458740234375
+        ],
+        [
+          52.59375,
+          117.26458740234375
+        ]
+      ]
+    },
+    {
+      "title": "B. Whole-Body Control",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          53.7890625,
+          306.64117431640625
+        ],
+        [
+          150.846435546875,
+          306.64117431640625
+        ],
+        [
+          150.846435546875,
+          316.603759765625
+        ],
+        [
+          53.7890625,
+          316.603759765625
+        ]
+      ]
+    },
+    {
+      "title": "C. Real-World Experiments",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          54.0,
+          697.0049743652344
+        ],
+        [
+          166.97589111328125,
+          697.0049743652344
+        ],
+        [
+          166.97589111328125,
+          706.9675750732422
+        ],
+        [
+          54.0,
+          706.9675750732422
+        ]
+      ]
+    },
+    {
+      "title": "VII. DISCUSSION",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          396.84375,
+          288.4921875
+        ],
+        [
+          473.65576171875,
+          288.4921875
+        ],
+        [
+          473.65576171875,
+          298.6192932128906
+        ],
+        [
+          396.84375,
+          298.6192932128906
+        ]
+      ]
+    },
+    {
+      "title": "A. System Design",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          311.37890625,
+          303.57421875
+        ],
+        [
+          386.68359375,
+          303.57421875
+        ],
+        [
+          386.68359375,
+          313.7257995605469
+        ],
+        [
+          311.37890625,
+          313.7257995605469
+        ]
+      ]
+    },
+    {
+      "title": "B. Limitations",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          311.37890625,
+          611.40234375
+        ],
+        [
+          372.33984375,
+          611.40234375
+        ],
+        [
+          372.33984375,
+          622.8805999755859
+        ],
+        [
+          311.37890625,
+          622.8805999755859
+        ]
+      ]
+    },
+    {
+      "title": "C. Future Work",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          54.00001525878906,
+          456.71484375
+        ],
+        [
+          119.01593780517578,
+          456.71484375
+        ],
+        [
+          119.01593780517578,
+          466.869384765625
+        ],
+        [
+          54.00001525878906,
+          466.869384765625
+        ]
+      ]
+    },
+    {
+      "title": "VIII. CONCLUSIONS",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          390.568359375,
+          337.9921875
+        ],
+        [
+          480.17706298828125,
+          337.9921875
+        ],
+        [
+          480.17706298828125,
+          349.0158386230469
+        ],
+        [
+          390.568359375,
+          349.0158386230469
+        ]
+      ]
+    },
+    {
+      "title": "ACKNOWLEDGMENT",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          382.5,
+          543.33984375
+        ],
+        [
+          488.2676086425781,
+          543.33984375
+        ],
+        [
+          488.2676086425781,
+          555.4076690673828
+        ],
+        [
+          382.5,
+          555.4076690673828
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          407.302734375,
+          679.46484375
+        ],
+        [
+          463.5054626464844,
+          679.46484375
+        ],
+        [
+          463.5054626464844,
+          690.0686569213867
+        ],
+        [
+          407.302734375,
+          690.0686569213867
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          144
+        ],
+        [
+          "Line",
+          71
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          189
+        ],
+        [
+          "Line",
+          59
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          503
+        ],
+        [
+          "Line",
+          127
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          5
+        ],
+        [
+          "Equation",
+          4
+        ],
+        [
+          "Reference",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          106
+        ],
+        [
+          "Span",
+          55
+        ],
+        [
+          "TableCell",
+          48
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Reference",
+          4
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          353
+        ],
+        [
+          "Line",
+          88
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "Reference",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          277
+        ],
+        [
+          "Line",
+          110
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          6
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          151
+        ],
+        [
+          "Line",
+          71
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          466
+        ],
+        [
+          "Line",
+          131
+        ],
+        [
+          "ListItem",
+          37
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/su_hitter_humanoid_table_tennis_robot"
+}

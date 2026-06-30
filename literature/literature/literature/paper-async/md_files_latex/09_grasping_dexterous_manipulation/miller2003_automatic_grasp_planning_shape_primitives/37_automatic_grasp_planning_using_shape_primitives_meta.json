@@ -1,0 +1,578 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Automatic Grasp Planning Using Shape Primitives",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          127.8984375,
+          118.4315185546875
+        ],
+        [
+          478.0299987792969,
+          118.4315185546875
+        ],
+        [
+          478.0299987792969,
+          135.646484375
+        ],
+        [
+          127.8984375,
+          135.646484375
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          153.298828125,
+          232.8046875
+        ],
+        [
+          195.03836059570312,
+          232.8046875
+        ],
+        [
+          195.03836059570312,
+          244.23797607421875
+        ],
+        [
+          153.298828125,
+          244.23797607421875
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          57.97265625,
+          434.671875
+        ],
+        [
+          141.13226318359375,
+          434.671875
+        ],
+        [
+          141.13226318359375,
+          448.330810546875
+        ],
+        [
+          57.97265625,
+          448.330810546875
+        ]
+      ]
+    },
+    {
+      "title": "2 GraspIt! Overview",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          312.873046875,
+          319.4296875
+        ],
+        [
+          429.3887023925781,
+          319.4296875
+        ],
+        [
+          429.3887023925781,
+          332.18682861328125
+        ],
+        [
+          312.873046875,
+          332.18682861328125
+        ]
+      ]
+    },
+    {
+      "title": "3 Grasp Preshapes",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          313.171875,
+          576.984375
+        ],
+        [
+          419.466064453125,
+          576.984375
+        ],
+        [
+          419.466064453125,
+          589.1518249511719
+        ],
+        [
+          313.171875,
+          589.1518249511719
+        ]
+      ]
+    },
+    {
+      "title": "4 Grasp Generation",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          57.97265625,
+          501.2718200683594
+        ],
+        [
+          168.9037322998047,
+          501.2718200683594
+        ],
+        [
+          168.9037322998047,
+          513.226806640625
+        ],
+        [
+          57.97265625,
+          513.226806640625
+        ]
+      ]
+    },
+    {
+      "title": "5 Grasp Testing",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          57.076171875,
+          615.5076141357422
+        ],
+        [
+          147.88685607910156,
+          615.5076141357422
+        ],
+        [
+          147.88685607910156,
+          627.4626159667969
+        ],
+        [
+          57.076171875,
+          627.4626159667969
+        ]
+      ]
+    },
+    {
+      "title": "5.1 Grasp Evaluation",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          314.666015625,
+          317.77276611328125
+        ],
+        [
+          422.25592041015625,
+          317.77276611328125
+        ],
+        [
+          422.25592041015625,
+          328.6817626953125
+        ],
+        [
+          314.666015625,
+          328.6817626953125
+        ]
+      ]
+    },
+    {
+      "title": "6 Planning Results",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          56.77734375,
+          430.5649108886719
+        ],
+        [
+          162.28070068359375,
+          430.5649108886719
+        ],
+        [
+          162.28070068359375,
+          442.5198974609375
+        ],
+        [
+          56.77734375,
+          442.5198974609375
+        ]
+      ]
+    },
+    {
+      "title": "7 Future Directions",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          57.673828125,
+          649.8408355712891
+        ],
+        [
+          166.46495056152344,
+          649.8408355712891
+        ],
+        [
+          166.46495056152344,
+          661.7958374023438
+        ],
+        [
+          57.673828125,
+          661.7958374023438
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          57.97265625,
+          465.99609375
+        ],
+        [
+          113.86293029785156,
+          465.99609375
+        ],
+        [
+          113.86293029785156,
+          479.8476867675781
+        ],
+        [
+          57.97265625,
+          479.8476867675781
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          163
+        ],
+        [
+          "Line",
+          84
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          114
+        ],
+        [
+          "Line",
+          64
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PictureGroup",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          135
+        ],
+        [
+          "Line",
+          68
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          204
+        ],
+        [
+          "Line",
+          101
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          173
+        ],
+        [
+          "TableCell",
+          60
+        ],
+        [
+          "Line",
+          46
+        ],
+        [
+          "Caption",
+          4
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "Table",
+          2
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "TableGroup",
+          2
+        ],
+        [
+          "PictureGroup",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          111
+        ],
+        [
+          "Line",
+          3
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          185
+        ],
+        [
+          "Line",
+          79
+        ],
+        [
+          "ListItem",
+          14
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/37_automatic_grasp_planning_using_shape_primitives"
+}

@@ -1,0 +1,1347 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Robert D. Howe",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          26.25390625,
+          60.0908203125
+        ],
+        [
+          110.04296875,
+          60.0908203125
+        ],
+        [
+          110.04296875,
+          72.4569091796875
+        ],
+        [
+          26.25390625,
+          72.4569091796875
+        ]
+      ]
+    },
+    {
+      "title": "Mark R. Cutkosky",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          25.974609375,
+          117.158203125
+        ],
+        [
+          122.611328125,
+          117.158203125
+        ],
+        [
+          122.611328125,
+          131.84747314453125
+        ],
+        [
+          25.974609375,
+          131.84747314453125
+        ]
+      ]
+    },
+    {
+      "title": "Practical Force-Motion\nModels for Sliding\nManipulation",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          273.15234375,
+          50.2646484375
+        ],
+        [
+          501.1199645996094,
+          50.2646484375
+        ],
+        [
+          501.1199645996094,
+          125.8353271484375
+        ],
+        [
+          273.15234375,
+          125.8353271484375
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          24.01953125,
+          246.41015625
+        ],
+        [
+          70.56640625,
+          246.41015625
+        ],
+        [
+          70.56640625,
+          258.3875732421875
+        ],
+        [
+          24.01953125,
+          258.3875732421875
+        ]
+      ]
+    },
+    {
+      "title": "1. Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          26.25390625,
+          449.3583984375
+        ],
+        [
+          105.11019897460938,
+          449.3583984375
+        ],
+        [
+          105.11019897460938,
+          459.2177429199219
+        ],
+        [
+          26.25390625,
+          459.2177429199219
+        ]
+      ]
+    },
+    {
+      "title": "2. Models of the Force-Motion Relationship",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          57.53515625,
+          239.607421875
+        ],
+        [
+          284.32421875,
+          239.607421875
+        ],
+        [
+          284.32421875,
+          254.47772216796875
+        ],
+        [
+          57.53515625,
+          254.47772216796875
+        ]
+      ]
+    },
+    {
+      "title": "2.1. Kinematics of Sliding",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          58.09375,
+          515.8740234375
+        ],
+        [
+          169.8125,
+          515.8740234375
+        ],
+        [
+          169.8125,
+          526.9180145263672
+        ],
+        [
+          58.09375,
+          526.9180145263672
+        ]
+      ]
+    },
+    {
+      "title": "2.2. Axisymmetric Contacts and Limit Curves",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          273.6304062909567,
+          309.5244140625
+        ],
+        [
+          467.04587155963304,
+          309.5244140625
+        ],
+        [
+          467.04587155963304,
+          319.3505859375
+        ],
+        [
+          273.6304062909567,
+          319.3505859375
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          83.7890625,
+          55.177734375
+        ],
+        [
+          185.453125,
+          55.177734375
+        ],
+        [
+          185.453125,
+          65.759765625
+        ],
+        [
+          83.7890625,
+          65.759765625
+        ]
+      ]
+    },
+    {
+      "title": "",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          348.5625,
+          54.7998046875
+        ],
+        [
+          509.4375,
+          54.7998046875
+        ],
+        [
+          509.4375,
+          66.1376953125
+        ],
+        [
+          348.5625,
+          66.1376953125
+        ]
+      ]
+    },
+    {
+      "title": "2.3. Effect of Pressure Distributiort Variation",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          306.109375,
+          509.8271484375
+        ],
+        [
+          498.265625,
+          509.8271484375
+        ],
+        [
+          498.265625,
+          520.9180145263672
+        ],
+        [
+          306.109375,
+          520.9180145263672
+        ]
+      ]
+    },
+    {
+      "title": "2.4. Noncircularly Symmetric Contacts: Limit Surfaces",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          23.4609375,
+          488.6630859375
+        ],
+        [
+          256.79998779296875,
+          488.6630859375
+        ],
+        [
+          256.79998779296875,
+          501.50909423828125
+        ],
+        [
+          23.4609375,
+          501.50909423828125
+        ]
+      ]
+    },
+    {
+      "title": "2.5. Point Contacts and Limit Surface Facets",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          310.3643512450852,
+          654.75
+        ],
+        [
+          503.7798165137615,
+          654.75
+        ],
+        [
+          503.7798165137615,
+          663.75
+        ],
+        [
+          310.3643512450852,
+          663.75
+        ]
+      ]
+    },
+    {
+      "title": "3. Experiments",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          275.107421875,
+          206.349609375
+        ],
+        [
+          354.986328125,
+          206.349609375
+        ],
+        [
+          354.986328125,
+          219.15386962890625
+        ],
+        [
+          275.107421875,
+          219.15386962890625
+        ]
+      ]
+    },
+    {
+      "title": "4. Practical Methods of Computing the Force-\nMotion Relationship",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          24.578125,
+          495.84375
+        ],
+        [
+          263.5154113769531,
+          495.84375
+        ],
+        [
+          263.5154113769531,
+          522.3177795410156
+        ],
+        [
+          24.578125,
+          522.3177795410156
+        ]
+      ]
+    },
+    {
+      "title": "4.1. ~'omparison of Methods",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          276.47998046875,
+          391.9130859375
+        ],
+        [
+          397.998046875,
+          391.9130859375
+        ],
+        [
+          397.998046875,
+          402.91790771484375
+        ],
+        [
+          276.47998046875,
+          402.91790771484375
+        ]
+      ]
+    },
+    {
+      "title": "4.2. Practical Approximate Solutions",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          306.7200012207031,
+          95.6162109375
+        ],
+        [
+          462.2458190917969,
+          95.6162109375
+        ],
+        [
+          462.2458190917969,
+          108.65234375
+        ],
+        [
+          306.7200012207031,
+          108.65234375
+        ]
+      ]
+    },
+    {
+      "title": "Table 2. Summary of Procedures for Constructing Approximating Ellipses and Ellipsoids for Limit Surfaces.",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          26.988204456094365,
+          82.0107421875
+        ],
+        [
+          499.28178243774573,
+          82.0107421875
+        ],
+        [
+          499.28178243774573,
+          93.0
+        ],
+        [
+          26.988204456094365,
+          93.0
+        ]
+      ]
+    },
+    {
+      "title": "1. Characterize contact.",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          27.737876802096984,
+          103.5
+        ],
+        [
+          133.44167758846658,
+          103.5
+        ],
+        [
+          133.44167758846658,
+          111.75
+        ],
+        [
+          27.737876802096984,
+          111.75
+        ]
+      ]
+    },
+    {
+      "title": "2. Find approximating ellipse.",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          27.737876802096984,
+          182.91796875
+        ],
+        [
+          159.68020969855831,
+          182.91796875
+        ],
+        [
+          159.68020969855831,
+          192.0
+        ],
+        [
+          27.737876802096984,
+          192.0
+        ]
+      ]
+    },
+    {
+      "title": "3. Normalize ellipse.",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          26.533203125,
+          309.75
+        ],
+        [
+          117.69855832241153,
+          309.75
+        ],
+        [
+          117.69855832241153,
+          318.97265625
+        ],
+        [
+          26.533203125,
+          318.97265625
+        ]
+      ]
+    },
+    {
+      "title": "4. Add facets/flattening.",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          26.988204456094365,
+          365.25
+        ],
+        [
+          131.94233289646132,
+          365.25
+        ],
+        [
+          131.94233289646132,
+          375.2841796875
+        ],
+        [
+          26.988204456094365,
+          375.2841796875
+        ]
+      ]
+    },
+    {
+      "title": "5. Relate sliding motion to force-moment combination.",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          26.238532110091743,
+          467.4990234375
+        ],
+        [
+          265.3840104849279,
+          467.4990234375
+        ],
+        [
+          265.3840104849279,
+          477.75
+        ],
+        [
+          26.238532110091743,
+          477.75
+        ]
+      ]
+    },
+    {
+      "title": "4.3. Uses: Planning, Simulation, and Control",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          56.9765625,
+          515.8740234375
+        ],
+        [
+          249.35987854003906,
+          515.8740234375
+        ],
+        [
+          249.35987854003906,
+          526.5847930908203
+        ],
+        [
+          56.9765625,
+          526.5847930908203
+        ]
+      ]
+    },
+    {
+      "title": "4.4. Three-Dimensional Applications",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          306.66796875,
+          482.6162109375
+        ],
+        [
+          462.479736328125,
+          482.6162109375
+        ],
+        [
+          462.479736328125,
+          494.8648376464844
+        ],
+        [
+          306.66796875,
+          494.8648376464844
+        ]
+      ]
+    },
+    {
+      "title": "5. Conclusions",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          28.208984375,
+          322.3740234375
+        ],
+        [
+          104.39085388183594,
+          322.3740234375
+        ],
+        [
+          104.39085388183594,
+          333.015869140625
+        ],
+        [
+          28.208984375,
+          333.015869140625
+        ]
+      ]
+    },
+    {
+      "title": "Acknowledgments",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          277.62109375,
+          117.158203125
+        ],
+        [
+          370.7850341796875,
+          117.158203125
+        ],
+        [
+          370.7850341796875,
+          130.21075439453125
+        ],
+        [
+          277.62109375,
+          130.21075439453125
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          278.3999938964844,
+          198.03515625
+        ],
+        [
+          333.759765625,
+          198.03515625
+        ],
+        [
+          333.759765625,
+          208.2216796875
+        ],
+        [
+          278.3999938964844,
+          208.2216796875
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          156
+        ],
+        [
+          "Line",
+          82
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "SectionHeader",
+          5
+        ],
+        [
+          "PageFooter",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          185
+        ],
+        [
+          "Line",
+          96
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Footnote",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          96
+        ],
+        [
+          "Span",
+          79
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          121
+        ],
+        [
+          "Line",
+          62
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          120
+        ],
+        [
+          "Line",
+          62
+        ],
+        [
+          "TableCell",
+          15
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          82
+        ],
+        [
+          "Span",
+          46
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Line",
+          1
+        ],
+        [
+          "Span",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          86
+        ],
+        [
+          "Span",
+          28
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          105
+        ],
+        [
+          "Line",
+          56
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          70
+        ],
+        [
+          "Line",
+          38
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          107
+        ],
+        [
+          "Line",
+          56
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          189
+        ],
+        [
+          "Line",
+          100
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 12,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          61
+        ],
+        [
+          "Span",
+          56
+        ],
+        [
+          "ListItem",
+          10
+        ],
+        [
+          "SectionHeader",
+          6
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "ListGroup",
+          3
+        ],
+        [
+          "PageFooter",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 13,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          193
+        ],
+        [
+          "Line",
+          99
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 14,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          188
+        ],
+        [
+          "Line",
+          100
+        ],
+        [
+          "ListItem",
+          11
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 15,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          187
+        ],
+        [
+          "Line",
+          96
+        ],
+        [
+          "ListItem",
+          30
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/howe_cutkosky_1996_force_motion_models_sliding"
+}

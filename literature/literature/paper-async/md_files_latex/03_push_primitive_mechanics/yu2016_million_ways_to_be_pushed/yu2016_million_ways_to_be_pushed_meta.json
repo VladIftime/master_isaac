@@ -1,0 +1,766 @@
+{
+  "table_of_contents": [
+    {
+      "title": "More than a Million Ways to Be Pushed.\nA High-Fidelity Experimental Dataset of Planar Pushing",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          107.41100311279297,
+          76.7255859375
+        ],
+        [
+          504.5929260253906,
+          76.7255859375
+        ],
+        [
+          504.5929260253906,
+          112.59185791015625
+        ],
+        [
+          107.41100311279297,
+          112.59185791015625
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          135.66796875,
+          540.24609375
+        ],
+        [
+          215.75390625,
+          540.24609375
+        ],
+        [
+          215.75390625,
+          552.1692962646484
+        ],
+        [
+          135.66796875,
+          552.1692962646484
+        ]
+      ]
+    },
+    {
+      "title": "II. RELATED WORK",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          132.6796875,
+          496.8363952636719
+        ],
+        [
+          219.35816955566406,
+          496.8363952636719
+        ],
+        [
+          219.35816955566406,
+          506.79901123046875
+        ],
+        [
+          132.6796875,
+          506.79901123046875
+        ]
+      ]
+    },
+    {
+      "title": "III. THE PUSHING DATASET",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          374.431640625,
+          484.2592468261719
+        ],
+        [
+          495.80023193359375,
+          484.2592468261719
+        ],
+        [
+          495.80023193359375,
+          494.22186279296875
+        ],
+        [
+          374.431640625,
+          494.22186279296875
+        ]
+      ]
+    },
+    {
+      "title": "IV. DATA COLLECTION SPECIFICATIONS",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          348.0,
+          203.25
+        ],
+        [
+          522.0,
+          203.25
+        ],
+        [
+          522.0,
+          212.25
+        ],
+        [
+          348.0,
+          212.25
+        ]
+      ]
+    },
+    {
+      "title": "A. Hardware",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          309.5859375,
+          278.25
+        ],
+        [
+          367.5,
+          278.25
+        ],
+        [
+          367.5,
+          286.9453125
+        ],
+        [
+          309.5859375,
+          286.9453125
+        ]
+      ]
+    },
+    {
+      "title": "B. Software",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          53.490234375,
+          229.32421875
+        ],
+        [
+          102.61748504638672,
+          229.32421875
+        ],
+        [
+          102.61748504638672,
+          240.14459228515625
+        ],
+        [
+          53.490234375,
+          240.14459228515625
+        ]
+      ]
+    },
+    {
+      "title": "C. Data Collection Process",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          53.490234375,
+          336.4453125
+        ],
+        [
+          167.62344360351562,
+          336.4453125
+        ],
+        [
+          167.62344360351562,
+          346.41253662109375
+        ],
+        [
+          53.490234375,
+          346.41253662109375
+        ]
+      ]
+    },
+    {
+      "title": "V. VARIABILITY OF DYNAMIC SURFACE FRICTION",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          67.53515625,
+          614.49609375
+        ],
+        [
+          284.18267822265625,
+          614.49609375
+        ],
+        [
+          284.18267822265625,
+          624.6089019775391
+        ],
+        [
+          67.53515625,
+          624.6089019775391
+        ]
+      ]
+    },
+    {
+      "title": "VI. EVALUATION OF MODELS OF FRICTIONAL SLIDING",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          56.1796875,
+          298.5
+        ],
+        [
+          295.2421875,
+          298.5
+        ],
+        [
+          295.2421875,
+          316.72265625
+        ],
+        [
+          56.1796875,
+          316.72265625
+        ]
+      ]
+    },
+    {
+      "title": "VII. STOCHASTICITY OF PUSHING MOTION",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          83.25,
+          422.68359375
+        ],
+        [
+          269.25,
+          422.68359375
+        ],
+        [
+          269.25,
+          432.75
+        ],
+        [
+          83.25,
+          432.75
+        ]
+      ]
+    },
+    {
+      "title": "VIII. CONCLUSION",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          390.568359375,
+          576.75
+        ],
+        [
+          477.75,
+          576.75
+        ],
+        [
+          477.75,
+          586.5
+        ],
+        [
+          390.568359375,
+          586.5
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          148.21875,
+          537.0842132568359
+        ],
+        [
+          204.30548095703125,
+          537.0842132568359
+        ],
+        [
+          204.30548095703125,
+          547.0468139648438
+        ],
+        [
+          148.21875,
+          547.0468139648438
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          221
+        ],
+        [
+          "Line",
+          88
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          291
+        ],
+        [
+          "Line",
+          99
+        ],
+        [
+          "TableCell",
+          24
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "Reference",
+          4
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          102
+        ],
+        [
+          "Span",
+          33
+        ],
+        [
+          "TableCell",
+          12
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          338
+        ],
+        [
+          "Line",
+          97
+        ],
+        [
+          "TableCell",
+          52
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "ListItem",
+          8
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Reference",
+          3
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          360
+        ],
+        [
+          "Line",
+          80
+        ],
+        [
+          "ListItem",
+          5
+        ],
+        [
+          "Caption",
+          4
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Reference",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          121
+        ],
+        [
+          "Span",
+          50
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Reference",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          129
+        ],
+        [
+          "Span",
+          38
+        ],
+        [
+          "TableCell",
+          28
+        ],
+        [
+          "ListItem",
+          11
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Reference",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          323
+        ],
+        [
+          "Line",
+          89
+        ],
+        [
+          "Reference",
+          31
+        ],
+        [
+          "ListItem",
+          30
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/yu2016_million_ways_to_be_pushed"
+}

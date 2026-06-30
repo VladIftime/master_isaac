@@ -1,0 +1,1467 @@
+{
+  "table_of_contents": [
+    {
+      "title": "LEARNING WITH AMIGO:\nADVERSARIALLY MOTIVATED INTRINSIC GOALS",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          106.3828125,
+          81.2109375
+        ],
+        [
+          465.0,
+          80.25
+        ],
+        [
+          465.0,
+          114.0
+        ],
+        [
+          106.3828125,
+          114.0
+        ]
+      ]
+    },
+    {
+      "title": "Andres Campero*",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          112.658203125,
+          136.125
+        ],
+        [
+          191.25,
+          136.125
+        ],
+        [
+          191.25,
+          146.25
+        ],
+        [
+          112.658203125,
+          146.25
+        ]
+      ]
+    },
+    {
+      "title": "Joshua B. Tenenbaum",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          112.95703125,
+          196.06640625
+        ],
+        [
+          208.5,
+          196.06640625
+        ],
+        [
+          208.5,
+          207.0
+        ],
+        [
+          112.95703125,
+          207.0
+        ]
+      ]
+    },
+    {
+      "title": "Roberta Raileanu",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          271.634765625,
+          135.73828125
+        ],
+        [
+          351.0,
+          135.73828125
+        ],
+        [
+          351.0,
+          145.5
+        ],
+        [
+          271.634765625,
+          145.5
+        ]
+      ]
+    },
+    {
+      "title": "Tim Rockt\u00e4schel",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          266.25,
+          197.25
+        ],
+        [
+          340.5,
+          197.25
+        ],
+        [
+          340.5,
+          206.25
+        ],
+        [
+          266.25,
+          206.25
+        ]
+      ]
+    },
+    {
+      "title": "Edward Grefenstette",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          386.0859375,
+          197.25
+        ],
+        [
+          479.3203125,
+          197.25
+        ],
+        [
+          479.3203125,
+          206.25
+        ],
+        [
+          386.0859375,
+          206.25
+        ]
+      ]
+    },
+    {
+      "title": "ABSTRACT",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          276.75,
+          281.91796875
+        ],
+        [
+          334.5,
+          281.91796875
+        ],
+        [
+          334.5,
+          291.0
+        ],
+        [
+          276.75,
+          291.0
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          108.17578125,
+          472.18359375
+        ],
+        [
+          206.25,
+          472.18359375
+        ],
+        [
+          206.25,
+          483.75
+        ],
+        [
+          108.17578125,
+          483.75
+        ]
+      ]
+    },
+    {
+      "title": "2 RELATED WORK",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          107.876953125,
+          81.0
+        ],
+        [
+          212.25,
+          82.37109375
+        ],
+        [
+          212.25,
+          92.25
+        ],
+        [
+          107.876953125,
+          91.5
+        ]
+      ]
+    },
+    {
+      "title": "3 ADVERSARIALLY MOTIVATED INTRINSIC GOALS",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          107.578125,
+          342.24609375
+        ],
+        [
+          375.75,
+          342.24609375
+        ],
+        [
+          375.75,
+          351.75
+        ],
+        [
+          107.578125,
+          351.75
+        ]
+      ]
+    },
+    {
+      "title": "3.1 Training the student",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          106.5,
+          475.27734375
+        ],
+        [
+          237.75,
+          475.27734375
+        ],
+        [
+          237.75,
+          486.0
+        ],
+        [
+          106.5,
+          486.0
+        ]
+      ]
+    },
+    {
+      "title": "3.2 Training the Teacher",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          107.25,
+          82.7578125
+        ],
+        [
+          238.5,
+          82.7578125
+        ],
+        [
+          238.5,
+          92.25
+        ],
+        [
+          107.25,
+          92.25
+        ]
+      ]
+    },
+    {
+      "title": "3.3 Types of Goals",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          108.17578125,
+          419.58984375
+        ],
+        [
+          206.25,
+          419.58984375
+        ],
+        [
+          206.25,
+          429.0
+        ],
+        [
+          108.17578125,
+          429.0
+        ]
+      ]
+    },
+    {
+      "title": "3.4 AUXILIARY TEACHER LOSSES",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          106.5,
+          629.25
+        ],
+        [
+          261.0,
+          629.25
+        ],
+        [
+          261.0,
+          638.47265625
+        ],
+        [
+          106.5,
+          638.47265625
+        ]
+      ]
+    },
+    {
+      "title": "4 EXPERIMENTS",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          106.3828125,
+          394.5
+        ],
+        [
+          200.25,
+          394.5
+        ],
+        [
+          200.25,
+          403.5
+        ],
+        [
+          106.3828125,
+          403.5
+        ]
+      ]
+    },
+    {
+      "title": "4.1 ENVIRONMENTS",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          106.3828125,
+          83.14453125
+        ],
+        [
+          201.75,
+          83.14453125
+        ],
+        [
+          201.75,
+          92.25
+        ],
+        [
+          106.3828125,
+          92.25
+        ]
+      ]
+    },
+    {
+      "title": "4.2 AMIGO IMPLEMENTATION",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          105.78515625,
+          343.01953125
+        ],
+        [
+          246.75,
+          343.01953125
+        ],
+        [
+          246.75,
+          351.75
+        ],
+        [
+          105.78515625,
+          351.75
+        ]
+      ]
+    },
+    {
+      "title": "4.3 Baselines and Evaluation",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          106.5,
+          487.5
+        ],
+        [
+          260.25,
+          487.5
+        ],
+        [
+          260.25,
+          496.16015625
+        ],
+        [
+          106.5,
+          496.16015625
+        ]
+      ]
+    },
+    {
+      "title": "4.4 RESULTS AND DISCUSSION",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          106.5,
+          219.75
+        ],
+        [
+          248.25,
+          219.75
+        ],
+        [
+          248.25,
+          228.1640625
+        ],
+        [
+          106.5,
+          228.1640625
+        ]
+      ]
+    },
+    {
+      "title": "5 CONCLUSION",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          107.25,
+          380.25
+        ],
+        [
+          195.75,
+          380.25
+        ],
+        [
+          195.75,
+          390.0
+        ],
+        [
+          107.25,
+          390.0
+        ]
+      ]
+    },
+    {
+      "title": "ACKNOWLEDGMENTS",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          105.78515625,
+          691.5
+        ],
+        [
+          201.0,
+          691.5
+        ],
+        [
+          201.0,
+          700.34765625
+        ],
+        [
+          105.78515625,
+          700.34765625
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          106.98046875,
+          81.59765625
+        ],
+        [
+          175.5,
+          81.59765625
+        ],
+        [
+          175.5,
+          92.25
+        ],
+        [
+          106.98046875,
+          92.25
+        ]
+      ]
+    },
+    {
+      "title": "A FULL RESULTS",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          106.3828125,
+          573.0
+        ],
+        [
+          204.75,
+          573.0
+        ],
+        [
+          204.75,
+          583.5
+        ],
+        [
+          106.3828125,
+          583.5
+        ]
+      ]
+    },
+    {
+      "title": "B HYPERPARAMETER SWEEPS AND BEST VALUES",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          107.578125,
+          243.24609375
+        ],
+        [
+          372.75,
+          243.24609375
+        ],
+        [
+          372.75,
+          253.5
+        ],
+        [
+          107.578125,
+          255.0
+        ]
+      ]
+    },
+    {
+      "title": "C SAMPLE EFFICIENCY",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          107.25,
+          675.0
+        ],
+        [
+          236.25,
+          675.0
+        ],
+        [
+          236.25,
+          684.87890625
+        ],
+        [
+          107.25,
+          684.87890625
+        ]
+      ]
+    },
+    {
+      "title": "D ABLATION STUDY",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          108.474609375,
+          663.99609375
+        ],
+        [
+          222.0,
+          663.99609375
+        ],
+        [
+          222.0,
+          674.25
+        ],
+        [
+          108.474609375,
+          674.25
+        ]
+      ]
+    },
+    {
+      "title": "E QUALITATIVE ANALYSIS",
+      "heading_level": null,
+      "page_id": 15,
+      "polygon": [
+        [
+          106.98046875,
+          603.75
+        ],
+        [
+          252.75,
+          603.75
+        ],
+        [
+          252.75,
+          614.25
+        ],
+        [
+          106.98046875,
+          614.25
+        ]
+      ]
+    },
+    {
+      "title": "F GOAL EXAMPLES",
+      "heading_level": null,
+      "page_id": 17,
+      "polygon": [
+        [
+          106.5,
+          132.75
+        ],
+        [
+          218.25,
+          132.75
+        ],
+        [
+          218.25,
+          142.69921875
+        ],
+        [
+          106.5,
+          142.69921875
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          89
+        ],
+        [
+          "Span",
+          26
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "SectionHeader",
+          8
+        ],
+        [
+          "PageHeader",
+          2
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          58
+        ],
+        [
+          "Span",
+          29
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          60
+        ],
+        [
+          "Span",
+          49
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          58
+        ],
+        [
+          "Span",
+          56
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          59
+        ],
+        [
+          "Span",
+          58
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          53
+        ],
+        [
+          "Span",
+          18
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          63
+        ],
+        [
+          "Span",
+          56
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          59
+        ],
+        [
+          "Line",
+          49
+        ],
+        [
+          "Span",
+          18
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          54
+        ],
+        [
+          "Span",
+          12
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          70
+        ],
+        [
+          "Span",
+          48
+        ],
+        [
+          "ListItem",
+          17
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          67
+        ],
+        [
+          "Span",
+          51
+        ],
+        [
+          "ListItem",
+          17
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          58
+        ],
+        [
+          "Span",
+          46
+        ],
+        [
+          "ListItem",
+          16
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 12,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          168
+        ],
+        [
+          "Line",
+          26
+        ],
+        [
+          "Span",
+          26
+        ],
+        [
+          "Caption",
+          4
+        ],
+        [
+          "Table",
+          4
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "TableGroup",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 13,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          67
+        ],
+        [
+          "Line",
+          65
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 14,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          80
+        ],
+        [
+          "Span",
+          13
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 15,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          53
+        ],
+        [
+          "Line",
+          50
+        ],
+        [
+          "Span",
+          29
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 16,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          49
+        ],
+        [
+          "Span",
+          13
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 17,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          23
+        ],
+        [
+          "Span",
+          14
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/campero2021_amigo_adversarial_intrinsic_goals"
+}

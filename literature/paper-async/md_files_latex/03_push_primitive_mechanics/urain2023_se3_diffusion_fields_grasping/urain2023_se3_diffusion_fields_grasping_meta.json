@@ -1,0 +1,1618 @@
+{
+  "table_of_contents": [
+    {
+      "title": "SE(3)-DiffusionFields: Learning smooth cost functions for joint grasp and motion optimization through diffusion",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          101.6015625,
+          72.703125
+        ],
+        [
+          508.0078125,
+          72.703125
+        ],
+        [
+          508.0078125,
+          108.28125
+        ],
+        [
+          101.6015625,
+          108.28125
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          129.0,
+          515.25
+        ],
+        [
+          222.75,
+          515.25
+        ],
+        [
+          222.75,
+          524.00390625
+        ],
+        [
+          129.0,
+          524.00390625
+        ]
+      ]
+    },
+    {
+      "title": "II. PRELIMINARIES",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          133.5,
+          657.80859375
+        ],
+        [
+          218.25,
+          657.80859375
+        ],
+        [
+          218.25,
+          668.25
+        ],
+        [
+          133.5,
+          668.25
+        ]
+      ]
+    },
+    {
+      "title": "III. SE(3)-DIFFUSION FIELDS",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          103.39453125,
+          145.79296875
+        ],
+        [
+          249.0,
+          145.79296875
+        ],
+        [
+          249.0,
+          156.75
+        ],
+        [
+          103.39453125,
+          156.75
+        ]
+      ]
+    },
+    {
+      "title": "A. From Euclidean diffusion to diffusion in SE(3)",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          52.5,
+          320.203125
+        ],
+        [
+          258.0,
+          320.203125
+        ],
+        [
+          258.0,
+          330.0
+        ],
+        [
+          52.5,
+          330.0
+        ]
+      ]
+    },
+    {
+      "title": "B. Architecture & training of Grasp SE(3)-DiffusionFields",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          311.25,
+          288.75
+        ],
+        [
+          553.5,
+          288.75
+        ],
+        [
+          553.5,
+          298.546875
+        ],
+        [
+          311.25,
+          298.546875
+        ]
+      ]
+    },
+    {
+      "title": "Algorithm 1: Grasp SE(3)-DiF Training Given: \\theta_0: initial params for z, F_{\\theta}, D_{\\theta};",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          56.1796875,
+          402.0
+        ],
+        [
+          225.75,
+          402.0
+        ],
+        [
+          225.75,
+          426.0
+        ],
+        [
+          56.1796875,
+          425.25
+        ]
+      ]
+    },
+    {
+      "title": "C. Grasp and motion optimization with diffusion models",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          52.5,
+          657.80859375
+        ],
+        [
+          286.875,
+          657.80859375
+        ],
+        [
+          286.875,
+          668.25
+        ],
+        [
+          52.5,
+          668.25
+        ]
+      ]
+    },
+    {
+      "title": "IV. EXPERIMENTAL EVALUATION",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          350.25,
+          670.18359375
+        ],
+        [
+          520.5,
+          670.18359375
+        ],
+        [
+          520.5,
+          681.75
+        ],
+        [
+          350.25,
+          681.75
+        ]
+      ]
+    },
+    {
+      "title": "A. Evaluation of 6DoF grasp pose generation",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          51.3984375,
+          372.75
+        ],
+        [
+          244.5,
+          372.75
+        ],
+        [
+          244.5,
+          382.5
+        ],
+        [
+          51.3984375,
+          382.5
+        ]
+      ]
+    },
+    {
+      "title": "B. Performance on grasp and motion optimization",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          311.25,
+          337.21875
+        ],
+        [
+          520.5,
+          337.21875
+        ],
+        [
+          520.5,
+          346.5
+        ],
+        [
+          311.25,
+          346.5
+        ]
+      ]
+    },
+    {
+      "title": "C. Grasp and motion optimization on real robots",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          52.5,
+          336.75
+        ],
+        [
+          258.0,
+          336.75
+        ],
+        [
+          258.0,
+          346.5
+        ],
+        [
+          52.5,
+          346.5
+        ]
+      ]
+    },
+    {
+      "title": "V. RELATED WORK",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          386.0859375,
+          208.5
+        ],
+        [
+          484.5,
+          208.5
+        ],
+        [
+          484.5,
+          218.25
+        ],
+        [
+          386.0859375,
+          218.25
+        ]
+      ]
+    },
+    {
+      "title": "VI. CONCLUSION",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          388.4765625,
+          573.0
+        ],
+        [
+          480.0,
+          573.0
+        ],
+        [
+          480.0,
+          582.78515625
+        ],
+        [
+          388.4765625,
+          582.78515625
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          147.75,
+          53.75390625
+        ],
+        [
+          204.75,
+          53.75390625
+        ],
+        [
+          204.75,
+          63.0
+        ],
+        [
+          147.75,
+          63.0
+        ]
+      ]
+    },
+    {
+      "title": "APPENDIX I",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          279.0,
+          54.0
+        ],
+        [
+          332.296875,
+          54.0
+        ],
+        [
+          332.296875,
+          62.25
+        ],
+        [
+          279.0,
+          62.25
+        ]
+      ]
+    },
+    {
+      "title": "THEORY ON SE(3) LIE GROUP: DERIVATIVES AND DISTRIBUTIONS",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          164.25,
+          66.0
+        ],
+        [
+          446.25,
+          66.0
+        ],
+        [
+          446.25,
+          75.0
+        ],
+        [
+          164.25,
+          75.0
+        ]
+      ]
+    },
+    {
+      "title": "A. Derivatives on Lie groups",
+      "heading_level": null,
+      "page_id": 9,
+      "polygon": [
+        [
+          51.3984375,
+          441.75
+        ],
+        [
+          173.3203125,
+          441.75
+        ],
+        [
+          173.3203125,
+          452.84765625
+        ],
+        [
+          51.3984375,
+          452.84765625
+        ]
+      ]
+    },
+    {
+      "title": "B. Distributions on Lie groups",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          52.5,
+          54.140625
+        ],
+        [
+          181.5,
+          54.140625
+        ],
+        [
+          181.5,
+          63.75
+        ],
+        [
+          52.5,
+          63.75
+        ]
+      ]
+    },
+    {
+      "title": "APPENDIX II\nALGORITHMIC DETAILS",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          254.25,
+          493.83984375
+        ],
+        [
+          357.0,
+          493.83984375
+        ],
+        [
+          357.0,
+          515.25
+        ],
+        [
+          254.25,
+          515.25
+        ]
+      ]
+    },
+    {
+      "title": "A. Algorithmic implementation of the training procedure",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          51.3984375,
+          552.0
+        ],
+        [
+          287.25,
+          552.62109375
+        ],
+        [
+          287.25,
+          563.25
+        ],
+        [
+          51.3984375,
+          561.75
+        ]
+      ]
+    },
+    {
+      "title": "Algorithm 2: Training procedure for SE(3)-DiF Given: \\theta_0: initial parameters of the function E_{\\theta};",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          56.1796875,
+          54.75
+        ],
+        [
+          257.25,
+          54.75
+        ],
+        [
+          257.25,
+          77.25
+        ],
+        [
+          56.1796875,
+          77.25
+        ]
+      ]
+    },
+    {
+      "title": "B. Algorithmic implementation of 6D grasp generation using SE(3)-DiF",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          52.5,
+          441.0
+        ],
+        [
+          351.0,
+          441.0
+        ],
+        [
+          351.0,
+          450.75
+        ],
+        [
+          52.5,
+          450.75
+        ]
+      ]
+    },
+    {
+      "title": "Algorithm 3: SE(3) grasp generation pipeline",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          56.77734375,
+          513.0
+        ],
+        [
+          248.25,
+          513.0
+        ],
+        [
+          248.25,
+          524.00390625
+        ],
+        [
+          56.77734375,
+          524.00390625
+        ]
+      ]
+    },
+    {
+      "title": "C. Algorithmic implementation of robot trajectory optimization using SE(3)-DiF",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          52.5,
+          681.0
+        ],
+        [
+          384.75,
+          681.0
+        ],
+        [
+          384.75,
+          691.06640625
+        ],
+        [
+          52.5,
+          691.06640625
+        ]
+      ]
+    },
+    {
+      "title": "Algorithm 4: Trajectory optimization pipeline",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          56.1796875,
+          54.140625
+        ],
+        [
+          249.75,
+          54.140625
+        ],
+        [
+          249.75,
+          64.5
+        ],
+        [
+          56.1796875,
+          64.5
+        ]
+      ]
+    },
+    {
+      "title": "APPENDIX III\nEXTENDED EXPERIMENTAL EVALUATION",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          218.25,
+          379.5
+        ],
+        [
+          392.25,
+          379.5
+        ],
+        [
+          392.25,
+          401.25
+        ],
+        [
+          218.25,
+          400.5
+        ]
+      ]
+    },
+    {
+      "title": "A. Evaluation of SE(3)-DiffusionFields as 6D grasp pose generative models",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          52.5,
+          406.5
+        ],
+        [
+          366.75,
+          406.5
+        ],
+        [
+          366.75,
+          416.25
+        ],
+        [
+          52.5,
+          416.25
+        ]
+      ]
+    },
+    {
+      "title": "B. Evaluation of SE(3)-DiffusionFields for robot grasp pose generation",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          52.5,
+          297.0
+        ],
+        [
+          347.25,
+          297.0
+        ],
+        [
+          347.25,
+          306.75
+        ],
+        [
+          52.5,
+          306.75
+        ]
+      ]
+    },
+    {
+      "title": "Exact weighting of cost terms",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          62.25,
+          89.25
+        ],
+        [
+          195.0,
+          90.4921875
+        ],
+        [
+          195.0,
+          99.7734375
+        ],
+        [
+          62.25,
+          99.7734375
+        ]
+      ]
+    },
+    {
+      "title": "C. Evaluation of SE(3)-DiffusionFields for joint grasp and motion optimization",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          52.5,
+          281.91796875
+        ],
+        [
+          379.5,
+          281.91796875
+        ],
+        [
+          379.5,
+          291.0
+        ],
+        [
+          52.5,
+          291.0
+        ]
+      ]
+    },
+    {
+      "title": "Exact weighting of cost terms",
+      "heading_level": null,
+      "page_id": 16,
+      "polygon": [
+        [
+          61.55859375,
+          53.75390625
+        ],
+        [
+          195.0,
+          53.75390625
+        ],
+        [
+          195.0,
+          63.0
+        ],
+        [
+          61.55859375,
+          63.0
+        ]
+      ]
+    },
+    {
+      "title": "Exact weighting of cost terms",
+      "heading_level": null,
+      "page_id": 16,
+      "polygon": [
+        [
+          62.25,
+          396.0
+        ],
+        [
+          195.0,
+          396.0
+        ],
+        [
+          195.0,
+          406.44140625
+        ],
+        [
+          62.25,
+          406.44140625
+        ]
+      ]
+    },
+    {
+      "title": "Exact weighting of cost terms",
+      "heading_level": null,
+      "page_id": 16,
+      "polygon": [
+        [
+          62.25,
+          651.62109375
+        ],
+        [
+          194.25,
+          651.62109375
+        ],
+        [
+          194.25,
+          660.75
+        ],
+        [
+          62.25,
+          660.75
+        ]
+      ]
+    },
+    {
+      "title": "D. Pointcloud based SE(3)-DiffusionFields",
+      "heading_level": null,
+      "page_id": 16,
+      "polygon": [
+        [
+          52.5,
+          696.75
+        ],
+        [
+          229.5,
+          696.75
+        ],
+        [
+          229.5,
+          706.53515625
+        ],
+        [
+          52.5,
+          706.53515625
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          98
+        ],
+        [
+          "Span",
+          64
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          128
+        ],
+        [
+          "Line",
+          117
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          116
+        ],
+        [
+          "Span",
+          106
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          204
+        ],
+        [
+          "Line",
+          134
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Code",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          131
+        ],
+        [
+          "Span",
+          65
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          112
+        ],
+        [
+          "Span",
+          32
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          8
+        ],
+        [
+          "Text",
+          1
+        ],
+        [
+          "Span",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          259
+        ],
+        [
+          "Span",
+          166
+        ],
+        [
+          "ListItem",
+          48
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          138
+        ],
+        [
+          "Span",
+          91
+        ],
+        [
+          "ListItem",
+          23
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          145
+        ],
+        [
+          "Line",
+          58
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "Equation",
+          4
+        ],
+        [
+          "SectionHeader",
+          3
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          64
+        ],
+        [
+          "Span",
+          40
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Equation",
+          6
+        ],
+        [
+          "SectionHeader",
+          3
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          132
+        ],
+        [
+          "Line",
+          92
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "Code",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 12,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          59
+        ],
+        [
+          "Line",
+          55
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "Code",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 13,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          53
+        ],
+        [
+          "Span",
+          39
+        ],
+        [
+          "TableCell",
+          28
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "Picture",
+          4
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 14,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          48
+        ],
+        [
+          "TableCell",
+          40
+        ],
+        [
+          "Span",
+          22
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Picture",
+          3
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 15,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          143
+        ],
+        [
+          "Span",
+          38
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 16,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          57
+        ],
+        [
+          "TableCell",
+          42
+        ],
+        [
+          "Span",
+          30
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Table",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "TableGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 17,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          54
+        ],
+        [
+          "Line",
+          49
+        ],
+        [
+          "TableCell",
+          24
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 18,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          31
+        ],
+        [
+          "Span",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Text",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/urain2023_se3_diffusion_fields_grasping"
+}

@@ -1,0 +1,655 @@
+{
+  "table_of_contents": [
+    {
+      "title": "A Hybrid Approach for Learning to Shift and Grasp with Elaborate\nMotion Primitives",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          62.15625,
+          72.80853271484375
+        ],
+        [
+          547.336181640625,
+          72.80853271484375
+        ],
+        [
+          547.336181640625,
+          108.67376708984375
+        ],
+        [
+          62.15625,
+          108.67376708984375
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          135.966796875,
+          347.66015625
+        ],
+        [
+          215.455078125,
+          347.66015625
+        ],
+        [
+          215.455078125,
+          358.0440979003906
+        ],
+        [
+          135.966796875,
+          358.0440979003906
+        ]
+      ]
+    },
+    {
+      "title": "II. RELATED WORK",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          131.783203125,
+          422.19952392578125
+        ],
+        [
+          218.4150848388672,
+          422.19952392578125
+        ],
+        [
+          218.4150848388672,
+          432.1621398925781
+        ],
+        [
+          131.783203125,
+          432.1621398925781
+        ]
+      ]
+    },
+    {
+      "title": "III. BACKGROUND",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          134.25,
+          336.83203125
+        ],
+        [
+          217.248046875,
+          336.83203125
+        ],
+        [
+          217.248046875,
+          345.75
+        ],
+        [
+          134.25,
+          345.75
+        ]
+      ]
+    },
+    {
+      "title": "IV. METHOD",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          405.75,
+          108.75
+        ],
+        [
+          464.25,
+          108.75
+        ],
+        [
+          464.25,
+          117.0
+        ],
+        [
+          405.75,
+          117.0
+        ]
+      ]
+    },
+    {
+      "title": "A. Motion Primitives",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          311.25,
+          552.62109375
+        ],
+        [
+          400.5,
+          552.0
+        ],
+        [
+          400.5,
+          561.12890625
+        ],
+        [
+          311.25,
+          561.75
+        ]
+      ]
+    },
+    {
+      "title": "B. Reinforcement Learning for Bin Picking",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          52.5,
+          194.90625
+        ],
+        [
+          231.29296875,
+          194.90625
+        ],
+        [
+          231.29296875,
+          204.1875
+        ],
+        [
+          52.5,
+          204.1875
+        ]
+      ]
+    },
+    {
+      "title": "C. Implementation Details",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          312.0,
+          361.5
+        ],
+        [
+          422.841796875,
+          361.5
+        ],
+        [
+          422.841796875,
+          371.25
+        ],
+        [
+          312.0,
+          371.25
+        ]
+      ]
+    },
+    {
+      "title": "V. EXPERIMENTS",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          138.0,
+          307.5
+        ],
+        [
+          214.5,
+          307.5
+        ],
+        [
+          214.5,
+          315.94921875
+        ],
+        [
+          138.0,
+          315.94921875
+        ]
+      ]
+    },
+    {
+      "title": "A. Simulation environment",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          52.5,
+          327.55078125
+        ],
+        [
+          163.5,
+          327.55078125
+        ],
+        [
+          163.5,
+          336.0
+        ],
+        [
+          52.5,
+          336.0
+        ]
+      ]
+    },
+    {
+      "title": "B. Experimental setup",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          52.5,
+          620.68359375
+        ],
+        [
+          147.0,
+          620.68359375
+        ],
+        [
+          147.0,
+          631.5
+        ],
+        [
+          52.5,
+          631.5
+        ]
+      ]
+    },
+    {
+      "title": "C. Evaluation results",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          53.490234375,
+          356.94140625
+        ],
+        [
+          141.53140258789062,
+          356.94140625
+        ],
+        [
+          141.53140258789062,
+          367.0025939941406
+        ],
+        [
+          53.490234375,
+          367.0025939941406
+        ]
+      ]
+    },
+    {
+      "title": "VI. CONCLUSION",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          393.85546875,
+          302.4140625
+        ],
+        [
+          473.9045104980469,
+          302.4140625
+        ],
+        [
+          473.9045104980469,
+          312.9159851074219
+        ],
+        [
+          393.85546875,
+          312.9159851074219
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          148.21875,
+          54.4814453125
+        ],
+        [
+          204.30548095703125,
+          54.4814453125
+        ],
+        [
+          204.30548095703125,
+          64.44403076171875
+        ],
+        [
+          148.21875,
+          64.44403076171875
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          184
+        ],
+        [
+          "Line",
+          87
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          228
+        ],
+        [
+          "Line",
+          113
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          177
+        ],
+        [
+          "Line",
+          114
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Equation",
+          5
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Reference",
+          3
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          177
+        ],
+        [
+          "Line",
+          117
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          115
+        ],
+        [
+          "Span",
+          77
+        ],
+        [
+          "TableCell",
+          35
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "ListItem",
+          3
+        ],
+        [
+          "Reference",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          268
+        ],
+        [
+          "Line",
+          83
+        ],
+        [
+          "TableCell",
+          35
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Reference",
+          3
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          416
+        ],
+        [
+          "Line",
+          149
+        ],
+        [
+          "ListItem",
+          42
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/15_a_hybrid_approach_for_learning_to_shift_and_grasp_with"
+}
