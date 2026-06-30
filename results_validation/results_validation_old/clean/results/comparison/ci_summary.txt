@@ -1,0 +1,11 @@
+Model                                                                   Scene SR    SE     95% CI (±2SE)     N scenes
+--------------------------------------------------------------------------------------------------------------
+A: PBRS single-agent                                         24/30  80.0%      7.3%   [ 65.4% –  94.6%]
+B: PBRS + curriculum                                         23/30  76.7%      7.7%   [ 61.2% –  92.1%]
+E: ASP + d\_pose                                              2/30   6.7%      4.6%   [  0.0% –  15.8%]
+F: ASP + disc                                                 2/30   6.7%      4.6%   [  0.0% –  15.8%]
+G: TASP + d\_pose                                             5/30  16.7%      6.8%   [  3.1% –  30.3%]
+H: TASP + disc                                                3/30  10.0%      5.5%   [  0.0% –  21.0%]
+
+A_simp vs B_curr gap (scene-level): +3.3pp ± 10.6pp (SE of difference, independent scenes)
+→ NOT statistically significant at 95% level — the 3.3pp gap is within noise for 30 scenes
