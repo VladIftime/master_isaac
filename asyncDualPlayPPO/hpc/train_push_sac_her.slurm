@@ -9,7 +9,7 @@
 #SBATCH --signal=B:USR1@120
 
 WILL_RESUBMIT=false
-trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); if [ -n "${APPTAINER_PID:-}" ]; then echo "[INFO] Forwarding to child PID $APPTAINER_PID..."; kill -USR1 $APPTAINER_PID 2>/dev/null; fi; WILL_RESUBMIT=true' USR1
+trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════

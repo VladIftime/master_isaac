@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline + SAC/HER
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-29 (Model I implemented — full symmetric Sukhbaatar reward with Bob time penalty; CI error-bar analysis complete; presentation deck revised with statistical CIs, confound disaggregation, C/D exclusion notes; A_simp 80.0% vs B_curr 76.7% gap = 3.3pp ± 10.6pp SE — not significant; ASP gap 4.8–11.9× — significant)
+**Last updated**: 2026-06-30 (deck restructured into 8‑section academic order; disc models F/H removed entirely; all model names changed to descriptive PPO‑PBRS / PPO‑Curriculum / ASP‑dPose / TASP‑dPose; per‑model error plots regenerated from exact 30‑scene CSVs; cross‑env p1 + per‑scene p3 heatmap added; Manager‑vs‑DirectRL takeaway placeholder; C9 resolved; RQ2/RQ3 reworded; validation‑test‑suite layout + recording plans written)
 
 ---
 
@@ -1941,3 +1941,88 @@ results/
 `28_isaac_30t.csv` = 26.06.28, Isaac protocol, 30 T-block scenes.
 
 Models **not evaluated**: D (ASP-no-GE, excluded), SAC (training incomplete).
+
+
+## 13. Presentation Deck Reorganization (2026-06-30)
+
+### 13.1 Naming Scheme Overhaul
+
+All model references changed from letter-codes (A–I) to self-contained descriptive names:
+
+| Old | New | Status |
+|---|---|---|
+| A / A_simp | **PPO-PBRS** | active (80.0% baseline) |
+| B / B_curr | **PPO-Curriculum** | active (76.7%, from 28_isaac_30t.csv) |
+| C / C_asp | **ASP-PBRS** | excluded (no genuine Isaac validation) |
+| D / asp_noge | **ASP-NoEncoder** | excluded |
+| E / E_asp_dpose | **ASP-dPose** | active (6.7%, outcome-based) |
+| F / F_asp_disc | **(removed)** | disc model; dropped from deck |
+| G / G_tasp_dpose | **TASP-dPose** | active (16.7%, time-based) |
+| H / H_tasp_disc | **(removed)** | disc model; dropped from deck |
+| I / train_i_tasp_dpose_bobpen | **TASP-dPose-BobPenalty** | implemented, not trained |
+
+### 13.2 Deck Restructured Into 8 Academic Sections
+
+**Section order** (replaces the old per-model interleaved structure):
+1. Introduction & Research Questions (RQ1/RQ2/RQ3)
+2. Background & Related Work (3 slides: reward shaping · curriculum & self-play · push mechanics & SE(2))
+3. Problem Definition & MDP
+4. Implementation (4-models-at-a-glance, PPO-PBRS arch, PBRS reward, SE(2) metric, curriculum mechanism, self-play)
+5. Evaluation (30-scene suite + Isaac-vs-gym testbed)
+6. Results (bar plots + per-model error plots + cross-env + per-scene)
+7. Discussion (validation observations + why-ASP-fails + confound + substitution + theory-vs-practice)
+8. Conclusion & Takeaways (conclusion + limitations + future + overhead + Manager-vs-DirectRL placeholder)
+
+**Key structural changes:**
+- Implementation and Results are fully separated (no more per-model interleaving).
+- PBRS theorem (Ng et al.) moved to Related Work; our potentials live in Implementation.
+- MDP State&Action + Transition&Episode merged into one slide.
+- Related Work reduced from 5 slides to 3 (curriculum + self-play merged; push mechanics + SE(2) merged).
+- Per-model metric tables and Training Dynamics moved to appendix.
+- All section dividers use `hlblue` theme colour.
+
+### 13.3 RQ changes
+
+- **RQ1**: "Can PBRS outperform hand-tuned dense rewards for goal reaching tasks in a robotic environment?"
+- **RQ2**: "Given a well-shaped PBRS reward and a fixed compute budget, does adding a curriculum or asymmetric self-play improve final task success over a direct single-agent approach?"
+- **RQ3**: "Can a sufficiently informative reward (PBRS) *substitute* for an explicit curriculum in contact-rich pushing?" (was "are reward and curriculum independent")
+
+### 13.4 New & Regenerated Figures
+
+| Figure | Source / action |
+|---|---|
+| `val_multi_sr_overall/testtype/difficulty/error_bars.png` | regenerated with 4 models (F/H removed), descriptive legends |
+| `p1_sr_bars.png` (cross-environment) | descriptive names, Isaac ASP bar dropped; placed on new Slide 11c |
+| `p3_heatmap.png` (per-scene) | descriptive row labels; placed on new Slide 12c |
+| `errors_ppo_pbrs/ppo_curriculum/asp_dpose/tasp_dpose.png` | per-model PosErr / RotErr bars, regenerated from **exact** 30-scene CSVs |
+| `val_test_layout.png` | model-independent 3×10 grid of 30 held-out scenes (Start->Goal, no pass/fail border) |
+| `cmp_Success_Rate/Value_Loss/Mean_Reward/Policy_Loss.png` + `plot1/3/4/5` + diagrams | regenerated with descriptive names, no disc, `generate_plots.py` repointed to local data tree |
+| `asp_loop_diagram.png` | user-supplied replacement for the old `diagram_asp_loop.png` |
+
+### 13.5 New & Updated Scripts
+
+- **`results_validation/layout/plot_validation_layout.py`** — draws the 30-scene start-to-goal grid (no model results needed).
+- **`results_validation/layout/plot_model_errors.py`** — generates the 4 per-model `errors_*.png` from the exact 30-scene CSVs + `ALL_TESTS` configs.
+- **`results_validation/abc_comp/plot_abc_comparison.py`** — updated with descriptive names, Isaac ASP bar dropped, pos_only/pos+rot renamed to descriptive legends.
+- **`results_validation/results_validation/clean/results/plot_comparison_with_cis.py`** — F/H removed; labels renamed; `disc_pos` category dropped; regenerated to `figures/`.
+- **`literature/paper-async/presentation/generate_plots.py`** — `BASE`/`TRAIN_CSV`/`VAL` repointed to results_validation tree; all hardcoded labels replaced with descriptive names; disc removed; `plot3_failure_taxonomy` updated to use current 30-scene CSVs (PPO-PBRS / PPO-Curriculum / ASP-dPose) instead of stale old-run data.
+
+### 13.6 Verified Consistency
+
+- **0** old model letter (A–H) references anywhere in `presentation.tex`.
+- **0** disc-object references anywhere in `presentation.tex` (outside `discrete`/`discontinuity`).
+- PosErr/RotErr numbers recomputed from CSVs and match deck claims (mean over all 30 scenes incl. failures).
+- Per-attempt SR (PPO-PBRS 66.0%, PPO-Curriculum 68.3%) disclosed in deck.
+- 172 push/s provenance: "from logged TF-event timestamps: 0.022 it/s x 7,920 push-macros/iter" (deck notes).
+- 4 stale cross-references fixed.
+
+### 13.7 Still Missing / Pending
+
+1. **RQ1 hand-tuned baseline re-eval** — command provided; checkpoint is at `asyncDualPlayPPO/runs/ppo_classic_reward/hpc_push_2048env_rel_full/agent/model_best.pt`; run on a GPU node with `--rel-obs --rel-act --num_tests 30 --max_tries 20 --max_pushes 30 --headless`.
+2. **SAC+HER baseline** — training; validate when done on the same 30-scene protocol.
+3. **C/ASP training-curve data** — CSVs cap at 2,969 iterations; the full run reached 7,600 on a different machine. To get full C curves in `cmp_*`, re-export TB events from the later checkpoint.
+4. **Parallel-environment training videos** — recording plan written; not yet executed (needs an N-env rollout with early/late checkpoints using forked record script).
+5. **Manager-vs-DirectRL controlled measurement** — placeholder slide in the deck ("to measure"); no controlled push-task numbers yet.
+6. **`speaker_notes.tex`** — content updated for names/narrative but slide numbering is from the old (pre-reorg) order; needs re-syncing to the current deck.
+7. **Model I training** (TASP-dPose-BobPenalty) — implemented, not run on HPC.
+8. **Validation seed variance** — single-seed per model; training seeds exist (5 A chains) but not re-evaluated for validation CIs.

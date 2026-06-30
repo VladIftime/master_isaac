@@ -476,7 +476,7 @@
 \item \textbf{Non-stationary goal distribution:} Alice learns continuously, so Bob's training distribution shifts every iteration. PPO importance ratio computed from rollouts collected under a previous Alice — dominated by distribution drift, not Bob's weight updates. (See Slides 9--9b.)
 \item \textbf{GoalEncoder bottleneck:} $\phi{:}\mathbb{R}^{22}{\to}\mathbb{R}^{8}$ compresses object+goal into single 8D latent. Fine translation/yaw signal may be lost, preventing precise SE(2) alignment.
 \item \textbf{Vanishing BC gradient:} Failed trajectories enter ABC buffer for BC ($\beta{=}0.5$). If Bob rarely succeeds, buffer fills with near-random trajectories — BC signal becomes noise.
-\item \textbf{Confounded ablation:} Self-play vs single-agent differ on $\ge 7$ axes: agent count, goal distribution, episode budget, GoalEncoder, ABC, historical pool, update frequency. 4.8$\times$ SR gap cannot be attributed to any single lever (see Slide 9c).
+\item \textbf{Confounded ablation:} Self-play vs single-agent differ on $\ge 7$ axes: agent count, goal distribution, episode budget, GoalEncoder, ABC, historical pool, update frequency. 4.8$\times$ SR gap cannot be attributed to any single lever (see the Caveat — Confounded Ablation slide).
 }
 
 
@@ -537,54 +537,38 @@
 \item Sky-blue = object start pose, orange = goal pose, arrow = required translation
 \item Difficulty within each row spans easy/medium/hard by start-to-goal distance and yaw change
 }
-% Slide 3a moved to appendix (Push Mechanics — Limit Surface + L)
+% Push Mechanics detail moved to Related Work and Appendix A
+% ============================================================
 % ============================================================
 
 
 
 \begin{frame}[t]{Isaac Lab — the Right Venue for Self-Play}
-  \textbf{Why GPU-batched simulation is necessary for this comparison:}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.50\textwidth}
-      \small
-      \textbf{Throughput} (push-macros/s, measured):
-      \vspace{2pt}
-      \begin{tabular}{lcc}
-        \toprule
-        \textbf{Setting} & \textbf{push/s} & \textbf{1M pushes} \\
-        \midrule
-        \rowcolor{hlgreen!15}
-        Isaac (1 GPU, 528 env) & \textbf{172} & \textbf{$\sim$1.6 h} \\
-        gym single-agent (6 CPU) & 91 & $\sim$3.0 h \\
-        gym self-play (1 CPU) & \textbf{22.4} & $\sim$12.4 h \\
-        \bottomrule
-      \end{tabular}
-
-      \vspace{4pt}
-      \textbf{Self-play on GPU vs CPU:}
-      \begin{itemize}
-        \item GPU: self-play \& single-agent identical throughput ($\sim$0.022 it/s)
-        \item CPU: self-play forced single-process $\to$ $\sim$7.7$\times$ slower than single-agent
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \small
-      \textbf{Three pillars:}
-      \begin{enumerate}
-        \item \textbf{GPU-batched parallelism}\\
-          528 envs/step $\to$ 7,920-sample PPO batch on one GPU. The non-stationary self-play objective needs a large batch for stable gradients.
-        \item \textbf{Robotic fidelity}\\
-          UR5e + 3D PhysX contact + cuRobo IK = the actual SE(2) task. gym-pusht is a 2D abstraction (diagnostic only).
-        \item \textbf{Time-to-scale (self-play)}\\
-          Self-play reaches $\sim$10M training pushes in $\sim$16h on GPU vs $\sim$5 days on CPU. The single-GPU budget is \emph{not} the bottleneck.
-      \end{enumerate}
-    \end{column}
-  \end{columns}
-
+  \centering\small
+  \textbf{Throughput} (push-macros/s, measured):
   \vspace{2pt}
-  \textbf{Key result:} Isaac gives self-play its best shot on a budget matched to the winning single-agent — and it \textbf{still} reaches only 6.7–16.7\% (4.8$\times$ gap). The failure is structural, not under-resourcing.
+  \begin{tabular}{lcc}
+    \toprule
+    \textbf{Setting} & \textbf{push/s} & \textbf{1M pushes} \\
+    \midrule
+    \rowcolor{hlgreen!15}
+    Isaac (1 GPU, 528 env) & \textbf{172} & \textbf{$\sim$1.6 h} \\
+    gym single-agent (6 CPU) & 91  & $\sim$3.0 h \\
+    gym self-play (1 CPU)   & 22.4 & $\sim$12.4 h \\
+    \bottomrule
+  \end{tabular}
 
-  \vfill\litfooter{[Makoviychuk et al.\ 2021]~[Rudin et al.\ 2022]~[Plappert et al.\ 2021]}
+  \vspace{3pt}
+  \flushleft\small
+  \textbf{Three pillars:}
+  \begin{itemize}
+    \item \textbf{GPU-batched} — 528 envs/step gives 7,920-sample PPO batches; the self-play objective needs a large batch for stable gradients.
+    \item \textbf{Robotic fidelity} — UR5e + 3D contact + cuRobo IK = the actual SE(2) task; gym‑pusht is a 2D diagnostic.
+    \item \textbf{Time-to-scale} — $\sim$10M pushes in $\sim$16h on GPU vs $\sim$5 days on CPU.
+  \end{itemize}
+
+  \vspace{4pt}
+  \textbf{Key result:} Isaac gives self-play its best shot at a budget matched to the winning single-agent — and it \textbf{still} reaches only 6.7--16.7\% (4.8$\times$ gap).
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
@@ -932,7 +916,7 @@
   \begin{itemize}
     \item TASP-dPose (time-based Alice, no ABC) vs ASP-dPose (outcome-based, ABC enabled) isolates the Alice reward axis — TASP-dPose gains $+$10pp
     \item But this is a \emph{single} 1-axis experiment within a 7-axis package change
-    \item The RQ3 substitution claim (Slide~10) concerns \textbf{reward vs curriculum}, not single-agent vs self-play architecture
+    \item The RQ3 substitution claim concerns \textbf{reward vs curriculum}, not single-agent vs self-play architecture
   \end{itemize}}
 
   \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Dennis et al.\ 2020]}
@@ -1129,7 +1113,7 @@
 \item Controlled, same-machine measurement: self-play and single-agent run at identical iteration cost (~0.022 it/s) on the same 528-env GPU setup. The 2-agent machinery adds ~no per-iteration wall-clock because cuRobo IK and physics dominate
 \item I deliberately do NOT claim a 5–10× self-play overhead — there is no controlled measurement supporting that; the only honest number is ~1.0× per iteration
 \item Key distinction: self-play doesn't fail because it's computationally expensive per iteration. It fails because it doesn't learn. The two are separate problems
-\item The measured Isaac-vs-gym throughput (~172 push/s vs ~22 push/s for self-play on CPU) is shown in the next slide (11b) — establishing that Isaac Lab is the right venue, not a handicap
+\item The measured Isaac-vs-gym throughput (~172 push/s vs ~22 push/s for self-play on CPU) is shown in the Isaac Lab venue slide (Evaluation) — establishing that Isaac Lab is the right venue, not a handicap
 }
 
 
