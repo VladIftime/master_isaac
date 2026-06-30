@@ -50,6 +50,7 @@ class ValidationResult:
     test_index: int
     test_name: str
     test_type: str
+    object_type: str
     success: bool
     pushes_used: int
     final_pos_error: float
@@ -355,6 +356,7 @@ def main():
             _init_rot_err = _rot_distance_rad(_init_obj_euler.unsqueeze(0), _init_goal_euler.unsqueeze(0)).item()
             if _obj_type == "disc":
                 _init_rot_err = 0.0
+            _init_oob_2d = float((_init_obj_pos[:2] - _init_goal_pos[:2]).norm().item())
             print(f"  [{cfg.test_type}] goal=({cfg.main_goal_x:+.3f},{cfg.main_goal_y:+.3f}) yaw={cfg.main_goal_yaw:+.3f}  "
                   f"start=({cfg.main_start.x:+.3f},{cfg.main_start.y:+.3f})  "
                   f"init_pos_err={_init_pos_err:.4f}m  init_rot_err={_init_rot_err:.3f}rad")
@@ -482,7 +484,7 @@ def main():
                     pos_err = prev_pos_err
                     rot_err = prev_rot_err
                     break
-                if oob_2d > 0.5:
+                if oob_2d > _init_oob_2d + 0.20:
                     stop_reason = "oob"
                     break
 
@@ -500,6 +502,11 @@ def main():
                 best_pos_err = pos_err
                 best_rot_err = rot_err
 
+            rtag = f"[R{trial+1}] " if trial > 0 else ""
+            print(f"    {rtag}pushes={pushes_used:2d} stopped={stop_reason:12s}  "
+                  f"pos_err={pos_err:.4f}m rot_err={rot_err:.3f}rad  "
+                  f"{'PASS' if trial_ok else 'FAIL'}")
+
         avg_pushes = int(np.mean(trial_pushes)) if trial_pushes else 0
         sr_pct = trial_successes / TRIAL_COUNT * 100
 
@@ -507,6 +514,7 @@ def main():
             test_index=test_idx,
             test_name=f"{cfg.name} #{cfg.test_id}",
             test_type=cfg.test_type,
+            object_type=_obj_type,
             success=(trial_successes > 0),
             pushes_used=avg_pushes,
             final_pos_error=best_pos_err,
@@ -520,7 +528,7 @@ def main():
             "start_x": cfg.main_start.x, "start_y": cfg.main_start.y,
             "goal_x": cfg.main_goal_x, "goal_y": cfg.main_goal_y,
             "goal_yaw": cfg.main_goal_yaw,
-            "object_type": getattr(cfg, "object_type", "tblock"),
+            "object_type": _obj_type,
         })
         status = "PASS" if trial_successes > 0 else "FAIL"
         print(f"  {status} | {trial_successes}/{TRIAL_COUNT} = {sr_pct:.0f}% | avg_pushes: {avg_pushes} | "
@@ -563,13 +571,27 @@ def main():
         import csv as _csv
         with open(args.csv, "w", newline="") as _f:
             writer = _csv.writer(_f)
-            writer.writerow(["test_index", "test_name", "test_type", "success", "pushes_used",
-                             "pos_err", "rot_err", "area_coverage", "trial_count", "success_count"])
+            writer.writerow(["test_index", "test_name", "test_type", "object_type", "success",
+                             "pushes_used", "pos_err", "rot_err", "area_coverage",
+                             "trial_count", "success_count"])
             for r in results:
-                writer.writerow([r.test_index, r.test_name, r.test_type, int(r.success),
-                                 r.pushes_used, r.final_pos_error, r.final_rot_error, r.area_coverage,
+                writer.writerow([r.test_index, r.test_name, r.test_type, r.object_type,
+                                 int(r.success), r.pushes_used, r.final_pos_error,
+                                 r.final_rot_error, r.area_coverage,
                                  r.trial_count, r.success_count])
         print(f"\n[CSV] Results saved to {args.csv}")
+
+    if args.csv and results:
+        try:
+            from asyncDualPlayPPO.tests.plot_validation import generate_single_run_plot
+            plot_data = [{"test_index": r.test_index, "test_name": r.test_name,
+                          "success": r.success, "final_pos_error": r.final_pos_error,
+                          "final_rot_error": r.final_rot_error} for r in results]
+            plot_path = os.path.splitext(args.csv)[0] + ".png"
+            generate_single_run_plot(plot_data, test_cfgs_data, plot_path,
+                                    rot_threshold_rad=args.rot_threshold)
+        except Exception as _e:
+            print(f"[WARN] Plot generation failed: {_e}")
 
     simulation_app.close()
     os._exit(0)

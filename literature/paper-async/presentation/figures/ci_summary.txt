@@ -1,0 +1,9 @@
+Model                                                                   Scene SR    SE     95% CI (±2SE)     N scenes
+--------------------------------------------------------------------------------------------------------------
+PPO-PBRS                                                     24/30  80.0%      7.3%   [ 65.4% –  94.6%]
+PPO-Curriculum                                               23/30  76.7%      7.7%   [ 61.2% –  92.1%]
+TASP-dPose                                                    5/30  16.7%      6.8%   [  3.1% –  30.3%]
+ASP-dPose                                                     2/30   6.7%      4.6%   [  0.0% –  15.8%]
+
+A_simp vs B_curr gap (scene-level): +3.3pp ± 10.6pp (SE of difference, independent scenes)
+→ NOT statistically significant at 95% level — the 3.3pp gap is within noise for 30 scenes

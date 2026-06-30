@@ -127,7 +127,7 @@ def main():
         )
 
     total_timesteps = args_cli.max_iterations * cfg.scene.num_envs
-    ckpt_interval = 50000
+    ckpt_interval = max(1, args_cli.max_iterations // 10)
     ckpt_dir = os.path.join(log_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
 
@@ -139,7 +139,7 @@ def main():
     )
 
     latest_ckpt_callback = LatestCheckpointCallback(
-        save_freq=20000,
+        save_freq=max(1, args_cli.max_iterations // 20),
         save_path=os.path.join(log_dir, "latest_checkpoint"),
     )
 

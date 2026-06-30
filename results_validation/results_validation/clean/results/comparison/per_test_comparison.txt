@@ -1,0 +1,32 @@
+Test Name            Type     A_simp (no curriculum)  B_curr (P82 curriculum)   E aspirant d_pose     F aspirant disc       G tasp d_pose         H tasp disc
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+   1 R_Pivot90       pos_rot      PASS P=30 E=0.003m C=90%    PASS P=28 E=0.012m C=72%    FAIL P= 6 E=0.027m C=0%    FAIL P= 8 E=0.033m C=0%    FAIL P= 8 E=0.025m C=0%    FAIL P= 8 E=0.024m C=0%
+   2 R_HalfTurn      pos_rot      PASS P=12 E=0.005m C=53%    PASS P=26 E=0.006m C=91%    FAIL P= 9 E=0.046m C=0%    FAIL P=12 E=0.023m C=0%    FAIL P=10 E=0.021m C=0%    FAIL P=11 E=0.025m C=0%
+   3 R_QuarterL      pos_rot      PASS P=30 E=0.013m C=65%    PASS P=30 E=0.013m C=0%    FAIL P=15 E=0.027m C=0%    FAIL P=13 E=0.089m C=0%    FAIL P=17 E=0.060m C=0%    FAIL P=16 E=0.041m C=0%
+   4 R_QuarterR      pos_rot      PASS P=13 E=0.023m C=11%    FAIL P=29 E=0.015m C=0%    FAIL P=14 E=0.121m C=0%    FAIL P=13 E=0.072m C=0%    PASS P=11 E=0.045m C=52%    FAIL P=13 E=0.030m C=0%
+   5 R_DiagTurn      pos_rot      PASS P=29 E=0.013m C=81%    PASS P=21 E=0.026m C=37%    FAIL P=13 E=0.054m C=0%    FAIL P=10 E=0.134m C=0%    FAIL P=12 E=0.079m C=0%    FAIL P=13 E=0.068m C=0%
+   6 R_Reverse       pos_rot      PASS P=29 E=0.004m C=72%    PASS P=28 E=0.005m C=42%    FAIL P= 1 E=0.252m C=0%    FAIL P= 1 E=0.252m C=0%    FAIL P= 1 E=0.055m C=42%    FAIL P= 1 E=0.187m C=0%
+   7 R_SpinCross     pos_rot      FAIL P= 2 E=0.408m C=0%    FAIL P=16 E=0.065m C=0%    FAIL P=11 E=0.218m C=0%    FAIL P=11 E=0.347m C=0%    FAIL P=12 E=0.368m C=0%    FAIL P=13 E=0.520m C=0%
+   8 R_WideSpin      pos_rot      PASS P=24 E=0.005m C=83%    PASS P=24 E=0.004m C=27%    FAIL P=14 E=0.089m C=7%    FAIL P=10 E=0.433m C=0%    FAIL P=11 E=0.137m C=0%    FAIL P=14 E=0.465m C=0%
+   9 R_LongSpin      pos_rot      PASS P=16 E=0.039m C=53%    PASS P=25 E=0.003m C=83%    FAIL P=15 E=0.061m C=0%    FAIL P=16 E=0.170m C=0%    FAIL P=20 E=0.293m C=0%    FAIL P=18 E=0.183m C=0%
+  10 R_Corner        pos_rot      FAIL P=19 E=0.124m C=0%    FAIL P=21 E=0.073m C=0%    FAIL P=10 E=0.198m C=0%    FAIL P= 9 E=0.485m C=0%    FAIL P=13 E=0.232m C=0%    FAIL P= 8 E=0.437m C=0%
+  11 E_Forward       pos_only     PASS P=27 E=0.018m C=7%    PASS P=29 E=0.025m C=0%    FAIL P=14 E=0.022m C=0%    PASS P=15 E=0.023m C=0%    PASS P=10 E=0.032m C=0%    PASS P= 9 E=0.022m C=0%
+  12 E_Right         pos_only     PASS P=30 E=0.017m C=24%    PASS P=30 E=0.007m C=0%    PASS P= 8 E=0.030m C=36%    FAIL P= 8 E=0.054m C=21%    PASS P= 8 E=0.032m C=39%    FAIL P=12 E=0.030m C=0%
+  13 E_Left          pos_only     PASS P=29 E=0.010m C=61%    PASS P=30 E=0.026m C=0%    PASS P=10 E=0.023m C=0%    PASS P= 9 E=0.048m C=41%    FAIL P=10 E=0.021m C=0%    PASS P=13 E=0.023m C=0%
+  14 M_Forward       pos_only     PASS P=28 E=0.010m C=90%    PASS P=28 E=0.024m C=66%    FAIL P=11 E=0.050m C=0%    FAIL P=13 E=0.060m C=0%    PASS P=15 E=0.040m C=41%    FAIL P=16 E=0.139m C=0%
+  15 M_Right         pos_only     PASS P=30 E=0.005m C=0%    PASS P=28 E=0.012m C=5%    FAIL P=18 E=0.066m C=0%    FAIL P=17 E=0.041m C=0%    FAIL P=14 E=0.066m C=0%    PASS P=12 E=0.025m C=22%
+  16 M_Left          pos_only     PASS P=29 E=0.008m C=8%    PASS P=30 E=0.022m C=31%    FAIL P=13 E=0.023m C=0%    FAIL P=10 E=0.063m C=0%    FAIL P=17 E=0.044m C=0%    FAIL P=12 E=0.042m C=0%
+  17 H_Forward       pos_only     PASS P=21 E=0.008m C=0%    PASS P=23 E=0.015m C=34%    FAIL P=21 E=0.175m C=0%    FAIL P=13 E=0.242m C=0%    FAIL P=18 E=0.222m C=0%    FAIL P=21 E=0.198m C=0%
+  18 H_Right         pos_only     PASS P=28 E=0.011m C=0%    PASS P=30 E=0.018m C=0%    FAIL P=15 E=0.226m C=0%    FAIL P=14 E=0.209m C=0%    FAIL P=15 E=0.067m C=0%    FAIL P=11 E=0.163m C=0%
+  19 H_Left          pos_only     PASS P=29 E=0.006m C=0%    PASS P=30 E=0.021m C=7%    FAIL P=15 E=0.070m C=0%    FAIL P=15 E=0.103m C=0%    FAIL P=12 E=0.140m C=0%    FAIL P=14 E=0.071m C=18%
+  20 H_Cross         pos_only     PASS P=27 E=0.002m C=10%    PASS P=30 E=0.017m C=0%    FAIL P=16 E=0.331m C=0%    FAIL P=12 E=0.257m C=0%    FAIL P=13 E=0.423m C=0%    FAIL P=14 E=0.297m C=0%
+  21 E_Diag          pos_rot      PASS P=29 E=0.003m C=93%    PASS P=30 E=0.004m C=25%    FAIL P=14 E=0.033m C=0%    FAIL P=15 E=0.028m C=0%    PASS P=14 E=0.039m C=0%    FAIL P=11 E=0.050m C=0%
+  22 M_Diag_R        pos_rot      PASS P=30 E=0.005m C=0%    PASS P=28 E=0.014m C=56%    FAIL P=14 E=0.114m C=0%    FAIL P=14 E=0.184m C=0%    FAIL P=14 E=0.021m C=4%    FAIL P=16 E=0.034m C=19%
+  23 M_Diag_L        pos_rot      FAIL P= 9 E=0.046m C=0%    FAIL P=30 E=0.033m C=0%    FAIL P=18 E=0.031m C=0%    FAIL P=18 E=0.066m C=0%    FAIL P=14 E=0.170m C=0%    FAIL P=14 E=0.167m C=0%
+  24 M_Back          pos_rot      FAIL P=19 E=0.014m C=0%    FAIL P=25 E=0.055m C=0%    FAIL P= 5 E=0.284m C=0%    FAIL P= 3 E=0.249m C=0%    FAIL P= 5 E=0.218m C=0%    FAIL P= 5 E=0.212m C=0%
+  25 H_Diag_FR       pos_rot      PASS P=19 E=0.009m C=57%    PASS P=23 E=0.003m C=62%    FAIL P=16 E=0.238m C=0%    FAIL P=19 E=0.242m C=0%    FAIL P=12 E=0.263m C=0%    FAIL P=11 E=0.354m C=0%
+  26 H_Diag_FL       pos_rot      PASS P=30 E=0.003m C=33%    PASS P=30 E=0.017m C=0%    FAIL P=16 E=0.113m C=0%    FAIL P=14 E=0.268m C=0%    FAIL P=13 E=0.236m C=0%    FAIL P=19 E=0.132m C=0%
+  27 H_Wide_R        pos_rot      FAIL P=28 E=0.103m C=0%    FAIL P=30 E=0.020m C=0%    FAIL P=13 E=0.177m C=0%    FAIL P=15 E=0.492m C=0%    FAIL P=14 E=0.376m C=0%    FAIL P=10 E=0.475m C=0%
+  28 H_Wide_L        pos_rot      PASS P=30 E=0.010m C=31%    PASS P=21 E=0.001m C=86%    FAIL P=13 E=0.436m C=0%    FAIL P= 7 E=0.558m C=0%    FAIL P=16 E=0.544m C=0%    FAIL P=17 E=0.544m C=0%
+  29 Edge_Near       pos_rot      FAIL P=16 E=0.026m C=0%    FAIL P=23 E=0.107m C=0%    FAIL P=14 E=0.256m C=0%    FAIL P=12 E=0.345m C=0%    FAIL P=13 E=0.080m C=0%    FAIL P= 9 E=0.202m C=0%
+  30 Edge_Far        pos_rot      PASS P=12 E=0.014m C=76%    PASS P=24 E=0.015m C=84%    FAIL P=11 E=0.495m C=0%    FAIL P=12 E=0.348m C=0%    FAIL P= 5 E=0.383m C=0%    FAIL P=16 E=0.414m C=0%

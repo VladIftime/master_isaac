@@ -8,11 +8,11 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-BASE = Path("/home/vladi/IsaacLab/master_isaac/asyncDualPlayPPO/runs")
+BASE = Path("/home/vlad/IsaacLab/vlad/master_isaac/results_validation/results_validation")
 TRAIN_CSV = BASE / "ppo_pbrs_reward/26.06.20/runs/anal_26.06.18/csv"
 VAL_20 = BASE / "ppo_pbrs_reward/26.06.12/runs"
 VAL_30 = BASE / "ppo_pbrs_reward/26.06.20/runs"
-OUT = Path("/home/vladi/IsaacLab/master_isaac/literature/paper-async/presentation/figures")
+OUT = Path("/home/vlad/IsaacLab/vlad/master_isaac/literature/paper-async/presentation/figures")
 
 plt.rcParams.update({'font.size': 10, 'figure.dpi': 150})
 
@@ -33,7 +33,7 @@ def plot1():
     ax1.set_xlabel('Training Iterations (×1000)')
     ax1.set_ylabel('PBRS Dense Reward')
     ax1.legend(loc='upper left', fontsize=7)
-    ax1.set_title('Model A: PBRS Reward Signal Over Training')
+    ax1.set_title('PPO-PBRS: PBRS Reward Signal Over Training')
 
     # Mark where validation was run (~3000 iters)
     ax1.axvline(x=2.83, color='green', linestyle='--', lw=1.2)
@@ -53,8 +53,8 @@ def plot2():
     cr_pos = load_csv("Push_PPO-Cr", "PBRS_DensePos")
 
     fig, ax = plt.subplots(figsize=(7, 3.2))
-    ax.plot(si_pos['step']/1000, si_pos['value'], color='#1f77b4', lw=1.2, label='Model A: PBRS Dense Pos')
-    ax.plot(cr_pos['step']/1000, cr_pos['value'], color='#d62728', lw=1.2, label='Model B: PBRS Dense Pos (curriculum)')
+    ax.plot(si_pos['step']/1000, si_pos['value'], color='#1f77b4', lw=1.2, label='PPO-PBRS: PBRS Dense Pos')
+    ax.plot(cr_pos['step']/1000, cr_pos['value'], color='#d62728', lw=1.2, label='PPO-Curriculum: PBRS Dense Pos')
     ax.set_xlabel('Training Iterations (×1000)')
     ax.set_ylabel('Dense Position Reward')
     ax.legend(fontsize=7)
@@ -72,10 +72,10 @@ def plot2():
 # PLOT 3 — Validation Failure Taxonomy (Slide 12)
 # ============================================================
 def plot3():
-    # Load validation data
-    simp = pd.read_csv(VAL_20 / "hpc_pbrs_simp_528env/results_simp.csv")
-    curr = pd.read_csv(VAL_20 / "hpc_pbrs_curr_528env/results_curr.csv")
-    simp30 = pd.read_csv(VAL_30 / "hpc_pbrs_simp_528env/results_valid_simp_dpose.csv")
+    RV = Path("/home/vlad/IsaacLab/vlad/master_isaac/results_validation")
+    simp30 = pd.read_csv(RV / "A_simp/20_isaac_30t.csv")
+    curr   = pd.read_csv(RV / "B_curr/28_isaac_30t.csv")
+    asp    = pd.read_csv(RV / "E_asp_dpose/26_isaac.csv")
 
     fig, axes = plt.subplots(1, 3, figsize=(11, 3.8))
 
@@ -97,12 +97,12 @@ def plot3():
         ax.set_xlabel('Position Error (m)')
         ax.set_ylabel('Rotation Error (rad)')
         ax.set_title(title, fontsize=10)
-        if title == 'Model A (PBRS Only)\n80% SR':
+        if title == 'PPO-PBRS\n80% SR':
             ax.legend(fontsize=6, loc='upper right')
 
-    _scat(axes[0], simp30, 'Model A (PBRS Only)\n80% SR', '#1f77b4')
-    _scat(axes[1], curr, 'Model B (+Curriculum)\n40% SR', '#ff7f0e')
-    _scat(axes[2], simp, 'Model A (20-test)\n55% SR', '#2ca02c')
+    _scat(axes[0], simp30, 'PPO-PBRS\n80% SR', '#1f77b4')
+    _scat(axes[1], curr,   'PPO-Curriculum\n76.7% SR', '#ff7f0e')
+    _scat(axes[2], asp,    'ASP-dPose\n6.7% SR', '#d62728')
 
     fig.suptitle('Validation Failure Taxonomy — Success Rectangle (pos<5cm, rot<0.2rad)', fontsize=11, y=1.02)
     fig.tight_layout()
@@ -136,7 +136,7 @@ def plot4():
     ax1.set_xlabel('Training Iterations (×1000)')
     ax1.set_title('ASP Diagnostic: Alice Proposes Good Goals — Bob Cannot Achieve Them')
     ax1.annotate('Alice: 79% validity,\nlow displacement', xy=(2.5, 75), fontsize=7, color=color_a)
-    ax2.annotate('Bob: 0.07% SR\n(dead gradient)', xy=(2.5, 0.1), fontsize=7, color='#d62728',
+    ax2.annotate('Bob: near-zero combined SR\n(dead gradient)', xy=(2.5, 0.1), fontsize=7, color='#d62728',
                 xytext=(1.5, 0.3), arrowprops=dict(arrowstyle='->', color='gray'))
     ax1.grid(alpha=0.2)
     fig.tight_layout()
@@ -177,7 +177,7 @@ def plot5():
     ax.set_xlabel('Training Iterations (×1000)')
     ax.set_ylabel('Reward per Iteration')
     ax.legend(fontsize=7, loc='upper left')
-    ax.set_title('Model A: PBRS Reward Decomposition Over Training')
+    ax.set_title('PPO-PBRS: PBRS Reward Decomposition Over Training')
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(OUT / "plot5_reward_diet.png", bbox_inches='tight')
@@ -194,18 +194,15 @@ from matplotlib.patches import FancyArrowPatch, Rectangle, FancyBboxPatch, Circl
 VAL = {
     'A': "ppo_pbrs_reward/26.06.20/runs/hpc_pbrs_simp_528env/results_valid_simp_dpose.csv",
     'B': "ppo_pbrs_reward/26.06.12/runs/hpc_pbrs_curr_528env/results_curr.csv",
-    'C': "ppo_pbrs_reward/26.06.12/runs/hpc_pbrs_asp_528env/results_asp.csv",
-    'E': "ppo_pbrs_reward/26.06.24/runs/hpc_pbrs_asp_dpose_528env/results_valid_pbrs_asp_dpose.csv",
-    'F': "ppo_pbrs_reward/26.06.24/runs/hpc_pbrs_asp_disc_528env/results_valid_pbrs_asp_disc.csv",
-    'G': "ppo_pbrs_reward/26.06.24/runs/hpc_pbrs_tasp_dpose_528env/results_valid_pbrs_tasp_dpose.csv",
-    'H': "ppo_pbrs_reward/26.06.24/runs/hpc_pbrs_tasp_disc_528env/results_valid_pbrs_tasp_disc.csv",
+    'E': "ppo_pbrs_reward/26.06.20/runs/hpc_pbrs_asp_dpose_528env/results_valid_asp_dpose.csv",
+    'G': "ppo_pbrs_reward/26.06.20/runs/hpc_pbrs_tasp_dpose_528env/results_valid_tasp_dpose.csv",
 }
 MODEL_TITLE = {
-    'A': 'Model A\nPBRS Single-Agent', 'B': 'Model B\n+Curriculum', 'C': 'Model C\nASP',
-    'E': 'Model E\nASP+d_pose', 'F': 'Model F\nASP disc', 'G': 'Model G\nTASP', 'H': 'Model H\nTASP disc',
+    'A': 'PPO-PBRS\n(single-agent)', 'B': 'PPO-Curriculum',
+    'E': 'ASP-dPose\n(outcome)', 'G': 'TASP-dPose\n(time-based)',
 }
-CAT_LABEL = {'disc_pos': 'Disc', 'pos_only': 'T-pos', 'pos_rot': 'T-pos+rot'}
-CAT_COLOR = {'disc_pos': '#2ca02c', 'pos_only': '#ff7f0e', 'pos_rot': '#d62728'}
+CAT_LABEL = {'pos_only': 'Position-only', 'pos_rot': 'Position + Rotation'}
+CAT_COLOR = {'pos_only': '#ff7f0e', 'pos_rot': '#d62728'}
 
 
 def _load_train(prefix, metric):
@@ -254,7 +251,7 @@ def plot_master_sr():
                 label=f'Model {name}')
     ax.set_xlabel('Training Iteration', fontsize=15)
     ax.set_ylabel('Combined Success Rate (%)', fontsize=15)
-    ax.set_title('Training Success Rate — Only Model A Climbs; Curriculum & ASP Stay Flat',
+    ax.set_title('Training Success Rate — Only PPO-PBRS Climbs; Curriculum & Self-Play Stay Flat',
                  fontsize=18, pad=14)
     ax.legend(fontsize=14, loc='upper left')
     ax.grid(alpha=0.3)
@@ -297,7 +294,7 @@ def plot_val_taxonomy_8():
         if i == 0:
             ax.legend(fontsize=7, loc='upper right')
     axes[-1].set_axis_off()
-    axes[-1].text(0.1, 0.6, 'Green box = success\n(pos<5cm, rot<0.2rad)\n\nModel A fills the box;\nASP variants scatter\noutside it.',
+    axes[-1].text(0.1, 0.6, 'Green box = success\n(pos<5cm, rot<0.2rad)\n\nPPO-PBRS fills the box;\nself-play variants scatter\noutside it.',
                   fontsize=11, va='center')
     fig.suptitle('Validation Failure Taxonomy — All Models', fontsize=17, y=1.0)
     fig.tight_layout()
@@ -328,7 +325,7 @@ def plot_val_sr_bars():
     ax.set_xticks(x)
     ax.set_xticklabels([f'Model {m}' for m in models])
     ax.set_ylabel('Validation Success Rate (%)')
-    ax.set_title('Validation SR by Object / Difficulty — Model A Dominates Every Category')
+    ax.set_title('Validation SR by Difficulty — PPO-PBRS Dominates Every Category')
     ax.legend(fontsize=8)
     ax.grid(axis='y', alpha=0.3)
     fig.tight_layout()
@@ -358,7 +355,7 @@ def plot_modelB_curriculum_stuck():
     ax2.set_ylabel('$w_{rot}$', color='#d62728')
     ax2.set_ylim(-0.5, 10.5)
     ax2.tick_params(axis='y', labelcolor='#d62728')
-    ax1.set_title('Model B: $w_{rot}$ Stuck at 0 — Curriculum Never Activated')
+    ax1.set_title('PPO-Curriculum: original trigger mis-specified (never fired)')
     ax1.grid(alpha=0.25)
     fig.tight_layout()
     fig.savefig(OUT / "modelB_curriculum_stuck.png", bbox_inches='tight')
@@ -375,7 +372,7 @@ def plot_asp_dead_gradient():
     fig, ax = plt.subplots(figsize=(12.8, 7.0))
     if si is not None:
         ax.plot(si['step'], _smooth(np.abs(si['value'].values)), color='#1f77b4', lw=2.4,
-                label='Model A — |surrogate loss| (learning)')
+                label='PPO-PBRS — |surrogate loss| (learning)')
     if bob is not None:
         ax.plot(bob['step'], _smooth(np.abs(bob['value'].values)), color='#d62728', lw=2.4,
                 label='ASP Bob — |surrogate loss| ($\\approx$0, no gradient)')
@@ -459,7 +456,7 @@ def plot_val_pushes_hist():
                     edgecolor='k', linewidth=0.3)
     ax.set_xlabel('Pushes to Success')
     ax.set_ylabel('Count (validation scenes)')
-    ax.set_title('Model A: Pushes-to-Success by Difficulty')
+    ax.set_title('PPO-PBRS: Pushes-to-Success by Difficulty')
     ax.legend(fontsize=8)
     ax.grid(axis='y', alpha=0.3)
     fig.tight_layout()
@@ -473,7 +470,7 @@ def plot_val_pushes_hist():
 # ============================================================
 def plot_independence_heatmap():
     data = np.array([[80.0, 17.3], [3.5, 0.07]])
-    labels = [['80%\nModel A', '17.3%\nPush-PPO'], ['0\u20137%\nModels C\u2013H', '0.07%\nPush-ASP']]
+    labels = [['80%\nPPO-PBRS', '17.3%\nhand-tuned'], ['6.7\u201316.7%\nself-play', '0.07%\nhand-tuned self-play']]
     fig, ax = plt.subplots(figsize=(11, 6.6))
     im = ax.imshow(data, cmap='RdYlGn', vmin=0, vmax=80, aspect='auto')
     ax.set_xticks([0, 1]); ax.set_xticklabels(['PBRS Reward', 'Ad-hoc Reward'], fontsize=15)
@@ -548,7 +545,7 @@ def diagram_limit_surface():
     axR.text(0.18, 0.05, '$(dx,dy)$', color='#1f77b4', fontsize=11)
     axR.text(0.5, 0.40, '$d\\theta$', color='#d62728', fontsize=11)
     axR.text(-0.05, -0.25, '$d_{pose}=\\sqrt{dx^2+dy^2+L^2 d\\theta^2}$', fontsize=12)
-    axR.text(-0.05, -0.38, 'T-block $L=0.07$m  ·  Disc $L=0$m', fontsize=10, color='gray')
+    axR.text(-0.05, -0.38, 'T-block $L=0.07$m (rotation couples to translation)', fontsize=10, color='gray')
     axR.set_xlim(-0.2, 0.9); axR.set_ylim(-0.5, 0.6); axR.set_aspect('equal'); axR.axis('off')
     axR.set_title('SE(2) Unified Distance', fontsize=12)
     fig.tight_layout()
@@ -581,7 +578,7 @@ def diagram_asp_loop():
     arr((0.87, 0.55), (0.55, 0.34))      # Bob outcome -> reward
     arr((0.39, 0.23), (0.13, 0.55))      # reward -> Alice
     arr((0.87, 0.34), (0.87, 0.55))      # ABC -> Bob (dashed)
-    ax.text(0.5, 0.86, 'Asymmetric Self-Play Loop (Model C)', ha='center', fontsize=14)
+    ax.text(0.5, 0.86, 'Asymmetric Self-Play Loop (Alice/Bob)', ha='center', fontsize=14)
     ax.set_xlim(0, 1); ax.set_ylim(0, 0.95); ax.axis('off')
     fig.tight_layout()
     fig.savefig(OUT / "diagram_asp_loop.png", bbox_inches='tight')

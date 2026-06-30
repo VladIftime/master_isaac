@@ -1,15 +1,16 @@
 # Presentation Revision Plan — Supervisor Critique Response
 
-**Deck**: `literature/paper-async/presentation/presentation.tex` (1200 lines, beamer/XeLaTeX)
+**Deck**: `literature/paper-async/presentation/presentation.tex` (~1480 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-06-29 (TIER 0/1 complete: error bars, confound disaggregation, C/D footnote, independence softening; 4 new CI plots generated; Model I implemented — full symmetric Sukhbaatar reward; deck rebuilds to 42pp xelatex-clean)
+**Last updated**: 2026-06-30 (deck restructured into 8‑section academic order; disc models F/H removed; all models renamed PPO‑PBRS / PPO‑Curriculum / ASP‑dPose / TASP‑dPose; RQ2/RQ3 reworded; C9 resolved — Manager‑vs‑DirectRL 5‑10× dropped; per‑model error plots regenerated from exact CSVs; cross‑env p1 + per‑scene p3 heatmap added; validation‑test‑suite layout slide added; build 60 pages clean)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
-> **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-29).** The deck's headline 80% / 30 scenes /
-> disc 100% is **now backed by real data** — `results/A_simp/20_isaac_30t.csv` = 80.0% SR
-> (100% disc, 80% pos-only, 60% pos+rot) on 30 scenes. The clean A vs B comparison on
-> identical 30 T-block scenes yields **A_simp 80.0% vs B_curr 76.7%**. All 7 models
-> validated. See `results/SUMMARY.md` and `results/comparison/summary.md`.
+> **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-30).** The deck is now backed by consistent CSVs.
+> Four models on 30 identical T-block scenes: **PPO-PBRS 80.0%**, **PPO-Curriculum 76.7%**,
+> **TASP-dPose 16.7%**, **ASP-dPose 6.7%**. Disc models (F/H) removed. Descriptive names
+> throughout. Builds to 60pp xelatex-clean. Still pending: RQ1 hand-tuned baseline re‑eval,
+> parallel‑training videos, Manager‑vs‑DirectRL measurement, and syncing
+> `speaker_notes.tex` numbering.
 
 ---
 
@@ -178,26 +179,24 @@ Source of truth (2026-06-30): `results_validation/SUMMARY.md` + gym HPC latest c
 
 | Deck claim | Actual data (2026-06-30) | Verdict |
 |---|---|---|
-| Model A **80% SR**, **24/30** scenes | A_simp **80.0% SR** (24/30), identical 30 T-block scenes | ✅ MATCH — 80% is real |
-| disc 100% / T-pos 80% / T-pos+rot 60% | disc 100% (10/10), pos-only 100% (10/10), pos+rot 70% (10/10) | ✅ T-block actually better (100% pos-only, 70% pos+rot vs claimed 80%/60%) |
-| Model A PosErr **0.095** / RotErr **0.208** | PosErr **0.032m** / RotErr **0.568rad** | ⚠ PosErr better than claimed, RotErr worse |
-| Model B "curriculum NEVER activated" | B_curr **76.7%** (P82 fixed, now functional) | ❌ stale — old trigger was mis-specified; curriculum now works |
-| Model C 0–3% valid | C_asp 6.7% Isaac, 13.3% gym HPC | ⚠ C in both environments; gym C slightly beats Isaac C |
-| Gym "all 0% SR" | Gym B HPC **50.0%** under same thesis gate used for Isaac | ❌ cherry-picked coverage gate (0%) instead of thesis gate (50%) |
-| Gym A/B at "8,800/9,000 iter, ~13h" | Latest checkpoints at **18,800 iter, ~30h** for both | ❌ outdated — intermediate checkpoint numbers; training completed at 2× the reported iters |
-| ASP "all collapse" | G_tasp_dpose 16.7% > H 10.0% > C 6.7%/13.3% > E/F 6.7% | ⚠ collapse is real but range is 6.7–16.7%, not 0–7% |
-| Gym budget "insufficient vs Isaac's 528 GPU" | Gym A/B got **18.0M pushes** — matched to Isaac's **19–20M** | ❌ total push budget is NOT the bottleneck; batch size (960 vs 7,920) is
+| PPO-PBRS **80% SR**, **24/30** scenes | `A_simp/20_isaac_30t.csv` = 80.0% (24/30) | ✅ MATCH |
+| pos-only 100%, pos+rot 70% | 10/10 pos-only, 14/20 pos+rot | ✅ MATCH |
+| PPO-PBRS PosErr 0.032 m / RotErr 0.568 rad | mean over all 30 scenes (incl. failures) = 0.0322 / 0.5685 | ✅ MATCH; clarified as "mean over all 30" in deck |
+| PPO-Curriculum **76.7%** (P82 fixed) | `B_curr/28_isaac_30t.csv` = 76.7% (23/30) | ✅ MATCH (note: a separate B run at 26_isaac_30t = 60% exists; deck correctly uses 28) |
+| ASP-dPose **6.7%**, TASP-dPose **16.7%** | `E_asp_dpose/26_isaac.csv` = 2/30; `G_tasp_dpose/26_isaac.csv` = 5/30 | ✅ MATCH |
+| Gym B 50% | `B_curr/hpc_gym_b_valid.csv` = 15/30 = 50.0% | ✅ MATCH |
+| C-Isaac file = E file (byte-identical) | C_asp/26_isaac.csv ≡ E_asp_dpose/26_isaac.csv | ⚠ no genuine Model-C Isaac validation exists |
+| Disc models removed from deck entirely | F/H CSVs still on disk; deck has zero disc references | ✅ deck clean; disc data archived |
+| RQ3 "substitute" framing | PPO-Curriculum 76.7% ≈ PPO-PBRS 80.0% (n.s.); gym shows curriculum helps at small batch | ✅ substitution holds at large batch; scope caveat stated |
 
-### Current 26.06.26/28 validation (30 T-block scenes, best-of-20, max-30 pushes, thesis gate)
+### Current definitive validation (30 T-block scenes, best-of-20, max-30 pushes, thesis gate)
 
 | Model | SR | PosErr | RotErr | Pos-only / Pos+rot |
 |---|---|---|---|---|
-| A_simp (no curriculum) | **80.0%** | 0.032 m | 0.568 rad | 100% / 70% |
-| B_curr (P82 curriculum) | **76.7%** | 0.023 m | 0.663 rad | 100% / 65% |
-| G_tasp_dpose | 16.7% | 0.158 m | 1.457 rad | 30% / 10% |
-| H_tasp_disc | 10.0% | 0.186 m | 1.260 rad | 30% / 0% |
-| E_asp_dpose | 6.7% | 0.143 m | 1.612 rad | 20% / 0% |
-| F_asp_disc | 6.7% | 0.197 m | 1.576 rad | 20% / 0% |
+| PPO-PBRS (no curriculum) | **80.0%** | 0.032 m | 0.568 rad | 100% / 70% |
+| PPO-Curriculum | **76.7%** | 0.023 m | 0.663 rad | 100% / 65% |
+| TASP-dPose (time-based self-play) | 16.7% | 0.158 m | 1.457 rad | 30% / 10% |
+| ASP-dPose (outcome-based self-play) | 6.7% | 0.143 m | 1.612 rad | 20% / 0% |
 
 ---
 
@@ -305,13 +304,24 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 
 ## 9. Decisions Already Made <a name="decisions"></a>
 
-- **Timeline**: 1–3 weeks → Tier 0/1 + cheap re-runs from checkpoints.
+- **Timeline**: 1–3 weeks → front-load all remaining items to finish 2026-07-05; re-runs from existing checkpoints.
 - **80% mystery**: ✅ RESOLVED — `results/A_simp/20_isaac_30t.csv` = 80.0% SR.
-- **A vs B comparison**: ✅ COMPLETE — A_simp 80.0% vs B_curr 76.7% on identical 30 T-block scenes.
-- **New experiments selected**: (a) re-eval Model A seeds + ad-hoc on 20/30 scenes; (b) controlled overhead timing A vs C; (c) controlled curriculum ablation. **HER/SAC: not selected.**
-- **Verify ASP wiring**: DONE — loop is wired (`wrapper_push_asp.py:755–761`); "toxic curriculum" survives as task-specific, not universal.
-- **Results consolidated**: All CSVs, plots, and comparisons in `/home/vladi/IsaacLab/master_isaac/results/` organized by model.
-- **Model I implemented**: `train_i_tasp_dpose_bobpen.py` (1508 lines) + `hpc/train_i_tasp_dpose_bobpen.slurm` (128 lines). Forked from Model G with Bob time penalty `R_B += -gamma_sp * t_B` — full symmetric Sukhbaatar reward. Not yet trained.
+- **Deck narrative restructured** into 8 academic sections (Intro+RQs, Related Work, Problem+MDP, Implementation, Evaluation, Results, Discussion, Conclusion+Takeaways). Implementation and Results fully separated.
+- **Naming scheme**: all models renamed from letters (A–I) to descriptive names (PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose). Disc models F/H removed. Model C/D excluded.
+- **PBRS theorem split**: theory (Ng et al.) → Related Work; our potentials → Implementation.
+- **RQ2 reworded**: "Given a well-shaped PBRS reward, does adding a curriculum or self-play improve final task success at fixed budget?"
+- **RQ3 reworded**: "Can PBRS substitute for an explicit curriculum?" (was "are reward and curriculum independent"). The gym batch-size interaction (PPO-Curriculum 50% ≫ PPO-PBRS 10% at small batch) makes substitution regime‑dependent — stated as a scope caveat.
+- **C9 resolved**: Slide 11 rewritten to "Self-Play Is Not Slower ~1.0×" (controlled same‑machine measurement); Table‑Tennis / 5–10× Manager‑vs‑DirectRL claim dropped. A placeholder slide for a controlled DirectRL‑vs‑Manager measurement is added as a takeaway.
+- **172 push/s measured**: provenance added "from logged TF‑event timestamps".
+- **Per‑model error plots** (`errors_ppo_pbrs/ppo_curriculum/asp_dpose/tasp_dpose.png`) regenerated from the exact 30‑scene CSVs.
+- **Validation‑test‑suite layout** (`val_test_layout.png`) added — 30 scenes, Start→Goal grid, no pass/fail border.
+- **Cross‑environment + per‑scene plots** (`p1_sr_bars.png`, `p3_heatmap.png`) with descriptive names, Isaac ASP bar dropped.
+- **Tables + training dynamics moved to appendix** (PPO‑Curriculum metric table, self‑play comparison table, CI table, failure taxonomy, training curves).
+- **Section dividers** added between the 8 sections using `hlblue` theme colour.
+- **Per‑attempt SR** (PPO‑PBRS 66.0%, PPO‑Curriculum 68.3%) disclosed in the deck.
+- **4 stale cross‑references** (`Slide~10`, `Slide 9c`, `next slide (11b)`, a stale comment) fixed.
+- **Old‑reward ad‑hoc baseline** checkpoint identified for RQ1 re‑eval; SAC+HER baseline training in progress.
+- **Model I** (TASP‑dPose‑BobPenalty) implemented; not yet trained.
 
 ---
 
@@ -359,23 +369,23 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 
 ## Next Actions (suggested order)
 
-1. ✅ Verify §8 items — resolved.
-2. ✅ Validation campaign complete — 7 Isaac models + 3 gym HPC models.
-3. ✅ A-vs-C overhead measured (~1.0× in Isaac; 5–10× is Manager API, not ASP).
-4. ✅ Deck tables rebuilt; claims softened; Slide 8a split; Slide 11b added.
-5. ✅ Error bars added — 4 new CI plots from best-of-20 trial data.
-6. ✅ Confound disaggregation — Slide 9c added; independence claim softened.
-7. ✅ C/D exclusion footnoted.
-8. ✅ Deck compiles cleanly — 42 pages, xelatex.
-9. ✅ **Gym HPC results corrected** — latest checkpoints at 18,800/18,800/4,400 iters (~30h/30h/48h); total pushes matched to Isaac (18–20M); batch size confirmed as the dominant bottleneck.
-10. ⚠ Density pass — ~28 slides; could cut to ~20.
-11. ⚠ Gym validation CSVs are from intermediate checkpoints (8,800/9,000/1,300) — re-validating from latest checkpoints (18,800/18,800/4,400) may yield different numbers.
-12. ❌ E3 controlled curriculum ablation — not done.
-13. ❌ Scripted-push reference baseline — not implemented.
-14. ❌ `tests/validate_push_pusht.py` — not implemented.
-15. ⚠ Training curves — exist but not independently verified against latest logs.
-16. ❌ C_asp Isaac 30-scene validation — TODO.
-17. ❌ Model I training — implemented but not yet run on HPC.
+1. ✅ Validation campaign complete — 4 models validated (PPO-PBRS 80.0%, PPO-Curriculum 76.7%, TASP-dPose 16.7%, ASP-dPose 6.7% on identical 30 T-block scenes).
+2. ✅ Deck narrative restructured into 8 academic sections; names renamed to descriptive; disc removed; tables + training-dynamics → appendix; section dividers added.
+3. ✅ Overhead measured (~1.0× self‑play vs single‑agent); C9 resolved; 5–10× claim dropped.
+4. ✅ Error bars + per‑model error plots from exact 30‑scene CSVs.
+5. ✅ Cross‑env p1 + per‑scene p3 added.
+6. ✅ Stale cross‑references fixed.
+7. ✅ Deck compiles cleanly — 60 pages, xelatex.
+8. ⚠ `speaker_notes.tex` slide numbering not re‑synced to new deck order (content is correct).
+9. ❌ **RQ1 hand‑tuned baseline re‑eval** — command ready; run on a GPU node: checkpoint at `runs/ppo_classic_reward/hpc_push_2048env_rel_full/agent/model_best.pt`.
+10. ❌ **SAC+HER baseline** — training in progress; validate on the same 30‑scene protocol when done.
+11. ❌ **C/ASP full training‑curve data** — CSVs capped at 2,969 iters; full run (7,600 iters) on a different machine; needs TB‑event re‑export + regenerate `cmp_*`.
+12. ❌ **Parallel‑environment training videos** — recording plan written; not yet executed.
+13. ❌ **Manager‑vs‑DirectRL controlled measurement** — placeholder in deck; not yet run.
+14. ❌ **E3 controlled curriculum ablation** — not done.
+15. ❌ **Model I** (TASP‑dPose‑BobPenalty) — implemented, not trained.
+16. ❌ **Validation seed variance** — single‑seed per model; training seeds (5 A chains) not re‑evaluated for validation CIs.
+17. ❌ **Cross‑Environment + Per‑Scene** placement — user preferred Discussion; currently in Results.
 
 ---
 

@@ -103,10 +103,8 @@ def difficulty_from_index(idx):
 
 # ──────────────────────────────────────────────────────────
 def plot1_sr_bars():
-    """Side-by-side SR bars: Isaac vs Gym HPC, grouped by pos_only / pos_rot / total."""
-    keys_a = ["A Isaac", "A Gym", "B Isaac", "B Gym", "C Isaac", "C Gym"]
-    labels = ["A\nIsaac", "A\nGym", "B\nIsaac", "B\nGym", "C\nIsaac", "C\nGym"]
-    colors = ["#0072B2", "#0072B2", "#D55E00", "#D55E00", "#009E73", "#009E73"]
+    """Side-by-side SR bars: Isaac vs Gym HPC, grouped by Position-only / Position+Rotation / Overall."""
+    keys_a = ["A Isaac", "A Gym", "B Isaac", "B Gym", "C Gym"]
 
     stats = {}
     for k in keys_a:
@@ -114,38 +112,40 @@ def plot1_sr_bars():
         stats[k] = compute_model_stats(rows)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-    fig.suptitle("Cross-Environment Validation SR — Isaac Lab vs Gym-pusht HPC\nSame thesis gate, same 30 T-block scenes, same total push budget (~18–20M for A/B)", fontsize=12, fontweight="bold")
+    fig.suptitle("Cross-Environment Validation SR — Isaac Lab vs Gym-pusht HPC\nSame thesis gate, same 30 T-block scenes, same total push budget (~18–20M for PPO-PBRS / PPO-Curriculum)", fontsize=12, fontweight="bold")
 
-    def draw_grouped(ax, keys_subset, env_label):
-        x = np.arange(3)
+    def draw_grouped(ax, keys_subset, xlabels, env_label):
+        x = np.arange(len(keys_subset))
         w = 0.35
         pos_vals   = [stats[k]["pos_only_sr"] for k in keys_subset]
         posrot_vals = [stats[k]["pos_rot_sr"] for k in keys_subset]
         total_vals  = [stats[k]["scene_sr"] for k in keys_subset]
         colors_sub  = [MODELS[k][4] for k in keys_subset]
 
-        b1 = ax.bar(x - w/2 - w/4, pos_vals, w/2, label="pos_only", color=colors_sub, edgecolor="white", alpha=0.85)
+        b1 = ax.bar(x - w/2 - w/4, pos_vals, w/2, label="Position-only", color=colors_sub, edgecolor="white", alpha=0.85)
         for bar, val, col in zip(b1, pos_vals, colors_sub):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, f"{val:.0f}%", ha="center", va="bottom", fontsize=8, fontweight="bold", color=col)
 
-        b2 = ax.bar(x - w/2 + w/4, posrot_vals, w/2, label="pos+rot", color=colors_sub, edgecolor="white", alpha=0.40, hatch="//")
+        b2 = ax.bar(x - w/2 + w/4, posrot_vals, w/2, label="Position + Rotation", color=colors_sub, edgecolor="white", alpha=0.40, hatch="//")
         for bar, val, col in zip(b2, posrot_vals, colors_sub):
             ax.text(bar.get_x() + bar.get_width()/2, max(bar.get_height(), 0) + 1, f"{val:.0f}%", ha="center", va="bottom", fontsize=7, color=col)
 
-        b3 = ax.bar(x + w/2, total_vals, w/2, label="total", color=colors_sub, edgecolor="white", alpha=0.95, linewidth=1.5)
+        b3 = ax.bar(x + w/2, total_vals, w/2, label="Overall", color=colors_sub, edgecolor="white", alpha=0.95, linewidth=1.5)
         for bar, val, col in zip(b3, total_vals, colors_sub):
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, f"{val:.0f}%", ha="center", va="bottom", fontsize=9, fontweight="bold", color="black")
 
         ax.set_xticks(x)
-        ax.set_xticklabels(["Model A", "Model B", "Model C"], fontsize=10)
+        ax.set_xticklabels(xlabels, fontsize=9)
         ax.set_ylabel("Scene Success Rate (%)", fontsize=10)
         ax.set_title(env_label, fontsize=11, fontweight="bold")
         ax.set_ylim(0, 110)
         ax.grid(axis="y", alpha=0.3)
         ax.legend(fontsize=8, loc="upper right")
 
-    draw_grouped(ax1, ["A Isaac", "B Isaac", "C Isaac"], "Isaac Lab (528 GPU, batch 7,920)\nA 19M / B 20.6M / C 60.2M pushes")
-    draw_grouped(ax2, ["A Gym", "B Gym", "C Gym"],    "Gym-pusht HPC (32 CPU, batch 960)\nA 18M / B 18M / C 4.2M pushes")
+    draw_grouped(ax1, ["A Isaac", "B Isaac"], ["PPO-PBRS", "PPO-Curriculum"],
+                 "Isaac Lab (528 GPU, batch 7,920)\nPPO-PBRS 19M / PPO-Curriculum 20.6M pushes")
+    draw_grouped(ax2, ["A Gym", "B Gym", "C Gym"], ["PPO-PBRS", "PPO-Curriculum", "ASP"],
+                 "Gym-pusht HPC (32 CPU, batch 960)\nPPO-PBRS 18M / PPO-Curriculum 18M / ASP 4.2M pushes")
 
     fig.tight_layout()
     p = os.path.join(OUT_DIR, "p1_sr_bars.png")
@@ -228,9 +228,9 @@ def plot2_batch_bottleneck():
 
 # ──────────────────────────────────────────────────────────
 def plot3_heatmap():
-    """Per-scene pass/fail heatmap: 30 scenes × 6 model×env combos."""
-    keys = ["A Isaac", "B Isaac", "C Isaac", "A Gym", "B Gym", "C Gym"]
-    labels = ["A\nIsaac", "B\nIsaac", "C\nIsaac", "A\nGym", "B\nGym", "C\nGym"]
+    """Per-scene pass/fail heatmap: 30 scenes × model×env combos."""
+    keys = ["A Isaac", "B Isaac", "A Gym", "B Gym", "C Gym"]
+    labels = ["PPO-PBRS\nIsaac", "PPO-Curriculum\nIsaac", "PPO-PBRS\nGym", "PPO-Curriculum\nGym", "ASP\nGym"]
 
     all_results = {}
     for k in keys:
@@ -311,7 +311,6 @@ def plot3_heatmap():
 
 def main():
     plot1_sr_bars()
-    plot2_batch_bottleneck()
     plot3_heatmap()
     print(f"\n[Done] All plots saved to {OUT_DIR}/")
 
