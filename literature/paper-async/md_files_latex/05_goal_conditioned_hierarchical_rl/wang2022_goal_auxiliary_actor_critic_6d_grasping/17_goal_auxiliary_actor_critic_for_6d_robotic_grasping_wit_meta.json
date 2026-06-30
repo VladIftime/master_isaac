@@ -1,0 +1,1373 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Goal-Auxiliary Actor-Critic for 6D Robotic Grasping\nwith Point Clouds",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          110.68399810791016,
+          83.327880859375
+        ],
+        [
+          501.3186950683594,
+          83.327880859375
+        ],
+        [
+          501.3186950683594,
+          120.46929931640625
+        ],
+        [
+          110.68399810791016,
+          120.46929931640625
+        ]
+      ]
+    },
+    {
+      "title": "1 Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          107.578125,
+          366.43115234375
+        ],
+        [
+          190.81362915039062,
+          366.43115234375
+        ],
+        [
+          190.81362915039062,
+          378.3863525390625
+        ],
+        [
+          107.578125,
+          378.3863525390625
+        ]
+      ]
+    },
+    {
+      "title": "2 Related Work",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          107.578125,
+          360.80859375
+        ],
+        [
+          197.09014892578125,
+          360.80859375
+        ],
+        [
+          197.09014892578125,
+          372.83538818359375
+        ],
+        [
+          107.578125,
+          372.83538818359375
+        ]
+      ]
+    },
+    {
+      "title": "3 Learning 6D Grasping Policies",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          107.578125,
+          677.1381378173828
+        ],
+        [
+          282.6056823730469,
+          677.1381378173828
+        ],
+        [
+          282.6056823730469,
+          689.0933380126953
+        ],
+        [
+          107.578125,
+          689.0933380126953
+        ]
+      ]
+    },
+    {
+      "title": "3.1 Background",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.98046875,
+          74.25
+        ],
+        [
+          183.0,
+          74.25
+        ],
+        [
+          183.0,
+          83.14453125
+        ],
+        [
+          106.98046875,
+          83.14453125
+        ]
+      ]
+    },
+    {
+      "title": "3.2 6D Grasping Policy From Point Clouds",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.3828125,
+          349.5
+        ],
+        [
+          297.75,
+          349.5
+        ],
+        [
+          297.75,
+          358.5
+        ],
+        [
+          106.3828125,
+          358.5
+        ]
+      ]
+    },
+    {
+      "title": "3.3 Demonstrations from a Joint Motion and Grasp Planner",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.5,
+          472.18359375
+        ],
+        [
+          371.25,
+          472.18359375
+        ],
+        [
+          371.25,
+          483.0
+        ],
+        [
+          106.5,
+          483.0
+        ]
+      ]
+    },
+    {
+      "title": "3.4 Behavior Cloning and DAGGER",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          106.5,
+          669.0
+        ],
+        [
+          269.25,
+          669.0
+        ],
+        [
+          269.25,
+          678.69140625
+        ],
+        [
+          106.5,
+          678.69140625
+        ]
+      ]
+    },
+    {
+      "title": "3.5 Goal-Auxiliary DDPG",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          106.5,
+          396.0
+        ],
+        [
+          224.25,
+          396.0
+        ],
+        [
+          224.25,
+          406.44140625
+        ],
+        [
+          106.5,
+          406.44140625
+        ]
+      ]
+    },
+    {
+      "title": "3.6 Hindsight Goals For Fine-tuning on Unknown Objects",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          106.5,
+          136.125
+        ],
+        [
+          363.0,
+          136.125
+        ],
+        [
+          363.0,
+          145.5
+        ],
+        [
+          106.5,
+          145.5
+        ]
+      ]
+    },
+    {
+      "title": "4 Experiments",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          107.578125,
+          273.0
+        ],
+        [
+          192.0,
+          273.0
+        ],
+        [
+          192.0,
+          283.8515625
+        ],
+        [
+          107.578125,
+          283.8515625
+        ]
+      ]
+    },
+    {
+      "title": "4.1 Ablation Studies in Simulation",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          106.5,
+          450.52734375
+        ],
+        [
+          261.0,
+          450.52734375
+        ],
+        [
+          261.0,
+          460.5
+        ],
+        [
+          106.5,
+          460.5
+        ]
+      ]
+    },
+    {
+      "title": "4.2 Tabletop 6D Grasping in the Real World",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          106.3828125,
+          276.890625
+        ],
+        [
+          302.5596008300781,
+          276.890625
+        ],
+        [
+          302.5596008300781,
+          287.05108642578125
+        ],
+        [
+          106.3828125,
+          287.05108642578125
+        ]
+      ]
+    },
+    {
+      "title": "4.3 Human-to-Robot Handovers in the Real World",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          107.578125,
+          555.71484375
+        ],
+        [
+          330.1062316894531,
+          555.71484375
+        ],
+        [
+          330.1062316894531,
+          565.8790283203125
+        ],
+        [
+          107.578125,
+          565.8790283203125
+        ]
+      ]
+    },
+    {
+      "title": "5 Conclusion",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          106.5,
+          626.87109375
+        ],
+        [
+          183.75,
+          626.87109375
+        ],
+        [
+          183.75,
+          637.5
+        ],
+        [
+          106.5,
+          637.5
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          106.98046875,
+          72.31640625
+        ],
+        [
+          163.54385375976562,
+          72.31640625
+        ],
+        [
+          163.54385375976562,
+          84.7423095703125
+        ],
+        [
+          106.98046875,
+          84.7423095703125
+        ]
+      ]
+    },
+    {
+      "title": "6 Appendix",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          107.279296875,
+          71.9296875
+        ],
+        [
+          176.25,
+          71.9296875
+        ],
+        [
+          176.25,
+          82.7578125
+        ],
+        [
+          107.279296875,
+          82.7578125
+        ]
+      ]
+    },
+    {
+      "title": "6.1 Hindsight Goal Auxiliary Training Algorithm",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          107.578125,
+          97.5
+        ],
+        [
+          324.75,
+          97.5
+        ],
+        [
+          324.75,
+          107.5078125
+        ],
+        [
+          107.578125,
+          107.5078125
+        ]
+      ]
+    },
+    {
+      "title": "6.2 Task and Environment Details",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          106.5,
+          453.62109375
+        ],
+        [
+          259.5,
+          453.62109375
+        ],
+        [
+          259.5,
+          462.75
+        ],
+        [
+          106.5,
+          462.75
+        ]
+      ]
+    },
+    {
+      "title": "6.3 Network Architecture",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          106.5,
+          382.46484375
+        ],
+        [
+          224.25,
+          382.46484375
+        ],
+        [
+          224.25,
+          390.97265625
+        ],
+        [
+          106.5,
+          390.97265625
+        ]
+      ]
+    },
+    {
+      "title": "6.4 Training Details",
+      "heading_level": null,
+      "page_id": 12,
+      "polygon": [
+        [
+          106.681640625,
+          510.75
+        ],
+        [
+          200.25,
+          510.75
+        ],
+        [
+          200.25,
+          520.91015625
+        ],
+        [
+          106.681640625,
+          520.91015625
+        ]
+      ]
+    },
+    {
+      "title": "6.5 Grasp Prediction Performance",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          106.98046875,
+          321.0
+        ],
+        [
+          261.75,
+          321.0
+        ],
+        [
+          261.75,
+          331.03125
+        ],
+        [
+          106.98046875,
+          331.03125
+        ]
+      ]
+    },
+    {
+      "title": "6.6 Closed-Loop 6D Grasping of Moving Objects in Simulation",
+      "heading_level": null,
+      "page_id": 13,
+      "polygon": [
+        [
+          106.3828125,
+          549.75
+        ],
+        [
+          384.0,
+          549.75
+        ],
+        [
+          384.0,
+          561.12890625
+        ],
+        [
+          106.3828125,
+          561.12890625
+        ]
+      ]
+    },
+    {
+      "title": "Human-to-Robot Handover",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          381.90234375,
+          75.75
+        ],
+        [
+          484.5,
+          75.75
+        ],
+        [
+          484.5,
+          83.25
+        ],
+        [
+          381.90234375,
+          83.25
+        ]
+      ]
+    },
+    {
+      "title": "6.7 Details on Real-world Experiments",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          106.5,
+          381.75
+        ],
+        [
+          280.5,
+          381.75
+        ],
+        [
+          280.5,
+          391.5
+        ],
+        [
+          106.5,
+          391.5
+        ]
+      ]
+    },
+    {
+      "title": "6.8 Design Limitations",
+      "heading_level": null,
+      "page_id": 14,
+      "polygon": [
+        [
+          106.5,
+          499.5
+        ],
+        [
+          212.25,
+          499.5
+        ],
+        [
+          212.25,
+          509.25
+        ],
+        [
+          106.5,
+          509.25
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          149
+        ],
+        [
+          "Line",
+          51
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          162
+        ],
+        [
+          "Line",
+          51
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          112
+        ],
+        [
+          "Line",
+          58
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          106
+        ],
+        [
+          "Line",
+          57
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          63
+        ],
+        [
+          "Span",
+          47
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          235
+        ],
+        [
+          "Line",
+          39
+        ],
+        [
+          "Span",
+          9
+        ],
+        [
+          "Table",
+          3
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "TableGroup",
+          3
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          220
+        ],
+        [
+          "Line",
+          54
+        ],
+        [
+          "TableCell",
+          33
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          59
+        ],
+        [
+          "Span",
+          18
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          170
+        ],
+        [
+          "Line",
+          47
+        ],
+        [
+          "ListItem",
+          17
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          187
+        ],
+        [
+          "Line",
+          48
+        ],
+        [
+          "ListItem",
+          19
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          124
+        ],
+        [
+          "Line",
+          32
+        ],
+        [
+          "ListItem",
+          13
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          94
+        ],
+        [
+          "Line",
+          66
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Code",
+          2
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 12,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          51
+        ],
+        [
+          "Span",
+          34
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 13,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          54
+        ],
+        [
+          "Line",
+          42
+        ],
+        [
+          "Span",
+          19
+        ],
+        [
+          "Picture",
+          7
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 14,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          180
+        ],
+        [
+          "Line",
+          33
+        ],
+        [
+          "Span",
+          11
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "Text",
+          3
+        ],
+        [
+          "Table",
+          2
+        ],
+        [
+          "TableGroup",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 15,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          23
+        ],
+        [
+          "Span",
+          4
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "PictureGroup",
+          2
+        ],
+        [
+          "Text",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/17_goal_auxiliary_actor_critic_for_6d_robotic_grasping_wit"
+}

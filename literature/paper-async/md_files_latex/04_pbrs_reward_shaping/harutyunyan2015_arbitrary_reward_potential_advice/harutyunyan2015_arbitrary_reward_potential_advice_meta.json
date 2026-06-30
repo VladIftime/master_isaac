@@ -1,0 +1,900 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Expressing Arbitrary Reward Functions as Potential-Based Advice",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          98.015625,
+          97.06640625
+        ],
+        [
+          512.25,
+          97.06640625
+        ],
+        [
+          512.25,
+          110.21484375
+        ],
+        [
+          98.015625,
+          110.21484375
+        ]
+      ]
+    },
+    {
+      "title": "Anna Harutyunyan",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          59.765625,
+          138.0
+        ],
+        [
+          162.75,
+          138.0
+        ],
+        [
+          162.75,
+          149.2734375
+        ],
+        [
+          59.765625,
+          149.2734375
+        ]
+      ]
+    },
+    {
+      "title": "Vrije Universiteit Brussel aharutyu@vub.ac.be",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          60.0,
+          148.11328125
+        ],
+        [
+          163.5,
+          148.11328125
+        ],
+        [
+          163.5,
+          172.08984375
+        ],
+        [
+          60.0,
+          172.08984375
+        ]
+      ]
+    },
+    {
+      "title": "Sam Devlin",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          207.984375,
+          136.51171875
+        ],
+        [
+          271.5,
+          136.51171875
+        ],
+        [
+          271.5,
+          147.0
+        ],
+        [
+          207.984375,
+          147.0
+        ]
+      ]
+    },
+    {
+      "title": "University of York sam.devlin@york.ac.uk",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          192.75,
+          148.11328125
+        ],
+        [
+          289.5,
+          148.11328125
+        ],
+        [
+          289.5,
+          170.25
+        ],
+        [
+          192.75,
+          170.25
+        ]
+      ]
+    },
+    {
+      "title": "Peter Vrancx",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          333.193359375,
+          137.25
+        ],
+        [
+          405.75,
+          137.25
+        ],
+        [
+          405.75,
+          147.0
+        ],
+        [
+          333.193359375,
+          147.0
+        ]
+      ]
+    },
+    {
+      "title": "Vrije Universiteit Brussel pvrancx@vub.ac.be",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          318.75,
+          148.88671875
+        ],
+        [
+          423.75,
+          148.88671875
+        ],
+        [
+          423.75,
+          170.25
+        ],
+        [
+          318.75,
+          170.25
+        ]
+      ]
+    },
+    {
+      "title": "Ann Now\u00e9",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          463.482421875,
+          137.28515625
+        ],
+        [
+          528.75,
+          137.28515625
+        ],
+        [
+          528.75,
+          147.0
+        ],
+        [
+          463.482421875,
+          147.0
+        ]
+      ]
+    },
+    {
+      "title": "Abstract",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          152.40234375,
+          217.5
+        ],
+        [
+          192.75,
+          217.5
+        ],
+        [
+          192.75,
+          225.0
+        ],
+        [
+          152.40234375,
+          225.0
+        ]
+      ]
+    },
+    {
+      "title": "Introduction",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          139.5,
+          375.0
+        ],
+        [
+          206.25,
+          375.0
+        ],
+        [
+          206.25,
+          384.0
+        ],
+        [
+          139.5,
+          384.0
+        ]
+      ]
+    },
+    {
+      "title": "Background",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          140.25,
+          53.75390625
+        ],
+        [
+          205.5,
+          53.75390625
+        ],
+        [
+          205.5,
+          64.5
+        ],
+        [
+          140.25,
+          64.5
+        ]
+      ]
+    },
+    {
+      "title": "Reward Shaping",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          318.0,
+          54.52734375
+        ],
+        [
+          398.63671875,
+          54.52734375
+        ],
+        [
+          398.63671875,
+          64.58203125
+        ],
+        [
+          318.0,
+          64.58203125
+        ]
+      ]
+    },
+    {
+      "title": "From Reward Functions to Dynamic\nPotentials",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          344.25,
+          436.5
+        ],
+        [
+          532.5,
+          436.5
+        ],
+        [
+          532.5,
+          459.75
+        ],
+        [
+          344.25,
+          459.75
+        ]
+      ]
+    },
+    {
+      "title": "Theory",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          153.59765625,
+          481.46484375
+        ],
+        [
+          192.75,
+          481.46484375
+        ],
+        [
+          192.75,
+          490.5
+        ],
+        [
+          153.59765625,
+          490.5
+        ]
+      ]
+    },
+    {
+      "title": "Dynamic Potential-Based Advice",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          52.5,
+          603.75
+        ],
+        [
+          207.75,
+          603.75
+        ],
+        [
+          207.75,
+          613.72265625
+        ],
+        [
+          52.5,
+          613.72265625
+        ]
+      ]
+    },
+    {
+      "title": "Shaping in Expectation",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          318.0,
+          434.25
+        ],
+        [
+          429.0,
+          434.25
+        ],
+        [
+          429.0,
+          444.75
+        ],
+        [
+          318.0,
+          444.75
+        ]
+      ]
+    },
+    {
+      "title": "Convergence of \\Phi",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          52.5,
+          292.5
+        ],
+        [
+          136.5,
+          292.5
+        ],
+        [
+          136.5,
+          303.1875
+        ],
+        [
+          52.5,
+          303.1875
+        ]
+      ]
+    },
+    {
+      "title": "Experiments",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          139.5,
+          594.0
+        ],
+        [
+          207.0,
+          594.0
+        ],
+        [
+          207.0,
+          604.5
+        ],
+        [
+          139.5,
+          604.5
+        ]
+      ]
+    },
+    {
+      "title": "Grid-World",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          318.0,
+          99.0
+        ],
+        [
+          375.75,
+          99.0
+        ],
+        [
+          375.75,
+          108.75
+        ],
+        [
+          318.0,
+          108.75
+        ]
+      ]
+    },
+    {
+      "title": "Cart-Pole",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          317.35546875,
+          561.90234375
+        ],
+        [
+          365.25,
+          561.90234375
+        ],
+        [
+          365.25,
+          571.5
+        ],
+        [
+          317.35546875,
+          571.5
+        ]
+      ]
+    },
+    {
+      "title": "Discussion",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          318.0,
+          657.80859375
+        ],
+        [
+          369.75,
+          657.80859375
+        ],
+        [
+          369.75,
+          666.75
+        ],
+        [
+          318.0,
+          666.75
+        ]
+      ]
+    },
+    {
+      "title": "Related Work",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          135.75,
+          577.37109375
+        ],
+        [
+          210.0,
+          577.37109375
+        ],
+        [
+          210.0,
+          588.0
+        ],
+        [
+          135.75,
+          588.0
+        ]
+      ]
+    },
+    {
+      "title": "Conclusions and Outlook",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          372.75,
+          396.75
+        ],
+        [
+          504.0,
+          396.75
+        ],
+        [
+          504.0,
+          406.5
+        ],
+        [
+          372.75,
+          406.5
+        ]
+      ]
+    },
+    {
+      "title": "Acknowledgments",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          124.91015625,
+          54.0
+        ],
+        [
+          220.5,
+          54.0
+        ],
+        [
+          220.5,
+          64.96875
+        ],
+        [
+          124.91015625,
+          64.96875
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          144.0,
+          104.80078125
+        ],
+        [
+          201.75,
+          104.80078125
+        ],
+        [
+          201.75,
+          114.75
+        ],
+        [
+          144.0,
+          114.75
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          115
+        ],
+        [
+          "Span",
+          90
+        ],
+        [
+          "SectionHeader",
+          10
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          203
+        ],
+        [
+          "Line",
+          104
+        ],
+        [
+          "Text",
+          16
+        ],
+        [
+          "Equation",
+          10
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Footnote",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          131
+        ],
+        [
+          "Line",
+          107
+        ],
+        [
+          "Text",
+          15
+        ],
+        [
+          "Equation",
+          11
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          129
+        ],
+        [
+          "Span",
+          128
+        ],
+        [
+          "Text",
+          15
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "Footnote",
+          3
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          109
+        ],
+        [
+          "Span",
+          102
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          101
+        ],
+        [
+          "Line",
+          98
+        ],
+        [
+          "TableCell",
+          33
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          134
+        ],
+        [
+          "Span",
+          84
+        ],
+        [
+          "ListItem",
+          26
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Text",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/harutyunyan2015_arbitrary_reward_potential_advice"
+}

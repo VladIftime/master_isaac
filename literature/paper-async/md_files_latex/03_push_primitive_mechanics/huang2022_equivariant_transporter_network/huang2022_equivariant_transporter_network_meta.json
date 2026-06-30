@@ -1,0 +1,1303 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Equivariant Transporter Network",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          143.25,
+          60.71484375
+        ],
+        [
+          467.25,
+          60.71484375
+        ],
+        [
+          467.25,
+          81.59765625
+        ],
+        [
+          143.25,
+          81.59765625
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          132.08203125,
+          338.37890625
+        ],
+        [
+          213.75,
+          338.37890625
+        ],
+        [
+          213.75,
+          347.25
+        ],
+        [
+          132.08203125,
+          347.25
+        ]
+      ]
+    },
+    {
+      "title": "II. RELATED WORK",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          130.2890625,
+          111.0
+        ],
+        [
+          217.5,
+          111.0
+        ],
+        [
+          217.5,
+          120.0
+        ],
+        [
+          130.2890625,
+          120.0
+        ]
+      ]
+    },
+    {
+      "title": "III. BACKGROUND ON SYMMETRY GROUPS",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          80.0859375,
+          657.80859375
+        ],
+        [
+          267.75,
+          657.80859375
+        ],
+        [
+          267.75,
+          668.25
+        ],
+        [
+          80.0859375,
+          668.25
+        ]
+      ]
+    },
+    {
+      "title": "A. The Groups SO(2) and C_n",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          46.5,
+          675.0
+        ],
+        [
+          174.0,
+          675.0
+        ],
+        [
+          174.0,
+          684.87890625
+        ],
+        [
+          46.5,
+          684.87890625
+        ]
+      ]
+    },
+    {
+      "title": "B. Representation of a Group",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          311.080078125,
+          115.5
+        ],
+        [
+          435.0,
+          115.62890625
+        ],
+        [
+          435.0,
+          126.0
+        ],
+        [
+          311.080078125,
+          125.68359375
+        ]
+      ]
+    },
+    {
+      "title": "C. Feature Map Transformations",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          311.25,
+          418.5
+        ],
+        [
+          448.5,
+          418.5
+        ],
+        [
+          448.5,
+          428.25
+        ],
+        [
+          311.25,
+          428.25
+        ]
+      ]
+    },
+    {
+      "title": "D. Equivariant Mappings",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          46.6171875,
+          58.0078125
+        ],
+        [
+          155.25,
+          58.0078125
+        ],
+        [
+          155.25,
+          67.2890625
+        ],
+        [
+          46.6171875,
+          67.2890625
+        ]
+      ]
+    },
+    {
+      "title": "IV. TRANSPORTER NETWORK",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          108.75,
+          217.5
+        ],
+        [
+          238.5,
+          217.5
+        ],
+        [
+          238.5,
+          226.6171875
+        ],
+        [
+          108.75,
+          226.6171875
+        ]
+      ]
+    },
+    {
+      "title": "A. Problem Statement",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          47.21484375,
+          288.0
+        ],
+        [
+          140.25,
+          288.0
+        ],
+        [
+          140.25,
+          296.25
+        ],
+        [
+          47.21484375,
+          296.25
+        ]
+      ]
+    },
+    {
+      "title": "B. Description of Transporter Net",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          48.0,
+          561.90234375
+        ],
+        [
+          189.75,
+          561.90234375
+        ],
+        [
+          189.75,
+          571.5
+        ],
+        [
+          48.0,
+          571.5
+        ]
+      ]
+    },
+    {
+      "title": "C. Equivariance of Transporter Net",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          309.884765625,
+          469.08984375
+        ],
+        [
+          459.896484375,
+          469.08984375
+        ],
+        [
+          459.896484375,
+          478.5
+        ],
+        [
+          309.884765625,
+          478.5
+        ]
+      ]
+    },
+    {
+      "title": "V. EQUIVARIANT TRANSPORTER",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          103.095703125,
+          160.48828125
+        ],
+        [
+          245.25,
+          160.48828125
+        ],
+        [
+          245.25,
+          170.25
+        ],
+        [
+          103.095703125,
+          170.25
+        ]
+      ]
+    },
+    {
+      "title": "A. Equivariant Pick",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          47.25,
+          177.0
+        ],
+        [
+          131.25,
+          177.0
+        ],
+        [
+          131.25,
+          186.3984375
+        ],
+        [
+          47.25,
+          186.3984375
+        ]
+      ]
+    },
+    {
+      "title": "B. Equivariant Place",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          310.5,
+          258.75
+        ],
+        [
+          400.4296875,
+          258.75
+        ],
+        [
+          400.4296875,
+          269.15625
+        ],
+        [
+          310.5,
+          269.15625
+        ]
+      ]
+    },
+    {
+      "title": "C. Equivariance Properties of the Placing Network",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          47.21484375,
+          425.25
+        ],
+        [
+          261.0,
+          425.25
+        ],
+        [
+          261.0,
+          434.28515625
+        ],
+        [
+          47.21484375,
+          434.28515625
+        ]
+      ]
+    },
+    {
+      "title": "D. Model Architecture Details",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          309.884765625,
+          209.25
+        ],
+        [
+          437.25,
+          209.25
+        ],
+        [
+          437.25,
+          219.0
+        ],
+        [
+          309.884765625,
+          219.0
+        ]
+      ]
+    },
+    {
+      "title": "VI. EXPERIMENTS",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          132.6796875,
+          319.4296875
+        ],
+        [
+          214.5,
+          319.4296875
+        ],
+        [
+          214.5,
+          328.5
+        ],
+        [
+          132.6796875,
+          328.5
+        ]
+      ]
+    },
+    {
+      "title": "A. Tasks",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          46.916015625,
+          366.22265625
+        ],
+        [
+          84.75,
+          366.22265625
+        ],
+        [
+          84.75,
+          375.0
+        ],
+        [
+          46.916015625,
+          375.0
+        ]
+      ]
+    },
+    {
+      "title": "B. Training and Evaluation",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          47.8125,
+          651.62109375
+        ],
+        [
+          162.75,
+          651.62109375
+        ],
+        [
+          162.75,
+          660.75
+        ],
+        [
+          47.8125,
+          660.75
+        ]
+      ]
+    },
+    {
+      "title": "C. Results for the Ravens-10 Benchmark Tasks",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          309.5859375,
+          602.12109375
+        ],
+        [
+          505.5,
+          602.12109375
+        ],
+        [
+          505.5,
+          611.25
+        ],
+        [
+          309.5859375,
+          611.25
+        ]
+      ]
+    },
+    {
+      "title": "D. Results for Parallel Jaw Gripper Tasks",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          47.21484375,
+          602.25
+        ],
+        [
+          223.5,
+          603.75
+        ],
+        [
+          223.5,
+          613.72265625
+        ],
+        [
+          47.21484375,
+          613.72265625
+        ]
+      ]
+    },
+    {
+      "title": "E. Ablation Study",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          309.5859375,
+          384.0
+        ],
+        [
+          386.25,
+          384.0
+        ],
+        [
+          386.25,
+          393.0
+        ],
+        [
+          309.5859375,
+          393.0
+        ]
+      ]
+    },
+    {
+      "title": "F. Experiments on a Physical Robot",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          309.884765625,
+          672.75
+        ],
+        [
+          461.25,
+          672.75
+        ],
+        [
+          461.25,
+          681.78515625
+        ],
+        [
+          309.884765625,
+          681.78515625
+        ]
+      ]
+    },
+    {
+      "title": "G. Training and Evaluation",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          310.78125,
+          204.0
+        ],
+        [
+          426.75,
+          204.0
+        ],
+        [
+          426.75,
+          213.75
+        ],
+        [
+          310.78125,
+          213.75
+        ]
+      ]
+    },
+    {
+      "title": "VII. CONCLUSION AND LIMITATIONS",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          356.25,
+          399.75
+        ],
+        [
+          518.25,
+          399.75
+        ],
+        [
+          518.25,
+          409.53515625
+        ],
+        [
+          356.25,
+          409.53515625
+        ]
+      ]
+    },
+    {
+      "title": "ACKNOWLEDGEMENT",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          390.0,
+          654.71484375
+        ],
+        [
+          484.5,
+          654.71484375
+        ],
+        [
+          484.5,
+          665.25
+        ],
+        [
+          390.0,
+          665.25
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 8,
+      "polygon": [
+        [
+          146.126953125,
+          58.0078125
+        ],
+        [
+          202.904296875,
+          58.0078125
+        ],
+        [
+          202.904296875,
+          66.75
+        ],
+        [
+          146.126953125,
+          66.75
+        ]
+      ]
+    },
+    {
+      "title": "VIII. APPENDIX",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          138.0,
+          58.39453125
+        ],
+        [
+          210.0,
+          58.39453125
+        ],
+        [
+          210.0,
+          66.75
+        ],
+        [
+          138.0,
+          66.75
+        ]
+      ]
+    },
+    {
+      "title": "A. Equivariance under Proposition 2:",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          46.5,
+          72.703125
+        ],
+        [
+          204.75,
+          72.703125
+        ],
+        [
+          204.75,
+          82.5
+        ],
+        [
+          46.5,
+          82.5
+        ]
+      ]
+    },
+    {
+      "title": "B. Proofs of propositions",
+      "heading_level": null,
+      "page_id": 10,
+      "polygon": [
+        [
+          47.21484375,
+          465.99609375
+        ],
+        [
+          153.0,
+          465.99609375
+        ],
+        [
+          153.0,
+          475.5
+        ],
+        [
+          47.21484375,
+          475.5
+        ]
+      ]
+    },
+    {
+      "title": "C. Task descriptions of Ravens-10:",
+      "heading_level": null,
+      "page_id": 11,
+      "polygon": [
+        [
+          48.0,
+          459.75
+        ],
+        [
+          193.5,
+          459.75
+        ],
+        [
+          193.5,
+          468.75
+        ],
+        [
+          48.0,
+          468.75
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          99
+        ],
+        [
+          "Span",
+          52
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          171
+        ],
+        [
+          "Line",
+          121
+        ],
+        [
+          "Text",
+          10
+        ],
+        [
+          "SectionHeader",
+          5
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          150
+        ],
+        [
+          "Line",
+          103
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          5
+        ],
+        [
+          "Equation",
+          4
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "Caption",
+          2
+        ],
+        [
+          "PictureGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          205
+        ],
+        [
+          "Line",
+          116
+        ],
+        [
+          "Text",
+          16
+        ],
+        [
+          "Equation",
+          10
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          184
+        ],
+        [
+          "Line",
+          107
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          98
+        ],
+        [
+          "Span",
+          41
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "ListItem",
+          5
+        ],
+        [
+          "SectionHeader",
+          4
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "TableCell",
+          359
+        ],
+        [
+          "Line",
+          72
+        ],
+        [
+          "Span",
+          32
+        ],
+        [
+          "Text",
+          4
+        ],
+        [
+          "ListItem",
+          4
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Table",
+          2
+        ],
+        [
+          "TableGroup",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          87
+        ],
+        [
+          "Span",
+          50
+        ],
+        [
+          "TableCell",
+          16
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Caption",
+          4
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "Picture",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "Table",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "TableGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          178
+        ],
+        [
+          "Span",
+          98
+        ],
+        [
+          "ListItem",
+          29
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 9,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          54
+        ],
+        [
+          "Span",
+          20
+        ],
+        [
+          "ListItem",
+          8
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 10,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          137
+        ],
+        [
+          "Line",
+          115
+        ],
+        [
+          "Text",
+          25
+        ],
+        [
+          "Equation",
+          17
+        ],
+        [
+          "SectionHeader",
+          3
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 11,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          96
+        ],
+        [
+          "Span",
+          76
+        ],
+        [
+          "ListItem",
+          10
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "Equation",
+          4
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/huang2022_equivariant_transporter_network"
+}
