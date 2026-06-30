@@ -3,7 +3,8 @@ Validate trained push models against the gym-pusht 2D environment.
 
 Maps observations from gym-pusht's 5D state to the network's expected
 format, decodes push actions, and executes them via PD-controlled agent
-movement.  Uses gym-pusht's native coverage metric for success.
+movement.      Uses the thesis success gate (pos_err < 0.05 m AND rot_err < 0.2 rad for pos_rot;
+    pos_err < 0.05 m for pos_only/disc), identical to validate_push_asp.py.
 
 Usage:
   # PPO single-agent:
@@ -484,8 +485,11 @@ def main():
 
             trial_ok = False
             pushes_used = 0
+            stop_reason = "max_pushes"
             pos_err = 0.0
             rot_err = 0.0
+            prev_pos_err = float('inf')
+            prev_rot_err = float('inf')
             trial_coverage = 0.0
 
             for push_i in range(args.max_pushes):
@@ -560,24 +564,37 @@ def main():
                     print(f"  push {push_i:2d}: "
                           f"act=({action_np[0,0]:+.3f},{action_np[0,1]:+.3f},{action_np[0,2]:+.3f},{action_np[0,3]:+.3f})  "
                           f"len={float(length.item()):.3f} th={math.degrees(float(theta.item())):.0f}deg  "
-                          f"pos={pos_err:.4f}m rot={rot_err:.3f}rad cov={coverage:.2f}")
+                          f"pos={pos_err:.4f}m rot={rot_err:.3f}rad")
                 elif model_type == "asp":
                     print(f"  push {push_i:2d}: bins=({', '.join(f'{int(b_acts[0,i].item()):2d}' for i in range(4))})  "
                           f"len={float(length.item()):.3f} θ={math.degrees(float(theta.item())):.0f}°  "
-                          f"pos={pos_err:.4f}m rot={rot_err:.3f}rad cov={coverage:.2f}")
+                          f"pos={pos_err:.4f}m rot={rot_err:.3f}rad")
                 else:
                     print(f"  push {push_i:2d}: bins=({', '.join(f'{int(actions[0,i].item()):2d}' for i in range(4))})  "
                           f"len={float(length.item()):.3f} θ={math.degrees(float(theta.item())):.0f}°  "
-                          f"pos={pos_err:.4f}m rot={rot_err:.3f}rad cov={coverage:.2f}")
+                          f"pos={pos_err:.4f}m rot={rot_err:.3f}rad")
 
                 block_px, block_py = float(obs[2]), float(obs[3])
                 block_mx, block_my = pixel_to_meter(block_px, block_py)
                 if block_mx < -0.55 or block_mx > 0.55 or block_my < 0.20 or block_my > 0.75:
                     print(f"  [OOB] block=({block_mx:.3f},{block_my:.3f})m outside workspace")
+                    stop_reason = "oob"
                     break
 
-                if coverage >= 0.95:
+                # ── Thesis gate (matching validate_push_asp.py) ──
+                if cfg.test_type == "pos_only":
+                    _success_check = pos_err < 0.05
+                else:
+                    _success_check = pos_err < 0.05 and rot_err < args.rot_threshold
+                if _success_check:
                     trial_ok = True
+                    stop_reason = "success"
+
+                if pos_err < best_pos_err:
+                    best_pos_err = pos_err
+                    best_rot_err = rot_err
+                prev_pos_err = pos_err
+                prev_rot_err = rot_err
 
             if trial_ok:
                 trial_successes += 1
@@ -586,6 +603,11 @@ def main():
                 best_pos_err = pos_err
                 best_rot_err = rot_err
                 best_coverage = trial_coverage
+
+            rtag = f"[R{trial+1}] " if trial > 0 else ""
+            print(f"    {rtag}pushes={pushes_used:2d} stopped={stop_reason:12s}  "
+                  f"pos_err={pos_err:.4f}m rot_err={rot_err:.3f}rad  "
+                  f"{'PASS' if trial_ok else 'FAIL'}")
 
         avg_pushes = int(np.mean(trial_pushes)) if trial_pushes else 0
         sr_pct = trial_successes / TRIAL_COUNT * 100
@@ -639,6 +661,7 @@ def main():
     print(f"  Trials:        {total_trials}")
     print(f"  Successes:     {total_successes}")
     print(f"  Success rate:  {sr:.1f}%")
+    print(f"  Success gate:    pos<0.05m AND rot<{args.rot_threshold}rad (thesis gate)")
     print(f"  Tests passed:  {n_tests_passed}/{len(results)} ({n_tests_passed/len(results)*100:.0f}% of configs)")
     print(f"  Pos-only SR:   {sr_po:.1f}% ({po_successes}/{po_trials} trials)")
     print(f"  Pos+rot SR:    {sr_pr:.1f}% ({pr_successes}/{pr_trials} trials)")
