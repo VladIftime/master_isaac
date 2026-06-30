@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=push_sac_her
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1
 #SBATCH --cpus-per-task=16
@@ -17,7 +17,7 @@ set -o pipefail
 # ═══════════════════════════════════════════════════════════════════════════════
 
 NUM_ENVS=528
-MAX_ITERATIONS=12000
+MAX_ITERATIONS=1200000
 SEED=42
 EXP_NAME="hpc_push_sac_her_${NUM_ENVS}env"
 MAX_RESUBMITS=50
