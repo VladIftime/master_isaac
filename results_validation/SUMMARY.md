@@ -1,6 +1,6 @@
 # Validation Results Summary — Planar Pushing PBRS Models
 
-**Date**: 2026-07-01 (revised)  
+**Date**: 2026-07-01 (revised; ASP training diagnostics added — per-axis vs combined SR from TensorBoard events)  
 **Location**: `/home/vlad/IsaacLab/vlad/master_isaac/results_validation/`  
 **Scene set**: 30 T-block scenes (tests 1–10: R_* rotation, 11–20: pos_only, 21–30: pos_rot)  
 **Thesis gate**: `pos_err < 0.05 m AND rot_err < 0.2 rad`, best-of-20 trials, max 30 pushes  
@@ -12,6 +12,8 @@
 ## Isaac Lab Results — 30 T-block Scenes (Thesis Gate)
 
 528 parallel envs, RTX Pro 6000 (96 GB VRAM), cuRobo IK.
+
+### Validation Results (best-of-20 trials, max 30 pushes)
 
 | Model | Scene SR | Trial SR | Pos-only | Pos+rot | PosErr | RotErr | Avg Push |
 |-------|----------|----------|----------|---------|--------|--------|----------|
@@ -26,6 +28,21 @@
 **A_simp leads by 3.3pp over B_curr.** Both achieve 100% pos-only SR. Single-agent (A) outperforms curriculum (B) and all ASP variants (C–H).  
 **G_tasp_dpose is the best ASP variant** at 16.7% — time-based Alice on T-block.  
 **Rotation remains the bottleneck.** Pos-only is solved (A/B at 100%), pos+rot caps at 65–70%. ASP models never achieve any pos+rot success (C–F at 0%).
+
+### ASP Training Diagnostics — Per-Axis vs Combined Success Rate (2026-07-01)
+
+Extracted from TensorBoard events (final iteration of each run). Bob's training metrics show per-axis skills exist under PBRS but the combined gate is the bottleneck:
+
+| Variant | Alice Validity | Bob PositionSR | Bob RotationSR | **Bob Combined SR** | Independence Product |
+|---------|---------------|----------------|----------------|--------------------|---------------------|
+| **orig_ASP** (orig reward, 2,048 envs) | 89.3% | 1.3% | 7.1% | **0.07%** | ~0.1% |
+| **ASP-dPose** (PBRS outcome, 528 envs) | 83.9% | 54.1% | 45.0% | **10.0%** | 24.3% |
+| **TASP-dPose-BP** (PBRS time+pen, 528 envs) | 90.5% | 54.1% | 46.3% | **8.5%** | 25.0% |
+
+**Key finding:** Under PBRS, Bob learns position and rotation individually to ~50% each. But the combined gate caps at ~10% — 2.5× below what independence would predict. Under the original fractional reward, Bob learns nothing (1.3%/7.1% per-axis, 0.07% combined). The adversarial goal distribution prevents simultaneous satisfaction of the coupled pos+rot objective — the combined gate is a causal bottleneck, not a measurement artifact (C4 resolved).
+
+**Alice learns across all variants** (83--91% GoalValidityRate) — Alice is NOT the problem. The failure sits at Bob's inability to combine independently-learned position and rotation skills under the non-stationary adversarial distribution.
+
 
 ---
 
@@ -135,6 +152,8 @@ These are from local `gym_gympusht.csv` validations with N≤6 cores — substan
 B_curr narrows from 1.5× behind at Isaac scale to 5× ahead in gym HPC — the P82 curriculum (position-only Phase 1) partially compensates for the 8× smaller PPO batch (960 vs 7,920 transitions/update). In Isaac, where the batch is large enough for stable gradient estimates on both objectives simultaneously, the curriculum's staging adds no value (76.7% vs 80.0%). In gym HPC, where batch variance limits PPO+LSTM gradient quality, the simplified Phase 1 objective helps bootstrap position control (90% gym vs 100% Isaac pos-only SR).
 
 **2. ASP (Models C–H) fails uniformly across three environments — Isaac, gym HPC, gym non-HPC.**
+
+Training diagnostics reveal the mechanism: under PBRS, Bob learns per-axis position (54\%) and rotation (45--46\%) individually, but the combined gate caps at 8.5--10.0\% — 2.5$\times$ below the independence product. The adversarial goal distribution prevents Bob from satisfying both criteria simultaneously. Under the original reward, Bob learns nothing (1.3\% per-axis, 0.07\% combined). Alice validity reaches 83--91\% across all variants — Alice is not the bottleneck.
 
 Outcome-based Alice (+5 fail / −1 succeed) produces a non-stationary goal distribution that prevents Bob from learning the combined pos+rot objective regardless of simulator choice. Gym C HPC (13.3%) slightly edges Isaac C (6.7%) because the simpler gym environment (no cuRobo IK failures, no contact physics, smaller workspace) gives Bob marginally cleaner gradients — but neither breaks above ~15% or achieves any pos+rot success. At non-HPC (few-CPU) scale, all ASP models collapse to ~0–3.3% with zero pos+rot success — the adversarial gradient vanishes as batch quality degrades. The failure is structural: ASP's adversarial curriculum collapses in contact-rich multi-objective domains, consistent across all three environments.
 

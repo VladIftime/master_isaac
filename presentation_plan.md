@@ -2,7 +2,7 @@
 
 **Deck**: `literature/paper-async/presentation/presentation.tex` (~1480 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-07-01 (deck finalized: 6 models, 5 appendix weakness slides H--L, Isaac-vs-gym throughput/batch plot, "Fractional" naming throughout, weaknesses disclosed in appendix with cross-references from main deck)
+**Last updated**: 2026-07-01 (deck restructured: arch slide removed, diagnostic slide replaced with 2-panel TB-extracted plot, Confounded Ablation → appendix, Conclusions rewritten per-RQ, Limitations+Future Work merged, Comp Overhead + Extra Takeaway moved after Conclusion; C4 fully resolved with training per-axis vs combined SR data)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
 > **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-30).** The deck is now backed by consistent CSVs.
@@ -72,8 +72,8 @@ the central results table is not backed by the experiments on disk (see §4).
 ### C4 — 0.07% combined SR vs 66%/65% individual is statistically suspicious
 - **[SUP]** If position and rotation succeeded independently at ~0.65 each, combined would be ~0.42, not 0.0007. 0.07% with 65% marginals implies strong anti-correlation or different conditions — points to a gate/reward bug, not a fundamental "toxic curriculum." An examiner will ask exactly this.
 - **[ASK]** Explain this problem.
-- **[FIND]** The combined gate requires `pos_err < 0.05m` **AND** `rot_err < 0.2 rad` **simultaneously at a single terminal step** (`wrapper_push_asp.py:742`). The 66%/65% are per-axis SRs logged independently (possibly at different steps/episodes). Independence would give ≈0.42; 0.0007 ⇒ the two are (a) measured under different conditions, (b) strongly anti-correlated (fixing rotation un-does position and vice versa via coupled limit-surface physics), or (c) Bob barely trained so per-axis "successes" are near-random transient crossings, not a held combined pose.
-- **[FIX]** On Slide 8b/8c, stop presenting 0.07-vs-66/65 as a "frontier curriculum" proof. State it honestly as a **gate/measurement artifact**: per-axis numbers are not independent Bernoulli; the combined metric is the only valid success measure; the gap most likely reflects coupled physics + a barely-trained Bob, not a law about ASP. (Verify per-axis vs combined logging definitions in the final run — see §8.)
+- **[FIND]** The 66%/65% were from old `train_curobo.py` training logs (per-axis SRs logged independently at different timesteps, not the thesis gate). **Resolved 2026-07-01:** Extracted training metrics from current PBRS ASP runs: Bob does learn per-axis position (54\%) and rotation (45--46\%) under PBRS, but the combined gate caps at 8.5--10.0\% — 2.5$\times$ below independence. Under the original reward, nothing is learned. The combined gate is a causal bottleneck (coupled physics + adversarial distribution), not a measurement artifact.
+- **[FIX]** New 2-panel diagnostic slide: Panel 1 = Alice GoalValidityRate bar chart (83--91\% across variants), Panel 2 = Bob per-axis vs combined SR (54\% / 45\% per-axis → 10\% combined). Caption explains the independence gap.
 
 ### C5 — Negative results confounded by a massive bug-fix history
 - **[SUP]** `implementations.md` lists fixes P1–P81+, several ASP-breaking (P55 "PPO update never called → Iteration 0 forever," P64 wrong dense formula until 2026-06-08, P65 false-positive termination on 45–55% of pushes). Were the ASP "collapse" numbers produced on the fixed code? If not, the finding is an artifact.
@@ -124,6 +124,7 @@ the central results table is not backed by the experiments on disk (see §4).
 7. **Seeds exist for training SR** (A: 5 chains; ad-hoc: 7 abs + 4 rel_full) but **not for validation** (single CSV per config). (→ C7)
 8. **05-19 diagnostic root causes (OLD path, context for C5):** Alice reward = pure geometry (not Bob outcome); ABC silently disabled (`warm=NO` when `alice_mean_rew<0`); Bob sparse reward in a contact task; ABC buffer starvation from short truncated trajectories. These were the *old* `train_curobo.py` pathologies; the final PBRS path fixed the wiring (item 2).
 9. **Model B curriculum never triggered by construction** — the Phase‑2 trigger thresholds a quantity that cannot reach the threshold. Full mechanism in §3.1. (→ C5, C6)
+10. **C4 fully resolved (2026-07-01):** Extracted Bob training metrics from TensorBoard events across three ASP variants. Under PBRS, Bob learns per-axis position to **54.1\%** and rotation to **45.0--46.3\%** individually — but the combined gate caps at **8.5--10.0\%**, 2.5$\times$ below the independence product (24--25\%). Under the original fractional reward, Bob learns nothing (PositionSR 1.3\%, Combined 0.07\%). Alice validity converges to 83--91\% across all variants. New 2-panel diagnostic plot (`asp_diagnostic_2panel.png`) replaces the old `plot4_alice_vs_bob_diagnostic.png` on slide "ASP Diagnostic — Alice \& Bob Training Dynamics."
 
 ### 3.1 Model B — Why the curriculum never triggered <a name="modelb"></a>
 
@@ -280,7 +281,8 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 | 6c-ii (546) | "Validation Breakdown" — Model A only, no error bars | ✅ REDONE — multi-model comparison with error bars from best-of-20 trial data; 4 new CI plots |
 | 7 (634) | "Curriculum NEVER activated" + "PBRS too effective" | ✅ REWRITTEN — P82 trigger explained; 76.7% result |
 | 7b (662) | Model B 40% + "independence" evidence, no CIs | ✅ UPDATED — A 80.0% vs B 76.7% + CI note (3.3pp not significant) |
-| 8a (697) | Too busy; diagram cramped | ✅ SPLIT — architecture text own slide; diagram+clip separate |
+| Diagnostic (replaced) | Old `plot4_alice_vs_bob_diagnostic.png` — Alice proposes, Bob fails | ✅ REPLACED — `asp_diagnostic_2panel.png` from TB events: Alice validity bars (83--91\%), Bob per-axis vs combined bars (54\%/45\% → 10\%), C4 resolved |
+| Arch slide (removed) | Self-Play — ASP / TASP Architecture — 3 crammed sections with \texttt{\textbackslash vspace\{-6pt\}} | ✅ REMOVED — content now carried by ASP loop diagram |
 | 8b (732) | 0.07% vs 66/65 framing | ✅ Reframed as gate artifact (C4) |
 | 8c-ii (777) | G/H rows 0–3% / 3–7%, C/D unmentioned | ✅ UPDATED — G 16.7%, H 10.0%; C/D exclusion footnote added |
 | 9c (844, NEW) | C6: confounded ASP ablation not addressed | ✅ ADDED — disaggregation table showing 7 axes of variation; G/H partial control noted |
@@ -339,7 +341,8 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 - **PBRS-for-ASP mathematical justification added** — new slide shows how PBRS partially decouples the GAE advantage from the value function. $\Phi(s')-\Phi(s)$ provides correctly-signed gradient even when $V(s)$ is stale under ASP's distribution shift. Explains why PBRS lifts ASP 0\% $\to$ 16.7\% but cannot fully close the 80\% gap.
 - **Baseline contrast slide added** — same fractional reward, same 2048 envs, same 100K iter budget: PPO single-agent 80\% vs ASP 0\%. Cleanest 1-axis comparison in thesis: only training architecture differs.
 - **TASP-dPose-BobPenalty slide added** — 0\% SR with detailed mechanism table showing fail-fast equilibrium.
-- **Deck now has 6 models**: PPO-Baseline, PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose, TASP-dPose-BP.
+- **Deck restructured (2026-07-01):** Self-Play Architecture slide removed (content moved to ASP loop diagram). Why ASP Fails #1+#2 condensed into "ASP — The Empirical Result" table slide. Caveat — Confounded Ablation moved to Appendix J. What We Found #1+#2 merged with Conclusion #1+#2 into two per-RQ Conclusion slides. Limitations & Future Work merged into one 4-bullet slide. Computational Overhead + Extra Takeaway moved after Conclusion, before Limitations.
+- **ASP Diagnostic slide replaced (2026-07-01):** Old `plot4_alice_vs_bob_diagnostic.png` replaced with `asp_diagnostic_2panel.png` — extracted directly from TensorBoard events across three ASP variants (orig_ASP, ASP-dPose, TASP-BP). Panel 1: Alice GoalValidityRate bar chart (83--91\%). Panel 2: Bob per-axis PositionSR/RotationSR vs Combined SR bars. Key finding: PBRS lifts per-axis skills to ~50\% but combined gate caps at ~10\% (2.5× below independence). C4 fully resolved.
 - **5 appendix slides H--L added** documenting all weaknesses: P82 trigger bug, BobPenalty fail-fast equilibrium, confounded ablation table, training budget comparison (including ASP-Baseline's actual ~1267 iter run vs the SLURM 100K cap), and validation protocol with disclosed limitations.
 - **Isaac Lab slide rewritten** with isaac_vs_gym.png — dual-panel bars showing throughput (172/209/24 push/s) and batch size (7,920/960/480). Emphasizes that raw speed is comparable but Isaac's 8× larger PPO batches stabilize self-play gradients. Text-only version cleaner for first-time viewers.
 - **Fractional naming** adopted throughout ("fractional formula" replacing "old/original").
