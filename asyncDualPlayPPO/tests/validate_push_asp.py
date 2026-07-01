@@ -119,6 +119,12 @@ def main():
                         help="SE(2) characteristic length L for d_pose (default 0.07)")
     parser.add_argument("--dpose-threshold", type=float, default=0.055,
                         help="d_pose success threshold in metres (default 0.055)")
+    parser.add_argument("--rel-obs", "--rel_obs", action="store_true", dest="rel_obs", default=None,
+                        help="Use object-relative goal observations (default: auto, enabled when not using dpose)")
+    parser.add_argument("--no-rel-obs", "--no_rel_obs", action="store_false", dest="rel_obs",
+                        help="Use absolute goal observations")
+    parser.add_argument("--rel-act", "--rel_act", action="store_true", dest="rel_act", default=True,
+                        help="Use object-relative action decoding (default: True, always on for ASP)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -255,7 +261,7 @@ def main():
     env = PushASPEnvWrapper(
         env=base_env, alice_pushes=5, bob_pushes=args.max_pushes,
         max_goals_per_episode=1, num_objects=1,
-        rel_obs=not args.dpose_obs,
+        rel_obs=(args.rel_obs if args.rel_obs is not None else (not args.dpose_obs)),
         dpose_obs=args.dpose_obs,
         char_length=args.char_length,
         dpose_threshold=args.dpose_threshold,
@@ -465,8 +471,9 @@ def main():
     else:
         alice_ppo = None
 
+    _effective_rel = (args.rel_obs if args.rel_obs is not None else (not args.dpose_obs))
     _obs_tag = f"d_pose L={args.char_length:.3f} thr={args.dpose_threshold:.3f}" if args.dpose_obs else \
-               ("rel_obs" if args.rel_obs else "absolute")
+               ("rel_obs" if _effective_rel else "absolute")
     print(f"[Validate] Mode: {_obs_tag}, GoalEncoder={'ON' if _has_goal_encoder else 'OFF (Model D)'}, "
           f"rot_threshold={args.rot_threshold:.3f} rad, max_pushes={args.max_pushes}")
 
