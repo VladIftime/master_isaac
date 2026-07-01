@@ -365,7 +365,7 @@ def main():
         sys.exit(1)
 
     n_models = len(all_data)
-    _cmap = matplotlib.colormaps["tab10"].resampled(max(n_models, 3))
+    _cmap = matplotlib.colormaps["tab10"]
     model_colors = [_cmap(i) for i in range(n_models)]
 
     test_indices = sorted(set(int(r["test_index"]) for d in all_data for r in d["rows"]))

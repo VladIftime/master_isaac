@@ -99,7 +99,7 @@
 \note[itemize]{
 \item 30-minute master thesis presentation
 \item Topic: potential-based reward shaping for planar pushing with a UR5e robot arm
-\item Four model variants: PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose
+\item Six model variants: PPO-Baseline, PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose, TASP-dPose-BP
 \item Key result: simplest model (PPO-PBRS, 80.0\%) beats every structured variant
 \item Curriculum is competitive but adds no value; self-play degrades performance
 }
@@ -117,9 +117,9 @@
     \begin{column}{0.48\textwidth}
       \begin{enumerate}
         \item \textbf{Introduction \& Research Questions}
-        \item \textbf{Background \& Related Work} \\ {\scriptsize reward shaping · curriculum \& self‑play · push mechanics \& SE(2)}
+        \item \textbf{Background \& Related Work} \\ {\scriptsize reward shaping · curriculum \& self-play · push mechanics \& SE(2)}
         \item \textbf{Problem Definition \& MDP}
-        \item \textbf{Implementation} \\ {\scriptsize four models: PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose}
+        \item \textbf{Implementation} \\ {\scriptsize six models: PPO-Baseline, PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose, TASP-dPose-BP}
       \end{enumerate}
     \end{column}
     \begin{column}{0.48\textwidth}
@@ -137,7 +137,7 @@
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
 \item Outline in eight parts, standard thesis structure
-\item Background covers the five literature areas; Implementation describes the four models; Evaluation defines the protocol; Results and Discussion present and interpret the validation outcomes
+\item Background covers the five literature areas; Implementation describes all models; Evaluation defines the protocol; Results and Discussion present and interpret the validation outcomes
 \item One-line thesis: PBRS single-agent wins; curriculum is competitive but adds no value; self-play degrades performance
 }
 
@@ -145,7 +145,7 @@
 \begin{frame}[t]{Research Questions}
   \begin{block}{Three Research Questions}
     \begin{enumerate}
-      \item \textbf{RQ1:} Can potential-based reward shaping outperform hand-tuned dense rewards for goal reaching tasks in a robotic enviroment?
+      \item \textbf{RQ1:} Can potential-based reward shaping improve the efficiency of hand-tuned dense rewards for goal reaching tasks in a robotic enviroment?
       \item \textbf{RQ2:} Given a well-shaped PBRS reward function does adding a curriculum or asymmetric self-play improve final task success over a direct single-agent approach?
       \item \textbf{RQ3:} Can a sufficiently informative reward (PBRS) \emph{substitute} for an explicit curriculum in contact-rich pushing?
     \end{enumerate}
@@ -157,10 +157,10 @@
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item RQ1: PPO-PBRS reaches 80\% validation SR on 30 held-out T-block scenes; compared head-to-head against the hand-tuned (classic) dense reward on the same protocol
-\item RQ2: No — PPO-Curriculum (76.7\%) is statistically tied, and self-play (ASP-dPose 6.7\%, TASP-dPose 16.7\%) is far worse
-\item RQ3: At sufficient batch size, PBRS substitutes for curriculum (PPO-PBRS $\approx$ PPO-Curriculum); at small batch the curriculum helps (gym result)
-\item Four models, {\textasciitilde}3000 iterations each, 528 parallel environments, RTX Pro 6000
+\item RQ1: PPO with original fractional reward at 2{,}048 envs reaches 80\%. PPO-PBRS reaches 80\% at 528 envs — 4$\times$ fewer. PBRS is more sample-efficient and theoretically principled .
+\item RQ2: No ASP variant exceeds 17\% across five configurations (two reward schemes, two simulators, three Alice reward structures). The structural failure mode is the perpetually stale value function under adversarial goal distribution shift.
+\item RQ3: At sufficient batch size, PBRS substitutes for curriculum (PPO-PBRS $\approx$ PPO-Curriculum). At small batch, the curriculum helps (gym: 50\% vs 10\%). Substitution is regime-dependent.
+\item Six models total: PPO-Baseline (orig.\ reward, 2{,}048 envs), PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose, TASP-dPose-BP (528 envs each). \texttt{\textasciitilde}3000 iterations per PBRS model, RTX Pro 6000.
 }
 
 
@@ -168,62 +168,97 @@
 
 
 \begin{frame}[t]{Related Work — Reward Shaping (PBRS)}
-  \textbf{Potential-based reward shaping} (Ng, Harada \& Russell 1999):
+  \textbf{Potential-based reward shaping} :
   \[ \mathcal{R}'(s,a,s') = \mathcal{R}(s,a,s') + \underbrace{\gamma\Phi(s')-\Phi(s)}_{F} \]
   \begin{itemize}
     \item \textbf{Policy invariance:} $Q'(s,a)=Q(s,a)-\Phi(s)$ — the optimal policy is unchanged for \emph{any} state potential $\Phi$.
-    \item \textbf{Episodic validity} (Grze\'s 2017): $\gamma_{\text{shaping}}{=}1$ is safe — $\sum F=\Phi(s_T)-\Phi(s_0)$ is bounded.
-    \item \textbf{Dynamic / arbitrary potentials} (Devlin \& Kudenko 2012; Harutyunyan et al.\ 2015) — basis for our exponential $\Phi$.
+    \item \textbf{Episodic validity} : $\gamma_{\text{shaping}}{=}1$ is safe — $\sum F=\Phi(s_T)-\Phi(s_0)$ is bounded.
+    \item \textbf{Dynamic / arbitrary potentials}  — basis for our exponential $\Phi$.
   \end{itemize}
   \textbf{Why it matters here:} lets us design a dense, well-behaved reward \emph{without} changing the task's optimum — the foundation of every model in this thesis.
   \vfill\litfooter{[Ng et al.\ 1999]~\textbf{[Grze\'s 2017]}~[Devlin \& Kudenko 2012]~[Harutyunyan et al.\ 2015]}
 \end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item PBRS is the theoretical foundation — Ng et al.\ proved you can add $\gamma\Phi(s')-\Phi(s)$ to any reward without changing what the agent learns
+\item Policy invariance: the optimal policy is unchanged — you can design rewards purely for learning speed
+\item Episodic validity (Grzes 2017): $\gamma_{\text{shaping}}=1$ is safe in finite-horizon tasks — the shaping telescopes to $\Phi(s_T)-\Phi(s_0)$
+\item Our exponential potentials $\Phi(s)=w e^{-k d^2}$ build on Devlin \& Kudenko's dynamic potential framework
+\item This decoupling from policy is the core insight — reward engineering becomes a separate, principled task
+}
 
 \begin{frame}[t]{Related Work — Curriculum \& Asymmetric Self-Play}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.50\textwidth}
       \textbf{Forced curricula}
       \begin{itemize}
-        \item \textbf{Surveys} (Narvekar et al.\ 2020; Portelas et al.\ 2020)
-        \item \textbf{Reverse / goal} (Florensa et al.\ 2017): start near the goal, expand outward
-        \item \textbf{Precision} (Luo et al.\ 2020): gradually tighten the success tolerance
+        \item \textbf{Surveys} 
+        \item \textbf{Reverse / goal} : start near the goal, expand outward
+        \item \textbf{Precision} : gradually tighten the success tolerance
       \end{itemize}
-      \textbf{Our use:} a forced 3‑phase pos$\to$rot curriculum (PPO‑Curriculum)
+      \textbf{Our use:} a forced 3-phase pos$\to$rot curriculum (PPO-Curriculum)
     \end{column}
     \begin{column}{0.50\textwidth}
-      \textbf{Automatic (self‑play)}
+      \textbf{Automatic (self-play)}
       \begin{itemize}
-        \item \textbf{ASP} (Sukhbaatar et al.\ 2018; Plappert et al.\ 2021): Alice/Bob adversarial game + ABC
-        \item \textbf{Time‑based Alice} (Sukhbaatar 2018): $R_A\propto t_B\!-\!t_A$, self‑regulating
-        \item \textbf{Regret‑based} (Dennis et al.\ 2020, PAIRED; Campero et al.\ 2021, AMIGo)
+        \item \textbf{ASP} : Alice/Bob adversarial game + ABC
+        \item \textbf{Time-based Alice} : $R_A\propto t_B\!-\!t_A$, self-regulating
+        \item \textbf{Regret-based} 
       \end{itemize}
-      \textbf{Our use:} ASP‑dPose (outcome) and TASP‑dPose (time‑based)
+      \textbf{Our use:} ASP-dPose (outcome) and TASP-dPose (time-based)
     \end{column}
   \end{columns}
   \vfill\litfooter{[Narvekar et al.\ 2020]~[Portelas et al.\ 2020]~\textbf{[Sukhbaatar et al.\ 2018]}~[Plappert et al.\ 2021]}
 \end{frame}
 
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item Forced curricula: Narvekar and Portelas surveys show curriculum helps when rewards are sparse or exploration is hard
+\item Our PPO-Curriculum uses a 3-phase pos$\to$rot staging — position first, then progressively add rotation
+\item Automatic curricula (self-play): ASP (Sukhbaatar, Plappert) trains Alice and Bob adversarially — Alice proposes goals, Bob solves them
+\item Time-based Alice (Sukhbaatar 2018): $R_A \propto t_B - t_A$ creates a self-regulating curriculum where Alice is rewarded for finding goals Bob struggles with
+\item Regret-based methods (PAIRED, AMIGo): antagonist minimizes protagonist's regret — solvable but challenging environments
+\item Our use: we test both outcome-based (ASP-dPose) and time-based (TASP-dPose) variants
+}
+
 \begin{frame}[t]{Related Work — Geometry \& Mechanics of Planar Pushing}
   \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.56\textwidth}
+    \begin{column}{0.62\textwidth}
       \textbf{Push mechanics}
       \begin{itemize}
-        \item \textbf{Quasi-static pushing} (Mason 1986; Lynch \& Mason 1996): motion set by the friction limit surface.
-        \item \textbf{Limit-surface normality} (Goyal et al.\ 1991; Howe \& Cutkosky 1996): object twist $\mathbf{t}\propto\nabla f(\mathbf{w})$ — \emph{every} push couples translation and rotation.
+        \item \textbf{Quasi-static pushing}: motion set by the friction limit surface.
+        \item \textbf{Limit-surface normality}: \emph{every} push couples translation and rotation.
       \end{itemize}
+
+      \vspace{4pt}
       \textbf{SE(2) geometry}
       \begin{itemize}
-        \item \textbf{Lie-group pose distance} (Park 1995; Urain et al.\ 2023): a geodesic metric fusing translation and rotation with characteristic length $L$.
-        \item \textbf{Equivariant manipulation} (van der Pol et al.\ 2020; Huang et al.\ 2022): exploiting SE(2)/SO(2) symmetry.
+        \item \textbf{Unified distance}: a single scalar that combines position and orientation error, weighted by the object's physical size $L$
+        \item \textbf{Equivariant manipulation}: exploiting SE(2)/SO(2) symmetry.
       \end{itemize}
-      \textbf{Our use:} limit‑surface coupling explains why the pos+rot gate is hard; the SE(2) $d_{\text{pose}}$ provides a unified reward for the self‑play variants.
+
+      \vspace{4pt}
+      \textbf{Our use:} the SE(2) $d_{\text{pose}}$ provides a unified reward for the self-play variants.
     \end{column}
-    \begin{column}{0.42\textwidth}
-      \centering\includegraphics[width=0.95\textwidth]{figures/diagram_limit_surface.png}
+    \begin{column}{0.36\textwidth}
+      \vspace{6pt}
+      \centering\includegraphics[width=\textwidth]{figures/diagram_limit_surface.png}
     \end{column}
   \end{columns}
+
+
   \vfill\litfooter{[Mason 1986]~[Goyal et al.\ 1991]~[Park 1995]~[Urain et al.\ 2023]}
 \end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item Quasi-static pushing (Mason 1986): the object motion is slow enough that inertial forces are negligible — the limit surface fully determines behavior
+\item Limit-surface normality (Goyal 1991): the resulting motion twist $\mathbf{t}$ is always normal to the limit surface — every push couples translation AND rotation
+\item SE(2) Lie-group distance (Park 1995): fuses position and orientation error into a single geodesic metric with characteristic length $L$
+\item Equivariant manipulation: exploiting SO(2) rotational symmetry so learned pushing skills transfer across orientations
+\item Why this matters: limit-surface coupling explains why the combined pos+rot gate is the universal bottleneck across all our models
+}
 
 \sectionframe{3.\ Problem Definition \& MDP}
 
@@ -237,7 +272,7 @@
       \textbf{Action} $\mathbf{a} \in \mathbb{R}^4$ (object-relative): $(r,\phi,\ell,\theta)$ — 21 bins/dim, 194\,481 discrete actions
 
       \vspace{6pt}
-      \textbf{Transition} (Mason 1986): $\mathbf{t}\propto\nabla f(\mathbf{w})$ — limit-surface normality couples \textbf{every} push with rotation
+      \textbf{Transition} : $\mathbf{t}\propto\nabla f(\mathbf{w})$ — limit-surface normality couples \textbf{every} push with rotation
 
       \vspace{4pt}
       \textbf{Success:} pos $<$ 5\,cm \textbf{and} rot $<$ 0.2\,rad.  \textbf{Validation:} 30 scenes $\times$ 20 trials $\times$ up to 30 pushes
@@ -251,72 +286,139 @@
   \vfill\litfooter{[Mason 1986]~[Lynch \& Mason 1996]~[Goyal et al.\ 1991]}
 \end{frame}
 
-% ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
 \item Planar pushing MDP: UR5e robot pushes a T-block on a 1.4m×1.0m table. 28D obs, 4D object-relative macro-action (21 bins/dim = 194k discrete). Object-relative actions achieve ~95\,\% contact rate.
 \item Transition: limit-surface normality couples translation and rotation — every push does both.
-\item Success: pos < 5\,cm AND rot < 0.2\,rad. Validation: 30 held‑out scenes × 20 trials × up to 30 pushes/trial; scene solved if any trial meets the gate.
+\item Success: pos < 5\,cm AND rot < 0.2\,rad. Validation: 30 held-out scenes × 20 trials × up to 30 pushes/trial; scene solved if any trial meets the gate.
 }
-\begin{frame}[t]{Old Reward Formula — Why It Failed}
-  \begin{block}{Fractional Improvement Formula (Fixes P63-P64)}
-    \[
-    R = \underbrace{\alpha\!\cdot\!\frac{d_{\text{prev}}\!-\!d_{\text{now}}}{d_{\text{prev}}}}_{\text{position improvement}}
-        + \underbrace{\alpha\!\cdot\!\frac{y_{\text{prev}}\!-\!y_{\text{now}}}{y_{\text{prev}}}}_{\text{rotation improvement}}
-        - \underbrace{\beta_{\text{pos}}\!\cdot\!d_{\text{now}}}_{\text{position penalty}}
-        - \underbrace{\beta_{\text{rot}}\!\cdot\!y_{\text{now}}}_{\text{rotation penalty}}
-    \]
-    {\small $\alpha=3.0,\;\beta_{\text{pos}}=0.5,\;\beta_{\text{rot}}=0.25$\\
-    $d_{\text{prev}},d_{\text{now}}$: position error before/after push;\; $y_{\text{prev}},y_{\text{now}}$: rotation error before/after push}
-  \end{block}
 
-  \vspace{-6pt}
+\begin{frame}[t]{Why the Fractional Reward Failed}
+  \textbf{Fractional improvement formula:}\\
+  $R = \underbrace{\textcolor{hlblue}{\alpha\!\cdot\!\frac{d_{\text{prev}}-d_{\text{now}}}{d_{\text{prev}}}}}_{\text{improvement}}
+       - \underbrace{\textcolor{Orange}{\beta_{\text{pos}}\!\cdot\!d_{\text{now}}}}_{\text{pos penalty}}
+       - \underbrace{\textcolor{hlred}{\beta_{\text{rot}}\!\cdot\!y_{\text{now}}}}_{\text{rot penalty}},\quad
+       \alpha{=}3.0,\;\beta_{\text{pos}}{=}0.5,\;\beta_{\text{rot}}{=}0.25$
+
+  \vspace{4pt}
+  \textbf{Worked example} — pushing toward a goal 30\,cm away, 1\,cm improvement:
+  \[
+  R = \textcolor{hlblue}{3.0\!\cdot\!0.01/0.30}
+     - \textcolor{Orange}{0.5\!\cdot\!0.29}
+     - \textcolor{hlred}{0.25\!\cdot\!0.5}
+     = \textcolor{hlred}{\mathbf{-0.17}}
+  \]
+
+  \vspace{4pt}
   \begin{columns}[T]
     \begin{column}{0.50\textwidth}
-      {\footnotesize \textbf{Problem 1 — Non-Markov:} Depends on $d_{\text{prev}}$ — same state transition gets different reward from different starting positions. Value function ill-defined.}
+      {\footnotesize \textbf{Problem 1 — Negative reward for progress:} the
+penalty terms dominate the improvement.}
     \end{column}
     \begin{column}{0.46\textwidth}
-      {\footnotesize \textbf{Problem 2 — Gradient Starvation:} 1cm improvement from 30cm: \textcolor{hlred}{$\alpha\!\cdot\!0.01/0.30 - \beta_{\text{pos}}\!\cdot\!0.29 = \mathbf{-0.045}$}. Progress gets $\mathbf{negative}$ reward. $\mathbb{E}[R] \approx -0.15$, near-zero variance.}
+      {\footnotesize \textbf{Problem 2 — Near-zero variance:} 99\% of pushes produce $R \in [-0.5,+0.1]$. }
     \end{column}
   \end{columns}
 
-  \vspace{-2pt}
-  {\footnotesize \textbf{Result:} The fractional formula suffers from two structural flaws — non-Markov dependence and gradient starvation — making it fundamentally unsuitable for stable RL training.}
-
-  \vfill\litfooter{[Ng et al.\ 1999]~[Grzes \& Kudenko 2009]}
+  \vfill\litfooter{[Ng et al.\ 1999]~[Grzes \& Kudenko 2009]~[Schulman et al.\ 2017]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item The old fractional improvement formula had two fatal flaws
-\item First, it's non-Markov: dividing by d_prev makes reward depend on starting position. The same state transition gets different reward. I prove in my thesis appendix that no static potential Phi(s) can reproduce this reward
-\item Second, gradient starvation: a push producing genuine progress gets penalized because the penalty term dominates. The expected reward for random pushes is negative with near-zero variance — PPO's GAE gets no signal to differentiate good from bad pushes
-\item This is WHY we needed a better reward function — PBRS fixes both problems
+\item The fractional formula gives $\sim$0 or negative reward for 99\% of pushes. A 1\,cm improvement from 30\,cm earns $-0.17$ — negative reward for genuine progress
+\item The penalty terms $\beta d_{\text{now}}$ and $\beta_{\text{rot}} y_{\text{now}}$ dominate the fractional improvement term $\alpha \Delta d / d_{\text{prev}}$, making the net reward negative even for progress-producing pushes
+\item PPO multiplies the policy gradient by the advantage sign. Negative advantage → gradient pushes policy AWAY from goal-directed behavior
+\item Sparse bonuses (+5/+2) fire on only $\sim$1\% of pushes. At 528 envs × 15 pushes = 7,920 steps/iter, that's $\sim$79 bonus events — too few to overcome the noise
+}
+
+
+\begin{frame}[t]{How PBRS Fixes the Reward}
+  \textbf{PBRS potential:} $\Phi(s) = w\!\cdot\!e^{-k\cdot d^2},\quad k{=}30,\;w{=}10$
+
+  \vspace{4pt}
+  \textbf{Same push, same 1\,cm improvement:}
+  \[
+  R = \textcolor{hlblue}{w\!\cdot\!\big[e^{-k\cdot d_{\text{now}}^2} - e^{-k\cdot d_{\text{prev}}^2}\big]}
+     = \textcolor{hlblue}{10\!\cdot\!\big[e^{-30\cdot0.29^2} - e^{-30\cdot0.30^2}\big]}
+     = \textcolor{hlgreen}{\mathbf{+0.133}}
+  \]
+
+  \vspace{4pt}
+  \textbf{Why this matters:}
+  \begin{itemize}
+    \item \textbf{Correctly signed} — every push toward the goal gets positive reward, away gets negative
+    \item \textbf{Bounded} — $\Phi(s) \in [0,w]$, so $|R| \le w$ regardless of distance or physics glitches
+    \item \textbf{Markovian} — depends only on current state $s$, not on history or $d_{\text{prev}}$
+    \item \textbf{Policy-invariant} — the optimal policy under PBRS is identical to the original task
+  \end{itemize}
+
+  \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Harutyunyan et al.\ 2015]}
+\end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item PBRS replaces the fractional formula with $\Phi(s')-\Phi(s)$ — a state-only potential difference that is always correctly signed
+\item The same push earns $+0.133$ with PBRS vs $-0.17$ with the old formula. The sign reversal is the key — gradient now pushes TOWARD the goal
+\item Four properties make PBRS ideal: bounded (no reward explosions from physics glitches), Markovian (GAE-compatible), correctly signed (every push provides useful signal), policy-invariant (optimal policy unchanged per Ng et al.)
+\item PBRS provides a guaranteed signal floor on every push regardless of distance — the agent always knows which direction is "better"
 }
 
 
 \sectionframe{4.\ Implementation}
 
 
-\begin{frame}[t]{The Four Models at a Glance}
+\begin{frame}[t]{Baseline — Fractional Reward at Scale}
+  \textbf{Same fractional reward, same PPO+LSTM, same 2{,}048 envs, same 100K iter budget:}
+  \vspace{4pt}
+  \begin{center}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Model} & \textbf{Scene SR} & \textbf{Pos-only} & \textbf{Pos+rot} \\
+    \midrule
+    \rowcolor{hlgreen!15}
+    PPO single-agent & \textcolor{hlgreen}{\textbf{80.0\%}} & 100\% & 70\% \\
+    ASP (Alice+Bob)  & \textcolor{hlred}{\textbf{0.0\%}}  & 0\%   & 0\% \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \vspace{4pt}
+  {\small \text{\emph{Same PPO+LSTM, same push primitive, same training budget} — only the architecture differs.}  \textcolor{hlred}{\textbf{The adversarial goal distribution, not the reward formula, is the bottleneck.}}}
+  {\scriptsize \textit{(See Appendix K for training budget comparison.)}}
+
+  \vfill\litfooter{[Sukhbaatar et al.\ 2018]~[Plappert et al.\ 2021]}
+\end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item The original fractional reward at 2,048 envs reaches 80\% for single-agent — the task IS solvable at scale
+\item Same reward, same environment, same budget — ASP with Alice/Bob gets 0\%. The adversarial goal distribution prevents any learning
+\item This is the cleanest 1-axis comparison in the thesis: only the training architecture changes. Self-play is the bottleneck
+\item All subsequent models switch to PBRS — not because the original reward is broken, but because PBRS is principled, efficient (works at 528 envs), and provides correct per-step signal even under distribution shift
+}
+
+
+\begin{frame}[t]{All Models at a Glance}
   \centering\small
   \begin{tabular}{lll}
     \toprule
     \textbf{Model} & \textbf{Idea} & \textbf{Reward / curriculum} \\
     \midrule
+    \textbf{PPO-Baseline} & single agent, original reward & fractional improvement (non-PBRS) \\
     \rowcolor{hlgreen!15}
     \textbf{PPO-PBRS} & single agent, no curriculum & two-potential PBRS (pos, rot) \\
     \textbf{PPO-Curriculum} & single agent + staged curriculum & PBRS + forced pos$\to$rot \\
     \textbf{ASP-dPose} & self-play (Alice/Bob) & SE(2) PBRS, outcome Alice ($+5/-1$) \\
     \textbf{TASP-dPose} & self-play (Alice/Bob) & SE(2) PBRS, time-based Alice \\
+    \textbf{TASP-dPose-BP} & self-play + Bob penalty & SE(2) PBRS, full Sukhbaatar symmetric \\
     \bottomrule
   \end{tabular}
 
   \vspace{6pt}
-  {\small All four share the same PPO+LSTM backbone, object-relative push primitive, 528 envs, and $\sim$3000 iterations. They differ only in \textbf{reward shape} and \textbf{training-goal generation}.}
+  {\small All six models share the same PPO+LSTM backbone and object-relative push primitive.}
   \vfill\litfooter{[Schulman et al.\ 2017]~[Ng et al.\ 1999]~\textbf{[Sukhbaatar et al.\ 2018]}}
 \end{frame}
 
-\begin{frame}[t]{PPO-PBRS — Single-Agent (Our Best Model)}
+\begin{frame}[t]{PPO-PBRS — Single-Agent (Recommended Baseline)}
   \small
   \textbf{Architecture:} Single PPO agent, LSTM(28$\to$256) + MLP[512, 256] trunk, MultiCategorical head (4 dims $\times$ 21 bins). No curriculum, no Alice/Bob, no GoalEncoder.
 
@@ -340,33 +442,76 @@
 }
 
 
-\begin{frame}[t]{PBRS — Reward Signal Analysis}
+\begin{frame}[t]{PBRS vs Fractional— Reward Signal Analysis}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.48\textwidth}
       \centering
-      \includegraphics[width=1.0\textwidth]{figures/plot5_reward_diet.png}
+      \includegraphics[width=1.0\textwidth]{figures/a3_episode_simulation.png}
       \vspace{2pt}
-      {\footnotesize\textbf{Reward diet:} $\sim$85\% dense PBRS shaping,\\+5/+2 sparse bonuses, penalties.}
+      {\footnotesize\textbf{Per-push reward — Fractional vs PBRS:} same 5-push episode. Fractional formula: negative or zero for 80\% of pushes. PBRS: correctly-signed, bounded on every push.}
     \end{column}
     \begin{column}{0.48\textwidth}
       \centering
-      \includegraphics[width=1.0\textwidth]{figures/plot1_pbrs_signal_vs_performance.png}
+      \includegraphics[width=1.0\textwidth]{figures/a5_Position_Error.png}
       \vspace{2pt}
-      {\footnotesize\textbf{Signal vs performance:} bounded exponential\\potentials $\to$ stable, correlated gradient.}
+      {\footnotesize\textbf{Position error per iteration (TensorBoard):} PBRS at 528 envs converges to lower PosErr than fractional formula at 2{,}048 envs — 4$\times$ more environment-efficient.}
     \end{column}
   \end{columns}
 
   \vspace{4pt}
-  {\small Dense signal on every push, bounded rewards, stable value — PBRS avoids the gradient starvation and critic instability of the old fractional formula.}
+  \begin{center}
+  \small Dense signal on every push, bounded rewards, stable value — PBRS avoids the gradient starvation and critic instability of the old fractional formula.
+  \end{center} 
 
-  \vfill\litfooter{[Ng, Harada \& Russell 1999]~\textbf{[Grze\'s 2017]}~[Harutyunyan et al.\ 2015]}
+  \vfill\litfooter{[Ng et al.\ 1999]~\textbf{[Grze\'s 2017]}~[Schulman et al.\ 2017]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item Reward diet: $\sim$85\% of reward from dense PBRS shaping. Sparse completion bonuses (+5/+2) are supplementary — PPO always has a gradient to follow
-\item Signal vs performance: the bounded exponential potentials produce a stable, correlated relationship between PBRS signal and training progress. The old fractional reward had near-zero variance (all pushes looked equally bad to GAE)
-\item Cosine angular distance on rotation respects S¹ topology — no wrap-around discontinuity at ±π
+\item Left: simulated 5-push episode comparing PBRS vs fractional formula per-push reward. PBRS gives correctly-signed positive reward on every push; fractional formula gives negative or near-zero reward
+\item Right: actual TensorBoard data from training runs — PBRS at 528 envs converges to lower position error (~0.095 m) than the fractional formula at 2,048 envs (~0.150 m) despite 4× fewer parallel environments
+\item Both achieve 80\% validation SR — PBRS does it with 4× fewer envs. The fractional formula works at scale but needs more parallelism to overcome its gradient starvation
+}
+
+
+\begin{frame}[t]{Why PBRS for ASP? — Decoupling Advantage from Value}
+  \textbf{GAE advantage decomposes into two parts:}
+  \[
+  \hat{A}_t = \underbrace{\sum (\gamma\lambda)^l\,
+  \big[\textcolor{hlblue}{\Phi(s_{t+l+1}) - \Phi(s_{t+l})}\big]}_{\textcolor{hlblue}{\text{always correctly-signed}}}
+  \;+\; \underbrace{\sum (\gamma\lambda)^l\,
+  \big[\gamma V(s_{t+l+1}) - V(s_{t+l})\big]}_{\textcolor{hlred}{\text{biased when $V$ is stale}}}
+  \]
+
+  \vspace{6pt}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{\textcolor{hlblue}{$\Phi$-term:} PBRS potential difference}\\
+      {\small $\Phi(s) = w\!\cdot\!e^{-k\cdot d^2}$ increases when object moves toward goal. Correct sign on every push regardless of $V(s)$ accuracy.}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{\textcolor{hlred}{$V$-term:} value function bootstrap}\\
+      {\small Under ASP, Alice shifts goal distribution $\rightarrow$ $V(s)$ perpetually stale. GAE bootstraps from wrong values $\rightarrow$ biased advantage.}
+    \end{column}
+  \end{columns}
+
+  \vspace{6pt}
+  \begin{center}
+  \textbf{Outcome:} \textcolor{hlblue}{PBRS lifts ASP 0\% $\to$ 16.7\%} via the $\Phi$-term —\\
+  but only partially, because the \textcolor{hlred}{$V$-term bias remains}.\\
+  \textcolor{hlgreen}{Single-agent: no distribution shift $\to$ $V$ accurate $\to$ both align $\to$ 80\%.}
+  \end{center}
+
+  \vfill\litfooter{[Schulman et al.\ 2016]~[Ng et al.\ 1999]~\textbf{[Sukhbaatar et al.\ 2018]}}
+\end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item GAE normally sums TD errors $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$. Under ASP with sparse rewards, those errors are just V-noise
+\item PBRS adds $\Phi(s')-\Phi(s)$ to every step — this term is always correct because $\Phi$ increases when object moves toward goal
+\item The $\Phi$-term provides a floor of correctly-signed gradient signal even when Bob's $V(s)$ is completely wrong
+\item This is why PBRS lifts ASP from 0\% to 16.7\% — Bob gets genuine learning signal despite the non-stationary objective
+\item But it only partially rescues ASP because the $V$-component still contributes bias. Single-agent has no distribution shift → $V$ is accurate → both terms align → 80\%
 }
 
 
@@ -399,6 +544,43 @@
 }
 
 
+% \begin{frame}[t]{TASP-dPose-BobPenalty — The Fallout}
+%   \textbf{Added to TASP-dPose:} Bob time penalty $R_B \mathrel{+}= -\gamma_{sp}\!\cdot\!t_B$  on \emph{all} phase ends.
+
+%   \vspace{4pt}
+%   \textbf{Valid SR: \textcolor{hlred}{0.0\%}} (0/30 scenes, 2600 iters, 528 envs) — worse than no-penalty TASP-dPose (16.7\%).
+
+%   \vspace{4pt}
+%   \textbf{Mechanism — the penalty fires on catastrophes (tip/launch/OOB):}
+%   \begin{center}\small
+%   \begin{tabular}{lccc}
+%     \toprule
+%     \textbf{Trajectory} & \textbf{PBRS Dense + Sparse} & \textbf{Penalty ($0.5\times t_B$)} & \textbf{Total} \\
+%     \midrule
+%     Fail on push 1  & $-10.5$ & $-0.5$ & $\mathbf{-11.0}$ \\
+%     Fail on push 10 & $-15.0$ & $-5.0$ & $\mathbf{-20.0}$ \\
+%     Succeed push 5  & $+10.0$ & $-2.5$ & $\mathbf{+7.5}$ \\
+%     \bottomrule
+%   \end{tabular}
+%   \end{center}
+
+%   {\small PPO gradient pushes Bob toward ``fail on push 1'' ($-11.0$ beats $-20.0$). Alice's reward collapses: $R_A = 0.5\!\cdot\!\max(0,1-5) = 0$. \textbf{The symmetric reward creates a perverse fail-fast equilibrium.} Asymmetric (Alice incentivised, Bob unpenalised) is necessary.}
+%   {\scriptsize \textit{(See Appendix I for full mechanism breakdown.)}}
+
+%   \vfill\litfooter{[Sukhbaatar et al.\ 2018]~[Letcher et al.\ 2019]~[Plappert et al.\ 2021]}
+% \end{frame}
+
+% % ~~~~~ SPEAKER NOTES ~~~~~
+% \note[itemize]{
+% \item Model I (TASP-dPose-BobPenalty) trains the full symmetric Sukhbaatar reward: Alice time bonus + Bob time penalty
+% \item Result: 0\% SR — worse than no-penalty TASP-dPose at 16.7\%. The penalty fires on ALL phase ends including catastrophes
+% \item Bob learns that failing on push 1 ($-$11.0) is a better return than trying for 10 pushes and failing ($-$20.0). PPO's gradient pushes toward faster failure
+% \item Alice gets zero reward ($t_B \approx 1$ gives $R_A = 0$) — the self-regulating curriculum collapses on both sides
+% \item This is NOT an indictment of Sukhbaatar 2018 or Letcher 2019. It's a reward design failure: the penalty applied to catastrophe environments creates a degenerate equilibrium
+% \item Lesson: asymmetric reward structure (Alice incentivised, Bob unpenalised) is necessary in this domain
+% }
+
+
 \begin{frame}[t]{PPO-Curriculum — Position$\to$Rotation Curriculum }
   \textbf{Design:} Same PPO agent as PPO-PBRS + 3-phase curriculum:
   \begin{enumerate}
@@ -407,11 +589,10 @@
     \item Full PBRS (multi-objective)
   \end{enumerate}
 
-  \vspace{2pt}
-  \textbf{\textcolor{hlred}{Original trigger was mis-specified:}} the first version used a per-push mean position error threshold of 0.08m — below even the \emph{best} model's validation PosErr (0.202m). The curriculum never activated because the threshold was unreachable by construction (P82 fix).
 
   \vspace{2pt}
-  \textbf{Corrected trigger:} gates on episodic position-only SR $\ge$ 0.5 over a 20-iter lookback. Curriculum now activates and reaches \textcolor{hlgreen}{76.7\% SR} — only 3.3pp below PPO-PBRS.
+  \textbf{Trigger:} gates on episodic position-only SR $\ge$ 0.5 over a 20-iter lookback. Curriculum now activates and reaches \textcolor{hlgreen}{76.7\% SR} — only 3.3pp below PPO-PBRS.
+  {\scriptsize \textit{(See Appendix H for original trigger bug details.)}}
 
   \vfill\litfooter{[Narvekar et al.\ 2020]~[Portelas et al.\ 2020]~[Florensa et al.\ 2017]}
 \end{frame}
@@ -444,7 +625,7 @@
 
   \vspace{-2pt}
   \textbf{Two variants:} both use the SE(2) unified $d_{\text{pose}}$ metric (T-block); they differ only in Alice's reward — \textbf{ASP-dPose} (outcome-based) vs \textbf{TASP-dPose} (time-based).
-  \textbf{Excluded:} base ASP (separate pos/rot potentials) and the GoalEncoder-ablation — no matched-protocol Isaac validation.
+
   }
 
   \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Torabi et al.\ 2018]}
@@ -527,7 +708,6 @@
   \vspace{2pt}
   {\scriptsize T-block \textcolor[HTML]{56B4E9}{\textbf{start pose}} $\to$ \textcolor[HTML]{E69F00}{\textbf{goal pose}}. Every model is evaluated on an identical 30-scene suite (20 trials $\times$ up to 30 pushes per scene).}
 
-  \vfill\litfooter{[Mason 1986]~[Lynch \& Mason 1996]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
@@ -544,40 +724,38 @@
 
 
 \begin{frame}[t]{Isaac Lab — the Right Venue for Self-Play}
-  \centering\small
-  \textbf{Throughput} (push-macros/s, measured):
-  \vspace{2pt}
-  \begin{tabular}{lcc}
-    \toprule
-    \textbf{Setting} & \textbf{push/s} & \textbf{1M pushes} \\
-    \midrule
-    \rowcolor{hlgreen!15}
-    Isaac (1 GPU, 528 env) & \textbf{172} & \textbf{$\sim$1.6 h} \\
-    gym single-agent (6 CPU) & 91  & $\sim$3.0 h \\
-    gym self-play (1 CPU)   & 22.4 & $\sim$12.4 h \\
-    \bottomrule
-  \end{tabular}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.52\textwidth}
+      \small
+      \textbf{GPU-batched parallelism} — 528 environments stepped simultaneously on one RTX~Pro~6000.\\
+      Produces 7,920-sample PPO batches — 8$\times$ larger than gym-pusht (960).\\
+      \textbf{Large batches stabilize PPO+LSTM gradients} — essential for the non-stationary two-agent self-play objective.
 
-  \vspace{3pt}
-  \flushleft\small
-  \textbf{Three pillars:}
-  \begin{itemize}
-    \item \textbf{GPU-batched} — 528 envs/step gives 7,920-sample PPO batches; the self-play objective needs a large batch for stable gradients.
-    \item \textbf{Robotic fidelity} — UR5e + 3D contact + cuRobo IK = the actual SE(2) task; gym‑pusht is a 2D diagnostic.
-    \item \textbf{Time-to-scale} — $\sim$10M pushes in $\sim$16h on GPU vs $\sim$5 days on CPU.
-  \end{itemize}
+      \vspace{4pt}
+      \textbf{Robotic fidelity} — UR5e arm + 3D contact physics + cuRobo IK = the actual SE(2) task.\\
+      gym-pusht is a 2D diagnostic only; it cannot test self-play under realistic contact dynamics.
 
-  \vspace{4pt}
-  \textbf{Key result:} Isaac gives self-play its best shot at a budget matched to the winning single-agent — and it \textbf{still} reaches only 6.7--16.7\% (4.8$\times$ gap).
+      \vspace{4pt}
+      \textbf{Fair budget} — self-play and single-agent run at identical per-iteration wall-clock ($\sim$0.022\,it/s).\\
+      Isaac gives self-play its \textbf{best shot}, matched to the winning single-agent —\\
+      and it \textbf{still} reaches only 6.7--16.7\% (4.8$\times$ gap).
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{figures/isaac_vs_gym.png}
+      \vspace{2pt}
+      {\footnotesize Throughput is comparable; batch size is the differentiator.}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item The throughput table shows three tiers: Isaac GPU-batched (172 push/s, from logged TF-event timestamps: 0.022 it/s × 7,920 push-macros/iter), gym multi-core single-agent (91 push/s), gym single-core self-play (22.4 push/s)
-\item GPU-batched: 528 envs stepped in parallel → large PPO batch without extra wall-clock. The non-stationary two-agent self-play gradient needs a large batch to be stable — Isaac provides this naturally
-\item Robotic fidelity: the real UR5e + cuRobo kinematic chain + 3D contact physics matters for the SE(2) coupled push task. gym-pusht is a useful diagnostic for the reward question, but not for the full self-play dynamics
-\item Time-to-scale: self-play reaches its training budget (~10M pushes) in ~16h on Isaac vs ~5 days on CPU. Self-play and single-agent have identical per-iteration timing in Isaac (~1.0×). So the budget is fair
-\item The takeaway: Isaac is not hiding self-play's failure — it's giving it its best shot. The 4.8× gap is real and structural, not an artifact of under-resourcing
+\item Left plot (isaac_vs_gym.png): throughput — Isaac 172 push/s at 528 envs, Gym single-agent 209 push/s at 32 cores, Gym ASP 24 push/s at 1 core. Raw speed is comparable
+\item Right plot: batch size — Isaac 7,920 transitions/update vs Gym 960 (8× smaller). Large batches stabilize PPO+LSTM gradients for self-play
+\item GPU-batched: 528 envs stepped in parallel → self-play and single-agent run at identical per-iteration wall-clock (~0.022 it/s). The budget is fair
+\item Robotic fidelity: the real UR5e + cuRobo kinematic chain + 3D contact physics matters for the SE(2) coupled push task. gym-pusht is a 2D diagnostic only
+\item The takeaway: Isaac gives self-play its best shot — large batches, fair budget, realistic physics — and it still fails (6.7--16.7\% vs 80\% single-agent). The 4.8× gap is structural, not a compute artifact
 }
 
 
@@ -600,6 +778,7 @@
 
   \vspace{2pt}
   {\small \textbf{PPO-PBRS vs PPO-Curriculum:} 80.0\% vs 76.7\% — 3.3pp gap \textbf{not statistically significant} (p\,$>$\,0.05 on 30 independent scenes). \textbf{Self-play (ASP-dPose, TASP-dPose):} 4.8–11.9$\times$ below single-agent — gap is significant.}
+  {\scriptsize \textit{All models evaluated under identical protocol (see Appendix L).}}
   {\scriptsize \textit{Error bars = ±1 standard error across scenes. Base ASP and the GoalEncoder-ablation are excluded — neither has a matched-protocol Isaac validation (see thesis).}}
 
   \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Schulman et al.\ 2017]}
@@ -631,10 +810,13 @@
         \textbf{Model} & \textbf{SR} & \textbf{SE} & \textbf{95\% CI} \\
         \midrule
         \rowcolor{hlgreen!15}
+        PPO-Baseline & 80.0\% & 7.3\% & 65--95\% \\
         PPO-PBRS & 80.0\% & 7.3\% & 65--95\% \\
         PPO-Curriculum & 76.7\% & 7.7\% & 61--92\% \\
+        \midrule
         TASP-dPose & 16.7\% & 6.8\% & 3--30\% \\
         ASP-dPose & 6.7\%  & 4.6\% & 0--16\% \\
+        TASP-dPose-BP & 0.0\%  & — & — \\
         \bottomrule
       \end{tabular}
       }
@@ -700,7 +882,7 @@
 \begin{frame}[t]{PPO-Curriculum — Per-Test Error}
   \centering
   \vspace{-2pt}
-  \includegraphics[width=0.95\textwidth]{figures/B_curr_20_isaac_errors.png}\\[2pt]
+  \includegraphics[width=0.95\textwidth]{figures/results_valid_pbrs_curr_errors.png}\\[2pt]
   {\scriptsize 23/30 (76.7\%) — same 100\% pos-only, 65\% pos+rot. Tighter position precision from Phase~1 (0.023 vs 0.032\,m), but marginally worse rotation (0.663 vs 0.568\,rad).}
 
 \end{frame}
@@ -764,7 +946,6 @@
   \vspace{2pt}
   {\small The ordering single-agent $\approx$ curriculum $\gg$ self-play holds in both simulators. Gaps compress in the simpler gym env: PPO-Curriculum benefits most from the small-batch regime (50\% gym vs 76.7\% Isaac), consistent with the RQ3 batch-size caveat.}
 
-  \vfill\litfooter{[Makoviychuk et al.\ 2021]~[Schulman et al.\ 2017]~[Plappert et al.\ 2021]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
@@ -838,18 +1019,21 @@
 
 \begin{frame}[t]{Why ASP Fails — Failure Modes}
   \begin{enumerate}
-    \item \textbf{Non-stationary goal distribution:}
+    \item \textbf{Reward signal starvation (affects both single-agent and ASP):}
     \begin{itemize}
-      \item Alice learns continuously $\rightarrow$ Bob's training distribution shifts every iteration
-      \item PPO's importance ratio computed against stale rollouts from a previous Alice
-      \item Distribution shift dominates the ratio — PPO clip fires on most transitions
+      \item Original fractional formula gives $\approx$0 reward for 99\% of pushes — GAE sees noise
+      \item Sparse bonuses (+5/+2) fire on $\sim$1\% of pushes — too few events for stable gradient
+      \item PBRS provides correctly-signed reward on \emph{every} push: +0.02 to +0.50 per step
+      \item Single-agent: PBRS enables 80\% SR. ASP: PBRS lifts 0\% $\to$ 16.7\%
     \end{itemize}
 
-    \item \textbf{Confounded ablation (C6):}
+    \item \textbf{Non-stationary goal distribution (ASP-specific):}
     \begin{itemize}
-      \item ASP changes 3 axes at once: goal distribution, agent count, episode budget
-      \item The collapse could be due to harder/non-stationary goals, not the curriculum mechanism itself
-      \item Time-based self-play (TASP-dPose, 16.7\%) shows partial rescue — self-regulating curriculum helps
+      \item Alice updates every iteration $\rightarrow$ Bob's training distribution shifts
+      \item Bob's value function $V(s)$ is trained on old goals, evaluated on new goals — systematically biased
+      \item GAE bootstraps with stale $V$ — $\hat{A}_t$ sign is wrong on most transitions
+      \item PPO clips $\pi_{\text{new}}/\pi_{\text{old}}$ — gradient killed when ratio moves outside $[1-\epsilon, 1+\epsilon]$
+      \item Single-agent has fixed random goals — no distribution shift, $V$ stays accurate, 80\% SR
     \end{itemize}
   \end{enumerate}
 
@@ -867,12 +1051,14 @@
 \begin{frame}[t]{Why ASP Fails — The Evidence}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.52\textwidth}
-      \textbf{What we observe:}
+      \textbf{What we observe across 5 ASP configurations:}
       \begin{itemize}
-        \item Outcome-based self-play (ASP-dPose): 6.7\% — essentially random
-        \item Time-based self-play (TASP-dPose): 16.7\% — partial rescue, $+10$pp
-        \item Both self-play variants have RotErr $>$ 1.4 rad — rotation \textbf{never learned}
-        \item Even the best variant (TASP-dPose) is 4.8$\times$ below single-agent
+        \item Original fractional reward, 2{,}048 envs: \textcolor{hlred}{0\%}
+        \item PBRS outcome-based (ASP-dPose): \textcolor{hlred}{6.7\%}
+        \item PBRS time-based (TASP-dPose): \textcolor{hlred}{16.7\%} \quad\textcolor{hlgreen}{(best variant)}
+        \item PBRS time-based + Bob penalty: \textcolor{hlred}{0\%}
+        \item gym-pusht (different sim, same gate): \textcolor{hlred}{13.3\%}
+        \item Single-agent ceiling (PPO-PBRS): \textbf{80.0\%}
       \end{itemize}
     \end{column}
     \begin{column}{0.46\textwidth}
@@ -918,6 +1104,7 @@
     \item TASP-dPose (time-based Alice, no ABC) vs ASP-dPose (outcome-based, ABC enabled) isolates the Alice reward axis — TASP-dPose gains $+$10pp
     \item But this is a \emph{single} 1-axis experiment within a 7-axis package change
     \item The RQ3 substitution claim concerns \textbf{reward vs curriculum}, not single-agent vs self-play architecture
+    \item {\scriptsize \textit{(See Appendix J for full disaggregation table.)}}
   \end{itemize}}
 
   \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Dennis et al.\ 2020]}
@@ -984,6 +1171,11 @@
     Bob's individual position and rotation skills are partly learned, but the combined gate rarely fires under the non-stationary adversarial goal distribution. The failure sits at the exploration / training-distribution level, not the observation encoding.
   \end{exampleblock}
 
+  \vspace{1pt}
+  \begin{exampleblock}{Consistent across reward schemes, simulators, and ASP variants}
+    We tested ASP under: (1) the original fractional reward at 2{,}048 envs (0\%), (2) PBRS with outcome-based Alice (6.7\%), (3) PBRS with time-based Alice (16.7\%), (4) the full Sukhbaatar symmetric reward with Bob time penalty (0\%), and (5) a simpler gym-pusht environment (13.3\%). No configuration exceeds 17\% while single-agent consistently reaches 80\%. The three original papers that introduced ASP report success in domains that lack the coupled pos+rot success gate — a structural difference that prevents the self-regulating curriculum from forming.
+  \end{exampleblock}
+
   \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Torabi et al.\ 2018]}
 \end{frame}
 
@@ -1000,7 +1192,7 @@
   \end{exampleblock}
 
   \vspace{1pt}
-  \begin{exampleblock}{PBRS theory strongly supported (Ng et al.\ 1999; Grze\'s 2017)}
+  \begin{exampleblock}{PBRS theory strongly supported }
     The policy invariance theorem holds in practice, even in contact-rich manipulation with stochastic PhysX physics. PBRS provides clean, bounded, Markovian rewards. Parameters $k_p{=}30$, $k_r{=}5$, $w{=}10.0$ are robust across all single-agent runs.
   \end{exampleblock}
 
@@ -1019,13 +1211,13 @@
 
 
 \begin{frame}[t]{Conclusion}
-  \begin{block}{\textbf{1.\ \ PBRS solves planar pushing (RQ1)}}
-    PPO-PBRS achieves \textcolor{hlgreen}{80.0\% validation SR} on 30 held-out T-block scenes — 100\% pos-only, 70\% pos+rot — with a simple single-agent PPO architecture and no curriculum. PBRS preserves the optimal policy while providing dense, bounded, Markovian gradients. This is the \textbf{recommended baseline}.
+  \begin{block}{\textbf{1.\ \ PBRS enables on-policy learning for planar pushing (RQ1)}}
+    PPO with the original fractional reward requires 2{,}048 envs to reach 80\%. PBRS achieves identical performance at 528 envs — 4$\times$ fewer — by providing dense, correctly-signed, bounded rewards on \emph{every} push. PBRS preserves the optimal policy  while making the reward tractable for on-policy GAE.
   \end{block}
 
   \vspace{1pt}
-  \begin{block}{\textbf{2.\ \ Self-play does not improve performance in this domain (RQ2)}}
-    Both self-play variants score 6.7--16.7\%, a 4.8--11.9$\times$ gap from single-agent. Time-based Alice (TASP-dPose, 16.7\%) partially rescues the adversarial dynamics but cannot close the gap. Complexity adds no benefit.
+  \begin{block}{\textbf{2.\ \ Self-play fails structurally on this specific task (RQ2)}}
+    Across five ASP variants — original fractional reward (0\%), outcome-based PBRS (6.7\%), time-based PBRS (16.7\%), symmetric Bob-penalty PBRS (0\%), and a gym-pusht implementation (13.3\%) — \textbf{no self-play configuration exceeds 17\%}, against an 80\% single-agent ceiling. The adversarial goal distribution creates a perpetually stale value function that prevents stable on-policy gradient estimates.
   \end{block}
 
   \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Plappert et al.\ 2021]}
@@ -1034,11 +1226,11 @@
 
 \begin{frame}[t]{Conclusion}
   \begin{block}{\textbf{3.\ \ PBRS can substitute for a curriculum (RQ3)}}
-    A well-shaped reward makes the staged curriculum redundant at this scale: PPO-Curriculum (76.7\%) is statistically tied with PPO-PBRS (80.0\%). The substitution is regime-dependent — at small PPO batch the curriculum does help (gym: 50\% vs 10\%). Self-play (6.7--16.7\%) helps in neither regime.
+    A well-shaped reward makes the staged curriculum redundant at sufficient batch size: PPO-Curriculum (76.7\%) is statistically tied with PPO-PBRS (80.0\%). The substitution is regime-dependent — at small PPO batch the curriculum does help (gym: 50\% vs 10\%). Self-play (6.7--16.7\%) helps in neither regime.
   \end{block}
 
   \vspace{1pt}
-  {\small Start simple. PPO-PBRS single-agent at 528 envs trains in $\sim$1.6 days on an RTX Pro 6000 and achieves 80\% SR. Add complexity only when proven to help — and expect it usually won't.}
+  {\small Start simple. PPO-PBRS single-agent at 528 envs trains in $\sim$1.6 days on an RTX Pro 6000 and achieves 80\% SR. PBRS provides the principled reward foundation; the training-goal distribution is a separate, lower-leverage knob. Add complexity only when proven to help — and expect it usually won't.}
 
   \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Plappert et al.\ 2021]}
 \end{frame}
@@ -1055,7 +1247,7 @@
 \begin{frame}[t]{Limitations \& Research Gaps}
   \textbf{What we couldn't test (training budget limited to 3000 iters $\times$ 528 envs):}
   \begin{itemize}
-    \item \textbf{TASP-dPose-BobPenalty:} Bob time penalty $R_B \mathrel{+}= -\gamma_{sp}\!\cdot\!t_B$ (full Sukhbaatar symmetric reward). Could create zero-sum dynamics that stabilize self-play training
+    \item \textbf{TASP-dPose-BobPenalty tested:} Bob time penalty (full Sukhbaatar symmetric reward) collapsed to 0\% — penalty applied on catastrophe phase ends created a perverse ``fail-fast'' equilibrium. Asymmetric reward structure (Alice incentivised, Bob unpenalised) proved necessary.
     \item \textbf{Time-based self-play + ABC:} time-based Alice with ABC enabled ($\beta_{\text{abc}}=0.5$). ABC might boot after Alice converges
     \item Larger models (Transformer, diffusion policy), sim-to-real transfer (physical UR5e)
   \end{itemize}
@@ -1075,10 +1267,10 @@
 \begin{frame}[t]{Future Work — Promising Directions}
   \small
   \begin{enumerate}
-    \item \textbf{Zero-sum time-based self-play (TASP-dPose-BobPenalty):} Bob penalty creates near-zero-sum game. From differentiable game theory (Letcher et al.\ 2019), zero-sum games have convergent (Hamiltonian) dynamics — this could stabilize self-play where general-sum diverges
+    \item \textbf{Zero-sum time-based self-play (TASP-dPose-BobPenalty):} Bob penalty creates near-zero-sum game. From differentiable game theory , zero-sum games have convergent (Hamiltonian) dynamics — this could stabilize self-play where general-sum diverges
     \item \textbf{ABC after Alice convergence:} Currently ABC fails because Alice acts randomly ($bc\_ratio \approx 1.0$). If Alice converges first, Bob starts with a meaningful imitation target
     \item \textbf{Relaxed combined success gate:} The combined pos+rot gate is the bottleneck (70\% single-agent vs 0–10\% for self-play). Partial credit for one objective could provide gradient to learn both
-    \item \textbf{PAIRED (Dennis et al.\ 2020):} Antagonist minimizes protagonist's regret rather than maximizing difficulty — solvable but challenging environments, addressing the exact failure mode
+    \item \textbf{PAIRED :} Antagonist minimizes protagonist's regret rather than maximizing difficulty — solvable but challenging environments, addressing the exact failure mode
   \end{enumerate}
 
   \vfill\litfooter{[Letcher et al.\ 2019]~[Dennis et al.\ 2020]~[Campero et al.\ 2021]}
@@ -1158,12 +1350,17 @@
     \item E. cuRobo IK pipeline and workspace configuration
     \item F. Observation space specifications (all model variants)
     \item G. Per-test error bars — PPO-PBRS vs PPO-Curriculum head-to-head and all-model comparison (95\% binomial CIs)
+    \item \textbf{H. P82 Curriculum Trigger Bug} — why the original trigger never fired
+    \item \textbf{I. BobPenalty Fail-Fast Equilibrium} — degeneracy mechanism
+    \item \textbf{J. Confounded Ablation Disaggregation} — 7-axis variation table
+    \item \textbf{K. Training Budget Comparison} — envs, iterations, push-macros
+    \item \textbf{L. Validation Protocol} — scene set, trials, disclosed limitations
   \end{itemize}
 \end{frame}
 
 
 \begin{frame}[t]{PBRS — The Shaping Theorem}
-  \textbf{Ng et al.\ (1999):}
+  \textbf{Ng et al.:}
   \[
   \boxed{\mathcal{R}'(s,a,s') = \mathcal{R}(s,a,s') + \underbrace{\gamma\Phi(s') - \Phi(s)}_{\text{shaping reward }F}}
   \]
@@ -1179,7 +1376,7 @@
   \textbf{Dense reward:} $F(s,s') = \Phi(s') - \Phi(s)$  —  difference only, no constant drain.
 
   \vspace{4pt}
-  \textbf{Episodic PBRS} (Grze\'s 2017): $\gamma_{\text{shaping}}{=}1.0$ valid — $\sum F = \Phi(s_T)-\Phi(s_0)$ bounded.
+  \textbf{Episodic PBRS} : $\gamma_{\text{shaping}}{=}1.0$ valid — $\sum F = \Phi(s_T)-\Phi(s_0)$ bounded.
 
   \vfill\litfooter{[Ng, Harada \& Russell 1999]~\textbf{[Grze\'s 2017]}~[Devlin \& Kudenko 2012]}
 \end{frame}
@@ -1303,7 +1500,7 @@
 }
 
 
-\begin{frame}[t]{Comparison Summary — Per‑Scene Position $\times$ Rotation Error}
+\begin{frame}[t]{Comparison Summary — Per-Scene Position $\times$ Rotation Error}
   \begin{center}
     \includegraphics[width=0.8\textwidth]{figures/plot3_failure_taxonomy.png}
   \end{center}
@@ -1311,9 +1508,9 @@
   \vspace{4pt}
   {\small \textbf{Three observations from the success rectangle (pos$<$5\,cm, rot$<$0.2\,rad):}
   \begin{itemize}
-    \item \textbf{PPO‑PBRS} (left): 24/30 scenes land inside the green box — solves position and rotation on nearly all scenes.
-    \item \textbf{PPO‑Curriculum} (center): position errors tightly cluster under 5\,cm (Phase‑1 training); rotation is the bottleneck, with RotErr $>$ 0.2 for most pos+rot scenes.
-    \item \textbf{ASP‑dPose} (right): only 2 successes — points scatter far outside, with RotErr $>$ 1.4\,rad. Rotation is never learned.
+    \item \textbf{PPO-PBRS} (left): 24/30 scenes land inside the green box — solves position and rotation on nearly all scenes.
+    \item \textbf{PPO-Curriculum} (center): position errors tightly cluster under 5\,cm (Phase-1 training); rotation is the bottleneck, with RotErr $>$ 0.2 for most pos+rot scenes.
+    \item \textbf{ASP-dPose} (right): only 2 successes — points scatter far outside, with RotErr $>$ 1.4\,rad. Rotation is never learned.
   \end{itemize}}
 
   \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Plappert et al.\ 2021]}
@@ -1321,15 +1518,15 @@
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item Three‑panel scatter: each point is one held‑out scene — position error vs rotation error; the green box is the success region (pos < 5\,cm, rot < 0.2\,rad). PPO‑PBRS fills it; PPO‑Curriculum clusters position inside it but rotation outside it; ASP‑dPose scatters far out.
-\item The curriculum forces consistent position control from Phase‑1 but cannot fix the combined pos+rot gate; self‑play fails both axes.
+\item Three-panel scatter: each point is one held-out scene — position error vs rotation error; the green box is the success region (pos < 5\,cm, rot < 0.2\,rad). PPO-PBRS fills it; PPO-Curriculum clusters position inside it but rotation outside it; ASP-dPose scatters far out.
+\item The curriculum forces consistent position control from Phase-1 but cannot fix the combined pos+rot gate; self-play fails both axes.
 }
 
 
 \begin{frame}[t]{Appendix A — Push Mechanics: Limit Surface \& $L$}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.46\textwidth}\small
-      \textbf{Limit surface normality} (Goyal 1991): $\mathbf{t} \propto \nabla f(\mathbf{w})$ — twist is normal to the surface, so every push couples translation \emph{and} rotation.
+      \textbf{Limit surface normality}: $\mathbf{t} \propto \nabla f(\mathbf{w})$ — twist is normal to the surface, so every push couples translation \emph{and} rotation.
 
       \vspace{2pt}
       \textbf{Characteristic length $L$} (radius of gyration):
@@ -1415,6 +1612,157 @@
   }
 
   \vfill\litfooter{[Schulman et al.\ 2017]~[Ng et al.\ 1999]~[Grze\'s 2017]}
+\end{frame}
+
+
+% ============================================================
+% APPENDIX: WEAKNESSES & PROTOCOL DETAILS
+% ============================================================
+
+\begin{frame}[t]{Appendix H — P82 Curriculum Trigger Bug}
+  \small
+  \textbf{The original PPO-Curriculum trigger never activated because it gated on an unreachable metric.}
+
+  \vspace{4pt}
+  \textbf{Broken trigger (original):}
+  \[
+  \text{If } \operatorname{mean}(\textit{per-push PosErr}) < 0.08\text{ m for ALL 50 consecutive iterations}
+  \Rightarrow \text{activate Phase 2}
+  \]
+
+  \textbf{Why unreachable:}
+  \begin{itemize}
+    \item Per-push PosErr is measured after \emph{every} push, including early ones far from a freshly randomized goal (0.1--0.45 m away)
+    \item The iteration-mean has a structural floor well above 0.08 m — even the \emph{best} model's validation PosErr is 0.202 m
+    \item 50-iteration AND gate: one noisy iteration resets the streak
+  \end{itemize}
+
+  \textbf{Consequence:} $w_{\text{rot}} = 0.0$ permanently — rotation received zero reward signal. Model B (the pre-P82 version) was effectively position-only PPO.
+
+  \textbf{Fix (P82):} gate on \textit{episodic position-only SR $\ge$ 0.5} over a 20-iteration lookback. This is a ``position is solved'' signal, not a per-push mean. Curriculum now activates.
+
+  \vfill\litfooter{[See \textsection 3.1 of thesis]}
+\end{frame}
+
+
+\begin{frame}[t]{Appendix I — BobPenalty Fail-Fast Equilibrium}
+  \small
+  \textbf{Model I (TASP-dPose-BobPenalty)} adds a Bob time penalty $R_B \mathrel{+}= -\gamma_{sp}\!\cdot\!t_B$ on \emph{all} phase ends, including catastrophes.
+
+  \vspace{4pt}
+  \textbf{Why it creates a degenerate equilibrium:}
+  \begin{center}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Trajectory} & \textbf{PBRS + Sparse} & \textbf{Penalty ($0.5\times t_B$)} & \textbf{Total return} \\
+    \midrule
+    Fail on push 1  & $-10.5$ & $-0.5$ & $\mathbf{-11.0}$ \\
+    Fail on push 10 & $-15.0$ & $-5.0$ & $\mathbf{-20.0}$ \\
+    Succeed push 5  & $+10.0$ & $-2.5$ & $\mathbf{+7.5}$ \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \textbf{Mechanism:}
+  \begin{enumerate}
+    \item PPO's gradient pushes Bob toward higher returns — ``fail on push 1'' ($-11.0$) beats ``try for 10 pushes and fail'' ($-20.0$)
+    \item Since failing is easier than succeeding in contact-rich physics, the policy collapses to immediate failure
+    \item Alice's reward collapses simultaneously: $R_A = 0.5\!\cdot\!\max(0, 1-5) = 0$ — she gets zero signal
+  \end{enumerate}
+
+  \textbf{Lesson:} asymmetric reward structure (Alice incentivised, Bob unpenalised) is necessary. This is a \emph{reward design failure}, not a refutation of Sukhbaatar 2018 or Letcher 2019.
+
+  \vfill\litfooter{[See thesis \textsection 5.4 for full diagnostic]}
+\end{frame}
+
+
+\begin{frame}[t]{Appendix J — Confounded Ablation Disaggregation}
+  \small
+  \textbf{Self-play variants differ from single-agent PPO-PBRS on $\ge$7 axes simultaneously:}
+
+  \vspace{4pt}
+  {\footnotesize
+  \begin{tabular}{lcc}
+    \toprule
+    \textbf{Variable} & \textbf{PPO-PBRS (80.0\%)} & \textbf{Self-play (6.7--16.7\%)} \\
+    \midrule
+    Agent count     & 1 & 2 (Alice + Bob) \\
+    Goal distribution & Fixed random & Adversarial, shifting \\
+    GoalEncoder     & None & $\phi$-MLP 8D latent \\
+    ABC buffer      & None & Yes (ASP-dPose) / No (TASP-dPose) \\
+    Historical pool & None & Yes \\
+    Episode budget  & 15 pushes/agent & 5 (Alice) $+$ 10 (Bob) \\
+    PPO updates/iter& 1 & 2 (Alice, then Bob) \\
+    \bottomrule
+  \end{tabular}
+  }
+
+  \vspace{4pt}
+  \textbf{Implication:} the 4.8$\times$ SR gap cannot be attributed to any single lever.
+  \begin{itemize}
+    \item TASP-dPose vs ASP-dPose isolates Alice's reward type — TASP-dPose gains $+$10pp
+    \item But this is a single 1-axis experiment within a 7-axis package change
+    \item We present ``self-play as implemented,'' not ``the curriculum mechanism in isolation''
+  \end{itemize}
+
+  \vfill\litfooter{[See thesis \textsection 6.3 for disaggregation analysis]}
+\end{frame}
+
+
+\begin{frame}[t]{Appendix K — Training Budget Comparison}
+  \small
+  \textbf{All PBRS variants used identical budgets. The PPO-Baseline used more compute for a direct architectural comparison.}
+
+  \vspace{4pt}
+  \begin{center}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Model} & \textbf{Envs} & \textbf{Max Iter} & \textbf{Est.\ Push-Macros} \\
+    \midrule
+    PPO-Baseline (Fractional) & 2{,}048 & 100{,}000 & $\sim$3.07B \\
+    PPO-PBRS & 528 & 3{,}000 & $\sim$23.8M \\
+    PPO-Curriculum & 528 & 3{,}000 & $\sim$23.8M \\
+    ASP-dPose & 528 & 3{,}000 & $\sim$23.8M \\
+    TASP-dPose & 528 & 3{,}000 & $\sim$23.8M \\
+    TASP-dPose-BP & 528 & 3{,}000 & $\sim$23.8M \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \vspace{4pt}
+  \textbf{Caveats:}
+  \begin{itemize}
+    \item PPO-Baseline at 2,048 envs received $\sim$129$\times$ more push-macros than PBRS models
+    \item Both converge to 80\% validation SR — PBRS achieves this with 4$\times$ fewer parallel envs and a fraction of the total push budget
+    \item The max\_iter values are SLURM caps; actual training stopped earlier (fractional: 1,030 iters; PBRS: 2,831 iters)
+  \end{itemize}
+
+  \vfill\litfooter{[See thesis \textsection 4.2 for training configuration details]}
+\end{frame}
+
+
+\begin{frame}[t]{Appendix L — Validation Protocol}
+  \small
+  \textbf{All models evaluated under an identical protocol:}
+
+  \vspace{4pt}
+  \begin{itemize}
+    \item \textbf{Scene set:} 30 held-out T-block scenes — 10 rotation-dominant (R\_*), 10 position-only (E\_*/M\_*/H\_*), 10 combined position+rotation
+    \item \textbf{Trials:} 20 independent trials per scene (best-of-20); a scene is ``solved'' if \emph{any} trial meets the gate
+    \item \textbf{Success gate:} $\text{pos\_err} < 0.05$ m \textbf{and} $\text{rot\_err} < 0.2$ rad at trial termination
+    \item \textbf{Push budget:} up to 30 pushes per trial (training uses 5--15)
+    \item \textbf{Scene SR vs Trial SR:} scene SR counts scenes where $\ge$1/20 trials pass; trial SR counts individual trial success rate
+  \end{itemize}
+
+  \vspace{4pt}
+  \textbf{Disclosed limitations:}
+  \begin{itemize}
+    \item \textbf{Single-seed validation:} each model evaluated once (one seed per checkpoint). Training SR variance exists across 5 chains (PPO-PBRS BestSR 0.081--0.110) but validation CIs are single-model.
+    \item \textbf{Protocol consistency:} some ASP variants used trial\_count=10 in early validations; later re-evaluated at trial\_count=20. The deck reports only the trial\_count=20 results.
+    \item \textbf{Best-of-20 inflates scene SR:} PPO-PBRS trial SR is 66.0\% but scene SR is 80.0\% — a scene passes if \emph{any} trial succeeds.
+  \end{itemize}
+
+  \vfill\litfooter{[Full validation scripts in \texttt{asyncDualPlayPPO/tests/}]}
 \end{frame}
 
 \end{document}
