@@ -520,12 +520,12 @@
 \sectionframe{5.\ Evaluation}
 
 
-\begin{frame}[t]{Validation Test Suite — 30 Held-Out Scenes}
+\begin{frame}[t]{Validation Test Suite — Top 10 Held-Out Scenes}
   \centering
-  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figures/val_test_layout.png}
+  \includegraphics[width=\textwidth,height=0.80\textheight,keepaspectratio]{figures/val_test_layout_top10.png}
 
   \vspace{2pt}
-  {\scriptsize Each cell is one held-out scene: T-block \textcolor[HTML]{56B4E9}{\textbf{start pose}} $\to$ \textcolor[HTML]{E69F00}{\textbf{goal pose}}. Rows: rotation (T1–T10), position-only (T11–T20), position+rotation (T21–T30). Every model is evaluated on this identical suite (20 trials $\times$ up to 30 pushes per scene).}
+  {\scriptsize T-block \textcolor[HTML]{56B4E9}{\textbf{start pose}} $\to$ \textcolor[HTML]{E69F00}{\textbf{goal pose}}. Every model is evaluated on an identical 30-scene suite (20 trials $\times$ up to 30 pushes per scene).}
 
   \vfill\litfooter{[Mason 1986]~[Lynch \& Mason 1996]}
 \end{frame}
@@ -689,36 +689,36 @@
 }
 
 
-\begin{frame}[t]{Results — Per-Test Error (Single-Agent Models)}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.5\textwidth}\centering
-      \includegraphics[width=1.0\textwidth]{figures/errors_ppo_pbrs.png}\\[2pt]
-      {\scriptsize PPO-PBRS — 80.0\% (24/30)}
-    \end{column}
-    \begin{column}{0.5\textwidth}\centering
-      \includegraphics[width=1.0\textwidth]{figures/errors_ppo_curriculum.png}\\[2pt]
-      {\scriptsize PPO-Curriculum — 76.7\% (23/30)}
-    \end{column}
-  \end{columns}
-  \vspace{2pt}
-  {\small Both clear position on nearly every scene; the failures are \textbf{rotation}-limited (red bars, bottom) on the hardest pos+rot scenes.}
-  \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Schulman et al.\ 2017]}
+\begin{frame}[t]{PPO-PBRS — Per-Test Error}
+  \centering
+  \vspace{-2pt}
+  \includegraphics[width=0.95\textwidth]{figures/A_simp_20_isaac_errors.png}\\[2pt]
+  {\scriptsize 24/30 (80.0\%) — 100\% pos-only, 70\% pos+rot. All 6 failures are rotation-limited (large-yaw / spin scenes); 8/10 rotation-dominant scenes solved.}
+
 \end{frame}
 
-\begin{frame}[t]{Results — Per-Test Error (Self-Play Models)}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.5\textwidth}\centering
-      \includegraphics[width=1.0\textwidth]{figures/errors_tasp_dpose.png}\\[2pt]
-      {\scriptsize TASP-dPose — 16.7\% (5/30)}
-    \end{column}
-    \begin{column}{0.5\textwidth}\centering
-      \includegraphics[width=1.0\textwidth]{figures/errors_asp_dpose.png}\\[2pt]
-      {\scriptsize ASP-dPose — 6.7\% (2/30)}
-    \end{column}
-  \end{columns}
-  \vspace{2pt}
-  {\small Self-play fails on \emph{both} axes across almost all scenes — rotation error stays $>$ 1.4 rad. The few successes are easy position-only scenes.}
-  \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Dennis et al.\ 2020]}
+\begin{frame}[t]{PPO-Curriculum — Per-Test Error}
+  \centering
+  \vspace{-2pt}
+  \includegraphics[width=0.95\textwidth]{figures/B_curr_20_isaac_errors.png}\\[2pt]
+  {\scriptsize 23/30 (76.7\%) — same 100\% pos-only, 65\% pos+rot. Tighter position precision from Phase~1 (0.023 vs 0.032\,m), but marginally worse rotation (0.663 vs 0.568\,rad).}
+
+\end{frame}
+
+\begin{frame}[t]{TASP-dPose — Per-Test Error}
+  \centering
+  \vspace{-2pt}
+  \includegraphics[width=0.95\textwidth]{figures/G_tasp_dpose_isaac_errors.png}\\[2pt]
+  {\scriptsize 5/30 (16.7\%) — 3 pos-only, 2 pos+rot. Only the easiest scenes pass, each with 1–2 successful trials; rotation never learned (RotErr 1.457\,rad).}
+
+\end{frame}
+
+\begin{frame}[t]{ASP-dPose — Per-Test Error}
+  \centering
+  \vspace{-2pt}
+  \includegraphics[width=0.95\textwidth]{figures/reults_valid_pbrs_asp_dpose_errors.png}\\[2pt]
+  {\scriptsize 2/30 (6.7\%) — only the two easiest position-only scenes pass. Zero pos+rot success; rotation never learned (RotErr 1.612\,rad). Outcome-based Alice collapses entirely.}
+
 \end{frame}
 
 \begin{frame}[t]{PPO-PBRS — Validation Runs (overhead)}
@@ -743,11 +743,12 @@
     \end{column}
   \end{columns}
 
-  \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Schulman et al.\ 2017]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
+    {\small Self-play fails on \emph{both} axes across almost all scenes — rotation error stays $>$ 1.4 rad. The few successes are easy position-only scenes.}
+    {\small Both clear position on nearly every scene; the failures are \textbf{rotation}-limited (red bars, bottom) on the hardest pos+rot scenes.}
 \item Three representative validation runs recorded top-down with record\_push\_video.py
 \item Left: a short forward push (E\_Forward, position-only)
 \item Middle: a lateral push (E\_Left, position-only)
