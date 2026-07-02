@@ -747,11 +747,7 @@ penalty terms dominate the improvement.}
   \centering
   \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figures/val_multi_combined.png}
 
-  \vspace{2pt}
-  {\small \textbf{PPO-PBRS vs PPO-Curriculum:} 80.0\% vs 76.7\% — \textbf{not statistically significant} (p\,$>$\,0.05). \textbf{Self-play:} 4.8--11.9$\times$ below single-agent.  All models evaluated under identical protocol (30 scenes, 20 trials, 30 pushes).}
 
-  \vspace{2pt}
-  {\scriptsize \textbf{Protocol note:} Scene SR (reported) counts a scene solved if $\ge$1 of 20 trials passes — standard for robotics manipulation evaluation. Per-attempt SR is lower: PPO-PBRS 66\%, PPO-Curriculum 68\%. The 14pp gap reflects 6 rotation-dominant scenes that systematically fail all 20 attempts, while position-only scenes succeed reliably. See Appendix L for protocol details.}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
