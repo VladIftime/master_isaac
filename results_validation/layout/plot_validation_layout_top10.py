@@ -61,9 +61,9 @@ def main():
 
     ncols = 5
     nrows = 2
-    cell_w, cell_h = 2.2, 2.0
+    cell_w, cell_h = 1.8, 1.4
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * cell_w, nrows * cell_h + 0.85))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * cell_w, nrows * cell_h + 0.50))
     axes = np.atleast_2d(axes)
 
     for idx, cfg in enumerate(tests):
@@ -94,7 +94,7 @@ def main():
         ax.set_aspect("equal")
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title(f"T{cfg.test_id}  {cfg.name}", fontsize=11.25, pad=2)
+        ax.set_title(f"T{cfg.test_id}  {cfg.name}", fontsize=7, pad=1)
 
         for spine in ax.spines.values():
             spine.set_edgecolor(CB_BORDER)
@@ -105,13 +105,13 @@ def main():
         Patch(facecolor=CB_SKY, edgecolor="black", label="Start pose"),
         Patch(facecolor=CB_ORANGE, edgecolor="black", label="Goal pose"),
     ]
-    fig.legend(handles=legend, loc="lower center", ncol=2, fontsize=10,
-               bbox_to_anchor=(0.5, -0.01))
-    fig.text(0.5, 0.025,
-             "\\textbf{Top row:} 5 easiest scenes (3\u20134 of 4 models pass)  |  "
-             "\\textbf{Bottom row:} 5 hardest scenes (0 of 4 models pass)",
-             ha="center", fontsize=9)
-    fig.tight_layout(rect=[0, 0.06, 1, 0.95])
+    fig.legend(handles=legend, loc="lower center", ncol=2, fontsize=7,
+               bbox_to_anchor=(0.5, -0.06))
+    fig.text(0.5, 0.05,
+             "Top row: 5 easiest scenes (3\u20134 of 4 models pass)  |  "
+             "Bottom row: 5 hardest scenes (0 of 4 models pass)",
+             ha="center", fontsize=7.5, fontweight="bold")
+    fig.tight_layout(rect=[0.02, 0.15, 0.98, 0.96], h_pad=0.15, w_pad=0.3)
     fig.savefig(OUT, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
