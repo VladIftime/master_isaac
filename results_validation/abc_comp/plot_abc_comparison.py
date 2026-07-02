@@ -228,55 +228,49 @@ def plot2_batch_bottleneck():
 
 # ──────────────────────────────────────────────────────────
 def plot3_heatmap():
-    """Per-scene pass/fail heatmap: 30 scenes × model×env combos."""
+    """Per-scene success-count heatmap: 30 scenes × model×env combos.
+    Colour = continuous red→yellow→green gradient (0/20 → 20/20 trials passed).
+    """
     keys = ["A Isaac", "B Isaac", "A Gym", "B Gym", "C Gym"]
     labels = ["PPO-PBRS\nIsaac", "PPO-Curriculum\nIsaac", "PPO-PBRS\nGym", "PPO-Curriculum\nGym", "ASP\nGym"]
 
     all_results = {}
     for k in keys:
         rows = load_csv(MODELS[k][0])
-        sr = {}
+        sc = {}
         for r in rows:
             ti = int(r["test_index"])
-            sr[ti] = int(r["success"])
-        all_results[k] = sr
+            sc[ti] = int(r.get("success_count", 0))
+        all_results[k] = sc
 
     n_models = len(keys)
     n_scenes = 30
-    data = np.zeros((n_models, n_scenes))
+    data = np.zeros((n_models, n_scenes), dtype=float)
     annotations = np.empty((n_models, n_scenes), dtype=object)
 
     for mi, k in enumerate(keys):
         for si in range(1, n_scenes + 1):
             val = all_results[k].get(si, 0)
             data[mi, si - 1] = val
-            annotations[mi, si - 1] = "P" if val else "F"
+            annotations[mi, si - 1] = f"{val}" if val > 0 else "0"
 
-    fig, ax = plt.subplots(figsize=(20, 5))
-    cmap = matplotlib.colors.ListedColormap(["#D55E00", "#009E73"])
-    bounds = [-0.5, 0.5, 1.5]
-    norm = matplotlib.colors.BoundaryNorm(bounds, cmap.N)
+    fig, ax = plt.subplots(figsize=(22, 5.5))
+    cmap = plt.cm.RdYlGn
+    im = ax.imshow(data, cmap=cmap, vmin=0, vmax=20, aspect="auto", interpolation="nearest")
 
-    im = ax.imshow(data, cmap=cmap, norm=norm, aspect="auto", interpolation="nearest")
-
-    # Trial success count where available
-    for mi, k in enumerate(keys):
-        rows = load_csv(MODELS[k][0])
-        for r in rows:
-            ti = int(r["test_index"])
-            sc = int(r.get("success_count", 0))
-            text = f"{sc}/20" if sc > 0 else "0"
-            color = "white" if data[mi, ti - 1] == 1 else "#333333"
-            ax.text(ti - 1, mi, text, ha="center", va="center", fontsize=5.5, color=color, fontweight="bold")
+    for mi in range(n_models):
+        for si in range(n_scenes):
+            val = data[mi, si]
+            text_color = "white" if val >= 15 else "black"
+            ax.text(si, mi, f"{int(val)}", ha="center", va="center",
+                    fontsize=6.5, color=text_color, fontweight="bold")
 
     ax.set_xticks(range(n_scenes))
     scene_names = []
-    # Read names from one CSV
     ref = load_csv(MODELS["A Isaac"][0])
     for r in ref:
         ti = int(r["test_index"])
         nm = r["test_name"]
-        # Shorten scene names for display
         nm = nm.replace(" #", "")
         if " " in nm:
             parts = nm.split(" ", 1)
@@ -287,22 +281,23 @@ def plot3_heatmap():
     ax.set_yticks(range(n_models))
     ax.set_yticklabels(labels, fontsize=9)
 
-    # Difficulty separators
     for x in [9.5, 19.5]:
-        ax.axvline(x, color="white", linewidth=2.5, linestyle="-")
+        ax.axvline(x, color="black", linewidth=2.0, linestyle="-")
 
-    ax.set_title("Per-Scene Pass/Fail — Isaac vs Gym HPC (30 T-block scenes)\nGreen=pass  Red=fail   n/20 = successful trials", fontsize=12, fontweight="bold")
+    fig.suptitle("Per-Scene Trial Success Rate — Isaac vs Gym HPC (30 T-block scenes, 20 trials each)\nColour: red=0 trials passed → yellow=10 → green=20",
+                 fontsize=13, fontweight="bold", y=0.98)
 
-    legend_elements = [Patch(facecolor="#009E73", label="Scene Pass"),
-                       Patch(facecolor="#D55E00", label="Scene Fail")]
-    ax.legend(handles=legend_elements, loc="upper right", fontsize=8)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.012, pad=0.02, ticks=[0, 5, 10, 15, 20])
+    cbar.set_label("Trials passed (of 20)", fontsize=9)
 
-    # Scene type labels
-    ax.text(4.5, -0.9, "ROTATION SCENES", ha="center", fontsize=8, fontweight="bold", transform=ax.transData)
-    ax.text(14.5, -0.9, "POS-ONLY SCENES", ha="center", fontsize=8, fontweight="bold", transform=ax.transData)
-    ax.text(24.5, -0.9, "POS+ROT SCENES", ha="center", fontsize=8, fontweight="bold", transform=ax.transData)
+    ax.text(4.5, -1.0, "ROTATION SCENES", ha="center", fontsize=8, fontweight="bold",
+            transform=ax.transData)
+    ax.text(14.5, -1.0, "POS-ONLY SCENES", ha="center", fontsize=8, fontweight="bold",
+            transform=ax.transData)
+    ax.text(24.5, -1.0, "POS+ROT SCENES", ha="center", fontsize=8, fontweight="bold",
+            transform=ax.transData)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.01, 1, 0.94])
     p = os.path.join(OUT_DIR, "p3_heatmap.png")
     fig.savefig(p, dpi=150, bbox_inches="tight")
     plt.close(fig)

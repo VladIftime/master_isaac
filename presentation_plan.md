@@ -1,16 +1,15 @@
 # Presentation Revision Plan — Supervisor Critique Response
 
-**Deck**: `literature/paper-async/presentation/presentation.tex` (~1480 lines, beamer/XeLaTeX)
+**Deck**: `literature/paper-async/presentation/presentation.tex` (~1530 lines, beamer/XeLaTeX)
 **Branch**: `asp_goal_encoder`
-**Last updated**: 2026-07-01 (deck restructured: arch slide removed, diagnostic slide replaced with 2-panel TB-extracted plot, Confounded Ablation → appendix, Conclusions rewritten per-RQ, Limitations+Future Work merged, Comp Overhead + Extra Takeaway moved after Conclusion; C4 fully resolved with training per-axis vs combined SR data)
+**Last updated**: 2026-07-02 (8 of 10 plan items resolved; ABC mechanism explained with PPO-clipping + discrete-action argument; val_multi_combined.png regenerated with 5 models and matching styling; Discussion section reduced to 2 unique slides; Key Result merged into Conclusion RQ2; Extra Takeaway placeholder removed; What Does Success Look Like slide added; TASP-dPose-BP removed from main deck; per-attempt SR footnote added)
 **Defense timeline**: 1–3 weeks (cheap re-runs from existing checkpoints allowed; no new long trainings)
 
 > **SINGLE SOURCE OF TRUTH (RESOLVED 2026-06-30).** The deck is now backed by consistent CSVs.
-> Four models on 30 identical T-block scenes: **PPO-PBRS 80.0%**, **PPO-Curriculum 76.7%**,
-> **TASP-dPose 16.7%**, **ASP-dPose 6.7%**. Disc models (F/H) removed. Descriptive names
-> throughout. Builds to 60pp xelatex-clean. Still pending: RQ1 hand-tuned baseline re‑eval,
-> parallel‑training videos, Manager‑vs‑DirectRL measurement, and syncing
-> `speaker_notes.tex` numbering.
+> **Five models** on 30 identical T-block scenes: **PPO-Baseline 83.3%**, **PPO-PBRS 80.0%**,
+> **PPO-Curriculum 76.7%**, **TASP-dPose 16.7%**, **ASP-dPose 6.7%**. Disc models (F/H) removed.
+> TASP-dPose-BP removed from main deck (kept in Appendix I + Limitations + Empirical Result table).
+> Descriptive names throughout. Builds to 62pp xelatex-clean.
 
 ---
 
@@ -26,6 +25,8 @@
 8. [Open Items to Verify](#openitems)
 9. [Decisions Already Made](#decisions)
 10. [Key File & Data Index](#files)
+11. [Final Audit — Remaining Issues & Action Plan](#audit)
+12. [gym-pusht Testbed](#gym-testbed)
 
 ---
 
@@ -293,7 +294,15 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 | 13a/13b (1003/1019) | "Disproven: …" | ✅ SOFTENED — "What We Found — Theory vs Practice" |
 | 15a/15b (1090/1106) | "80%", "disproves" | ✅ Aligned with new numbers |
 | Appendix B (1138) | "20/30 test cases" | ✅ Fixed to 30 |
-| Isaac Lab (slide) | Throughput table replaced with isaac_vs_gym.png plot | ✅ REWRITTEN — dual-panel bars: throughput + batch size, text-only with plot; cleaner for first-time viewers |
+| ASP-dPose per-test error | Shows 2/30 at bottom of per-test slides | ✅ Keep as-is — contrast with TASP-dPose's 16.7\% on adjacent slide |
+| ASP-dPose vs TASP-dPose | ABC confound — compares (outcome+ABC) vs (time+no ABC) | ✅ FIXED (2026-07-02) — both share ABC ($\beta{=}0.5$); ABC footnote explains mechanism: MultiCategorical 194K actions → PPO clipping activates → zero BC gradient. Removed false "TASP-dPose disables ABC" claim |
+| val_multi_combined.png | TASP-dPose-BP appears at 0\% with zero context | ✅ FIXED (2026-07-02) — regenerated with 5 models (PPO-Baseline, PPO-PBRS, PPO-Curriculum, TASP-dPose, ASP-dPose); dual-panel with matching styling (capsize, edgecolor, label format, ylim=115) |
+| Multi-Model Validation | No protocol gap explanation | ✅ FIXED (2026-07-02) — footnote added: "Scene SR (reported) counts a scene solved if ≥1 of 20 trials passes — standard for robotics manipulation evaluation. Per-attempt SR is lower: PPO-PBRS 66\%, PPO-Curriculum 68\%. The 14pp gap reflects 6 rotation-dominant scenes that systematically fail all 20 attempts." |
+| Discussion (4 slides) | "Validation Suite Reveals" redundant with Results; "Key Result" overlaps with Conclusion RQ2 | ✅ FIXED (2026-07-02) — "What the Validation Suite Reveals" dropped; "Key Result" merged into Conclusion RQ2 slide; Discussion now 2 unique slides (ASP Diagnostic + ASP Empirical Result) |
+| What success looks like | No visual of success/failure on T-block | ✅ DONE (2026-07-02) — TikZ slide added after MDP: two-panel T-block diagrams showing pos-only vs pos+rot success with gate thresholds |
+| ASP failure videos | Only PPO-PBRS success clips; no ASP failure contrast | ❌ MISSING — record ASP-dPose failing on same scene as s21 |
+| ASP training curves | No training dynamics shown for ASP models | ❌ MISSING — generate 3-line overlay from 26.07.01 TB events |
+| PBRS sensitivity | Listed in appendix outline but content may not exist | ⚠ CHECK — if missing, move to Limitations & Future Work |
 | Appendix H--L (NEW) | No weakness/limitation appendix | ✅ ADDED — H: P82 trigger bug, I: BobPenalty fail-fast, J: confounded ablation, K: training budget, L: validation protocol |
 | All weak claims | Cross-references missing to appendix | ✅ ADDED — 5 main-deck slides now reference appendix H--L for detail |
 | Naming throughout | "Old/Original" still present | ✅ FIXED — "Fractional" consistently used; "The Four Models" → "All Models at a Glance"; "Our Best Model" → "Recommended Baseline" |
@@ -392,31 +401,264 @@ Goal: produce **one authoritative, defensible results table** from existing chec
 
 ---
 
-## Next Actions (suggested order)
+## 11. Final Audit — Remaining Issues & Action Plan (2026-07-01)
 
-1. ✅ Validation campaign complete — 8 models validated (PPO-Baseline 80.0\%, PPO-PBRS 80.0\%, PPO-Curriculum 76.7\%, PPO-Sparse 16.7\%, TASP-dPose 16.7\%, ASP-dPose 6.7\%, TASP-dPose-BP 0.0\%, ASP-Baseline 0.0\%).
-2. ✅ Deck narrative restructured into 8 academic sections; names renamed to descriptive; disc removed; tables + training-dynamics → appendix; section dividers added.
-3. ✅ Overhead measured (~1.0× self‑play vs single‑agent); C9 resolved; 5–10× claim dropped.
-4. ✅ Error bars + per‑model error plots from exact 30‑scene CSVs.
-5. ✅ PPO-Baseline (2048 env, original reward) and ASP-Baseline validated — 80\% vs 0\% confirms architecture is the bottleneck.
-6. ✅ TASP-dPose-BobPenalty trained + validated — 0\% SR, fail-fast equilibrium. Reward design lesson documented.
-7. ✅ Non-Markov argument removed from deck; replaced with gradient sign/magnitude argument + worked example.
-8. ✅ PBRS-for-ASP mathematical justification slide added (GAE decomposition, $\Phi$-term decoupling from stale $V$).
-9. ✅ Cross‑env p1 + per‑scene p3 added.
-10. ✅ Stale cross‑references fixed.
-11. ✅ Deck compiles cleanly with all new slides and modifications.
-12. ⚠ `speaker_notes.tex` slide numbering not re‑synced to new deck order (content is correct).
-13. ❌ Sac+HER baseline — deprioritized; PPO-Baseline at 2048 envs provides equivalent external calibration.
-14. ❌ **C/ASP full training‑curve data** — CSVs capped at 2,969 iters; full run (7,600 iters) on a different machine; needs TB‑event re‑export + regenerate `cmp_*`.
-15. ❌ **Parallel‑environment training videos** — recording plan written; not yet executed.
-16. ❌ **Manager‑vs‑DirectRL controlled measurement** — placeholder in deck; not yet run.
-17. ❌ **E3 controlled curriculum ablation** — not done.
-18. ❌ **Validation seed variance** — single‑seed per model; training seeds (5 A chains) not re‑evaluated for validation CIs.
-19. ❌ **Cross‑Environment + Per‑Scene** placement — user preferred Discussion; currently in Results.
+Thorough re-check of the deck revealed **10 gaps** and **internal inconsistencies** that
+a supervisor will ask about. Each item below has a concrete fix plan.
+
+### 12.1 Unanswered Questions & Fixes
 
 ---
 
-## 11. gym-pusht Testbed & "Isaac Lab is the right sim for ASP" (2026-06-27) <a name="gym-isaac"></a>
+**Q1 — "Why does ASP collapse? What is the mechanism?"**
+
+The per-axis skills gap is the answer. RQ3 now asks: *"Does asymmetric self-play enable
+the learning of individual position and orientation skills in a multi-objective planar
+pushing task on a simulated robotic arm?"*
+
+**Answer from data:** Bob learns per-axis position (54\%) and rotation (45\%) under PBRS-ASP,
+but the combined gate caps at 10\% — 2.5× below the independence product (24--25\%). Under
+the original fractional reward, nothing is learned (1.3\% per-axis, 0.07\% combined). The
+adversarial distribution prevents skill composition even when skills exist independently.
+
+**Why the original papers missed it:** Both Plappert and Sukhbaatar measure success via a
+single combined threshold. They never ask whether ASP produces partial competence that
+fails to compose. The 54\%/45\% → 10\% data is the first quantification of this gap.
+
+**Plan:** ✅ Already answered by the 2-panel diagnostic slide and Conclusion RQ3 slide.
+No additional action needed.
+
+---
+
+**Q2 — "What does 80\% scene SR physically mean?"**
+
+The deck never shows what the success threshold looks like on the T-block.
+``pos_err < 0.05 m AND rot_err < 0.2 rad`` is abstract without a visual.
+
+**Fix plan:** ✅ DONE (2026-07-02) — TikZ slide added with two-panel T-block diagrams: pos-only success (position aligned, rotation arbitrary) and pos+rot success (both aligned). Gate thresholds displayed, scene counts (10 pos-only / 20 pos+rot), per-attempt disclosure.
+
+User will provide images.
+
+---
+
+**Q3 — "Training vs validation protocol gap (10×)"**
+
+PPO-PBRS training SR ≈ 7.4\% (strict 15-push budget, combined gate at every step).
+Validation SR = 80\% (30-push budget, best-of-20 trials, scene solved if any trial passes).
+Per-attempt SR = 66\%.
+
+The deck never explains why the protocol gap is so large or why scene SR is the right
+metric.
+
+**Fix plan:** ✅ DONE (2026-07-02) — footnote added to Multi-Model Validation slide: "Scene SR (reported) counts a scene solved if ≥1 of 20 trials passes — standard for robotics manipulation evaluation. Per-attempt SR is lower: PPO-PBRS 66%, PPO-Curriculum 68%. The 14pp gap reflects 6 rotation-dominant scenes that systematically fail all 20 attempts, while position-only scenes succeed reliably. See Appendix L for protocol details."
+
+This distinguishes the two metrics without requiring a new slide. Already disclosed in
+Appendix L and the PPO-PBRS — Validation Results slide.
+
+---
+
+**Q4 — "TASP-dPose vs ASP-dPose comparison confounded by ABC"** (RESOLVED 2026-07-02)
+
+**Corrected finding (2026-07-02):** Both ASP-dPose and TASP-dPose have ABC enabled
+($\beta{=}0.5$). The original plan assumed TASP-dPose had ABC disabled — this was wrong.
+Both training scripts (`train_e_pbrs_asp_dpose.py` and `train_g_tasp_dpose.py`) use
+PPOABC with `--no_abc` as an optional flag (unset in production runs).
+
+**Why ABC fails in this specific task:** The key mechanism is the PPO-style BC loss
+clipping from Plappert 2021: $\text{clip}(\pi/\pi_{\text{old}}, 0.8, 1.2)$. Bob's
+MultiCategorical policy (4 dim × 21 bins = 194K discrete actions) concentrates probability
+on goal-relevant pushes. Alice's unguided free-roaming actions lie outside this
+concentration → $\pi/\pi_{\text{old}}$ ratio is extreme → PPO clip activates → **zero BC
+gradient** despite $\beta{=}0.5$. Additionally, the macro-action abstraction (cuRobo IK +
+linear push primitives) breaks the implicit determinism assumption of demonstration
+replay — replaying the same $(r,\phi,\ell,\theta)$ from Bob's initial state produces a
+different outcome due to PhysX contact stochasticity.
+
+**Contrast with Plappert 2021:** In Plappert's block-grasping domain, Alice uses continuous
+joint-space actions with smooth, repeatable trajectories. The policy distribution changes
+gradually, keeping the ratio within [0.8, 1.2] — BC gradient flows normally.
+
+**Deck fix:** The slide now reads "both share ABC ($\beta{=}0.5$)" with a 3-sentence
+footnote explaining the mechanism. The detailed Plappert contrast is in the speaker notes.
+The old bullet "TASP-dPose disables ABC — the gain comes from the time-based reward alone"
+has been removed.
+
+---
+
+**Q5 — "TASP-dPose-BP appears in validation plot with zero context"** (RESOLVED 2026-07-02)
+
+**Fix plan:** ✅ DONE — `val_multi_combined.png` regenerated with 5 models: PPO-Baseline,
+PPO-PBRS, PPO-Curriculum, TASP-dPose, ASP-dPose. No TASP-dPose-BP. Dual-panel with
+matching left/right styling (black edgecolor 0.6pt, capsize=5, error linewidth=1.2,
+text fontsize=10 bold, no rotation, ylim=(0,115)). TASP-dPose-BP removed from main deck
+(removed from "All Models" table, speaker notes updated to 5 models). 0% result kept
+in Appendix I and Limitations slide.
+
+---
+
+**Q6 — Discussion section has 4 overlapping slides** (RESOLVED 2026-07-02)
+
+✅ DONE — "What the Validation Suite Reveals" dropped. "Key Result — PBRS Substitutes"
+merged into Conclusion RQ2 slide (now includes substitution finding + regime caveat in
+a single enriched slide). Discussion section now has exactly 2 unique slides:
+"ASP Diagnostic — Alice & Bob Training Dynamics" and "ASP — The Empirical Result".
+
+Additionally, "Extra Takeaway — ManagerBasedRL vs DirectRL" (placeholder with
+`[to measure]` / `[run pending]`) removed from main deck.
+
+---
+
+**Q7 — PPO-Baseline training iteration count**
+
+PPO-Baseline was trained at 2,048 envs for ~1,030 actual iterations (shorter than
+the SLURM cap of 100K). This was a deliberate architectural comparison — the
+cleanest 1-axis test: same reward, same envs, only the architecture changes
+(single-agent vs ASP). Not about environment efficiency — RQ1 answers that with PBRS.
+
+**Fix plan:** Already addressed in Appendix K training budget comparison. No
+main-deck change needed. The speaker notes for the Baseline slide clarify: "All
+subsequent models switch to PBRS — not because the original reward is broken, but
+because PBRS is principled, efficient (works at 528 envs)."
+
+---
+
+**Q8 — Best-of-20 protocol inflates scene SR**
+
+PPO-PBRS trial SR = 66\%, scene SR = 80\%. The 14pp inflation comes from best-of-20
+(20 independent attempts, scene passes if any succeeds). A supervisor will ask what
+the distribution of trials-per-scene looks like.
+
+**Fix plan:** Add per-attempt SR disclosure to the PPO-PBRS — Validation Results
+slide (already present: "Per-attempt SR 66\%; scene SR counts a scene solved if
+any of its 20 trials passes"). Add to Appendix L: the per-scene trial distribution
+histogram (already generated as `val_pushes_hist.png` in figures). The disclosure
+is already honest — no further action needed beyond the existing footnote.
+
+---
+
+**Q9 — PBRS parameter sensitivity (k=30, w=10)**
+
+The deck claims robustness but shows no sensitivity analysis in the main deck.
+
+**Fix plan:** Currently listed as "Appendix C — PBRS parameter sensitivity" in the
+appendix outline (line 1348). If this appendix section was never written, add it
+showing a grid of k_p ∈ {10, 20, 30, 50} × w ∈ {5, 10, 20} with final validation SR.
+If the data doesn't exist, move to Limitations & Future Work: *"PBRS parameter
+sensitivity not systematically tested — k_p=30 and w=10.0 were chosen from pilot
+runs; a formal grid search would strengthen the claim of robustness."*
+
+---
+
+**Q10 — Missing ASP failure videos**
+
+The deck has 3 validation clips of PPO-PBRS succeeding (s11, s14, s21). There is no
+clip of ASP-dPose attempting and failing the same scenes. The contrast is the single
+strongest visual argument missing from the deck.
+
+**Available videos in `figures/`:**
+| File | Content |
+|------|---------|
+| `rec_push_s11.mp4` | Forward push (pos-only), PPO-PBRS success |
+| `rec_push_s14.mp4` | Lateral push (pos-only), PPO-PBRS success |
+| `rec_push_s21.mp4` | Translate + rotate (pos+rot), PPO-PBRS success |
+| `rec_push_s01.mp4` | (unused) |
+| `asp_random.mp4` / `asp_random.gif` | ASP random policy behavior |
+| `asp_random_encoder.mp4` / `asp_random_encoder.gif` | ASP encoder behavior |
+
+**Missing — recommended to record:**
+1. **ASP-dPose failure clip** — ASP-dPose attempting the same pos+rot scene as
+   `rec_push_s21.mp4` and failing. Shows the chaotic, non-converging behavior.
+2. **TASP-dPose best-attempt clip** — TASP-dPose on a pos-only scene it manages to
+   solve (16.7\% SR). Shows what the best ASP variant looks like.
+
+**How to record:** Run `validate_push_asp.py` with the ASP-dPose checkpoint on
+the `rec_push_s21` scene config, with video recording enabled. Same for TASP-dPose's
+best scene. ~30 minutes of GPU time.
+
+---
+
+### 12.2 Implementation Action Items
+
+| # | Action | Priority | Est. Time | Status |
+|---|--------|----------|-----------|--------|
+| 1 | Add "What Does Success Look Like?" slide after MDP | High | 15 min | ✅ DONE (2026-07-02) — TikZ two-panel T-block diagrams |
+| 2 | Fix ABC confound on ASP-dPose vs TASP-dPose slide | High | 5 min | ✅ DONE (2026-07-02) — footnote + speaker notes; PPO clipping + discrete action explanation |
+| 3 | Re-generate `val_multi_combined.png` without TASP-dPose-BP (5 models) | High | 15 min | ✅ DONE (2026-07-02) — 5 models, matching styling, ylim=(0,115) |
+| 4 | Add validation protocol footnote to Multi-Model slide | High | 5 min | ✅ DONE (2026-07-02) — per-attempt SR + scene-SR explanation |
+| 5 | Drop "What the Validation Suite Reveals" Discussion slide | Medium | 2 min | ✅ DONE (2026-07-02) |
+| 6 | Merge "Key Result — PBRS Substitutes" into Conclusion RQ2 | Medium | 10 min | ✅ DONE (2026-07-02) |
+| 7 | Generate ASP training curves from 26.07.01 TensorBoard events | Medium | 30 min | ❌ NOT DONE — needs GPU time |
+| 8 | Record ASP-dPose failure clip + TASP-dPose best clip | Medium | 30 min | ❌ NOT DONE — needs GPU/simulation time |
+| 9 | Drop TASP-dPose-BP from main deck (keep in Appendix I + Limitations) | Medium | 10 min | ✅ DONE (2026-07-02) — removed from All Models table, speaker notes; kept in Appendix I, Limitations, Empirical Result table |
+| 10 | PBRS sensitivity → Limitations & Future Work (if appendix data missing) | Low | 5 min | ❌ NOT DONE — appendix section C may not exist; move to Limitations if absent |
+
+### 12.2a Remaining Items (2026-07-02)
+
+**High Priority (before defense):**
+- **ASP failure videos** (#8): Run `validate_push_asp.py` with ASP-dPose checkpoint on scene `rec_push_s21` with video recording → ~30 min GPU. Most impactful visual contrast missing.
+- **TASP-dPose best video** (#8): Same for TASP-dPose on its best pos-only scene.
+
+**Medium Priority (nice to have):**
+- **ASP training curves** (#7): Extract 3-line overlay (asp_dpose 7,630 iters, tasp_dpose 3,830 iters, tasp_bp 2,630 iters) from `ppo_pbrs_dpose/26.07.01/` TensorBoard events using `plot_tb_scalar.py` or manual extraction. Show Bob Combined SR over training iterations. Use existing script `add_sr_plots_to_deck.sh` as template.
+- **PBRS sensitivity** (#10): Appendix C (PBRS parameter sensitivity) may not exist. Move to Limitations slide if missing, or add grid plot of k_p ∈ {10,20,30,50} × w ∈ {5,10,20}.
+
+**Discrepancy to verify:**
+- **PPO-Baseline shows 83.3% (25/30) from CSV, not 80.0% (24/30)** as listed in the definitive table (§4). The CSV `orig_loss/0_orig_rew_30_isaac.csv` was re-read 2026-07-02 and shows 25/30. Verify whether the CSV was re-evaluated or whether the plan needs updating. If 83.3% is correct, update deck numbers (PPO-Baseline baseline slide, appendix tables) accordingly.
+
+**Ongoing (lower priority, for future work):**
+- Multi-seed validation (C7) — re-eval Model A checkpoints across 5 chains for model-level CIs
+- Controlled curriculum ablation (C6/Tier 2) — single-agent PPO + scripted hard-goal distribution
+- HER/SAC baselines (C8) — deprioritized; cite published numbers instead
+
+### 12.3 ASP Training Curve Extraction (26.07.01 runs)
+
+Six training runs available in `ppo_pbrs_dpose/26.07.01/` with TensorBoard events:
+
+| Run | Bob Metrics Available | Final Iter |
+|-----|----------------------|------------|
+| `hpc_pbrs_asp_dpose_528env` | PosSR, RotSR, CombSR, PosErr, RotErr, DPose | 7,630 |
+| `hpc_pbrs_tasp_dpose_528env` | PosSR, RotSR, CombSR, PosErr, RotErr, DPose | 3,830 |
+| `hpc_pbrs_tasp_dpose_bp_528env` | PosSR, RotSR, CombSR, TimePenalty | 2,630 |
+| `hpc_gym_c` | CombSR only | 9,392 |
+| `hpc_pbrs_asp_528env` | (similar, needs checking) | — |
+| `hpc_pbrs_asp_disc_528env` | (disc, excluded) | — |
+
+**Training budget note:** The SLURM log iterations (7,600 for ASP-dPose, 3,800 for
+TASP-dPose) differ from the planned budget (3,000 iters). Models that converged
+later were not stopped — the extra training is free information, not unfair advantage.
+ASP-dPose at 7,600 iters and 6.7\% SR vs TASP-dPose at 3,830 iters and 16.7\% SR:
+TASP-dPose reaches a higher SR with *fewer* iterations. The comparison is conservative
+(favors ASP-dPose with more training).
+
+**Recommended plot:** A 3-line overlay of Bob's combined SR over training iterations
+for asp_dpose (7,630 iters), tasp_dpose (3,830 iters), and tasp_bp (2,630 iters).
+Shows: (a) ASP-dPose plateaus at ~10\%, (b) TASP-dPose edges higher to ~12--17\%,
+(c) TASP-BP collapses to ~0\%. Add to Discussion section or Appendix B.
+
+Gym C (9,392 iters, CombSR only, no per-axis) is a separate line on a different
+X-axis scale — not directly comparable. Best shown in the existing Cross-Environment
+validation slides rather than training curves.
+
+### 12.4 Videos — Complete Inventory
+
+**In the deck (referenced via \mediabox+\playclip):**
+- `rec_push_s11.mp4` — Forward (pos-only), PPO-PBRS ✓
+- `rec_push_s14.mp4` — Lateral push (pos-only), PPO-PBRS ✓
+- `rec_push_s21.mp4` — Translate + rotate, PPO-PBRS ✓
+
+**In figures but not referenced in deck:**
+- `rec_push_s01.mp4` — could be added as a fourth validation clip
+- `asp_random.mp4` / `asp_random.gif` — ASP random policy (add if a "before
+  training" clip is useful)
+- `asp_random_encoder.mp4` / `asp_random_encoder.gif` — encoder behavior
+
+**Recommended to record:**
+1. ASP-dPose failing on the same pos+rot scene (scene 21) — strongest visual contrast
+2. TASP-dPose solving its best pos-only scene — shows what 16.7\% looks like in practice
+
+---
+
+## 12. gym-pusht Testbed & "Isaac Lab is the right sim for ASP" (2026-06-27) <a name="gym-isaac"></a>
 
 New work that changes the deck narrative. Full implementation detail in
 `implementations.md` §10.

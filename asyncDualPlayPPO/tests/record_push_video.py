@@ -11,8 +11,23 @@ primitive + visual markers, but instead of measuring success rate it captures vi
 
 Usage (Model A — the simple PBRS single-agent checkpoint, object-relative obs+act):
   python -m asyncDualPlayPPO.tests.record_push_video \
-      --chkpt runs/ppo_pbrs_reward/26.06.20/runs/hpc_pbrs_simp_528env/agent/model_best_simp.pt \
-      --rel-obs --rel-act --headless --enable_cameras --scenes 11,14,21
+      --chkpt runs/ppo_pbrs_reward/.../agent/latest_checkpoint.pt \
+      --rel-obs --rel-act --scenes 11,14,21
+
+Demo scenes (object already at goal, no policy — static camera hold):
+  python -m asyncDualPlayPPO.tests.record_push_video \
+      --demo --scenes 31,32 --enable_cameras
+
+Interactive controls (non-headless mode, the default):
+  [R] — re-roll the current attempt (discard, try again, same repeat count)
+  [N] — skip to the next scene (abandon remaining repeats for this scene)
+  [P] — go back to the previous scene
+  [K] or [Enter] — save this rollout and either repeat once more or move to the next scene
+
+  --repeats N     how many rollouts to record per scene (default 5)
+  --demo          static camera hold (object already at goal thresholds, no policy)
+  --demo-secs N   seconds to hold camera in demo mode (default 3)
+  --no-interact   disable interactive controls; run in batch mode with --max_attempts
 
 Notes:
   * ``--enable_cameras`` is REQUIRED (camera sensors need rendering, works headless).
@@ -27,6 +42,8 @@ import argparse
 import os
 import sys
 import math
+import time
+import threading
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -69,7 +86,10 @@ def _rot_distance_rad(euler_a, euler_b):
 
 def main():
     parser = argparse.ArgumentParser(description="Record top-down push videos")
-    parser.add_argument("--chkpt", type=str, required=True, help="Path to trained checkpoint")
+    parser.add_argument("--chkpt", type=str, default=None, help="Path to trained checkpoint (required unless --demo)")
+    parser.add_argument("--demo", action="store_true", help="Static demo — object already at goal thresholds, no policy")
+    parser.add_argument("--demo-secs", type=float, default=3.0, dest="demo_secs",
+                        help="Seconds to hold camera in demo mode (default 3)")
     parser.add_argument("--scenes", type=str, default="11,13,21",
                         help="Comma-separated validation scene indices to record")
     parser.add_argument("--max_pushes", type=int, default=15, help="Max pushes per scene")
@@ -88,6 +108,12 @@ def main():
     parser.add_argument("--height", type=int, default=1080, help="Camera image height")
     parser.add_argument("--cam-margin", type=float, default=0.055, dest="cam_margin",
                         help="Extra height above the robot's highest link, in metres")
+    parser.add_argument("--cam-height", type=float, default=None, dest="cam_height",
+                        help="Manual camera Z height in metres (overrides auto-detection)")
+    parser.add_argument("--repeats", type=int, default=5,
+                        help="Number of rollouts to record per scene in interactive mode")
+    parser.add_argument("--no-interact", action="store_true", dest="no_interact",
+                        help="Disable keyboard controls; run non-interactively")
     parser.add_argument("--clean", action="store_true",
                         help="Hide debug markers (push spheres/arrow). Goal ghost always shown.")
     parser.add_argument("--out-dir", type=str, dest="out_dir", default=None,
@@ -95,9 +121,14 @@ def main():
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
+    if not args.demo and args.chkpt is None:
+        print("[ERROR] --chkpt is required (or use --demo for static scenes).")
+        sys.exit(1)
+
     if not getattr(args, "enable_cameras", False):
-        print("[WARN] --enable_cameras was not passed; camera frames will be empty. "
-              "Re-run with --enable_cameras (and --headless for offscreen render).")
+        print("[ERROR] --enable_cameras is required (camera sensor needs rendering). "
+              "Re-run with --enable_cameras.")
+        sys.exit(1)
 
     # default output dir → presentation figures
     if args.out_dir is None:
@@ -130,6 +161,8 @@ def main():
     import gymnasium as gym_mc
     import numpy as np
     import imageio.v2 as imageio
+    import carb
+    import omni.appwindow
 
     # ── Environment (T-block only, exactly like validate_push.py) ────────────────
     env_cfg = PushTaskCuRoboEnvCfg()
@@ -280,7 +313,10 @@ def main():
 
     # ── Camera height = robot's highest link ────────────────────────────────────
     _robot_max_z = float(_robot_scene.data.body_pos_w[0, :, 2].max().item())
-    _cam_height = _robot_max_z + args.cam_margin
+    if args.cam_height is not None:
+        _cam_height = args.cam_height
+    else:
+        _cam_height = _robot_max_z + args.cam_margin
     _origin = env.env.scene.env_origins[0]
     _cam_pos = torch.tensor([[float(_origin[0]) + _TABLE_CENTER_XY[0],
                               float(_origin[1]) + _TABLE_CENTER_XY[1],
@@ -308,44 +344,47 @@ def main():
     for _ in range(5):
         env.step(_calib_act)
 
-    # ── Load checkpoint ────────────────────────────────────────────────────────
-    num_bins = 21
-    _mc_space = gym_mc.spaces.Box(
-        low=0.0, high=float(num_bins - 1), shape=(4,), dtype=np.float32,
-    )
-    agent_cfg = {
-        "learn": {
-            "nsteps": 32, "noptepochs": 3, "nminibatches": 4,
-            "cliprange": 0.2, "ent_coef": 0.01, "gamma": 0.998, "lam": 0.95,
-            "optim_stepsize": 3e-4, "init_noise_std": 0.3,
-            "value_loss_coef": 1.0, "max_grad_norm": 1.0,
-        },
-        "policy": {
-            "use_multicategorical": True, "num_cat_dims": 4, "num_bins": 21,
-            "use_lstm": True, "lstm_hidden_size": 256,
-            "pi_hid_sizes": [512, 256, 128],
-            "vf_hid_sizes": [512, 256, 128],
-            "activation": "relu",
-        },
-    }
-    agent = PPO(
-        vec_env=env, cfg_train=agent_cfg, device=device,
-        sampler="sequential", log_dir="/tmp/record_push",
-        asymmetric=False,
-    )
-    agent.observation_space = env.observation_space
-    agent.state_space = env.state_space
-    agent.action_space = _mc_space
-    agent.desired_kl = None
-    agent.actor_critic = ActorCriticPush(
-        agent.observation_space.shape, agent.state_space.shape,
-        agent.action_space.shape, agent.init_noise_std, agent.model_cfg,
-        asymmetric=False,
-    ).to(device)
-    agent.load(args.chkpt)
-    agent.actor_critic.eval()
-    print(f"[Record] Loaded model from {args.chkpt}")
-    print(f"[Record] rel_obs={args.rel_obs}, rel_act={args.rel_act}, scenes={scene_indices}")
+    if args.demo:
+        print(f"[Record] Demo mode — static camera hold, scenes={scene_indices}")
+    else:
+        # ── Load checkpoint ────────────────────────────────────────────────────────
+        num_bins = 21
+        _mc_space = gym_mc.spaces.Box(
+            low=0.0, high=float(num_bins - 1), shape=(4,), dtype=np.float32,
+        )
+        agent_cfg = {
+            "learn": {
+                "nsteps": 32, "noptepochs": 3, "nminibatches": 4,
+                "cliprange": 0.2, "ent_coef": 0.01, "gamma": 0.998, "lam": 0.95,
+                "optim_stepsize": 3e-4, "init_noise_std": 0.3,
+                "value_loss_coef": 1.0, "max_grad_norm": 1.0,
+            },
+            "policy": {
+                "use_multicategorical": True, "num_cat_dims": 4, "num_bins": 21,
+                "use_lstm": True, "lstm_hidden_size": 256,
+                "pi_hid_sizes": [512, 256, 128],
+                "vf_hid_sizes": [512, 256, 128],
+                "activation": "relu",
+            },
+        }
+        agent = PPO(
+            vec_env=env, cfg_train=agent_cfg, device=device,
+            sampler="sequential", log_dir="/tmp/record_push",
+            asymmetric=False,
+        )
+        agent.observation_space = env.observation_space
+        agent.state_space = env.state_space
+        agent.action_space = _mc_space
+        agent.desired_kl = None
+        agent.actor_critic = ActorCriticPush(
+            agent.observation_space.shape, agent.state_space.shape,
+            agent.action_space.shape, agent.init_noise_std, agent.model_cfg,
+            asymmetric=False,
+        ).to(device)
+        agent.load(args.chkpt)
+        agent.actor_critic.eval()
+        print(f"[Record] Loaded model from {args.chkpt}")
+        print(f"[Record] rel_obs={args.rel_obs}, rel_act={args.rel_act}, scenes={scene_indices}")
 
     # ── Rollout one scene, returning (frames, success) ──────────────────────────
     def _rollout_scene(cfg):
@@ -387,6 +426,7 @@ def main():
         prev_joint_cmd = _robot_scene.data.joint_pos[:, _arm_jids].clone()
 
         success = False
+        success_hits = []
         for push_i in range(args.max_pushes):
             with torch.no_grad():
                 actions, _, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
@@ -467,17 +507,28 @@ def main():
                 rot_err = 0.0
 
             if _obj_type == "disc":
-                success = pos_err < 0.05
+                cur_success = pos_err < 0.05
             else:
-                success = pos_err < 0.05 and rot_err < args.rot_threshold
+                cur_success = pos_err < 0.05 and rot_err < args.rot_threshold
+            if cur_success:
+                success_hits.append((push_i + 1, pos_err, rot_err))
+            success = success or cur_success
 
             f = _grab_frame()
             if f is not None:
                 frames.append(f)
 
-            if success or terminated[0]:
+            if terminated[0]:
                 break
             env.capture_pre_push(obs)
+
+        if success_hits:
+            parts = [f"push{h[0]:2d} pos={h[1]:.4f}m rot={h[2]:.3f}rad" for h in success_hits]
+            print(f"  -> {len(success_hits)} success hits ({args.max_pushes} pushes)")
+            for p in parts:
+                print(f"     {p}")
+        else:
+            print(f"  -> no success (ran full {args.max_pushes} pushes)")
 
         # hold a few frames at the end so the loop "rests" on the result
         hold_cmd = torch.zeros(1, env.action_space.shape[0], device=device)
@@ -491,44 +542,196 @@ def main():
 
         return frames, success
 
+    # ── Demo scene — static camera hold (object already at goal) ─────────────
+    def _demo_scene(cfg):
+        frames = []
+        env.reset()
+        top_cam.set_world_poses(positions=_cam_pos, orientations=_cam_quat, convention="opengl")
+        env.goal_pos_euler[0, 0] = cfg.main_goal_x
+        env.goal_pos_euler[0, 1] = cfg.main_goal_y
+        env.goal_pos_euler[0, 5] = cfg.main_goal_yaw
+        env._update_goal_in_extras()
+        _update_goal_marker(cfg.main_goal_x, cfg.main_goal_y, cfg.main_goal_yaw)
+
+        obj = env.env.scene["target_object"]
+        obj.write_root_pose_to_sim(torch.tensor([[
+            cfg.main_start.x, cfg.main_start.y, 0.02, 1.0, 0.0, 0.0, 0.0
+        ]], device=device))
+        obj.write_root_velocity_to_sim(torch.zeros(1, 6, device=device))
+        env.env.sim.step()
+
+        hold_cmd = torch.zeros(1, env.action_space.shape[0], device=device)
+        hold_cmd[:, :6] = _robot_scene.data.joint_pos[:, _arm_jids]
+        hold_cmd[:, 6] = -1.0
+        for _ in range(max(1, int(args.demo_secs * args.fps))):
+            env.step(hold_cmd)
+            f = _grab_frame()
+            if f is not None:
+                frames.append(f)
+        return frames
+
+    # ── Keyboard input (non-headless interactive mode) ────────────────────────
+    # Two input paths: (1) carb.input captures keys in the Isaac Sim viewport,
+    # (2) a background stdin thread captures typed commands in the terminal.
+    _replay_fl = [False]
+    _next_fl   = [False]
+    _prev_fl   = [False]
+    _keep_fl   = [False]
+    _kb_sub    = None
+    _stdin_exit = threading.Event()
+
+    if args.demo:
+        _scn_fn = lambda cfg: (_demo_scene(cfg), True)
+    else:
+        _scn_fn = _rollout_scene
+
+    if not args.headless and not args.no_interact:
+        # Path 1 — carb.input (viewport keyboard)
+        def _on_keyboard(event, *_args, **_kwargs):
+            if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+                if event.input == carb.input.KeyboardInput.R:
+                    _replay_fl[0] = True
+                elif event.input == carb.input.KeyboardInput.N:
+                    _next_fl[0] = True
+                elif event.input == carb.input.KeyboardInput.P:
+                    _prev_fl[0] = True
+                elif event.input == carb.input.KeyboardInput.K:
+                    _keep_fl[0] = True
+                elif event.input == carb.input.KeyboardInput.ENTER:
+                    _keep_fl[0] = True
+                elif event.input == carb.input.KeyboardInput.ESCAPE:
+                    _next_fl[0] = True
+            return True
+        try:
+            _aw = omni.appwindow.get_default_app_window()
+            _iface = carb.input.acquire_input_interface()
+            _kb_sub = _iface.subscribe_to_keyboard_events(_aw.get_keyboard(), _on_keyboard)
+        except Exception as e:
+            print(f"[WARN] carb.input not available: {e}")
+
+        # Path 2 — stdin thread (terminal keyboard, type r/n/k + Enter)
+        def _stdin_loop():
+            while not _stdin_exit.is_set():
+                try:
+                    line = sys.stdin.readline()
+                except Exception:
+                    break
+                if not line:
+                    break
+                ch = line.strip().lower()
+                if ch == 'r':
+                    _replay_fl[0] = True
+                elif ch == 'n':
+                    _next_fl[0] = True
+                elif ch == 'p':
+                    _prev_fl[0] = True
+                elif ch == 'k':
+                    _keep_fl[0] = True
+        threading.Thread(target=_stdin_loop, daemon=True).start()
+        _int_active = True
+        print("[Record] Interactive mode — focus Isaac window OR type r/n/p/k+Enter in terminal")
+    else:
+        _int_active = False
+
     # ── Record each scene ───────────────────────────────────────────────────────
     n_tests = get_test_count()
-    for idx in scene_indices:
+    si = 0
+    while si < len(scene_indices):
+        idx = scene_indices[si]
         if idx < 1 or idx > n_tests:
             print(f"[skip] scene {idx} out of range (1..{n_tests})")
+            si += 1
             continue
         cfg = get_test_config(idx)
         if cfg is None:
+            si += 1
             continue
         print(f"\n[Scene {idx}] {cfg.name}  type={cfg.test_type}  "
               f"goal=({cfg.main_goal_x:+.2f},{cfg.main_goal_y:+.2f}) yaw={cfg.main_goal_yaw:+.2f}")
 
-        best_frames, got_success = None, False
-        for attempt in range(args.max_attempts):
-            frames, success = _rollout_scene(cfg)
-            print(f"  attempt {attempt + 1}/{args.max_attempts}: "
-                  f"{'SUCCESS' if success else 'fail'} ({len(frames)} frames)")
-            if best_frames is None:
-                best_frames = frames
-            if success:
-                best_frames, got_success = frames, True
-                break
+        if not _int_active:
+            # ── Non-interactive: best-of-N ──────────────────────────────────
+            best_frames, got_success = None, False
+            for attempt in range(args.max_attempts):
+                frames, success = _scn_fn(cfg)
+                print(f"  attempt {attempt + 1}/{args.max_attempts}: "
+                      f"{'SUCCESS' if success else 'fail'} ({len(frames)} frames)")
+                if best_frames is None:
+                    best_frames = frames
+                if success:
+                    best_frames, got_success = frames, True
+                    break
 
-        if not best_frames:
-            print(f"  [warn] no frames captured for scene {idx}")
-            continue
+            if not best_frames:
+                print(f"  [warn] no frames captured for scene {idx}")
+                si += 1
+                continue
 
-        stem = f"rec_push_s{idx:02d}"
-        mp4_path = os.path.join(args.out_dir, f"{stem}.mp4")
-        key_path = os.path.join(args.out_dir, f"{stem}_key.png")
-        try:
-            imageio.mimsave(mp4_path, best_frames, fps=args.fps, macro_block_size=None)
-            imageio.imwrite(key_path, best_frames[len(best_frames) // 2])
-            print(f"  saved {mp4_path} ({'success' if got_success else 'best-effort'}) "
-                  f"+ keyframe {key_path}")
-        except Exception as e:
-            print(f"  [error] encoding failed for scene {idx}: {e}")
+            stem = f"rec_push_s{idx:02d}"
+            mp4_path = os.path.join(args.out_dir, f"{stem}.mp4")
+            key_path = os.path.join(args.out_dir, f"{stem}_key.png")
+            try:
+                imageio.mimsave(mp4_path, best_frames, fps=args.fps, macro_block_size=None)
+                imageio.imwrite(key_path, best_frames[len(best_frames) // 2])
+                print(f"  saved {mp4_path} ({'success' if got_success else 'best-effort'}) "
+                      f"+ keyframe {key_path}")
+            except Exception as e:
+                print(f"  [error] encoding failed for scene {idx}: {e}")
+            si += 1
 
+        else:
+            # ── Interactive: R=replay  N=next  P=prev  K/Enter=save+next ───
+            repeat = 0
+            went_back = False
+            while repeat < args.repeats:
+                frames, success = _scn_fn(cfg)
+                label = f"r{repeat + 1}"
+                print(f"  [{label}] {'SUCCESS' if success else 'fail'} ({len(frames)} frames)  "
+                      f"[R]eplay  [P]rev  [N]ext  [K]eep > ", end="", flush=True)
+
+                _replay_fl[0] = False
+                _next_fl[0]   = False
+                _prev_fl[0]   = False
+                _keep_fl[0]   = False
+
+                while True:
+                    simulation_app.update()
+                    time.sleep(0.03)
+                    if _replay_fl[0]:
+                        print("R — re-rolling")
+                        break
+                    if _prev_fl[0]:
+                        print("P — going back")
+                        went_back = True
+                        break
+                    if _next_fl[0]:
+                        print("N — skipping to next scene")
+                        break
+                    if _keep_fl[0]:
+                        print("K — saving")
+                        stem = f"rec_push_s{idx:02d}_{label}"
+                        mp4_path = os.path.join(args.out_dir, f"{stem}.mp4")
+                        key_path = os.path.join(args.out_dir, f"{stem}_key.png")
+                        try:
+                            imageio.mimsave(mp4_path, frames, fps=args.fps, macro_block_size=None)
+                            imageio.imwrite(key_path, frames[len(frames) // 2])
+                            print(f"  saved {mp4_path}")
+                        except Exception as e:
+                            print(f"  [error] encoding failed: {e}")
+                        repeat += 1
+                        break
+
+                if _prev_fl[0]:
+                    break  # exit repeat loop to go back
+                if _next_fl[0]:
+                    break  # skip remaining repeats for this scene
+
+            if went_back:
+                si = max(0, si - 1)
+            else:
+                si += 1
+
+    _stdin_exit.set()
     print("\n[Record] Done.")
     simulation_app.close()
     sys.exit(0)
