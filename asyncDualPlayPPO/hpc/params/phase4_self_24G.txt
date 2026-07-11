@@ -7,3 +7,6 @@ train_e_pbrs_asp_dpose.py 123 528 3000 100 pbrsE_e528_i3000_s123_nohist --alice_
 train_e_pbrs_asp_dpose.py 7 528 3000 100 pbrsE_e528_i3000_s7_noge --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --no_abc --no_ge
 train_e_pbrs_asp_dpose.py 42 528 3000 100 pbrsE_e528_i3000_s42_noge --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --no_abc --no_ge
 train_e_pbrs_asp_dpose.py 123 528 3000 100 pbrsE_e528_i3000_s123_noge --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --no_abc --no_ge
+train_e_pbrs_asp_dpose.py 7 528 3000 100 pbrsE_e528_i3000_s7_abc --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055
+train_e_pbrs_asp_dpose.py 42 528 3000 100 pbrsE_e528_i3000_s42_abc --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055
+train_e_pbrs_asp_dpose.py 123 528 3000 100 pbrsE_e528_i3000_s123_abc --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055

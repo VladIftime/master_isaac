@@ -586,6 +586,13 @@ def main():
 
         writer.add_scalar("Loss/Bob/Value", loss_val, bob_updates)
         writer.add_scalar("Loss/Bob/Surrogate", loss_surr, bob_updates)
+        if not args.no_abc:
+            _abc = bob_ppo.last_abc_stats
+            writer.add_scalar("Loss/Bob/ABC", loss_abc, bob_updates)
+            writer.add_scalar("ABC/ClipFraction", _abc["clip_fraction"], bob_updates)
+            writer.add_scalar("ABC/BCRatioMean", _abc["bc_ratio_mean"], bob_updates)
+            writer.add_scalar("ABC/BCProbMean", _abc["bc_prob_mean"], bob_updates)
+            writer.add_scalar("ABC/NSamples", _abc["n_samples"], bob_updates)
         writer.add_scalar("Reward/Bob", mean_bob_rew, bob_updates)
         writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
         writer.add_scalar("Metrics/Bob/PosError", mean_pos_err, bob_updates)

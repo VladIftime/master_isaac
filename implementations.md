@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline + SAC/HER
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-07-12 (final job-array training campaign added — §14: budget-matched multi-seed/multi-batch suite across 5 phases with per-config 23h auto-resume, /scratch results, mem-tiered arrays, seed-RNG wiring, PBRS `--k_p/--k_r/--w_pos/--w_rot` flags, `Metrics/Bob/ValueError`, `--no_ge` on the E-model, SAC+HER checkpoint/replay-buffer hardening; `hpc/gen_params.py` + `hpc/submit_all.sh` + `extras/collate_seeds.py`)
+**Last updated**: 2026-07-12 (§14 job-array campaign + ABC macro-action repair: `construct_bob_observation` d_pose/rel_obs fix, hard-fail ABC population, LSTM-threaded `old_lp`, clip-saturation instrumentation, ABC-on E ablation + disc-F positive control; campaign fail-fast brake (`FAIL_YYMMDD.log` + scancel) and idempotent reconcile in `submit_all.sh`)
 
 ---
 
@@ -226,6 +226,10 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-07-12 | **Phase 0.2 — value-error metric** — `Metrics/Bob/ValueError = (storage.values − storage.returns).abs().mean()` logged in `train_a` (@ agent update), `train_e` and `train_g` (@ Bob update, captured before `storage.clear()`). Directly instruments the GAE value-bias mechanism (methods.tex:316-342) so E5 can plot value-error vs batch size. Single tag name across all three for cross-model comparability. |
 | 2026-07-12 | **Phase 0.4 — GoalEncoder ablation flag on E** — `train_e_pbrs_asp_dpose.py` gains `--no_ge`: sets `bob_cfg.policy.use_goal_encoder=False` and `pi_obj_dim=22` (PI-encoder consumes the full 22D per-object chunk, no 8D latent bottleneck), mirroring Model D but on the d_pose E-model. Provides an encoder-off ablation *within* the E lineage instead of the confounded C-based `train_d`. |
 | 2026-07-12 | **Training suite: job-array launcher** — New `hpc/arrays/` (4 templates), `hpc/params/` (generated), `hpc/gen_params.py`, `hpc/submit_all.sh`, `extras/collate_seeds.py`. ~90 budget-matched training jobs across 5 phases (E9 scale sweep, E2 env frontier, E1 multi-seed CIs, E4/E5 ablations+value-error, E6 PBRS grid + E3 gym crossover) + per-phase validation arrays. Replaces the six single-config `*_s7/_s123` slurms. See §14 for the full design. |
+| 2026-07-12 | **ABC macro-action audit + repair (§14.8)** — Verified the ABC path is fully wired in the macro-action self-play scripts (buffer, Alice-demo capture, `construct_bob_observation`, `PPOABC` clipped BC loss over the 4×21 MultiCategorical, β=0.5 from yaml) and fixed three real defects that would silently invalidate an ABC-on run: (1) **`construct_bob_observation` ignored `dpose_obs`/`rel_obs`** — it always emitted the legacy `[…, pos_dist, rot_dist]` tail, so d_pose ABC demos were 2-of-28 features out of distribution vs Bob's rollout obs; now branches to mirror `_get_push_obs` exactly (`wrapper_push_asp.py:897`). (2) **Silent `try/except`** around ABC-buffer population → now **hard-fails** (`traceback` + `sys.exit(1)`) in all six self-play scripts (`train_{c,d,e,f,g,h}`), so a broken ABC crashes the job (and trips the campaign brake) instead of degrading to ABC-off. (3) **`old_lp` LSTM-threading mismatch** — behaviour log-probs were computed with `evaluate(obs, None, acts)` (zero-init, unthreaded) while the BC loss threads the LSTM; added `PPOABC.threaded_demo_logprobs()` and use it per-trajectory at buffer-add time so the BC ratio is unbiased. |
+| 2026-07-12 | **ABC clip-saturation instrumentation** — `PPOABC._compute_abc_loss_sequential` now records `self.last_abc_stats = {clip_fraction, bc_ratio_mean, bc_prob_mean, n_samples}` (share of demo samples with `bc_ratio ∉ [1−ε,1+ε]`, mean ratio, mean π_B on Alice's demonstrated actions). `train_{e,g,f}` log these as `ABC/ClipFraction`, `ABC/BCRatioMean`, `ABC/BCProbMean`, `ABC/NSamples`, `Loss/Bob/ABC` — turning the conclusion's clip-saturation claim into a measured quantity. |
+| 2026-07-12 | **ABC-on suite additions** — `gen_params.py` adds Phase-4 **ABC-on E** ablation (`pbrsE_*_abc`, `train_e_pbrs_asp_dpose.py` with β=0.5, no `--no_abc`, 3 seeds @528/3000) and a new **`phase4_pc` positive control** (`discF_*_abc`, `train_f_pbrs_asp_disc.py` disc, `char_length=0`, ABC-on, 3 seeds) — if ABC helps anywhere it should help on the easy symmetric disc, ruling out "the BC was broken." |
+| 2026-07-12 | **Campaign fail-fast brake + idempotent reconcile (§14.9)** — `hpc/arrays/_campaign.sh` (sourced by the 3 training templates) adds: (a) a **brake** — the first non-timeout crash trips `$RESULTS_ROOT/.campaign/<id>/ABORTED`, `scancel`s every recorded campaign job, and appends a traceback tail to `$HOME/FAIL_YYMMDD.log`; queued tasks self-exit on the sentinel; time-limit (137/143 or USR1) still resubmits. (b) per-config `.running` (with job-id) / `.done` markers. `submit_all.sh` is now **idempotent** — per params line it skips configs whose run dir is `.done` or `.running` with a job-id still in `squeue`, and submits only the remaining indices via an explicit `--array=3,7,12%K` list. Re-running after a crash resubmits just the gaps. New flags: `--no-reconcile`, `--campaign`. |
 
 ---
 
@@ -2163,3 +2167,90 @@ python3 extras/collate_seeds.py                  # CI table -> collated_summary.
    the overlay (else point it at `gym_overlay.img` per the earlier gym slurms).
 4. **E7 gate reconciliation** (self-play train vs eval success definition) — not auto-generated; a
    one-off validation run.
+
+### 14.8 ABC in the macro-action pipeline — audit & repair
+
+A supervisor review flagged that the campaign disabled ABC everywhere (`--no_abc`),
+so neither the ablation nor the thesis's clip-saturation claim was tested, and this
+collided with the methods text stating β=0.5 is on. An audit of the macro-action
+self-play scripts (`train_e/g/f`, forks of `train_push_pbrs_asp.py`) confirmed the
+ABC machinery **is** fully present and action-space-agnostic:
+
+- `bob_ppo.abc_buffer = GPUDemonstrationBuffer(...)`; Alice macro-action trajectories
+  captured per push; on Bob-fail-of-valid-goal the demo is added.
+- `PPOABC._compute_abc_loss_sequential` threads the LSTM and evaluates
+  `dist.log_prob(acts)` over the 4×21 MultiCategorical tokens; β=0.5 from
+  `ppo_continuous.yaml`.
+- Alice's demo (20D, no goal) is re-expressed into Bob's observation with the goal
+  Alice created via `env.construct_bob_observation(traj_o, g)` — the "same
+  embodiment / same action space" requirement ABC needs.
+
+Three defects were fixed so an ABC-on run is scientifically valid:
+
+1. **`construct_bob_observation` ignored the observation mode** — it always emitted
+   the legacy `[…, pos_dist, rot_dist]` tail, whereas Bob's rollout obs
+   (`_get_push_obs`) writes `[d_pose, bearing]` (d_pose models E/G/F/H) or
+   `[rel_dx, rel_dy]` (rel_obs). ABC demos were therefore 2-of-28 features out of
+   distribution on every d_pose model. Now branches to mirror `_get_push_obs`
+   exactly. `wrapper_push_asp.py:897`.
+2. **Silent failure** — the ABC-population block was wrapped in
+   `except … if args.debug_rewards: print`, so a broken ABC silently became a
+   no-op (empty buffer → BC term skipped), i.e. "ABC-on" could really be ABC-off.
+   Now **hard-fails** (`traceback.print_exc(); sys.exit(1)`) in all six self-play
+   scripts (`train_{c,d,e,f,g,h}`); the non-zero exit trips the campaign brake.
+3. **`old_lp` LSTM-threading mismatch** — behaviour log-probs were computed with
+   `evaluate(obs, None, acts)` (unthreaded, zero-init) while the BC loss threads
+   the LSTM, biasing the ratio/clip metric. Added
+   `PPOABC.threaded_demo_logprobs()` and use it per-trajectory at buffer-add time.
+
+**Clip-saturation instrumentation:** `_compute_abc_loss_sequential` records
+`self.last_abc_stats = {clip_fraction, bc_ratio_mean, bc_prob_mean, n_samples}`;
+`train_{e,g,f}` log `ABC/ClipFraction`, `ABC/BCRatioMean`, `ABC/BCProbMean`,
+`ABC/NSamples`, `Loss/Bob/ABC`. This makes the conclusion's clip-saturation claim
+a measured quantity (result first, mechanism second) rather than an assertion.
+
+**Suite additions** (`gen_params.py`):
+- Phase-4 **ABC-on E** (`pbrsE_*_abc`): Model E with β=0.5 (no `--no_abc`), 3 seeds
+  @528/3000 — the experiment that was missing everywhere.
+- New **`phase4_pc` positive control** (`discF_*_abc`): `train_f_pbrs_asp_disc.py`
+  disc, `char_length=0` (position-only, symmetric = easy), ABC-on, 3 seeds. If ABC
+  imitates when it should, it should help here; if it still fails on the coupled
+  T-block task, the negative result is airtight rather than "the BC was broken."
+
+The intended write-up (thesis text update deferred): "We ran ABC as specified
+(β=0.5); it did not recover self-play, and the BC diagnostics show the clip
+saturates because Alice's discrete macro-action demonstrations sit in the tail of
+Bob's high-cardinality categorical (clip-fraction ≈ X%, BC gradient ≈ 0). We
+attribute this to the coarse discrete action space, in contrast to Plappert's dense
+continuous control."
+
+### 14.9 Campaign fail-fast brake + idempotent reconcile
+
+Two features were added so a launch of ~100 jobs can't waste compute on a
+systematic bug or spawn runaway jobs, and so re-running the launcher is safe.
+
+**Fail-fast brake** — `hpc/arrays/_campaign.sh`, sourced by the three training
+templates:
+- `campaign_start` records `$CAMPAIGN_DIR/jobids/<jobid>`, writes a per-config
+  `.running` marker (with job-id), and self-exits if `$CAMPAIGN_DIR/ABORTED`
+  already exists (backstop for queued tasks racing `scancel`).
+- On **any non-timeout crash** (exit ≠ 0, ≠ 137/143, not the USR1/time-limit path)
+  the job calls `campaign_trip_abort`: an atomic `mkdir aborting` claim ensures the
+  first failer alone writes `$CAMPAIGN_DIR/ABORTED`, appends a diagnostic block
+  (config, exit code, `tail -n 40` of the job's slurm-out) to
+  `$HOME/FAIL_$(date +%y%m%d).log`, and `scancel`s every recorded campaign job.
+- Time-limit preemption (SIGUSR1 → forwarded to the container, or exit 137/143)
+  still resubmits as before; `MAX_RESUBMITS=10` caps crash-loops.
+- `.done` is written only on a clean exit (TRAIN_EXIT=0); `.running` is always
+  cleared on exit.
+
+**Idempotent reconcile** — `submit_all.sh` (default on; `--no-reconcile` to force
+`1-N`): for each params line it derives `EXP_NAME` (token before the first
+`--flag`) and skips it when the run dir has `.done`, or `.running` whose job-id is
+still in `squeue --me`; it then submits only the remaining indices via an explicit
+`sbatch --array=3,7,12%K` list (empty ⇒ the whole file is skipped). Stale
+`.running` after a cancel (job-id gone from `squeue`) is treated as idle and
+resubmitted. Recovery workflow: launch → early crash auto-cancels + writes
+`FAIL_YYMMDD.log` → fix bug → re-run `submit_all.sh` (resubmits only the gaps).
+New flags: `--no-reconcile`, `--campaign <id>` (share one brake domain across
+separate invocations; default is a fresh per-invocation campaign id).

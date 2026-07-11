@@ -1343,23 +1343,14 @@ def main():
                         bc_obs = env.construct_bob_observation(traj_o, g)
                         valid_trajs.append((bc_obs, traj_a))
                     if valid_trajs:
-                        all_obs2 = torch.cat([t[0] for t in valid_trajs], dim=0)
-                        all_acts2 = torch.cat([t[1] for t in valid_trajs], dim=0)
-                        with torch.no_grad():
-                            old_lp_all, _, _, _, _ = bob_ppo.actor_critic.evaluate(
-                                all_obs2, None, all_acts2,
-                            )
-                        offset = 0
                         for bc_obs_i, traj_a_i in valid_trajs:
-                            t_len_i = bc_obs_i.shape[0]
-                            bob_ppo.abc_buffer.add_trajectory(
-                                bc_obs_i, traj_a_i,
-                                old_lp_all[offset:offset + t_len_i],
-                            )
-                            offset += t_len_i
+                            old_lp_i = bob_ppo.threaded_demo_logprobs(bc_obs_i, traj_a_i)
+                            bob_ppo.abc_buffer.add_trajectory(bc_obs_i, traj_a_i, old_lp_i)
                 except Exception as e:
-                    if args.debug_rewards:
-                        print(f"  [ABC] WARNING: buffer population error: {e}", flush=True)
+                    import traceback as _tb, sys as _sys
+                    print(f"  [ABC] FATAL: buffer population error: {e}", flush=True)
+                    _tb.print_exc()
+                    _sys.exit(1)
 
             env.capture_pre_push(full_push_obs)
             _obj_pos_pre = full_push_obs[:, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 3]

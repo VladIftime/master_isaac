@@ -8,10 +8,12 @@ hpc/params/phase2_single_48G.txt hpc/arrays/train_single_agent.slurm 48G 23:00:0
 hpc/params/phase3_self_24G.txt hpc/arrays/train_self_play.slurm 24G 23:00:00 4 phase3
 hpc/params/phase3_single_24G.txt hpc/arrays/train_single_agent.slurm 24G 23:00:00 4 phase3
 hpc/params/phase4_self_24G.txt hpc/arrays/train_self_play.slurm 24G 23:00:00 4 phase4
+hpc/params/phase4_pc_self_24G.txt hpc/arrays/train_self_play.slurm 24G 23:00:00 4 phase4_pc
 hpc/params/phase5_grid_single_24G.txt hpc/arrays/train_single_agent.slurm 24G 23:00:00 4 phase5_grid
 hpc/params/phase5_gym_gym_16G.txt hpc/arrays/train_gym.slurm 16G 23:00:00 4 phase5_gym
 hpc/params/phase1_validate.txt hpc/arrays/validate.slurm 24G 06:00:00 4 phase1_validate
 hpc/params/phase2_validate.txt hpc/arrays/validate.slurm 24G 06:00:00 4 phase2_validate
 hpc/params/phase3_validate.txt hpc/arrays/validate.slurm 24G 06:00:00 4 phase3_validate
 hpc/params/phase4_validate.txt hpc/arrays/validate.slurm 24G 06:00:00 4 phase4_validate
+hpc/params/phase4_pc_validate.txt hpc/arrays/validate.slurm 24G 06:00:00 4 phase4_pc_validate
 hpc/params/phase5_grid_validate.txt hpc/arrays/validate.slurm 24G 06:00:00 4 phase5_grid_validate

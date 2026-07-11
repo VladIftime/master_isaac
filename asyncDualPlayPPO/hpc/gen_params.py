@@ -48,6 +48,11 @@ MODELS = {
               "--dpose-obs --char-length 0.07 --dpose-threshold 0.055"),
     "pbrsG": ("train_g_tasp_dpose.py", "self", G_EXTRA, "validate_push_asp.py",
               "--dpose-obs --char-length 0.07 --dpose-threshold 0.055"),
+    # Disc (position-only d_pose) — ABC-on positive control substrate.
+    "discF": ("train_f_pbrs_asp_disc.py", "self",
+              "--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
+              "--char_length 0.0 --dpose_threshold 0.05 --no_abc",
+              "validate_push_asp.py", "--dpose-obs --char-length 0.0 --dpose-threshold 0.05"),
 }
 
 
@@ -129,6 +134,21 @@ def build():
         for seed in seeds3:
             s.add("phase4", "pbrsE", seed, 528,
                   extra_override=f"{base_extra} {flag}", name_suffix=f"_{tag}")
+
+    # Phase 4 (ABC-on): E with ABC enabled (beta=0.5) — tests the clip-saturation
+    # claim on the T-block d_pose model. NOTE: no --no_abc → ABC active.
+    abc_extra = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
+                 "--char_length 0.07 --dpose_threshold 0.055")
+    for seed in seeds3:
+        s.add("phase4", "pbrsE", seed, 528, extra_override=abc_extra, name_suffix="_abc")
+
+    # Phase 4 positive control (E4-PC): ABC-on on the easy/symmetric disc
+    # (position-only d_pose). If ABC helps anywhere it should help here — rules
+    # out "the BC was broken" for the negative ABC-on-E result.
+    disc_abc_extra = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
+                      "--char_length 0.0 --dpose_threshold 0.05")
+    for seed in seeds3:
+        s.add("phase4_pc", "discF", seed, 528, extra_override=disc_abc_extra, name_suffix="_abc")
 
     # Phase 5a (E6): PBRS grid on pbrsA @528, seed 42
     for k_p in (10, 20, 30, 50):
