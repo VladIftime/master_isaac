@@ -1,0 +1,12 @@
+train_a_gym_pbrs_simple.py 42 64 15 3000 100 gymA_e64_p15_s42
+train_a_gym_pbrs_simple.py 42 64 45 3000 100 gymA_e64_p45_s42
+train_a_gym_pbrs_simple.py 42 256 15 3000 100 gymA_e256_p15_s42
+train_a_gym_pbrs_simple.py 42 256 45 3000 100 gymA_e256_p45_s42
+train_b_gym_pbrs_curriculum.py 42 64 15 3000 100 gymB_e64_p15_s42
+train_b_gym_pbrs_curriculum.py 42 64 45 3000 100 gymB_e64_p45_s42
+train_b_gym_pbrs_curriculum.py 42 256 15 3000 100 gymB_e256_p15_s42
+train_b_gym_pbrs_curriculum.py 42 256 45 3000 100 gymB_e256_p45_s42
+train_c_gym_pbrs_asp.py 42 64 15 3000 100 gymC_e64_p15_s42
+train_c_gym_pbrs_asp.py 42 64 45 3000 100 gymC_e64_p45_s42
+train_c_gym_pbrs_asp.py 42 256 15 3000 100 gymC_e256_p15_s42
+train_c_gym_pbrs_asp.py 42 256 45 3000 100 gymC_e256_p45_s42

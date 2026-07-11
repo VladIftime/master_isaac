@@ -1,7 +1,7 @@
 # Implementation Record — ASP + GoalEncoder + Push-PPO Baseline + SAC/HER
 
 **Branch**: `asp_goal_encoder`  
-**Last updated**: 2026-06-30 (deck restructured into 8‑section academic order; disc models F/H removed entirely; all model names changed to descriptive PPO‑PBRS / PPO‑Curriculum / ASP‑dPose / TASP‑dPose; per‑model error plots regenerated from exact 30‑scene CSVs; cross‑env p1 + per‑scene p3 heatmap added; Manager‑vs‑DirectRL takeaway placeholder; C9 resolved; RQ2/RQ3 reworded; validation‑test‑suite layout + recording plans written)
+**Last updated**: 2026-07-12 (final job-array training campaign added — §14: budget-matched multi-seed/multi-batch suite across 5 phases with per-config 23h auto-resume, /scratch results, mem-tiered arrays, seed-RNG wiring, PBRS `--k_p/--k_r/--w_pos/--w_rot` flags, `Metrics/Bob/ValueError`, `--no_ge` on the E-model, SAC+HER checkpoint/replay-buffer hardening; `hpc/gen_params.py` + `hpc/submit_all.sh` + `extras/collate_seeds.py`)
 
 ---
 
@@ -20,6 +20,7 @@
 11. [Validation Results (26.06.26–28)](#validation-results)
 12. [Results Directory Structure](#results-directory)
 13. [CI Error-Bar Analysis & Presentation Updates](#ci-analysis)
+14. [Final Training Suite — Job-Array Campaign](#training-suite)
 
 ---
 
@@ -220,6 +221,11 @@ A fourth script, `train_push.py`, implements a single-agent **Push-PPO Baseline*
 | 2026-06-29 | **CI plotting script** — Created `results_validation/clean/results/plot_comparison_with_cis.py` (430 lines). Reads best-of-20 CSV validation data (with `trial_count`/`success_count` columns) from all 6 Isaac-validated models (A_simp, B_curr, E-H). Computes: (a) scene-level SR with standard error across 30 independent scenes, (b) per-scene trial-level SR with 95% Wilson binomial confidence intervals, (c) aggregates by difficulty (easy/med/hard) and test type (pos_only/pos_rot). Generates 4 plots: `val_multi_sr_overall.png`, `val_multi_sr_difficulty.png`, `val_multi_sr_testtype.png`, `val_multi_error_bars.png`. Also generates `ci_summary.txt` with CIs and significance tests. Key finding: A (80.0%) vs B (76.7%) gap of 3.3pp is NOT statistically significant (SE diff = ±10.6pp, p > 0.05). ASP gap of 4.8-11.9× IS significant. |
 | 2026-06-29 | **Presentation feedback response** — Addressed 3 weaknesses from supervisor pre-review of `presentation.tex`: (1) Models C/D exclusion: added explicit footnote with available data; (2) No statistical error bars: all bar charts replaced with error-bar-enhanced plots; (3) Confounded ASP ablation: added new Slide 9c disaggregating 7 axes of variation between single-agent and ASP. Changes span Slides 6c-ii (multi-model error bars), 7b (CI note), 8c-ii (C/D footnote), 9c (NEW: confound disaggregation), 10 (softened independence claim), 12 (error-bar plot replacing static table), and appendix G (per-test error bars). 4 new plots copied to `presentation/figures/`. Deck compiles to 42 pages with xelatex. |
 | 2026-06-29 | **Validation CI comparison finalised** — CI analysis confirms A vs B 3.3pp gap is statistically indistinguishable across 30 independent scenes. A and B both solve at ~80% level. ASP variants E-H are 4.8-11.9× below single-agent: this gap IS statistically significant. The independence claim softened to: PBRS works regardless of curriculum, but the multi-axis package change from single-agent to ASP prevents attributing the gap to any single lever. |
+| 2026-07-12 | **Seed RNG wiring** — `--seed` was parsed but never applied in `train_a_pbrs_simple.py`, `train_b_pbrs_curriculum.py`, `train_e_pbrs_asp_dpose.py`, `train_g_tasp_dpose.py`, `train_push.py`. Added `torch.manual_seed` + `torch.cuda.manual_seed_all` + `np.random.seed` + `random.seed(args.seed)` after the in-`main()` numpy import, and `env_cfg.seed = args.seed` before env construction (Isaac Lab applies it on `ManagerBasedRLEnv` init). Seed labels are now real and reproducible — prerequisite for the multi-seed CI campaign. |
+| 2026-07-12 | **Phase 0.1 — PBRS reward CLI flags** — `train_a_pbrs_simple.py` gains `--k_p --k_r --w_pos --w_rot` (default `None` → fall back to `reward_pbrs` module defaults `k_p=30,k_r=5,w_pos=w_rot=10`). Threaded into `compute_pbrs_reward(...)` **and** both `potential_pos/potential_rot` `prev_phi_*` snapshot sites so the `Φ(s')−Φ(s)` delta uses one consistent set of coefficients. Enables the E6 PBRS grid without editing source per run. |
+| 2026-07-12 | **Phase 0.2 — value-error metric** — `Metrics/Bob/ValueError = (storage.values − storage.returns).abs().mean()` logged in `train_a` (@ agent update), `train_e` and `train_g` (@ Bob update, captured before `storage.clear()`). Directly instruments the GAE value-bias mechanism (methods.tex:316-342) so E5 can plot value-error vs batch size. Single tag name across all three for cross-model comparability. |
+| 2026-07-12 | **Phase 0.4 — GoalEncoder ablation flag on E** — `train_e_pbrs_asp_dpose.py` gains `--no_ge`: sets `bob_cfg.policy.use_goal_encoder=False` and `pi_obj_dim=22` (PI-encoder consumes the full 22D per-object chunk, no 8D latent bottleneck), mirroring Model D but on the d_pose E-model. Provides an encoder-off ablation *within* the E lineage instead of the confounded C-based `train_d`. |
+| 2026-07-12 | **Training suite: job-array launcher** — New `hpc/arrays/` (4 templates), `hpc/params/` (generated), `hpc/gen_params.py`, `hpc/submit_all.sh`, `extras/collate_seeds.py`. ~90 budget-matched training jobs across 5 phases (E9 scale sweep, E2 env frontier, E1 multi-seed CIs, E4/E5 ablations+value-error, E6 PBRS grid + E3 gym crossover) + per-phase validation arrays. Replaces the six single-config `*_s7/_s123` slurms. See §14 for the full design. |
 
 ---
 
@@ -2026,3 +2032,134 @@ All model references changed from letter-codes (A–I) to self-contained descrip
 6. **`speaker_notes.tex`** — content updated for names/narrative but slide numbering is from the old (pre-reorg) order; needs re-syncing to the current deck.
 7. **Model I training** (TASP-dPose-BobPenalty) — implemented, not run on HPC.
 8. **Validation seed variance** — single-seed per model; training seeds exist (5 A chains) but not re-evaluated for validation CIs.
+---
+
+## 14. Final Training Suite — Job-Array Campaign <a name="training-suite"></a>
+
+> The final two-week campaign that converts the single-budget, single-seed results into a
+> multi-seed, multi-batch study with confidence intervals. Implemented 2026-07-12 on the
+> Hábrók cluster (RTX Pro 6000 nodes). Everything is driven by SLURM **job arrays** + a
+> params-file/manifest/launcher pattern so ~90 configs are submitted, resumed, and collated
+> with three commands.
+
+### 14.1 Motivation — which validator each phase serves
+
+The campaign is organised around five research gaps flagged in review:
+
+| Phase | Gap | Question it answers |
+|---|---|---|
+| **1 (E9)** | Single-GPU budget hedge | Does the self-play value-bias close as the PPO batch (num_envs) grows? Plot combined-gate SR and `Metrics/Bob/ValueError` vs `num_envs ∈ {256,512,1024,2048}`. Either SR rises (scale story) or plateaus (robust negative result). |
+| **2 (E2)** | "4× fewer envs" claim | Env-count frontier for single-agent PBRS vs the improvement-reward baseline — does the baseline catch PBRS at high env counts? |
+| **3 (E1)** | Single-seed validation (the #1 objection) | Mean ± 95% CI headline table: A/B/E/G/baseline × 5 seeds at the 528-env/3000-iter anchor. |
+| **4 (E4/E5)** | Confounded ASP ablation | `--no_abc`, `--no_hist_pool`, `--no_ge` from the E-model, 3 seeds, at the Phase-1 best env count. E5 (value-error) piggybacks on the logs — no extra jobs. |
+| **5 (E6/E3)** | Reward-shape robustness + sim confound | PBRS `k_p×w` grid (needs Phase 0.1); gym-pusht batch crossover (`num_envs×push_nsteps`). |
+
+**Deferred:** SAC+HER → future work (cite published Push-T numbers for external calibration).
+
+### 14.2 Budget matching (the reference anchor)
+
+The thesis anchor is **528 envs × 3000 iters × 15 pushes/rollout ≈ 23.76 M total pushes**.
+To hold *total experience* constant while varying batch size, `max_iterations ∝ 1/num_envs`:
+
+| num_envs | 256 | 512 | 528 (anchor) | 1024 | 2048 |
+|---|---|---|---|---|---|
+| max_iterations | 6188 | 3094 | **3000** | 1547 | 773 |
+
+This isolates the per-update batch size (the variable driving the GAE value-bias mechanism)
+from the amount of experience. `push_nsteps` stays fixed at 15 (LSTM temporal window); only
+env breadth changes. Computed in `hpc/gen_params.py::iters_for()`.
+
+### 14.3 Phase-0 code changes (prerequisites)
+
+| Item | File(s) | Change |
+|---|---|---|
+| Seed wiring | `train_a/b/e/g` + `train_push.py` | `torch/cuda/np/random` seed from `args.seed` + `env_cfg.seed` — seeds are now real & reproducible |
+| 0.1 PBRS flags | `train_a_pbrs_simple.py` | `--k_p --k_r --w_pos --w_rot` threaded into `compute_pbrs_reward` and both `prev_phi_*` sites |
+| 0.2 Value-error | `train_a`, `train_e`, `train_g` | `Metrics/Bob/ValueError = |values − returns|.mean()` captured before `storage.clear()` |
+| 0.4 Encoder ablation | `train_e_pbrs_asp_dpose.py` | `--no_ge` → `use_goal_encoder=False`, `pi_obj_dim=22` |
+| 0.3 Collation | `extras/collate_seeds.py` | Aggregates `validation_results_*.csv` → mean ± 95% CI (t-corrected) per `(model,envs,iters)` |
+
+### 14.4 Launcher architecture
+
+```
+hpc/
+  arrays/                       # 4 job-array templates (parse one params line per $SLURM_ARRAY_TASK_ID)
+    train_single_agent.slurm    #   A / B / baseline  (scheme-agnostic resume: latest_checkpoint.pt OR model_*.pt)
+    train_self_play.slurm       #   E / G  (+ --no_abc/--no_hist_pool/--no_ge); alice+bob checkpoints
+    train_gym.slurm             #   gym A/B/C (adds push_nsteps field; no --headless)
+    validate.slurm              #   validators (run manually; no resume — validation is short)
+  params/                       # generated: one file per (phase, family, mem-tier) + manifest.txt
+  gen_params.py                 # defines the matrix → writes params files + manifest
+  submit_all.sh                 # reads manifest; sbatch --array=1-N%K per phase; --list/--phase/--throttle/--dry-run
+extras/collate_seeds.py         # mean ± 95% CI table
+```
+
+Run flow on the cluster (from the project root, where `isaac-lab.sif` lives):
+```bash
+python3 hpc/gen_params.py                       # (re)generate params after any matrix edit
+./hpc/submit_all.sh --list                      # phases + job counts
+./hpc/submit_all.sh --phase phase1 --phase phase3   # fire highest-payoff first
+./hpc/submit_all.sh --phase phase1_validate      # after checkpoints exist
+python3 extras/collate_seeds.py                  # CI table -> collated_summary.{csv,md}
+```
+
+### 14.5 Design decisions (and why)
+
+- **Job arrays over 100 individual scripts.** Idiomatic Hábrók; one `scancel <id>` kills a phase;
+  `--array=1-N%K` throttles concurrency, which matters because Hábrók priority is
+  **fairshare-dominated** (weight 10M, 1-week half-life) — flooding the queue tanks priority for
+  a week. Default throttle `%4`. The **age** factor (weight 2.5M) rewards submitting the
+  high-payoff phases (1 & 3) first.
+- **Params grouped by memory tier, one array each.** A job array shares `#SBATCH` resource
+  directives across all tasks, so mixed env-counts can't share one array. `gen_params.py` emits
+  `phaseX_<family>_<mem>.txt`, and `submit_all.sh` overrides `--mem`/`--time` per array at submit
+  time (CLI overrides win over script directives).
+- **Memory tiers from measured usage.** A 512-env self-play job used **13.3 GB RAM / 12.8 GB
+  VRAM** (Hábrók completion email). Node = 8 GPU / 128 CPU / **192 GB**, so `--mem=24G` packs
+  exactly 8 jobs/node (balanced with 16 CPU/GPU and 8 GPU). Tiers: ≤528→24G, 1024→32G,
+  2048→48G, gym→16G. (The old scripts' 64G capped a node at 3 jobs, idling 5 GPUs.)
+- **23 h walltime, per-config self-resubmit.** Max GPU walltime is 24 h; budget-matched runs are
+  ~1.5–2 days = 2 chunks. Templates set `--time=23:00:00` (margin for cleanup+resubmit) and, on
+  `SIGUSR1@120`, forward the signal to the container **and** resubmit *that one array index* as a
+  standalone job (`--array=i-i`), preserving `PARAMS/JOB_MEM/JOB_TIME/TEMPLATE` via `--export`.
+  Capped at `MAX_RESUBMITS=10` to stop crash-loops burning fairshare.
+- **`--partition=gpu`** (auto-routes to `gpumedium`) and explicit **`rtx_pro_6000:1`** — bare
+  `--gpus-per-node=1` only reaches V100/A100 (32/40 GB), too small for 2048 envs and possibly
+  Isaac-incompatible.
+- **Results on `/scratch/$USER/final_results_thesis`.** Run paths are relative (`runs/<exp>`),
+  bind-mounted to node-local scratch, then rsynced to `RESULTS_ROOT` — a SLURM-only redirect, no
+  Python edit. `RESULTS_ROOT` is overridable via env var (default `/scratch/$USER/...`) so it
+  propagates through resubmits and is locally testable.
+- **Scheme-agnostic resume.** The single-agent template prefers `agent/latest_checkpoint.pt` +
+  `latest_iter.txt` (PBRS A/B) and falls back to newest `agent/model_*.pt` (baseline
+  `train_push`), always resuming if a checkpoint exists (idempotent re-submits).
+- **Naming convention** `<model>_e<envs>_i<iters>_s<seed>` (e.g. `pbrsE_e1024_i1547_s42`) is
+  parsed by `collate_seeds.py` to group seeds; validation CSVs land at
+  `<RESULTS_ROOT>/<exp>/validation_results_<validator>.csv`.
+
+### 14.6 SAC+HER checkpoint hardening (kept, deferred from the suite)
+
+`train_push_sac_her.py` + its slurm were repaired so a resumed SAC run is actually usable
+(prior chains silently lost all experience):
+
+- **Replay buffer now saved/restored.** `atomic_sac_save()` writes `<base>.zip` **and**
+  `<base>_replay.pkl`; `CheckpointCallback(save_replay_buffer=True)`; on resume the HER buffer is
+  reloaded via `model.load_replay_buffer(...)`. Previously `model.save()` dropped the buffer, so
+  each 24 h chunk restarted off-policy learning from `learning_starts`.
+- **Atomic writes** (`*.tmp` → `os.replace`) so a kill mid-save can't corrupt the checkpoint
+  (was causing crash-loops on reload).
+- **Guarded load** (`try/except` → fresh SAC) and `reset_num_timesteps = not resumed`.
+- **Signal handling**: batch `USR1` trap forwards to the container so the Python `SIGTERM/USR1`
+  saver runs inside the 120 s window; slurm fallback also copies the paired `_replay.pkl`.
+- Checkpoint cadence decoupled from `max_iterations` (fixed 200k-step intervals).
+
+### 14.7 Open items / follow-ups
+
+1. **2048-env OOM smoke test** on the interactive L40S nodes (`gpu1/gpu2`) before committing the
+   Phase-1 48G jobs (self-play = two policies + ABC/hist buffers).
+2. **Phase-4 env count is a placeholder** (`528`); once Phase 1 identifies the best batch, edit
+   `build()` in `hpc/gen_params.py` and regenerate.
+3. **Gym in-container deps** — the gym template runs in `isaac-lab.sif`; confirm `gym-pusht` is on
+   the overlay (else point it at `gym_overlay.img` per the earlier gym slurms).
+4. **E7 gate reconciliation** (self-play train vs eval success definition) — not auto-generated; a
+   one-off validation run.

@@ -97,6 +97,14 @@ def main():
                         help="Write terminal output to this file as well")
     parser.add_argument("--with_distractor", action="store_true",
                         help="Spawn a random cube/cylinder as clutter (no goal)")
+    parser.add_argument("--k_p", type=float, default=None,
+                        help="PBRS position potential sharpness (default: reward_pbrs.PBRS_K_POS)")
+    parser.add_argument("--k_r", type=float, default=None,
+                        help="PBRS rotation potential sharpness (default: reward_pbrs.PBRS_K_ROT)")
+    parser.add_argument("--w_pos", type=float, default=None,
+                        help="PBRS position dense weight (default: reward_pbrs.PBRS_W_POS)")
+    parser.add_argument("--w_rot", type=float, default=None,
+                        help="PBRS rotation dense weight (default: reward_pbrs.PBRS_W_ROT)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
 
@@ -157,6 +165,13 @@ def main():
         PBRS_K_POS, PBRS_K_ROT, PBRS_W_POS, PBRS_W_ROT,
         TIP_OVER_THRESHOLD,
     )
+
+    # PBRS reward coefficients — CLI overrides fall back to reward_pbrs defaults.
+    pbrs_k_p = args.k_p if args.k_p is not None else PBRS_K_POS
+    pbrs_k_r = args.k_r if args.k_r is not None else PBRS_K_ROT
+    pbrs_w_pos = args.w_pos if args.w_pos is not None else PBRS_W_POS
+    pbrs_w_rot = args.w_rot if args.w_rot is not None else PBRS_W_ROT
+    print(f"[PBRS] k_p={pbrs_k_p} k_r={pbrs_k_r} w_pos={pbrs_w_pos} w_rot={pbrs_w_rot}")
 
     ppo_cfg_path = os.path.join(os.path.dirname(__file__), "cfg/ppo/ppo_continuous.yaml")
     ppo_cfg = load_cfg(ppo_cfg_path)
@@ -535,8 +550,9 @@ def main():
         _obj_euler_pre = obs[:, env.robot_dim + 3:env.robot_dim + 6]
         _goal_pos_pre = obs[:, env.robot_dim + env.obj_state_dim:env.robot_dim + env.obj_state_dim + 3]
         _goal_euler_pre = obs[:, env.robot_dim + env.obj_state_dim + 3:env.robot_dim + env.obj_state_dim + 6]
-        prev_phi_pos = potential_pos(_obj_pos_pre, _goal_pos_pre)
-        prev_phi_rot = potential_rot(_obj_euler_pre[..., 2], _goal_euler_pre[..., 2])
+        prev_phi_pos = potential_pos(_obj_pos_pre, _goal_pos_pre, k_p=pbrs_k_p)
+        prev_phi_rot = potential_rot(_obj_euler_pre[..., 2], _goal_euler_pre[..., 2], k_r=pbrs_k_r)
+
 
         for push_step in range(push_nsteps):
             # ── Agent predicts push action ────────────────────────────────────
@@ -626,6 +642,7 @@ def main():
             pbrs_result = compute_pbrs_reward(
                 _obj_pos_now, _obj_euler_now, _goal_pos_now, _goal_euler_now,
                 prev_phi_pos, prev_phi_rot, gave_completion, gave_rot_bonus,
+                w_pos=pbrs_w_pos, w_rot=pbrs_w_rot, k_p=pbrs_k_p, k_r=pbrs_k_r,
             )
             reward = pbrs_result["reward"]
             gave_completion = pbrs_result["gave_completion"]
@@ -795,13 +812,14 @@ def main():
             _obj_euler_pre = obs[:, env.robot_dim + 3:env.robot_dim + 6]
             _goal_pos_pre = obs[:, env.robot_dim + env.obj_state_dim:env.robot_dim + env.obj_state_dim + 3]
             _goal_euler_pre = obs[:, env.robot_dim + env.obj_state_dim + 3:env.robot_dim + env.obj_state_dim + 6]
-            prev_phi_pos = potential_pos(_obj_pos_pre, _goal_pos_pre)
-            prev_phi_rot = potential_rot(_obj_euler_pre[..., 2], _goal_euler_pre[..., 2])
+            prev_phi_pos = potential_pos(_obj_pos_pre, _goal_pos_pre, k_p=pbrs_k_p)
+            prev_phi_rot = potential_rot(_obj_euler_pre[..., 2], _goal_euler_pre[..., 2], k_r=pbrs_k_r)
 
         # ── PPO UPDATE ────────────────────────────────────────────────────────
         with torch.no_grad():
             last_val = agent.actor_critic.critic(obs)
         agent.storage.compute_returns(last_val, agent.gamma, agent.lam)
+        value_error = (agent.storage.values - agent.storage.returns).abs().mean().item()
         loss_val, loss_surr = agent.update()
         agent.storage.clear()
 
@@ -825,6 +843,7 @@ def main():
 
         writer.add_scalar("Loss/Agent/Value",        loss_val,      iteration)
         writer.add_scalar("Loss/Agent/Surrogate",    loss_surr,     iteration)
+        writer.add_scalar("Metrics/Bob/ValueError",  value_error,   iteration)
         writer.add_scalar("Reward/Mean",             mean_rew,      iteration)
         writer.add_scalar("Reward/EMA",              ema_rew,       iteration)
         writer.add_scalar("Metrics/SuccessRate",     sr,            iteration)

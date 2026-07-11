@@ -898,8 +898,16 @@ class PushASPEnvWrapper:
         self, alice_obs: torch.Tensor, goal_states: torch.Tensor,
     ) -> torch.Tensor:
         """Construct Bob's full observation from Alice's obs + goal states.
-        Alice obs: [robot(7) | obj_state(14)] = 21D
-        Bob obs:   [robot(7) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 29D
+
+        Alice obs: [robot(6) | obj_state(14)] = 20D
+        Bob obs:   [robot(6) | obj_state(14) | goal_pose(6) | tail(2)] = 28D
+
+        The last-2 ``tail`` slot MUST match ``_get_push_obs`` exactly, otherwise
+        ABC demonstrations sit in a different feature space than Bob's rollout
+        observations (2-of-28 features out of distribution):
+          - dpose_obs : [d_pose, bearing]
+          - rel_obs   : [rel_dx, rel_dy]
+          - default   : [pos_dist, rot_dist]
         """
         if alice_obs.dim() == 1:
             alice_obs = alice_obs.unsqueeze(0)
@@ -916,10 +924,24 @@ class PushASPEnvWrapper:
         obj_pos = obj_state[:, :3]
         obj_euler = obj_state[:, 3:6]
 
-        pos_dist = (obj_pos - goal_pos).norm(dim=-1, keepdim=True)
-        rot_dist = _rot_distance_rad(obj_euler, goal_euler).unsqueeze(-1)
+        if self.dpose_obs:
+            d_pose = compute_dpose(
+                obj_pos, goal_pos, obj_euler[:, 2], goal_euler[:, 2], self.char_length,
+            ).unsqueeze(-1)
+            dx = goal_pos[:, 0] - obj_pos[:, 0]
+            dy = goal_pos[:, 1] - obj_pos[:, 1]
+            bearing = torch.atan2(dy, dx).unsqueeze(-1)
+            tail = torch.cat([d_pose, bearing], dim=-1)
+        elif self.rel_obs:
+            rel_dx = (goal_pos[:, 0] - obj_pos[:, 0]).unsqueeze(-1)
+            rel_dy = (goal_pos[:, 1] - obj_pos[:, 1]).unsqueeze(-1)
+            tail = torch.cat([rel_dx, rel_dy], dim=-1)
+        else:
+            pos_dist = (obj_pos - goal_pos).norm(dim=-1, keepdim=True)
+            rot_dist = _rot_distance_rad(obj_euler, goal_euler).unsqueeze(-1)
+            tail = torch.cat([pos_dist, rot_dist], dim=-1)
 
-        return torch.cat([robot, obj_state, goal_pose, pos_dist, rot_dist], dim=-1)
+        return torch.cat([robot, obj_state, goal_pose, tail], dim=-1)
 
     def close(self):
         self.env.close()

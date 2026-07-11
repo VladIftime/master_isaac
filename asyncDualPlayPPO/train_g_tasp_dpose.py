@@ -591,6 +591,7 @@ def main():
                                   g_sample.norm(dim=-1).mean().item(), bob_updates)
 
         bob_ppo.storage.compute_returns(last_val_b, bob_ppo.gamma, bob_ppo.lam)
+        bob_value_error = (bob_ppo.storage.values - bob_ppo.storage.returns).abs().mean().item()
         bob_ppo.current_learning_iteration = bob_updates
         loss_val, loss_surr, loss_abc, _ = bob_ppo.update(alice_mean_rew=last_alice_mean_rew)
         bob_ppo.storage.clear()
@@ -604,6 +605,14 @@ def main():
 
         writer.add_scalar("Loss/Bob/Value", loss_val, bob_updates)
         writer.add_scalar("Loss/Bob/Surrogate", loss_surr, bob_updates)
+        writer.add_scalar("Metrics/Bob/ValueError", bob_value_error, bob_updates)
+        if not args.no_abc:
+            _abc = bob_ppo.last_abc_stats
+            writer.add_scalar("Loss/Bob/ABC", loss_abc, bob_updates)
+            writer.add_scalar("ABC/ClipFraction", _abc["clip_fraction"], bob_updates)
+            writer.add_scalar("ABC/BCRatioMean", _abc["bc_ratio_mean"], bob_updates)
+            writer.add_scalar("ABC/BCProbMean", _abc["bc_prob_mean"], bob_updates)
+            writer.add_scalar("ABC/NSamples", _abc["n_samples"], bob_updates)
         writer.add_scalar("Reward/Bob", mean_bob_rew, bob_updates)
         writer.add_scalar("Metrics/Bob/SuccessRate", bob_success_rate, bob_updates)
         writer.add_scalar("Metrics/Bob/PosError", mean_pos_err, bob_updates)
@@ -1345,23 +1354,14 @@ def main():
                         bc_obs = env.construct_bob_observation(traj_o, g)
                         valid_trajs.append((bc_obs, traj_a))
                     if valid_trajs:
-                        all_obs2 = torch.cat([t[0] for t in valid_trajs], dim=0)
-                        all_acts2 = torch.cat([t[1] for t in valid_trajs], dim=0)
-                        with torch.no_grad():
-                            old_lp_all, _, _, _, _ = bob_ppo.actor_critic.evaluate(
-                                all_obs2, None, all_acts2,
-                            )
-                        offset = 0
                         for bc_obs_i, traj_a_i in valid_trajs:
-                            t_len_i = bc_obs_i.shape[0]
-                            bob_ppo.abc_buffer.add_trajectory(
-                                bc_obs_i, traj_a_i,
-                                old_lp_all[offset:offset + t_len_i],
-                            )
-                            offset += t_len_i
+                            old_lp_i = bob_ppo.threaded_demo_logprobs(bc_obs_i, traj_a_i)
+                            bob_ppo.abc_buffer.add_trajectory(bc_obs_i, traj_a_i, old_lp_i)
                 except Exception as e:
-                    if args.debug_rewards:
-                        print(f"  [ABC] WARNING: buffer population error: {e}", flush=True)
+                    import traceback as _tb, sys as _sys
+                    print(f"  [ABC] FATAL: buffer population error: {e}", flush=True)
+                    _tb.print_exc()
+                    _sys.exit(1)
 
             env.capture_pre_push(full_push_obs)
             _obj_pos_pre = full_push_obs[:, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 3]

@@ -61,10 +61,32 @@ class PPOABC(PPO):
         # Fix 9: removed abc_warmup_threshold gate — paper uses β=0.5 from iteration 1
         self.abc_warmup_threshold = 0.0  # always active
         self.abc_buffer = None
+        # BC diagnostics from the most recent update() (clip-saturation evidence).
+        self.last_abc_stats = {"clip_fraction": 0.0, "bc_ratio_mean": 0.0,
+                               "bc_prob_mean": 0.0, "n_samples": 0}
 
     def set_abc_buffer(self, abc_buffer):
         """Attach the demonstration buffer populated by train.py."""
         self.abc_buffer = abc_buffer
+
+    @torch.no_grad()
+    def threaded_demo_logprobs(self, obs_seq: torch.Tensor, act_seq: torch.Tensor) -> torch.Tensor:
+        """Behaviour log-probs of a single demo trajectory under the CURRENT Bob
+        policy, threading the LSTM across the trajectory exactly as
+        ``_compute_abc_loss_sequential`` does (both start from a zero hidden
+        state).  Stored as ``old_lp`` so the BC ratio is 1.0 at collection time
+        and the clip-fraction metric is unbiased by LSTM-threading mismatch."""
+        T = obs_seq.shape[0]
+        h = torch.zeros(1, self.actor_critic.lstm_hidden_size, device=self.device)
+        c = torch.zeros(1, self.actor_critic.lstm_hidden_size, device=self.device)
+        lps = []
+        for t in range(T):
+            raw, (h, c) = self.actor_critic._actor_forward(
+                obs_seq[t:t + 1].to(self.device), (h, c), detach_goal_encoder=True
+            )
+            dist = self.actor_critic._make_distribution(raw)
+            lps.append(dist.log_prob(act_seq[t:t + 1].to(self.device).long()))
+        return torch.cat(lps, dim=0)
 
     def _compute_abc_loss_sequential(self, abc_trajs) -> torch.Tensor:
         """LSTM-threaded ABC loss over a batch of complete trajectories.
@@ -105,6 +127,17 @@ class PPOABC(PPO):
         seq_log_probs = torch.stack(seq_log_probs, dim=0)  # (max_T, n_t)
         bc_ratio = torch.exp(seq_log_probs - padded_old_lp)
         bc_clipped = torch.clamp(bc_ratio, 1.0 - self.clip_param, 1.0 + self.clip_param)
+        # ── Clip-saturation diagnostics (evidence for the ABC clip claim) ──────
+        with torch.no_grad():
+            r = bc_ratio[traj_valid]
+            if r.numel() > 0:
+                outside = (r < (1.0 - self.clip_param)) | (r > (1.0 + self.clip_param))
+                self.last_abc_stats = {
+                    "clip_fraction": outside.float().mean().item(),
+                    "bc_ratio_mean": r.mean().item(),
+                    "bc_prob_mean": seq_log_probs[traj_valid].exp().mean().item(),
+                    "n_samples": int(traj_valid.sum().item()),
+                }
         return -torch.min(bc_ratio, bc_clipped)[traj_valid].mean()
 
     def update(self, alice_mean_rew: float = 0.0):

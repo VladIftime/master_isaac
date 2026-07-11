@@ -129,6 +129,13 @@ def main():
     import gymnasium as gym_mc
     from torch.utils.tensorboard import SummaryWriter
 
+    import random as _random
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    np.random.seed(args.seed)
+    _random.seed(args.seed)
+    print(f"[SEED] RNG seeded with {args.seed}")
+
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
     import isaaclab.sim as sim_utils
@@ -182,6 +189,7 @@ def main():
 
     # ── Environment config ────────────────────────────────────────────────────
     env_cfg = PushTaskCuRoboEnvCfg()
+    env_cfg.seed = args.seed
     env_cfg.scene.num_envs = args.num_envs
 
     env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
