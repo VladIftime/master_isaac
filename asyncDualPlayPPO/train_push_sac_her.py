@@ -46,6 +46,22 @@ from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from stable_baselines3.her import HerReplayBuffer
 
 
+def atomic_sac_save(model, base_path, with_buffer=True):
+    """Atomically save an SB3 model (+ its HER replay buffer).
+
+    Writes to ``*.tmp`` files first, then ``os.replace`` into place so a
+    process killed mid-save can never leave a truncated/corrupt checkpoint.
+    Produces ``<base>.zip`` and (if with_buffer) ``<base>_replay.pkl``.
+    """
+    zip_tmp = base_path + ".zip.tmp"
+    model.save(zip_tmp)
+    os.replace(zip_tmp, base_path + ".zip")
+    if with_buffer and getattr(model, "replay_buffer", None) is not None:
+        rb_tmp = base_path + "_replay.pkl.tmp"
+        model.save_replay_buffer(rb_tmp)
+        os.replace(rb_tmp, base_path + "_replay.pkl")
+
+
 class LatestCheckpointCallback(BaseCallback):
     def __init__(self, save_freq, save_path, verbose=0):
         super().__init__(verbose)
@@ -58,7 +74,7 @@ class LatestCheckpointCallback(BaseCallback):
             self._last_save = self.num_timesteps
         if self.num_timesteps - self._last_save >= self.save_freq:
             try:
-                self.model.save(self.save_path)
+                atomic_sac_save(self.model, self.save_path, with_buffer=True)
             except Exception as e:
                 print(f"[CKPT] save failed at step {self.num_timesteps}: {e} — continuing.", flush=True)
             self._last_save = self.num_timesteps
@@ -94,13 +110,37 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     print(f"[INFO] Logging to: {log_dir}")
 
+    resumed = False
+    model = None
     if args_cli.checkpoint:
         print(f"[INFO] Loading checkpoint: {args_cli.checkpoint}")
-        model = SAC.load(
-            args_cli.checkpoint, env=env_wrapped,
-            tensorboard_log=None, seed=args_cli.seed,
-        )
-    else:
+        try:
+            model = SAC.load(
+                args_cli.checkpoint, env=env_wrapped,
+                tensorboard_log=None, seed=args_cli.seed,
+            )
+            resumed = True
+            print(f"[INFO] Policy restored. num_timesteps={model.num_timesteps}")
+            # Restore the HER replay buffer saved alongside the .zip.
+            ckpt = args_cli.checkpoint
+            rb_path = (ckpt[:-4] if ckpt.endswith(".zip") else ckpt) + "_replay.pkl"
+            if os.path.exists(rb_path):
+                try:
+                    model.load_replay_buffer(rb_path)
+                    print(f"[INFO] Replay buffer restored: {rb_path} "
+                          f"(size={model.replay_buffer.size()})")
+                except Exception as e:
+                    print(f"[WARN] Replay buffer load failed ({e}); "
+                          "continuing with empty buffer.", flush=True)
+            else:
+                print(f"[WARN] No replay buffer at {rb_path}; "
+                      "continuing with empty buffer.", flush=True)
+        except Exception as e:
+            print(f"[WARN] Checkpoint load failed ({e}); starting fresh SAC.", flush=True)
+            model = None
+            resumed = False
+
+    if model is None:
         model = SAC(
             "MultiInputPolicy",
             env_wrapped,
@@ -127,19 +167,18 @@ def main():
         )
 
     total_timesteps = args_cli.max_iterations * cfg.scene.num_envs
-    ckpt_interval = max(1, args_cli.max_iterations // 10)
     ckpt_dir = os.path.join(log_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
 
     checkpoint_callback = CheckpointCallback(
-        save_freq=ckpt_interval,
+        save_freq=200000,
         save_path=ckpt_dir,
         name_prefix="agent",
-        save_replay_buffer=False,
+        save_replay_buffer=True,
     )
 
     latest_ckpt_callback = LatestCheckpointCallback(
-        save_freq=max(1, args_cli.max_iterations // 20),
+        save_freq=200000,
         save_path=os.path.join(log_dir, "latest_checkpoint"),
     )
 
@@ -156,17 +195,21 @@ def main():
 
     print(f"[INFO] Total timesteps: {total_timesteps} "
           f"({args_cli.max_iterations} iters x {cfg.scene.num_envs} envs)")
-    print(f"[INFO] Checkpoint intervals: agent={ckpt_interval} steps, latest={20000} steps")
+    print(f"[INFO] Checkpoint intervals: agent=200000 steps, latest=200000 timesteps (with replay buffer)")
     print(f"[INFO] Replay buffer size: {100000}")
     print(f"[INFO] HER n_sampled_goal: 4, strategy: future")
+    print(f"[INFO] Resumed: {resumed}")
     sys.stdout.flush()
 
     latest_ckpt_path = os.path.join(log_dir, "latest_checkpoint")
 
     def _save_on_signal(signum, frame):
-        print(f"\n[CKPT] Received signal {signum} - saving latest_checkpoint...")
-        model.save(latest_ckpt_path)
-        print(f"[CKPT] Saved to: {latest_ckpt_path}.zip")
+        print(f"\n[CKPT] Received signal {signum} - saving latest_checkpoint (+replay buffer)...")
+        try:
+            atomic_sac_save(model, latest_ckpt_path, with_buffer=True)
+            print(f"[CKPT] Saved to: {latest_ckpt_path}.zip (+_replay.pkl)")
+        except Exception as e:
+            print(f"[CKPT] Save on signal failed: {e}", flush=True)
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _save_on_signal)
@@ -175,7 +218,7 @@ def main():
     try:
         model.learn(
             total_timesteps=total_timesteps,
-            reset_num_timesteps=(args_cli.checkpoint is None),
+            reset_num_timesteps=(not resumed),
             log_interval=4,
             progress_bar=True,
             callback=[checkpoint_callback, latest_ckpt_callback],
@@ -185,8 +228,8 @@ def main():
               "training completed, ignoring.", flush=True)
 
     ckpt_path = os.path.join(ckpt_dir, "agent_final")
-    model.save(ckpt_path)
-    print(f"[INFO] Final model saved to: {ckpt_path}.zip")
+    atomic_sac_save(model, ckpt_path, with_buffer=True)
+    print(f"[INFO] Final model saved to: {ckpt_path}.zip (+_replay.pkl)")
 
     env.close()
 

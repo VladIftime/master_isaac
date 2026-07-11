@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=push_sac_her
-#SBATCH --time=04:00:00
+#SBATCH --time=24:00:00
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1
 #SBATCH --cpus-per-task=16
@@ -9,7 +9,7 @@
 #SBATCH --signal=B:USR1@120
 
 WILL_RESUBMIT=false
-trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); will resubmit."; WILL_RESUBMIT=true' USR1
+trap 'echo "[INFO] Caught SIGUSR1 (Time Limit); forwarding to container..."; kill -USR1 $APPTAINER_PID 2>/dev/null; WILL_RESUBMIT=true' USR1
 set -o pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -17,7 +17,7 @@ set -o pipefail
 # ═══════════════════════════════════════════════════════════════════════════════
 
 NUM_ENVS=528
-MAX_ITERATIONS=1200000
+MAX_ITERATIONS=5000000
 SEED=42
 EXP_NAME="hpc_push_sac_her_${NUM_ENVS}env"
 MAX_RESUBMITS=50
@@ -26,9 +26,7 @@ PROJECT_ROOT=$(pwd)
 SIF_IMAGE="${PROJECT_ROOT}/isaac-lab.sif"
 CUROBO_OVERLAY="${PROJECT_ROOT}/curobo_overlay.img"
 
-LOCAL_LOGS="${TMPDIR:-/tmp}/push_sac_her_${SLURM_JOB_ID}"
 LOCAL_RUNS="${TMPDIR:-/tmp}/push_sac_runs_${SLURM_JOB_ID}"
-mkdir -p "$LOCAL_LOGS"
 mkdir -p "$LOCAL_RUNS"
 mkdir -p "$PROJECT_ROOT/.cache"
 mkdir -p "$PROJECT_ROOT/.isaac_cache/kit/data"
@@ -44,18 +42,26 @@ CONTAINER_PROJECT="/workspace/isaaclab/user_project/asyncDualPlayPPO"
 cleanup() {
     echo "[INFO] Syncing results to NFS..."
     rsync -a --no-perms "$LOCAL_RUNS/" "$PROJECT_ROOT/runs/sac/" 2>/dev/null
-    rsync -a --no-perms "$LOCAL_LOGS/" "$PROJECT_ROOT/runs/sac/" 2>/dev/null
     echo "[INFO] Sync complete."
 
-    # Fallback: create latest_checkpoint.zip from the most recent agent checkpoint
-    # Only if latest_checkpoint.zip does NOT already exist (never overwrite).
-    # LatestCheckpointCallback and SIGTERM handler already save with replay buffer.
+    # Fallback: create latest_checkpoint.zip (+replay) from the most recent
+    # agent checkpoint.  Only if latest_checkpoint.zip does NOT already exist
+    # (never overwrite).  The periodic LatestCheckpointCallback and the signal
+    # handler both write the data via atomic_sac_save, so this fallback only
+    # fires when the Python process was killed without running _save_on_signal
+    # (e.g. unhandled SIGKILL or OOM).
     LATEST_AGENT_ZIP=$(find "$PROJECT_ROOT/runs/sac" \( -name "agent_*_steps.zip" -o -name "agent_final.zip" \) -type f 2>/dev/null | sort -V | tail -1)
     if [ -n "$LATEST_AGENT_ZIP" ]; then
-        RUN_DIR="${LATEST_AGENT_ZIP%/checkpoints/*}"
+        RUN_DIR=$(dirname $(dirname "$LATEST_AGENT_ZIP"))
         if [ ! -f "$RUN_DIR/latest_checkpoint.zip" ]; then
             cp "$LATEST_AGENT_ZIP" "$RUN_DIR/latest_checkpoint.zip"
             echo "[CKPT] Fallback: created latest_checkpoint.zip from $(basename "$LATEST_AGENT_ZIP")"
+            # Also copy the paired replay buffer if it exists (added by save_replay_buffer=True).
+            LATEST_AGENT_RB="${LATEST_AGENT_ZIP%.zip}_replay.pkl"
+            if [ -f "$LATEST_AGENT_RB" ]; then
+                cp "$LATEST_AGENT_RB" "$RUN_DIR/latest_checkpoint_replay.pkl"
+                echo "[CKPT] Fallback: copied matching replay buffer"
+            fi
         fi
     fi
 
@@ -135,6 +141,7 @@ apptainer exec --nv \
         --max_iterations "$MAX_ITERATIONS" \
         --seed           "$SEED" \
         --exp_name       "$EXP_NAME" \
+        --rel_act \
         $RESUME_ARGS \
     2>&1 | grep --line-buffered -v \
         -e "\[Lula\] Joint .* is specified as a mimic joint" \
