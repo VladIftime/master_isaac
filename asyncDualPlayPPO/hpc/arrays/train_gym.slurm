@@ -7,7 +7,7 @@
 #SBATCH --job-name=gym_train
 #SBATCH --partition=regular
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --time=23:00:00
 #SBATCH --output=slurm-%A_%a-gym_train.out
 #SBATCH --signal=B:USR1@120

@@ -25,6 +25,7 @@ def iters_for(envs):
     return round(BUDGET_PUSHES / (envs * 15))
 
 MEM_TIER = {256: "24G", 512: "24G", 528: "24G", 1024: "32G", 2048: "48G"}
+GYM_MEM = {64: "32G", 256: "32G"}
 TIME = "23:00:00"
 
 TPL_SINGLE = "hpc/arrays/train_single_agent.slurm"
@@ -84,7 +85,8 @@ class Suite:
     def add_gym(self, phase, model_script, seed, envs, push_nsteps, exp):
         iters = 3000
         line = f"{model_script} {seed} {envs} {push_nsteps} {iters} {SAVE} {exp}"
-        self.buckets.setdefault((phase, "gym", "16G"), []).append(line)
+        mem = GYM_MEM.get(envs, "32G")
+        self.buckets.setdefault((phase, "gym", mem), []).append(line)
         self.gymval.setdefault(phase, []).append(f"validate_pusht_gym.py {exp}")
 
     def add_xeval(self, phase, exp, val_extra):
@@ -113,7 +115,7 @@ class Suite:
             fname = f"{phase}_validate.txt"
             with open(os.path.join(PARAMS_DIR, fname), "w") as f:
                 f.write("\n".join(lines) + "\n")
-            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 16G 04:00:00 4 {phase}_validate")
+            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 32G 04:00:00 4 {phase}_validate")
         with open(os.path.join(PARAMS_DIR, "manifest.txt"), "w") as f:
             f.write("# PARAMS_FILE  TEMPLATE  MEM  TIME  THROTTLE  PHASE\n")
             f.write("\n".join(manifest) + "\n")
