@@ -11,7 +11,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=12G
 #SBATCH --time=23:00:00
-#SBATCH --output=slurm-%A_%a-sa_train.out
+#SBATCH --output=/scratch/%u/slurm_logs/slurm-%A_%a-sa_train.out
 #SBATCH --signal=B:USR1@120
 #SBATCH --requeue                        # preempt/qos cluster: let SLURM auto-requeue on preemption
 

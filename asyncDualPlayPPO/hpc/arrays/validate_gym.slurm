@@ -10,9 +10,10 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=8G
 #SBATCH --time=04:00:00
-#SBATCH --output=slurm-%A_%a-gymvalidate.out
+#SBATCH --output=/scratch/%u/slurm_logs/slurm-%A_%a-gymvalidate.out
 
 set -o pipefail
+mkdir -p "/scratch/$USER/slurm_logs" 2>/dev/null
 PROJECT_ROOT=$(pwd)
 RESULTS_ROOT="${RESULTS_ROOT:-/scratch/$USER/final_results_thesis}"
 CONTAINER_PROJECT="/workspace/isaaclab/user_project/asyncDualPlayPPO"

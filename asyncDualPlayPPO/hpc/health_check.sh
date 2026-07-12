@@ -48,5 +48,12 @@ LOG="$HOME/experiment_health_$(date +%y%m%d).log"
         echo "$STALLED"
     fi
 
+    # ── clean old .out files (>7 days) from scratch slurm_logs ──────────
+    SLURM_LOGS="/scratch/$USER/slurm_logs"
+    CLEANED=$(find "$SLURM_LOGS" -name "*.out" -mtime +7 -delete -print 2>/dev/null | wc -l)
+    if [ "$CLEANED" -gt 0 ]; then
+        echo "Cleaned $CLEANED old .out files from $SLURM_LOGS"
+    fi
+
     echo "---"
 } >> "$LOG" 2>&1

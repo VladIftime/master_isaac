@@ -14,6 +14,7 @@ campaign_start() {
     JOB_START=$(date +%s)
     if [ -n "${CAMPAIGN_DIR:-}" ]; then
         mkdir -p "$CAMPAIGN_DIR/jobids" 2>/dev/null
+        mkdir -p "/scratch/$USER/slurm_logs" 2>/dev/null
         # Self-abort: a queued task that starts after the brake tripped exits now
         # (backstop in case scancel had not yet reached it).
         if [ -f "$CAMPAIGN_DIR/ABORTED" ]; then
