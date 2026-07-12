@@ -7,7 +7,7 @@
 #SBATCH --job-name=gym_train
 #SBATCH --partition=regular
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=32G
+#SBATCH --mem=8G
 #SBATCH --time=23:00:00
 #SBATCH --output=slurm-%A_%a-gym_train.out
 #SBATCH --signal=B:USR1@120
@@ -17,7 +17,7 @@ set -o pipefail
 PROJECT_ROOT=$(pwd)
 RESULTS_ROOT="${RESULTS_ROOT:-/scratch/$USER/final_results_thesis}"
 TEMPLATE="${TEMPLATE:-$PROJECT_ROOT/hpc/arrays/train_gym.slurm}"
-JOB_MEM="${JOB_MEM:-16G}"
+JOB_MEM="${JOB_MEM:-8G}"
 JOB_TIME="${JOB_TIME:-23:00:00}"
 MAX_RESUBMITS="${MAX_RESUBMITS:-10}"
 CHAIN_COUNT="${CHAIN_COUNT:-0}"

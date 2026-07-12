@@ -11,7 +11,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=24G
+#SBATCH --mem=12G
 #SBATCH --time=06:00:00
 #SBATCH --output=slurm-%A_%a-validate.out
 

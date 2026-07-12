@@ -9,7 +9,7 @@
 #SBATCH --partition=gpu
 #SBATCH --gpus-per-node=rtx_pro_6000:1   # 96 GB VRAM
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=24G
+#SBATCH --mem=12G
 #SBATCH --time=23:00:00
 #SBATCH --output=slurm-%A_%a-sa_train.out
 #SBATCH --signal=B:USR1@120
@@ -19,7 +19,7 @@ set -o pipefail
 PROJECT_ROOT=$(pwd)
 RESULTS_ROOT="${RESULTS_ROOT:-/scratch/$USER/final_results_thesis}"
 TEMPLATE="${TEMPLATE:-$PROJECT_ROOT/hpc/arrays/train_single_agent.slurm}"
-JOB_MEM="${JOB_MEM:-24G}"
+JOB_MEM="${JOB_MEM:-12G}"
 JOB_TIME="${JOB_TIME:-23:00:00}"
 MAX_RESUBMITS="${MAX_RESUBMITS:-10}"
 CHAIN_COUNT="${CHAIN_COUNT:-0}"
