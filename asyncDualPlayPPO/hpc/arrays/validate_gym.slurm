@@ -8,7 +8,7 @@
 #SBATCH --job-name=gymvalidate
 #SBATCH --partition=regular
 #SBATCH --cpus-per-task=16
-#SBATCH --mem=8G
+#SBATCH --mem=16G
 #SBATCH --time=04:00:00
 #SBATCH --output=/scratch/%u/slurm_logs/slurm-%A_%a-gymvalidate.out
 
