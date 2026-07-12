@@ -17,13 +17,15 @@ from typing import Tuple
 
 import torch
 
+from .action_push_relative import TBLOCK_MIN_R, TBLOCK_MAX_R, MAX_LEN
+
 
 def decode_push_action_continuous(
     action: torch.Tensor,
     max_xs: float = 0.50,
     max_ys: float = 0.225,
     ys_center: float = 0.475,
-    max_len: float = 0.20,
+    max_len: float = MAX_LEN,
     max_theta: float = math.pi,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
@@ -49,9 +51,9 @@ def decode_push_action_relative_continuous(
     action: torch.Tensor,
     obj_xy: torch.Tensor,
     obj_yaw: torch.Tensor,
-    min_r: float = 0.02,
-    max_r: float = 0.08,
-    max_len: float = 0.20,
+    min_r: float = TBLOCK_MIN_R,
+    max_r: float = TBLOCK_MAX_R,
+    max_len: float = MAX_LEN,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Decode continuous 4D action to push parameters using object-relative approach.

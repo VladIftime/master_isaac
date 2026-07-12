@@ -9,6 +9,9 @@ future work.
 \subsection{Interpretation}
 \label{sec:interpretation}
 
+\oldresults{old single-seed numbers and the old reward-vs-training framing;
+to be rewritten around the ASP-failure regime analysis.}
+
 The central result of this thesis is a priority ordering. For a contact-rich
 multi-objective planar-pushing task under a single-GPU budget, effort spent on
 principled reward design produces a larger and more reliable improvement than
@@ -56,6 +59,9 @@ yet leaves it far below single-agent training.
 
 \subsection{Relation to Prior Work}
 \label{sec:relation}
+
+\oldresults{conceptual arguments are kept, but the embedded gym curriculum
+numbers (10.0\% to 50.0\%) are old single-seed values.}
 
 The findings of this thesis agree with the theory of the papers it builds on,
 while qualifying the empirical claims of the papers it tests. The distinction
@@ -140,6 +146,9 @@ not incidental but necessary.
 \subsection{Contributions Revisited}
 \label{sec:contributions}
 
+\oldresults{stated against the old RQ1--RQ3 with old single-seed numbers;
+to be remapped to the three contributions of the ASP-failure framing.}
+
 The contributions stated in Chapter~\ref{sec:introduction} can now be given
 quantitative content, one per research question.
 
@@ -166,6 +175,9 @@ under a non-stationary goal distribution, not in skill acquisition.
 \subsection{Limitations}
 \label{sec:limitations}
 
+\oldresults{states the single-seed / no-confidence-interval limitation that the
+new experiment set (five seeds with confidence intervals) removes; must be updated.}
+
 Several limitations bound the scope of these conclusions. Validation uses a single
 seed per model, so the reported scene success rates carry no confidence intervals.
 Only the training-time success rate has variance data, across five chains for the
@@ -185,6 +197,10 @@ on published planar-pushing results rather than a converged in-house baseline.
 
 \subsection{Future Work}
 \label{sec:future_work}
+
+\oldresults{several items listed here (multi-seed confidence intervals, batch/scale
+sweep, ABC-clip instrumentation, disc isolation) are already performed by the
+experiment set; reconcile once its results exist.}
 
 Each limitation suggests a concrete continuation. Repeating the validation across
 multiple seeds would attach confidence intervals to the scene success rates. It
@@ -224,6 +240,9 @@ localisation of where the method breaks in this domain.
 
 \subsection{Conclusion}
 \label{sec:final}
+
+\oldresults{old priority-ordering message and old numbers (4x, 35 percentage
+points); to be rewritten as the ASP-failure conclusion.}
 
 This thesis compared reward shaping against structured training dynamics on a
 single contact-rich planar-pushing task, under a common budget and a common

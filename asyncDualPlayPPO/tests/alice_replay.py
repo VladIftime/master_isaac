@@ -79,7 +79,11 @@ import torch
 import yaml
 
 from asyncDualPlayPPO.tasks.utils.wrapper_push_asp import PushASPEnvWrapper, _OBS_ROBOT_DIM
-from asyncDualPlayPPO.tasks.utils.action_push_relative import decode_push_action_relative
+from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+    decode_push_action_relative,
+    TBLOCK_MIN_R, TBLOCK_MAX_R,
+    DISC_MIN_R, DISC_MAX_R,
+)
 from asyncDualPlayPPO.tasks.utils.action_push import compute_push_waypoints
 from asyncDualPlayPPO.tasks.utils.validation_configs import get_test_config
 from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
@@ -283,8 +287,8 @@ def main():
     _py_random.seed(42)
     trajs = bob_ppo.abc_buffer.sample_trajectories(n_replays)
     _obj_dim = _OBS_ROBOT_DIM + 14  # offset of goal block
-    _min_r = 0.06 if _is_disc else 0.03
-    _max_r = 0.12 if _is_disc else 0.08
+    _min_r = DISC_MIN_R if _is_disc else TBLOCK_MIN_R
+    _max_r = DISC_MAX_R if _is_disc else TBLOCK_MAX_R
 
     for r_idx, traj in enumerate(trajs):
         T = traj["obs"].shape[0]

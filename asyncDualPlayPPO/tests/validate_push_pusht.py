@@ -465,7 +465,10 @@ def main():
 
     # Action decoders (isaaclab-free)
     from asyncDualPlayPPO.tasks.utils.action_push import decode_push_action
-    from asyncDualPlayPPO.tasks.utils.action_push_relative import decode_push_action_relative
+    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+        decode_push_action_relative,
+        TBLOCK_MIN_R, TBLOCK_MAX_R,
+    )
     if args.model_type == "sac":
         from asyncDualPlayPPO.tasks.utils.action_push_continuous import \
             decode_push_action_relative_continuous
@@ -577,6 +580,7 @@ def main():
                             torch.stack([obj_x, obj_y]).unsqueeze(0),
                             obj_yaw.unsqueeze(0),
                             num_bins=num_bins,
+                            min_r=TBLOCK_MIN_R, max_r=TBLOCK_MAX_R,
                         )
                     else:
                         Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)
@@ -599,6 +603,7 @@ def main():
                         a_t,
                         torch.stack([obj_x, obj_y]).unsqueeze(0),
                         obj_yaw.unsqueeze(0),
+                        min_r=TBLOCK_MIN_R, max_r=TBLOCK_MAX_R,
                     )
                     bins_str = f"{a_np[0,0]:+.3f},{a_np[0,1]:+.3f},{a_np[0,2]:+.3f},{a_np[0,3]:+.3f}"
 

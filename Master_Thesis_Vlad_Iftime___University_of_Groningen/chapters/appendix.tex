@@ -103,6 +103,9 @@ than solving it.
 \subsection{Per-Test Error Bars}
 \label{app:error_bars}
 
+\oldresults{single-seed per-scene bars and the "statistically equivalent" claim;
+to be regenerated with the seed-CI data.}
+
 Figure~\ref{fig:app_error_bars} shows the per-scene trial-level success rate with
 95\,\% binomial confidence intervals for the single-agent and curriculum models
 head to head, and for all models together. The confidence intervals of the
@@ -145,6 +148,9 @@ per-push error mean, and which activates as intended.
 \subsection{Symmetric Self-Play Fail-Fast Equilibrium}
 \label{app:failfast}
 
+\oldresults{the 0\% collapse is an old single-seed observation; the Bob-penalty
+phase of the experiment set will quantify it with confidence intervals.}
+
 A symmetric variant of time-based self-play, in which the goal-solving agent is
 penalised for its own solve time in addition to the goal-proposing agent being
 rewarded for it, collapses to a 0\,\% success rate. The penalty applies on all
@@ -159,6 +165,9 @@ specific to the setting, not a refutation of the symmetric formulation in genera
 
 \subsection{Confounded Ablation Disaggregation}
 \label{app:confound}
+
+\oldresults{the "10-percentage-point" advantage is an old number, and the new
+single-axis isolations (disc, ABC on/off, encoder on/off) change this account.}
 
 The single-agent and self-play models differ on at least seven axes at once:
 the number of agents (one against two), the goal distribution (fixed random
@@ -175,6 +184,8 @@ time-based formulation.
 \subsection{Training Budget Comparison}
 \label{app:budget}
 
+\oldresults{old single-seed 80.0\% figures and the "five principal models" framing.}
+
 The single-agent and curriculum models and both self-play models were trained at
 528 environments for approximately 3{,}000 iterations. The PPO-Baseline was
 trained at 2{,}048 environments, a deliberately larger batch, so that its lower
@@ -186,6 +197,9 @@ Section~\ref{sec:rq1}.
 
 \subsection{Secondary Variants}
 \label{app:secondary}
+
+\oldresults{treats disc and Bob-penalty as "secondary" and cites old results;
+these are now first-class subjects in the experiment set.}
 
 Beyond the five principal models, several secondary variants were trained and
 evaluated. These are self-play on a rotationally symmetric disc, for which the

@@ -25,29 +25,31 @@ across environments from artefacts of a single implementation.
 \subsection{Training Configuration and the Experiment Set}
 \label{sec:train_config}
 
-All potential-based models are trained with 528 parallel environments for
-approximately 3{,}000 iterations. This corresponds to about 1.3 days of
-wall-clock time per model on the RTX Pro 6000. At 15 pushes per rollout it yields a
-batch of roughly 7{,}920 push transitions per PPO update. The PPO-Baseline is
-trained at 2{,}048 environments, a deliberately larger batch. This ensures the
-reward comparison of Section~\ref{sec:frac_reward} is not confounded by the
-baseline having too little parallelism. The PPO hyperparameters are a learning
-rate of $3\times10^{-4}$, a clipping range of 0.2, a discount factor of 0.998, a
-GAE parameter of 0.95, and an entropy coefficient of 0.005. The self-play models
-additionally use Alice Behavioral Cloning at $\beta = 0.5$.
+At the 528-environment anchor, every model is trained for approximately 3{,}000
+iterations. This corresponds to about 1.6 days of wall-clock time per model on the
+RTX Pro 6000. At 15 pushes per rollout it yields a batch of roughly 7{,}920 push
+transitions per PPO update. For the reward-efficiency comparison, the
+improvement-reward baseline and the potential-based agent are trained across the
+same environment counts, from 256 to 2{,}048, so the two rewards are measured at
+matched parallelism rather than at a single batch. The two self-play subjects are
+additionally trained at 256 and 2{,}048 environments, which tests whether the
+single-GPU compute budget is the cause of their result. The PPO hyperparameters are
+a learning rate of $3\times10^{-4}$, a clipping range of 0.2, a discount factor of
+0.998, a GAE parameter of 0.95, and an entropy coefficient of 0.005. The self-play
+models additionally use Alice Behavioral Cloning at $\beta = 0.5$.
 
 Two points about the training history are stated for reproducibility. First, all
 reported checkpoints post-date a sequence of corrections to the reward and the
 environment. The reported numbers are therefore produced on the corrected code,
-and earlier runs are excluded. Second, the training budget differs between the
-PPO-Baseline and the potential-based models by design. The baseline is given more
-parallelism precisely so that its lower performance cannot be attributed to an
-unfairly small batch. The budgets are tabulated in Appendix~K.
+and earlier runs are excluded. Second, the improvement-reward baseline and the
+potential-based agent are compared across a shared range of environment counts, so
+that any difference between the two rewards cannot be attributed to unequal
+parallelism. The budgets are tabulated in Appendix~K.
 
-Every run in the experiment set is budget-matched. The total experience is held at
-about 23.8 million pushes, and the iteration count is set inversely proportional to
-the number of parallel environments, so a change in the number of environments
-changes the per-update batch size alone. This design has one confound that is
+Every Isaac Lab run in the experiment set is budget-matched. The total experience
+is held at about 23.8 million pushes, and the iteration count is set inversely
+proportional to the number of parallel environments, so a change in the number of
+environments changes the per-update batch size alone. This design has one confound that is
 stated wherever a scale result appears: a larger batch also means fewer gradient
 updates over training, so batch size and update count move together and cannot be
 fully separated. Table~\ref{tab:phases} lists the phases, the models each one
@@ -62,24 +64,25 @@ trains, the environment counts, the matched iteration counts, and the seeds.
         \textbf{Seeds} & \textbf{Runs} \\
         \hline
         Anchor and efficiency & PPO-Baseline, PPO-PBRS & 256--2{,}048 &
-        770--6{,}200 & 3 & 24 \\
+        773--6{,}188 & 3 & 24 \\
         Seed intervals & Baseline, PBRS, Curriculum, ASP-dPose, TASP-dPose & 528 &
         3{,}000 & 5 & 25 \\
         Coupling isolation & ASP-disc, TASP-disc & 528 & 3{,}000 & 5 & 10 \\
-        Self-play scale & ASP-dPose, TASP-dPose & 256--2{,}048 & 770--6{,}200 & 3 &
-        24 \\
+        Self-play scale & ASP-dPose, TASP-dPose & 256, 2{,}048 & 6{,}188; 773 & 3 &
+        12 \\
         Component ablations & ASP-dPose, TASP-dPose & 528 & 3{,}000 & 3 & 12 \\
         Imitation positive control & ASP-disc & 528 & 3{,}000 & 3 & 6 \\
         Reward structure & Bob-penalty & 528 & 3{,}000 & 5 & 5 \\
-        Cross-environment & single agent, curriculum, self-play & two batches &
-        matched & 3 & 10 \\
-        Reward sensitivity & PPO-PBRS grid & 528 & 3{,}000 & 1 & 12 \\
+        Cross-environment & single agent, curriculum, self-play & 64, 256 &
+        3{,}000 & 1 & 10 \\
         \hline
     \end{tabularx}
     \caption{The phases of the experiment set. Environments and iterations trade
-    off to hold the total experience at about 23.8 million pushes. Several anchor
-    runs are shared across phases, so the distinct executed total is approximately
-    94 training runs in Isaac Lab and 10 in the second simulator.}
+    off to hold the total experience at about 23.8 million pushes for the Isaac Lab
+    runs; the cross-environment runs instead use a fixed 3{,}000 iterations and a
+    single seed, and vary the per-update batch through the environment count and
+    the push length. The experiment set comprises 94 training runs in Isaac Lab and
+    10 in the second simulator.}
     \label{tab:phases}
 \end{table}
 
@@ -126,12 +129,14 @@ To test whether the ordering of the models is a property of the methods rather
 than of Isaac Lab, the single-agent, curriculum, and self-play models are
 retrained and evaluated in \texttt{gym-pusht} under the same 30-scene gate. The
 two environments differ mainly in the size of the PPO batch. Isaac Lab produces
-about 7{,}920 transitions per update, while \texttt{gym-pusht} on 32 CPU cores
-produces about 960, a factor of roughly eight smaller. The total number of pushes
-seen over training is matched between the two environments. Any difference in
-outcome is therefore attributable to the per-update batch size, rather than to the
-amount of experience. Figure~\ref{fig:isaac_vs_gym} summarises the throughput and
-batch size of the two environments.
+about 7{,}920 transitions per update at the 528-environment anchor, while
+\texttt{gym-pusht} produces between about 960 and 11{,}520, depending on the
+environment count and the push length. The gym runs use a fixed 3{,}000 iterations
+and sweep the per-update batch through these two settings, so the comparison tests
+whether the ordering of the methods survives a second, lower-fidelity simulator,
+rather than matching the total experience between the two environments.
+Figure~\ref{fig:isaac_vs_gym} summarises the throughput and batch size of the two
+environments.
 
 \begin{figure}[H]
     \centering

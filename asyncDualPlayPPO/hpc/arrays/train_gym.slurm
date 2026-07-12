@@ -35,7 +35,7 @@ WILL_RESUBMIT=false
 trap 'echo "[INFO] SIGUSR1; forwarding + will resubmit."; kill -USR1 $APPTAINER_PID 2>/dev/null; WILL_RESUBMIT=true' USR1
 
 SIF_IMAGE="isaac-lab.sif"
-CURBO_OVERLAY="curobo_overlay.img"
+GYM_OVERLAY="gym_overlay.img"
 NFS_RUN_DIR="$RESULTS_ROOT/$EXP_NAME"
 LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS" "$RESULTS_ROOT"
@@ -116,8 +116,8 @@ echo "==================================================================="
 
 if [ ! -f "$SIF_IMAGE" ]; then echo "[ERROR] $SIF_IMAGE not found"; exit 1; fi
 
-apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
-    --overlay "$PROJECT_ROOT/$CURBO_OVERLAY":ro \
+apptainer exec --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
+    --overlay "$PROJECT_ROOT/$GYM_OVERLAY":ro \
     --bind "$PROJECT_ROOT":/workspace/isaaclab/user_project/asyncDualPlayPPO \
     --bind "$LOCAL_RUNS":/workspace/isaaclab/user_project/asyncDualPlayPPO/runs \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \

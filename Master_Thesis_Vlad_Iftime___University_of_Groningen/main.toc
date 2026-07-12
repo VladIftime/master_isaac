@@ -28,53 +28,53 @@
 \contentsline {paragraph}{Reward.}{20}{}%
 \contentsline {paragraph}{Success criterion.}{20}{}%
 \contentsline {subsection}{\numberline {3.3}The Object-Relative Push Primitive}{20}{}%
-\contentsline {subsection}{\numberline {3.4}Why the Improvement Reward Underperforms}{21}{}%
-\contentsline {subsection}{\numberline {3.5}Potential-Based Reward Shaping for Pushing}{22}{}%
-\contentsline {subsection}{\numberline {3.6}The SE(2) Unified Distance}{23}{}%
-\contentsline {subsection}{\numberline {3.7}The Models}{23}{}%
-\contentsline {paragraph}{PPO-Baseline.}{25}{}%
-\contentsline {paragraph}{PPO-PBRS.}{25}{}%
-\contentsline {paragraph}{PPO-Curriculum.}{25}{}%
-\contentsline {paragraph}{ASP-dPose.}{26}{}%
-\contentsline {paragraph}{TASP-dPose.}{26}{}%
-\contentsline {paragraph}{ASP-disc and TASP-disc.}{28}{}%
-\contentsline {paragraph}{Bob-penalty.}{28}{}%
-\contentsline {paragraph}{Cross-environment counterparts.}{28}{}%
-\contentsline {subsection}{\numberline {3.8}Why PBRS Assists Self-Play but Does Not Solve It}{29}{}%
-\contentsline {subsection}{\numberline {3.9}Experiment-Set Overview}{29}{}%
-\contentsline {subsection}{\numberline {3.10}Validation Protocol}{30}{}%
-\contentsline {subsection}{\numberline {3.11}Training Instrumentation for the Self-Play Mechanism}{31}{}%
-\contentsline {section}{\numberline {4}Experimental Setup}{33}{}%
-\contentsline {subsection}{\numberline {4.1}Tools and Infrastructure}{33}{}%
-\contentsline {subsection}{\numberline {4.2}Training Configuration and the Experiment Set}{33}{}%
-\contentsline {subsection}{\numberline {4.3}Validation Protocol}{34}{}%
-\contentsline {subsection}{\numberline {4.4}Cross-Environment Protocol}{35}{}%
-\contentsline {subsection}{\numberline {4.5}Off-Policy Baseline: SAC with Hindsight Experience Replay}{35}{}%
-\contentsline {subsection}{\numberline {4.6}Metrics}{36}{}%
-\contentsline {section}{\numberline {5}Results}{37}{}%
-\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{37}{}%
-\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{38}{}%
-\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{39}{}%
-\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{40}{}%
-\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{41}{}%
-\contentsline {section}{\numberline {6}Discussion and Conclusion}{43}{}%
-\contentsline {subsection}{\numberline {6.1}Interpretation}{43}{}%
-\contentsline {subsection}{\numberline {6.2}Relation to Prior Work}{43}{}%
-\contentsline {subsection}{\numberline {6.3}Contributions Revisited}{45}{}%
-\contentsline {subsection}{\numberline {6.4}Limitations}{45}{}%
-\contentsline {subsection}{\numberline {6.5}Future Work}{46}{}%
-\contentsline {subsection}{\numberline {6.6}Conclusion}{46}{}%
-\contentsline {section}{Bibliography}{47}{}%
-\contentsline {section}{Appendices}{51}{}%
-\contentsline {subsection}{\numberline {A}Push Mechanics: Limit Surface and Characteristic Length}{51}{}%
-\contentsline {subsection}{\numberline {B}Training Curves}{51}{}%
-\contentsline {subsection}{\numberline {C}PBRS Parameter Sensitivity}{52}{}%
-\contentsline {subsection}{\numberline {D}Validation Scene Descriptions}{52}{}%
-\contentsline {subsection}{\numberline {E}cuRobo IK Pipeline and Workspace}{52}{}%
-\contentsline {subsection}{\numberline {F}Observation Space Specifications}{52}{}%
-\contentsline {subsection}{\numberline {G}Per-Test Error Bars}{53}{}%
-\contentsline {subsection}{\numberline {H}Curriculum Trigger Correction}{53}{}%
-\contentsline {subsection}{\numberline {I}Symmetric Self-Play Fail-Fast Equilibrium}{54}{}%
-\contentsline {subsection}{\numberline {J}Confounded Ablation Disaggregation}{54}{}%
-\contentsline {subsection}{\numberline {K}Training Budget Comparison}{54}{}%
-\contentsline {subsection}{\numberline {L}Secondary Variants}{54}{}%
+\contentsline {subsection}{\numberline {3.4}Why the Improvement Reward Underperforms}{23}{}%
+\contentsline {subsection}{\numberline {3.5}Potential-Based Reward Shaping for Pushing}{23}{}%
+\contentsline {subsection}{\numberline {3.6}The SE(2) Unified Distance}{24}{}%
+\contentsline {subsection}{\numberline {3.7}The Models}{25}{}%
+\contentsline {paragraph}{PPO-Baseline.}{27}{}%
+\contentsline {paragraph}{PPO-PBRS.}{27}{}%
+\contentsline {paragraph}{PPO-Curriculum.}{27}{}%
+\contentsline {paragraph}{ASP-dPose.}{28}{}%
+\contentsline {paragraph}{TASP-dPose.}{28}{}%
+\contentsline {paragraph}{ASP-disc and TASP-disc.}{30}{}%
+\contentsline {paragraph}{Bob-penalty.}{30}{}%
+\contentsline {paragraph}{Cross-environment counterparts.}{30}{}%
+\contentsline {subsection}{\numberline {3.8}Why PBRS Assists Self-Play but Does Not Solve It}{31}{}%
+\contentsline {subsection}{\numberline {3.9}Experiment-Set Overview}{31}{}%
+\contentsline {subsection}{\numberline {3.10}Validation Protocol}{33}{}%
+\contentsline {subsection}{\numberline {3.11}Training Instrumentation for the Self-Play Mechanism}{34}{}%
+\contentsline {section}{\numberline {4}Experimental Setup}{35}{}%
+\contentsline {subsection}{\numberline {4.1}Tools and Infrastructure}{35}{}%
+\contentsline {subsection}{\numberline {4.2}Training Configuration and the Experiment Set}{35}{}%
+\contentsline {subsection}{\numberline {4.3}Validation Protocol}{36}{}%
+\contentsline {subsection}{\numberline {4.4}Cross-Environment Protocol}{37}{}%
+\contentsline {subsection}{\numberline {4.5}Off-Policy Baseline: SAC with Hindsight Experience Replay}{37}{}%
+\contentsline {subsection}{\numberline {4.6}Metrics}{38}{}%
+\contentsline {section}{\numberline {5}Results}{39}{}%
+\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{39}{}%
+\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{40}{}%
+\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{41}{}%
+\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{42}{}%
+\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{43}{}%
+\contentsline {section}{\numberline {6}Discussion and Conclusion}{45}{}%
+\contentsline {subsection}{\numberline {6.1}Interpretation}{45}{}%
+\contentsline {subsection}{\numberline {6.2}Relation to Prior Work}{46}{}%
+\contentsline {subsection}{\numberline {6.3}Contributions Revisited}{47}{}%
+\contentsline {subsection}{\numberline {6.4}Limitations}{47}{}%
+\contentsline {subsection}{\numberline {6.5}Future Work}{48}{}%
+\contentsline {subsection}{\numberline {6.6}Conclusion}{49}{}%
+\contentsline {section}{Bibliography}{50}{}%
+\contentsline {section}{Appendices}{54}{}%
+\contentsline {subsection}{\numberline {A}Push Mechanics: Limit Surface and Characteristic Length}{54}{}%
+\contentsline {subsection}{\numberline {B}Training Curves}{54}{}%
+\contentsline {subsection}{\numberline {C}PBRS Parameter Sensitivity}{55}{}%
+\contentsline {subsection}{\numberline {D}Validation Scene Descriptions}{55}{}%
+\contentsline {subsection}{\numberline {E}cuRobo IK Pipeline and Workspace}{55}{}%
+\contentsline {subsection}{\numberline {F}Observation Space Specifications}{55}{}%
+\contentsline {subsection}{\numberline {G}Per-Test Error Bars}{56}{}%
+\contentsline {subsection}{\numberline {H}Curriculum Trigger Correction}{56}{}%
+\contentsline {subsection}{\numberline {I}Symmetric Self-Play Fail-Fast Equilibrium}{57}{}%
+\contentsline {subsection}{\numberline {J}Confounded Ablation Disaggregation}{57}{}%
+\contentsline {subsection}{\numberline {K}Training Budget Comparison}{58}{}%
+\contentsline {subsection}{\numberline {L}Secondary Variants}{58}{}%

@@ -28,7 +28,7 @@ if [ -z "$LINE" ]; then echo "[ERROR] No line $SLURM_ARRAY_TASK_ID in $PARAMS"; 
 read -r VALIDATOR EXP_NAME EXTRA <<< "$LINE"
 
 SIF_IMAGE="isaac-lab.sif"
-CURBO_OVERLAY="curobo_overlay.img"
+GYM_OVERLAY="gym_overlay.img"
 NFS_RUN_DIR="$RESULTS_ROOT/$EXP_NAME"
 [ -d "$NFS_RUN_DIR" ] || { echo "[ERROR] run dir not found: $NFS_RUN_DIR"; exit 1; }
 
@@ -55,8 +55,8 @@ echo "  CSV -> $OUT_HOST/validation_results_gym.csv"
 echo "==================================================================="
 [ -f "$SIF_IMAGE" ] || { echo "[ERROR] $SIF_IMAGE not found"; exit 1; }
 
-apptainer exec --nv --pwd "$CONTAINER_PROJECT" \
-    --overlay "$PROJECT_ROOT/$CURBO_OVERLAY":ro \
+apptainer exec --pwd "$CONTAINER_PROJECT" \
+    --overlay "$PROJECT_ROOT/$GYM_OVERLAY":ro \
     --bind "$PROJECT_ROOT":"$CONTAINER_PROJECT" \
     --bind "$RESULTS_ROOT":"$CONTAINER_PROJECT/runs" \
     --bind "$PROJECT_ROOT/.cache":/root/.cache \

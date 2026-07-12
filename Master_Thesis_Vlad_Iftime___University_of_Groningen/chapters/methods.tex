@@ -95,15 +95,28 @@ Each decision commands one complete push rather than a joint torque, so the
 learning problem is defined over whole pushing motions. The four parameters are
 read in the object frame wherever possible, which is the property that makes the
 primitive robust to the object's location. The radial approach offset $r$ and the
-approach angle $\phi$ place the contact point on the object's boundary: $\phi$
-selects a direction around the object, and $r$ sets how far outside the boundary
-the arm first descends. The push length $\ell$ and the push direction $\theta$ then
-define the straight motion that follows contact. Because the contact point is
-expressed relative to the object, the arm meets the object wherever it lies on the
-table, and the contact rate stays near 95\,\%. An absolute parameterisation in
-table coordinates would instead require the policy to first locate the object,
-which spends interaction on a step the object-relative form removes.
+approach angle $\phi$ place the contact point on the object's boundary. The angle
+$\phi$ selects a direction around the object, and $r$ sets how far outside the
+boundary the arm first descends. The push length $\ell$ and the push direction
+$\theta$ then define the straight motion that follows contact. Because the contact
+point is expressed relative to the object, the arm meets the object wherever it
+lies on the table, and the contact rate stays near 95\,\%.
 
+This choice is deliberate, and it addresses two shortcomings of an absolute
+parameterisation in table coordinates. The first concerns exploration. When the
+push start was specified in world coordinates, a randomly sampled action contacted
+the object on only about 2\,\% of pushes. The remaining pushes missed, returned no
+progress signal, and left the policy with almost nothing to learn from; in
+self-play the goal-proposing agent could not begin to improve. Placing the contact
+point on the object boundary instead makes contact the default, so nearly every
+push becomes an informative transition. The second concerns generalisation. With a
+fixed object position and absolute coordinates, the policy could memorise a single
+approach point and ignore the observation. Tying the action to the current object
+pose removes that shortcut, and requires the policy to read where the object is, so
+it acts on objects placed anywhere on the table. The push direction $\theta$ is
+kept in the world frame, aligned with the relative goal-direction feature of the
+observation, so the direction that reduces the goal distance is straightforward to
+learn.
 Each parameter is discretised into 21 bins, and the bins map linearly onto physical
 ranges bounded by the reachable workspace. Once decoded, the primitive runs as a
 five-phase Cartesian trajectory. The arm approaches a point above the contact
@@ -113,8 +126,30 @@ with the gripper held closed. Each Cartesian waypoint is mapped to arm joint
 targets by the cuRobo inverse-kinematics solver. A waypoint that falls outside the
 region where the solver returns a valid arm configuration is clamped to the
 boundary, so the credit assigned to an action matches the motion actually
-performed. Algorithm~\ref{alg:primitive} summarises the decoding and execution; the
-workspace bounds and the five phases are detailed in Appendix~\ref{app:ik}.
+performed. Figure~\ref{fig:primitive_bins} shows the discrete choices the primitive
+exposes to the policy: the object-relative grid of contact points, and the
+world-frame push directions and lengths. Algorithm~\ref{alg:primitive} summarises
+the decoding and execution; the workspace bounds and the five phases are detailed
+in Appendix~\ref{app:ik}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{push_primitive_bins.pdf}
+    \caption{The object-relative push primitive, drawn to scale over a top-down
+    T-block. Panel (a) shows the approach placement in the object frame: the
+    contact point is set by a radial offset $r$, sampled from the band between
+    $0.04\,\text{m}$ and $0.12\,\text{m}$ from the object centre (dashed circles),
+    and an approach angle $\phi$, one of 21 directions (grey spokes); the green
+    points are the resulting grid of candidate contact points. The band is sized so
+    that it encloses the object, whose outline reaches about $0.10\,\text{m}$ from
+    the tracked centre. Panel (b) shows the
+    push itself in the world frame, from a representative contact point: the push
+    direction $\theta$ is one of 21 headings (blue arrows), and the push length is
+    one of 21 values from 0 to $0.20\,\text{m}$ (marked along one heading). Each of
+    the four parameters is discretised into 21 bins, so the action is a
+    four-dimensional choice over a fixed grid rather than a continuous command.}
+    \label{fig:primitive_bins}
+\end{figure}
 
 \begin{algorithm}[H]
 \caption{Decode and execute one object-relative push primitive.}
@@ -295,22 +330,24 @@ model, and what each is meant to show.
         \textbf{Envs} & \textbf{Seeds} & \textbf{What it is meant to show} \\
         \hline
         PPO-Baseline & Single-agent anchor & Improvement reward
-        (Equation~\ref{eq:fractional}); one agent & 2{,}048 & 5 &
+        (Equation~\ref{eq:fractional}); one agent & 256--2{,}048 & 5 &
         The goal is reachable without shaping; sets the reference the
         potential-based reward is measured against. \\[2pt]
         PPO-PBRS & Single-agent anchor & Two-potential PBRS over position and
-        orientation; one agent & 528 & 5 &
+        orientation; one agent & 256--2{,}048 & 5 &
         The solvable anchor; reaches success with far fewer environments than the
         improvement reward. \\[2pt]
         PPO-Curriculum & Single-agent anchor & PBRS with forced
         position-then-orientation staging & 528 & 5 &
         Whether staging the two objectives helps once the reward is well shaped. \\[2pt]
         ASP-dPose & Self-play subject & $\mathrm{SE}(2)$ PBRS for Bob;
-        outcome-based Alice reward; imitation on & 528 & 5 &
-        Primary subject: outcome-reward self-play on the coupled T-block goal. \\[2pt]
+        outcome-based Alice reward; imitation on & 256, 528, 2{,}048 & 5 &
+        Primary subject: outcome-reward self-play on the coupled T-block goal;
+        trained up to 2{,}048 environments to test compute scale. \\[2pt]
         TASP-dPose & Self-play subject & $\mathrm{SE}(2)$ PBRS for Bob; time-based
-        Alice reward; imitation on & 528 & 5 &
-        Primary subject; isolates Alice's reward against ASP-dPose. \\[2pt]
+        Alice reward; imitation on & 256, 528, 2{,}048 & 5 &
+        Primary subject; isolates Alice's reward against ASP-dPose, and is likewise
+        scaled to 2{,}048 environments. \\[2pt]
         ASP-disc & Coupling isolation & Outcome-based self-play on a disc;
         position-only goal & 528 & 5 &
         Whether self-play reaches the anchor level once orientation is
@@ -322,17 +359,21 @@ model, and what each is meant to show.
         penalised for its own solve time & 528 & 5 &
         Whether a symmetric reward structure collapses the self-play loop. \\[2pt]
         gym A/B/C & Cross-environment & Single agent, curriculum, and self-play in
-        the two-dimensional simulator & two batch sizes & 3 &
+        the two-dimensional simulator & 64, 256 & 1 &
         Whether the ordering of the methods holds in a second simulator. \\
         \hline
     \end{tabularx}
     \caption{The nine models. Every model uses the same PPO and LSTM backbone and
     the same object-relative push primitive; only the reward and the training
     dynamics change. The seed column gives the number of random seeds behind each
-    model's headline confidence interval. The environment-efficiency and scale
-    sweeps additionally repeat the single-agent and self-play models at three
-    seeds for each of the environment counts 256, 512, 1{,}024, and 2{,}048, and
-    the component ablations use three seeds; the full per-phase counts are given in
+    model's headline confidence interval, taken at 528 environments. The
+    single-agent Baseline and PBRS are trained across 256, 512, 1{,}024, 2{,}048,
+    and 528 environments, with three seeds per swept count and five at the 528
+    anchor. The self-play subjects ASP-dPose and TASP-dPose are additionally
+    trained at 256 and 2{,}048 environments, with three seeds, so that the
+    single-GPU compute budget can be tested, rather than assumed, as a cause of the
+    underperformance. The component ablations use three seeds and the gym runs a
+    single seed; the full per-phase counts are given in
     Section~\ref{sec:experiment-set} and Chapter~\ref{sec:experiments}.}
     \label{tab:models}
 \end{table}
@@ -503,9 +544,9 @@ analysed in Appendix~\ref{app:failfast}.
 The single-agent, curriculum, and self-play models are retrained in a second,
 two-dimensional pushing simulator that uses neither inverse kinematics nor
 three-dimensional contact physics. These counterparts run on the central
-processing unit at two batch sizes. Their role is to test whether the ordering of
-the methods holds in an environment of different fidelity, so that a conclusion
-does not rest on one simulator. The protocol is described in
+processing unit at environment counts of 64 and 256. Their role is to test whether
+the ordering of the methods holds in an environment of different fidelity, so that
+a conclusion does not rest on one simulator. The protocol is described in
 Section~\ref{sec:cross_env}.
 
 \subsection{Why PBRS Assists Self-Play but Does Not Solve It}
@@ -534,8 +575,8 @@ learning signal, which lifts self-play above the level it reaches under the spar
 or improvement reward. It cannot, however, remove the bias contributed by the
 stale value term. The consequence, quantified in Chapter~\ref{sec:results}, is
 that
-potential-based shaping raises self-play from near-zero to a modest success rate
-without approaching the single-agent result.
+\oldflag{potential-based shaping raises self-play from near-zero to a modest success rate
+without approaching the single-agent result.}
 
 This account is a hypothesis about the learning dynamics, not a result. Both of
 its claims, the elevated value error under a shifting goal distribution and the
@@ -573,7 +614,12 @@ of about 23.8 million pushes. The temporal window of the recurrent policy is fix
 at 15 pushes per rollout; only the number of parallel environments, and therefore
 the per-update batch size, changes. This isolates the per-update batch size, the
 quantity that drives the value-function bias of Section~\ref{sec:pbrs_asp}, from
-the total experience.
+the total experience. Budget matching applies to the Isaac Lab runs; the
+second-simulator runs instead use a fixed iteration count, as described in
+Chapter~\ref{sec:experiments}. To examine whether the single-GPU budget is itself
+the cause of the self-play result, the two self-play subjects are additionally
+trained at 256 and 2{,}048 environments, so that compute scale is tested rather
+than assumed.
 
 Two conventions hold across every self-play run in the experiment set. The
 imitation term is enabled in the canonical self-play models, and disabled only for
@@ -597,8 +643,9 @@ families are compared under one protocol.
         Coupling isolation & Does self-play reach the anchor level when the goal is
         position-only? &
         the two disc self-play models against the two T-block subjects, five seeds \\
-        Self-play scale & Does self-play performance rise as the batch grows? &
-        both self-play subjects across four environment counts, three seeds \\
+        Self-play scale & Does more compute rescue self-play, or is scale not the
+        cause? &
+        both self-play subjects at 256 and 2{,}048 environments, three seeds \\
         Component ablations & Which component of the self-play package matters? &
         the self-play subjects with the imitation term, then the goal encoder,
         removed one at a time, three seeds \\
@@ -608,11 +655,8 @@ families are compared under one protocol.
         the Bob-penalty model at the anchor budget, five seeds \\
         Cross-environment & Does the ordering hold in a second simulator? &
         single agent, curriculum, and self-play in the two-dimensional simulator
-        across two batch sizes, three seeds \\
-        Reward sensitivity & Is the potential-based reward robust to its
-        parameters? &
-        the single agent over a grid of the position sharpness and the potential
-        weight, reported in the appendix \\
+        across environment counts 64 and 256 and push lengths 15 and 45, single
+        seed \\
         \hline
     \end{tabularx}
     \caption{The experiment set. Each phase answers one question; the per-phase

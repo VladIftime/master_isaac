@@ -44,6 +44,15 @@
 % \TBD prints a red "TBD" token; results filled in once the experiment set completes.
 \newcommand{\TBD}{\textcolor{red}{\textbf{TBD}}}
 
+% Visible red flag for content still supported only by the OLD single-seed
+% results, to be replaced once the new experiment set completes.
+\newcommand{\oldresults}[1]{%
+  \par\smallskip\noindent\textcolor{red}{\rule{\linewidth}{0.6pt}}\par\nobreak
+  \noindent\textcolor{red}{\textbf{OLD RESULTS --- pending experiment set: #1}}\par\nobreak
+  \noindent\textcolor{red}{\rule{\linewidth}{0.6pt}}\par\smallskip}
+% Inline red flag for a single old-results claim.
+\newcommand{\oldflag}[1]{\textcolor{red}{#1}}
+
 % Define the page styles
 \fancypagestyle{titlepage}{
 	\fancyhf{}

@@ -146,6 +146,7 @@ def main():
     )
     from asyncDualPlayPPO.tasks.utils.action_push_relative import (
         decode_push_action_relative,
+        DISC_MIN_R, DISC_MAX_R,
     )
     from asyncDualPlayPPO.tasks.utils.events import (
         reset_objects_to_random_safe_pose, reset_robot_joints,
@@ -935,8 +936,8 @@ def main():
             _obj_xy_all = full_push_obs[:, _OBS_ROBOT_DIM:_OBS_ROBOT_DIM + 2]
             _obj_yaw_all = full_push_obs[:, _OBS_ROBOT_DIM + 5]
 
-            min_r = 0.06
-            max_r = 0.12
+            min_r = DISC_MIN_R
+            max_r = DISC_MAX_R
             max_l = 0.20
             if len(alice_indices) > 0:
                 a_Xs, a_Ys, a_len, a_theta = decode_push_action_relative(

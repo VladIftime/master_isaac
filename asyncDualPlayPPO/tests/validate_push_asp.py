@@ -153,7 +153,11 @@ def main():
     from asyncDualPlayPPO.tasks.utils.wrapper_push_asp import PushASPEnvWrapper, _OBS_ROBOT_DIM
     from asyncDualPlayPPO.tasks.utils.reward_pbrs import dpose_and_zero_yaw
     from asyncDualPlayPPO.tasks.utils.action_push import compute_push_waypoints
-    from asyncDualPlayPPO.tasks.utils.action_push_relative import decode_push_action_relative
+    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+        decode_push_action_relative,
+        TBLOCK_MIN_R, TBLOCK_MAX_R,
+        DISC_MIN_R, DISC_MAX_R,
+    )
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
     from asyncDualPlayPPO.algorithms.rl.ppo.module import MultiCategorical
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
@@ -514,8 +518,8 @@ def main():
         _active_obj_name = "disc_object" if _obj_type == "disc" else "target_object"
         _inactive_obj_name = "target_object" if _obj_type == "disc" else "disc_object"
         _spawn_z = 0.03 if _obj_type == "disc" else 0.05
-        _min_r = 0.06 if _obj_type == "disc" else 0.04
-        _max_r = 0.12 if _obj_type == "disc" else 0.08
+        _min_r = DISC_MIN_R if _obj_type == "disc" else TBLOCK_MIN_R
+        _max_r = DISC_MAX_R if _obj_type == "disc" else TBLOCK_MAX_R
 
         print(f"\n[Test {test_idx}/{n_tests}] {cfg.name} #{cfg.test_id}")
 

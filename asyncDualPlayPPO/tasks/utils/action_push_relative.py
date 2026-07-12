@@ -12,7 +12,7 @@ length, theta) in world coordinates.
 Action space (single object, 4D × 21 bins):
   dim 0: r     — radial offset from object center  [min_r, max_r] m
   dim 1: φ     — approach angle in object's frame   [-π, π] rad
-  dim 2: length — push distance                      [0.0, max_len] m
+  dim 2: length — push distance                      [0.0, MAX_LEN] m
   dim 3: θ     — push direction in world frame      [-π, π] rad
 
 Conversion to world coordinates:
@@ -28,15 +28,25 @@ from typing import Tuple
 
 import torch
 
+# ── Centralised approach-radius constants — single source of truth ──────────
+# Every caller of decode_push_action_relative() MUST use these (or the Disc
+# variants below), not bare literals.  The function-signature defaults mirror
+# TBLOCK_* so that callers without explicit arguments still get the right range.
+TBLOCK_MIN_R = 0.04   # Isaac T-block  reaches ~0.102 m from near-centre origin
+TBLOCK_MAX_R = 0.12
+DISC_MIN_R   = 0.06   # disc  radius 0.05 m; min_r keeps gripper 1 cm outside
+DISC_MAX_R   = 0.12
+MAX_LEN      = 0.20   # maximum push length in metres
+
 
 def decode_push_action_relative(
     bin_indices: torch.Tensor,
     obj_xy: torch.Tensor,
     obj_yaw: torch.Tensor,
     num_bins: int = 21,
-    min_r: float = 0.02,
-    max_r: float = 0.08,
-    max_len: float = 0.20,
+    min_r: float = TBLOCK_MIN_R,
+    max_r: float = TBLOCK_MAX_R,
+    max_len: float = MAX_LEN,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Decode 4D bins → world-frame push parameters using object pose.

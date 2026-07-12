@@ -114,6 +114,9 @@ def main():
         decode_push_action_continuous,
         decode_push_action_relative_continuous,
     )
+    from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+        TBLOCK_MIN_R, TBLOCK_MAX_R,
+    )
 
     env_cfg = PushTaskCuRoboEnvCfg()
     env_cfg.scene.num_envs = 1
@@ -387,6 +390,7 @@ def main():
                         action_tensor,
                         torch.stack([obj_x, obj_y]).unsqueeze(0),
                         obj_yaw.unsqueeze(0),
+                        min_r=TBLOCK_MIN_R, max_r=TBLOCK_MAX_R,
                     )
                 else:
                     Xs, Ys, length, theta = decode_push_action_continuous(

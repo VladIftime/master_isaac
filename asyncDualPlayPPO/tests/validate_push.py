@@ -124,6 +124,7 @@ def main():
     )
     from asyncDualPlayPPO.tasks.utils.action_push_relative import (
         decode_push_action_relative,
+        TBLOCK_MIN_R, TBLOCK_MAX_R,
     )
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.algorithms.rl.ppo.module_push import ActorCriticPush
@@ -392,6 +393,7 @@ def main():
                         torch.stack([obj_x, obj_y]).unsqueeze(0),
                         obj_yaw.unsqueeze(0),
                         num_bins=num_bins,
+                        min_r=TBLOCK_MIN_R, max_r=TBLOCK_MAX_R,
                     )
                 else:
                     Xs, Ys, length, theta = decode_push_action(actions, num_bins=num_bins)

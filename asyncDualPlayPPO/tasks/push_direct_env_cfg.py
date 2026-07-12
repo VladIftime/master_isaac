@@ -15,6 +15,10 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import UrdfFileCfg, UsdFileCfg
 from isaaclab.utils import configclass
 
+from asyncDualPlayPPO.tasks.utils.action_push_relative import (
+    TBLOCK_MIN_R, TBLOCK_MAX_R, MAX_LEN,
+)
+
 PROJ_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TABLE_X = 0.0
@@ -223,9 +227,9 @@ class PushDirectEnvCfg(DirectRLEnvCfg):
     ws_z: tuple = (0.25, 0.55)
 
     rel_act: bool = False
-    action_min_r: float = 0.02
-    action_max_r: float = 0.08
-    action_max_len: float = 0.20
+    action_min_r: float = TBLOCK_MIN_R
+    action_max_r: float = TBLOCK_MAX_R
+    action_max_len: float = MAX_LEN
 
     ik_n_iters: int = 30
     ik_inner_iters: int = 10
