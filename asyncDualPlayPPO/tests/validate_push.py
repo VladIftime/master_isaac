@@ -95,6 +95,8 @@ def main():
                         help="Use object-relative observation (30D instead of 28D)")
     parser.add_argument("--rel-act", action="store_true", dest="rel_act",
                         help="Decode actions as object-relative (r, phi, len, theta)")
+    parser.add_argument("--argmax", action="store_true", dest="argmax",
+                        help="Use argmax (deterministic) actions instead of sampling")
     parser.add_argument("--csv", type=str, default=None,
                         help="Save validation results to CSV file")
     AppLauncher.add_app_launcher_args(parser)
@@ -375,6 +377,7 @@ def main():
                 with torch.no_grad():
                     actions, _, _, _, _, _, new_h = agent.actor_critic.act_with_hidden(
                         obs, None, (hidden[0], hidden[1]),
+                        deterministic=args.argmax,
                     )
                     if new_h is not None:
                         hidden[0] = new_h[0]

@@ -127,6 +127,8 @@ def main():
                         help="Use object-relative action decoding (default: True, always on for ASP)")
     parser.add_argument("--scene-set", choices=["all", "tblock", "disc"], default="all",
                         help="Which validation scene list to run (disc = 30 position-only disc scenes)")
+    parser.add_argument("--argmax", action="store_true", dest="argmax",
+                        help="Use argmax (deterministic) actions instead of sampling")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     set_test_set(args.scene_set)
@@ -597,12 +599,11 @@ def main():
                 with torch.no_grad():
                     h_in = (bob_hidden[0], bob_hidden[1])
                     raw_logits, new_bh = bob_ppo.actor_critic._actor_forward(bob_obs, h_in)
-                    # BEST-OF-20: sample from the MultiCategorical distribution so the
-                    # 20 trials are genuinely stochastic draws (not argmax → 20× identical
-                    # result in a deterministic env). Matches the single-agent validator
-                    # (which already samples via act_with_hidden → dist.sample()).
+                    # BEST-OF-20: by default, samples from the MultiCategorical distribution
+                    # so the 20 trials are genuinely stochastic draws.
+                    # --argmax switches to deterministic argmax for comparison.
                     _dist = MultiCategorical(raw_logits.view(1, num_cat_dims, num_bins))
-                    b_acts = _dist.sample()
+                    b_acts = _dist.mode() if args.argmax else _dist.sample()
                     if new_bh is not None:
                         bob_hidden[0] = new_bh[0]
                         bob_hidden[1] = new_bh[1]

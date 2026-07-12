@@ -1,3 +1,0 @@
-train_f_pbrs_asp_disc.py 7 528 3000 100 discF_e528_i3000_s7_abc --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
-train_f_pbrs_asp_disc.py 42 528 3000 100 discF_e528_i3000_s42_abc --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
-train_f_pbrs_asp_disc.py 123 528 3000 100 discF_e528_i3000_s123_abc --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05

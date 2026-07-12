@@ -178,6 +178,7 @@ def main():
         writer.add_scalar("Metrics/PosError", mean_pos, iteration)
         writer.add_scalar("Metrics/CosRotErr", mean_rot, iteration)
         writer.add_scalar("Metrics/EpisodicSR", ep_sr, iteration)
+        writer.add_scalar("Diagnostics/GradientUpdates", iteration, iteration)
 
         print(f"[Iter {iteration:5d}] Loss={loss_surr:.4f} Val={loss_val:.4f} "
               f"Rew={mean_rew:+.4f}(EMA {ema_rew:+.4f}) PosErr={mean_pos:.4f} "

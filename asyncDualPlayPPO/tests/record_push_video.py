@@ -92,6 +92,8 @@ def main():
                         help="Seconds to hold camera in demo mode (default 3)")
     parser.add_argument("--scenes", type=str, default="11,13,21",
                         help="Comma-separated validation scene indices to record")
+    parser.add_argument("--all", action="store_true", dest="all_scenes",
+                        help="Record every validation scene (overrides --scenes)")
     parser.add_argument("--max_pushes", type=int, default=15, help="Max pushes per scene")
     parser.add_argument("--max_attempts", type=int, default=3,
                         help="Re-run a scene up to N times; keep the first successful rollout")
@@ -136,8 +138,14 @@ def main():
             os.path.dirname(__file__), "..", "..",
             "literature", "paper-async", "presentation", "figures"))
     os.makedirs(args.out_dir, exist_ok=True)
+    # MP4 videos go into a "videos" subfolder; keyframe PNGs stay in out_dir.
+    video_dir = os.path.join(args.out_dir, "videos")
+    os.makedirs(video_dir, exist_ok=True)
 
-    scene_indices = [int(s) for s in args.scenes.split(",") if s.strip() != ""]
+    if args.all_scenes:
+        scene_indices = list(range(1, get_test_count() + 1))
+    else:
+        scene_indices = [int(s) for s in args.scenes.split(",") if s.strip() != ""]
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
@@ -668,7 +676,7 @@ def main():
                 continue
 
             stem = f"rec_push_s{idx:02d}"
-            mp4_path = os.path.join(args.out_dir, f"{stem}.mp4")
+            mp4_path = os.path.join(video_dir, f"{stem}.mp4")
             key_path = os.path.join(args.out_dir, f"{stem}_key.png")
             try:
                 imageio.mimsave(mp4_path, best_frames, fps=args.fps, macro_block_size=None)
@@ -680,37 +688,44 @@ def main():
             si += 1
 
         else:
-            # ── Interactive: R=replay  N=next  P=prev  K/Enter=save+next ───
-            repeat = 0
+            # ── Interactive: R=reset  N=next  P=prev  K=keep(hold) ─────────
+            # K saves the current rollout but does NOT reset — it holds and
+            # waits for a further command (R to reset/re-roll, N for next scene).
+            roll_id = 0
             went_back = False
-            while repeat < args.repeats:
+            action = "replay"  # first pass: roll the scene once
+            while roll_id < args.repeats:
                 frames, success = _scn_fn(cfg)
-                label = f"r{repeat + 1}"
+                roll_id += 1
+                label = f"r{roll_id}"
                 print(f"  [{label}] {'SUCCESS' if success else 'fail'} ({len(frames)} frames)  "
-                      f"[R]eplay  [P]rev  [N]ext  [K]eep > ", end="", flush=True)
+                      f"[R]eset  [P]rev  [N]ext  [K]eep > ", end="", flush=True)
 
                 _replay_fl[0] = False
                 _next_fl[0]   = False
                 _prev_fl[0]   = False
                 _keep_fl[0]   = False
 
-                while True:
+                action = None
+                while action is None:
                     simulation_app.update()
                     time.sleep(0.03)
                     if _replay_fl[0]:
+                        _replay_fl[0] = False
                         print("R — re-rolling")
-                        break
-                    if _prev_fl[0]:
+                        action = "replay"
+                    elif _prev_fl[0]:
+                        _prev_fl[0] = False
                         print("P — going back")
-                        went_back = True
-                        break
-                    if _next_fl[0]:
-                        print("N — skipping to next scene")
-                        break
-                    if _keep_fl[0]:
-                        print("K — saving")
+                        action = "prev"
+                    elif _next_fl[0]:
+                        _next_fl[0] = False
+                        print("N — next scene")
+                        action = "next"
+                    elif _keep_fl[0]:
+                        _keep_fl[0] = False
                         stem = f"rec_push_s{idx:02d}_{label}"
-                        mp4_path = os.path.join(args.out_dir, f"{stem}.mp4")
+                        mp4_path = os.path.join(video_dir, f"{stem}.mp4")
                         key_path = os.path.join(args.out_dir, f"{stem}_key.png")
                         try:
                             imageio.mimsave(mp4_path, frames, fps=args.fps, macro_block_size=None)
@@ -718,13 +733,15 @@ def main():
                             print(f"  saved {mp4_path}")
                         except Exception as e:
                             print(f"  [error] encoding failed: {e}")
-                        repeat += 1
-                        break
+                        # hold — do NOT reset; wait for the next command
+                        print("  held — [R]eset or [N]ext > ", end="", flush=True)
 
-                if _prev_fl[0]:
-                    break  # exit repeat loop to go back
-                if _next_fl[0]:
-                    break  # skip remaining repeats for this scene
+                if action == "prev":
+                    went_back = True
+                    break
+                if action == "next":
+                    break
+                # action == "replay" → loop re-rolls (resets) the scene
 
             if went_back:
                 si = max(0, si - 1)

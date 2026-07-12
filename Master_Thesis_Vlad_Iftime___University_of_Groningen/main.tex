@@ -23,11 +23,14 @@
 \usepackage{mwe}
 \usepackage{graphicx} % Use for Images
 \graphicspath{{images/}}
+\usepackage{pdflscape} % Full-page landscape tables (rotates the PDF page)
 \usepackage{here}     % Forced Figure Placement
 % NOTE: pslatex/mathptmx require the rsfs script font for \mathcal, which is
 % not available in this TeX install; using default Computer Modern fonts.
 \usepackage{fancyhdr} % Use headers
 \usepackage{float}
+\usepackage{algorithm}      % pseudocode float
+\usepackage{algpseudocode}  % pseudocode body (algorithmicx)
 % Here I keep the left and right margins equal. You can choose to have unequal margins if you want a two-sided book effect.
 \usepackage[
 	top    = 1.5cm,
@@ -37,8 +40,8 @@
 	includeheadfoot]{geometry} % Use similar margins to the Word Template
 \setlength{\parindent}{0pt}
 
-% Placeholder for results pending from the running HPC campaign.
-% \TBD prints a red "TBD" token; results filled in once the campaign completes.
+% Placeholder for results pending from the running HPC experiment set.
+% \TBD prints a red "TBD" token; results filled in once the experiment set completes.
 \newcommand{\TBD}{\textcolor{red}{\textbf{TBD}}}
 
 % Define the page styles
@@ -102,11 +105,12 @@
 \title{
     \vspace{5cm}
         {\bf
-        {\Huge Potential-Based Reward Shaping\\
-        \vspace{2mm}for Planar Pushing:\\
-        \vspace{4mm}Single-Agent Control vs.\ Asymmetric Self-Play}
+        {\Huge Contact-Rich Planar Goal-Reaching:\\
+        \vspace{2mm}Why Asymmetric Self-Play Underperforms\\
+        \vspace{2mm}Single-Agent Reward Shaping\\
+        \vspace{4mm}{\Large A Regime Analysis of a Method That Succeeds Elsewhere}}
         }\\
-        \vspace{10cm}{\LARGE Vlad Iftime}
+        \vspace{9cm}{\LARGE Vlad Iftime}
 }
 \date{}
 
@@ -122,7 +126,7 @@
 
 \begin{center}
     {\bf{\large University of Groningen}}\\
-    \vspace{1cm}{\bf{\large Potential-Based Reward Shaping for Planar Pushing:\\\vspace{1mm}Single-Agent Control vs.\ Asymmetric Self-Play}}\\
+    \vspace{1cm}{\bf{\large Contact-Rich Planar Goal-Reaching:\\\vspace{1mm}Why Asymmetric Self-Play Underperforms Single-Agent Reward Shaping\\\vspace{1mm}\normalsize A Regime Analysis of a Method That Succeeds Elsewhere}}\\
     \vspace{2cm}{\bf Master's Thesis}\\
     \vspace{0.5cm}To fulfill the requirements for the degree of\\Master of Science in Artificial Intelligence\\
     at University of Groningen under the supervision of\\

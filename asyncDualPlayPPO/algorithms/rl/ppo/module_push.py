@@ -125,11 +125,11 @@ class ActorCriticPush(nn.Module):
         return actions, log_prob, value, mu, sigma
 
     @torch.no_grad()
-    def act_with_hidden(self, observations, states, hidden_state):
+    def act_with_hidden(self, observations, states, hidden_state, deterministic=False):
         """Returns (actions, log_prob, value, mu, sigma, hidden_in, new_hidden)."""
         raw, new_hidden = self._actor_forward(observations, hidden_state)
         dist = self._make_distribution(raw)
-        actions = dist.sample()
+        actions = dist.mode() if deterministic else dist.sample()
         log_prob = dist.log_prob(actions.long())
         value = self.critic(observations)
         mu = torch.zeros_like(actions)

@@ -1,36 +1,36 @@
 \relax 
-\@writefile{toc}{\contentsline {section}{\numberline {5}Results}{31}{}\protected@file@percent }
-\newlabel{sec:results}{{5}{31}{}{section.5}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Principal validation results on the 30-scene held-out suite (best of 20 attempts, up to 30 pushes, combined gate). Scene SR counts a scene solved if any of its 20 attempts passes the gate; trial SR is the per-attempt rate. The PPO-Baseline row uses the improvement reward and the original, non-simplified potential formulation reported at the position-only gate; its combined-gate performance is discussed in the text.}}{31}{}\protected@file@percent }
-\newlabel{tab:main_results}{{3}{31}{}{table.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{31}{}\protected@file@percent }
-\newlabel{sec:rq1}{{5.1}{31}{}{subsection.5.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Per-scene position and orientation error for PPO-PBRS on the 30-scene suite. Position is within tolerance on every scene; the failing scenes are limited by orientation error on rotation-dominant scenes.}}{32}{}\protected@file@percent }
-\newlabel{fig:pbrs_errors}{{7}{32}{}{figure.7}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{32}{}\protected@file@percent }
-\newlabel{sec:rq2}{{5.2}{32}{}{subsection.5.2}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Scene success rate (left) and the position-only against combined breakdown (right) for the five models. The single-agent and curriculum models cluster at the top; the self-play variants reach at most 16.7\,\%. The combined position-and-orientation gate is the discriminating objective.}}{33}{}\protected@file@percent }
-\newlabel{fig:val_multi}{{8}{33}{}{figure.8}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Per-scene error for TASP-dPose (left, 16.7\,\%) and ASP-dPose (right, 6.7\,\%). Both solve only the easiest scenes; orientation error remains far above tolerance on the rest.}}{33}{}\protected@file@percent }
-\newlabel{fig:selfplay_errors}{{9}{33}{}{figure.9}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{33}{}\protected@file@percent }
-\newlabel{sec:rq3}{{5.3}{33}{}{subsection.5.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Training-time per-axis and combined success rates for the goal-solving agent under self-play. Under the improvement reward the agent learns almost nothing; under the potential-based reward it learns each axis to roughly 50\,\% but the combined gate remains near 10\,\%, well below the independence product of about 24 to 25\,\%. Alice's goal-validity rate is high throughout.}}{34}{}\protected@file@percent }
-\newlabel{tab:rq3}{{4}{34}{}{table.4}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Self-play training diagnostics. Left: the goal-proposing agent's goal-validity rate, between 83 and 91\,\% across variants. Right: the goal-solving agent's per-axis success rates against its combined-gate success rate. Each axis reaches roughly 50\,\% while the combined gate remains near 10\,\%.}}{34}{}\protected@file@percent }
-\newlabel{fig:asp_diagnostic}{{10}{34}{}{figure.10}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{34}{}\protected@file@percent }
-\newlabel{sec:cross_env_results}{{5.4}{34}{}{subsection.5.4}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Scene success rate in Isaac Lab and \texttt  {gym-pusht} under the same 30-scene gate. The ordering of the methods is preserved across the two simulators.}}{35}{}\protected@file@percent }
-\newlabel{fig:cross_env}{{11}{35}{}{figure.11}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Per-scene outcomes across models and simulators. Colour encodes the number of successful attempts per scene out of 20. The combined position-and-orientation block is the region that only the single-agent and curriculum models on Isaac Lab solve consistently.}}{35}{}\protected@file@percent }
-\newlabel{fig:heatmap}{{12}{35}{}{figure.12}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{35}{}\protected@file@percent }
-\newlabel{sec:qualitative}{{5.5}{35}{}{subsection.5.5}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Keyframes of PPO-PBRS on three held-out scenes: a forward push (left), a lateral push (centre), and a combined translate-and-rotate scene (right).}}{36}{}\protected@file@percent }
-\newlabel{fig:keyframes}{{13}{36}{}{figure.13}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Results}{37}{}\protected@file@percent }
+\newlabel{sec:results}{{5}{37}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Principal validation results on the 30-scene held-out suite (best of 20 attempts, up to 30 pushes, combined gate). Scene SR counts a scene solved if any of its 20 attempts passes the gate; trial SR is the per-attempt rate. The PPO-Baseline row uses the improvement reward and the original, non-simplified potential formulation reported at the position-only gate; its combined-gate performance is discussed in the text.}}{37}{}\protected@file@percent }
+\newlabel{tab:main_results}{{4}{37}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{37}{}\protected@file@percent }
+\newlabel{sec:rq1}{{5.1}{37}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Per-scene position and orientation error for PPO-PBRS on the 30-scene suite. Position is within tolerance on every scene; the failing scenes are limited by orientation error on rotation-dominant scenes.}}{38}{}\protected@file@percent }
+\newlabel{fig:pbrs_errors}{{7}{38}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{38}{}\protected@file@percent }
+\newlabel{sec:rq2}{{5.2}{38}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Scene success rate (left) and the position-only against combined breakdown (right) for the five models. The single-agent and curriculum models cluster at the top; the self-play variants reach at most 16.7\,\%. The combined position-and-orientation gate is the discriminating objective.}}{39}{}\protected@file@percent }
+\newlabel{fig:val_multi}{{8}{39}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Per-scene error for TASP-dPose (left, 16.7\,\%) and ASP-dPose (right, 6.7\,\%). Both solve only the easiest scenes; orientation error remains far above tolerance on the rest.}}{39}{}\protected@file@percent }
+\newlabel{fig:selfplay_errors}{{9}{39}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{39}{}\protected@file@percent }
+\newlabel{sec:rq3}{{5.3}{39}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Training-time per-axis and combined success rates for the goal-solving agent under self-play. Under the improvement reward the agent learns almost nothing; under the potential-based reward it learns each axis to roughly 50\,\% but the combined gate remains near 10\,\%, well below the independence product of about 24 to 25\,\%. Alice's goal-validity rate is high throughout.}}{40}{}\protected@file@percent }
+\newlabel{tab:rq3}{{5}{40}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Self-play training diagnostics. Left: the goal-proposing agent's goal-validity rate, between 83 and 91\,\% across variants. Right: the goal-solving agent's per-axis success rates against its combined-gate success rate. Each axis reaches roughly 50\,\% while the combined gate remains near 10\,\%.}}{40}{}\protected@file@percent }
+\newlabel{fig:asp_diagnostic}{{10}{40}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{40}{}\protected@file@percent }
+\newlabel{sec:cross_env_results}{{5.4}{40}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Scene success rate in Isaac Lab and \texttt  {gym-pusht} under the same 30-scene gate. The ordering of the methods is preserved across the two simulators.}}{41}{}\protected@file@percent }
+\newlabel{fig:cross_env}{{11}{41}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Per-scene outcomes across models and simulators. Colour encodes the number of successful attempts per scene out of 20. The combined position-and-orientation block is the region that only the single-agent and curriculum models on Isaac Lab solve consistently.}}{41}{}\protected@file@percent }
+\newlabel{fig:heatmap}{{12}{41}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{41}{}\protected@file@percent }
+\newlabel{sec:qualitative}{{5.5}{41}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Keyframes of PPO-PBRS on three held-out scenes: a forward push (left), a lateral push (centre), and a combined translate-and-rotate scene (right).}}{42}{}\protected@file@percent }
+\newlabel{fig:keyframes}{{13}{42}{}{}{}}
 \@setckpt{chapters/results}{
-\setcounter{page}{37}
+\setcounter{page}{43}
 \setcounter{equation}{22}
 \setcounter{enumi}{0}
 \setcounter{enumii}{0}
@@ -45,11 +45,31 @@
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
 \setcounter{figure}{13}
-\setcounter{table}{4}
+\setcounter{table}{5}
 \setcounter{caption@flags}{2}
 \setcounter{continuedfloat}{0}
 \setcounter{subfigure}{0}
 \setcounter{subtable}{0}
 \setcounter{parentequation}{0}
-\setcounter{float@type}{4}
+\setcounter{blindtext}{1}
+\setcounter{Blindtext}{5}
+\setcounter{blind@countparstart}{0}
+\setcounter{blindlist}{0}
+\setcounter{blindlistlevel}{0}
+\setcounter{blindlist@level}{0}
+\setcounter{blind@listcount}{0}
+\setcounter{blind@levelcount}{0}
+\setcounter{blind@randomcount}{0}
+\setcounter{blind@randommax}{0}
+\setcounter{blind@pangramcount}{0}
+\setcounter{blind@pangrammax}{0}
+\setcounter{float@type}{8}
+\setcounter{algorithm}{4}
+\setcounter{ALG@line}{22}
+\setcounter{ALG@rem}{0}
+\setcounter{ALG@nested}{0}
+\setcounter{ALG@Lnr}{2}
+\setcounter{ALG@blocknr}{10}
+\setcounter{ALG@storecount}{0}
+\setcounter{ALG@tmpcounter}{0}
 }

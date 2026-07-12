@@ -167,7 +167,7 @@
 \sectionframe{2.\ Background \& Related Work}
 
 
-\begin{frame}[t]{Related Work — Reward Shaping (PBRS)}
+\begin{frame}[t]{Reward Shaping (PBRS)}
   \textbf{Potential-based reward shaping} :
   \[ \mathcal{R}'(s,a,s') = \mathcal{R}(s,a,s') + \underbrace{\gamma\Phi(s')-\Phi(s)}_{F} \]
   \begin{itemize}
@@ -188,7 +188,7 @@
 \item This decoupling from policy is the core insight — reward engineering becomes a separate, principled task
 }
 
-\begin{frame}[t]{Related Work — Curriculum \& Asymmetric Self-Play}
+\begin{frame}[t]{Curriculum \& Asymmetric Self-Play}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.50\textwidth}
       \textbf{Forced curricula}
@@ -222,7 +222,7 @@
 \item Our use: we test both outcome-based (ASP-dPose) and time-based (TASP-dPose) variants
 }
 
-\begin{frame}[t]{Related Work — Geometry \& Mechanics of Planar Pushing}
+\begin{frame}[t]{Geometry \& Mechanics of Planar Pushing}
   \begin{columns}[T,onlytextwidth]
     \begin{column}{0.62\textwidth}
       \textbf{Push mechanics}
@@ -292,33 +292,9 @@
 \item Success: pos < 5\,cm AND rot < 0.2\,rad. Validation: 30 held-out scenes × 20 trials × up to 30 pushes/trial; scene solved if any trial meets the gate.
 }
 
-\begin{frame}[t]{What Does Success Look Like?}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.30\textwidth}
-      \centering
-      \textbf{Position-only success}\\[4pt]
-      
-    \end{column}
-    \begin{column}{0.30\textwidth}
-      \centering
-      \textbf{Position + Rotation success}\\[4pt]
-     
-    \end{column}
-    \begin{column}{0.38\textwidth}
-      \vspace{4pt}
-      {\small \textbf{Success gate:}}
-      \begin{itemize}
-        \item \textcolor{hlblue}{Object} reaches \textcolor{hlgreen}{goal} \\
-              \textbf{pos $<$ 0.05\,m AND rot $<$ 0.2\,rad}
-        \item 10/30 scenes are pos-only (rotation ungated)
-        \item 20/30 scenes require both
-        \item $\geq$1 of 20 trials must pass per scene
-      \end{itemize}
-    \end{column}
-  \end{columns}
-\end{frame}
 
-\begin{frame}[t]{Why the Fractional Reward Failed}
+
+\begin{frame}[t]{How the Fractional Reward Failed}
   \textbf{Fractional improvement formula:}\\
   $R = \underbrace{\textcolor{hlblue}{\alpha\!\cdot\!\frac{d_{\text{prev}}-d_{\text{now}}}{d_{\text{prev}}}}}_{\text{improvement}}
        - \underbrace{\textcolor{Orange}{\beta_{\text{pos}}\!\cdot\!d_{\text{now}}}}_{\text{pos penalty}}
@@ -392,6 +368,38 @@ penalty terms dominate the improvement.}
 \sectionframe{4.\ Implementation}
 
 
+\begin{frame}[t]{Why Isaac Lab?}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.48\textwidth}
+      \footnotesize
+      \begin{enumerate}
+        \item \textbf{GPU-batched parallelism} — 528 simultaneous environments produce 7{,}920-sample PPO batches. gym-pusht peaks at 960 — 8$\times$ smaller. Large batches stabilize the non-stationary self-play gradient.
+        \item \textbf{No extra per-iteration cost} — self-play and single-agent run at identical wall-clock ($\sim$0.022\,it/s). The two-agent machinery adds negligible overhead.
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \centering
+      \includegraphics[width=\textwidth,height=0.55\textheight,keepaspectratio]{figures/isaac_vs_gym.png}
+      \vspace{2pt}
+      {\footnotesize Throughput is comparable; batch size is the differentiator.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Why Isaac Lab? - Training demos}
+  \begin{columns}[T,onlytextwidth]
+ 
+  \end{columns}
+\end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item Isaac GPU-batched: 528 envs stepped in parallel → 7{,}920 transitions per PPO update. gym-pusht HPC at 32 CPU cores only reaches 960 per update. Large batches are essential to stabilize PPO+LSTM gradients under non-stationary self-play objectives
+\item Throughput (isaac\_vs\_gym.png): Isaac 172 push/s at 528 envs vs Gym 209 push/s at 32 cores — raw speed is comparable. The 8× batch-size difference drives the performance gap, not raw throughput
+\item Self-play and single-agent run at identical per-iteration wall-clock (\textasciitilde0.022 it/s) on the same GPU — the 2-agent machinery (Alice + Bob, GoalEncoder, ABC) adds no measurable overhead
+\item Takeaway: Isaac gives self-play its best shot — same budget, same batch size as the winning single-agent — and it still reaches only 6.7--16.7\% SR. The 4.8× gap is structural, not a compute artifact
+}
+
 \begin{frame}[t]{Baseline — Fractional Reward at Scale}
   \textbf{Same fractional reward, same PPO+LSTM, same 2{,}048 envs, same 100K iter budget:}
   \vspace{4pt}
@@ -401,7 +409,7 @@ penalty terms dominate the improvement.}
     \textbf{Model} & \textbf{Scene SR} & \textbf{Pos-only} & \textbf{Pos+rot} \\
     \midrule
     \rowcolor{hlgreen!15}
-    PPO single-agent & \textcolor{hlgreen}{\textbf{80.0\%}} & 100\% & 70\% \\
+    PPO single-agent & \textcolor{hlgreen}{\textbf{83.3\%}} & 100\% & 75\% \\
     ASP (Alice+Bob)  & \textcolor{hlred}{\textbf{0.0\%}}  & 0\%   & 0\% \\
     \bottomrule
   \end{tabular}
@@ -416,7 +424,7 @@ penalty terms dominate the improvement.}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item The original fractional reward at 2,048 envs reaches 80\% for single-agent — the task IS solvable at scale
+\item The original fractional reward at 2,048 envs reaches 83.3\% for single-agent — the task IS solvable at scale
 \item Same reward, same environment, same budget — ASP with Alice/Bob gets 0\%. The adversarial goal distribution prevents any learning
 \item This is the cleanest 1-axis comparison in the thesis: only the training architecture changes. Self-play is the bottleneck
 \item All subsequent models switch to PBRS — not because the original reward is broken, but because PBRS is principled, efficient (works at 528 envs), and provides correct per-step signal even under distribution shift
@@ -615,7 +623,7 @@ penalty terms dominate the improvement.}
 
   \vspace{2pt}
   \textbf{Trigger:} gates on episodic position-only SR $\ge$ 0.5 over a 20-iter lookback. Curriculum now activates and reaches \textcolor{hlgreen}{76.7\% SR} — only 3.3pp below PPO-PBRS.
-  {\scriptsize \textit{(See Appendix H for original trigger bug details.)}}
+  
 
   \vfill\litfooter{[Narvekar et al.\ 2020]~[Portelas et al.\ 2020]~[Florensa et al.\ 2017]}
 \end{frame}
@@ -659,7 +667,7 @@ penalty terms dominate the improvement.}
     \textbf{Self-play variant} & \textbf{Alice reward} & \textbf{Valid SR} \\
     \midrule
     \textbf{ASP-dPose} (outcome-based) & $R_A=+5$ fail $/-1$ win, $\beta_{\text{abc}}{=}0.5$ & \textcolor{hlred}{6.7\%} \\
-    \textbf{TASP-dPose} (time-based) & $R_A=\gamma_{sp}\!\cdot\!\max(0,t_B\!-\!t_A)$, no ABC & \textcolor{hlred}{16.7\%} \\
+    \textbf{TASP-dPose} (time-based) & $R_A=\gamma_{sp}\!\cdot\!\max(0,t_B\!-\!t_A)$, $\beta_{\text{abc}}{=}0.5$ & \textcolor{hlred}{16.7\%} \\
     \bottomrule
   \end{tabular}
   \end{center}
@@ -706,38 +714,39 @@ penalty terms dominate the improvement.}
 \item Sky-blue = object start pose, orange = goal pose, arrow = required translation
 \item Difficulty within each row spans easy/medium/hard by start-to-goal distance and yaw change
 }
+
+\begin{frame}[t]{What Does Success Look Like?}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.30\textwidth}
+      \centering
+      \textbf{Position-only success}\\[4pt]
+      \includegraphics[width=0.9\linewidth]{figures/pos_succ.png}
+    \end{column}
+    \begin{column}{0.30\textwidth}
+      \centering
+      \textbf{Position + Rotation success}\\[4pt]
+      \includegraphics[width=0.9\linewidth]{figures/posrot_succ_pos_00-3_rot_0-17.png}
+    \end{column}
+    \begin{column}{0.38\textwidth}
+      \vspace{4pt}
+      {\small \textbf{Success gate:}}
+      \begin{itemize}
+        \item \textcolor{hlblue}{Object} reaches \textcolor{hlgreen}{goal} \\
+              \textbf{pos $<$ 0.05\,m AND rot $<$ 0.2\,rad}
+        \item 10/30 scenes are pos-only (rotation ungated)
+        \item 20/30 scenes require both
+        \item $\geq$1 of 20 trials must pass per scene
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
 % Push Mechanics detail moved to Related Work and Appendix A
 % ============================================================
 % ============================================================
 
 
 
-\begin{frame}[t]{Why Isaac Lab?}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.48\textwidth}
-      \footnotesize
-      \begin{enumerate}
-        \item \textbf{GPU-batched parallelism} — 528 simultaneous environments produce 7{,}920-sample PPO batches. gym-pusht peaks at 960 — 8$\times$ smaller. Large batches stabilize the non-stationary self-play gradient.
-        \item \textbf{No extra per-iteration cost} — self-play and single-agent run at identical wall-clock ($\sim$0.022\,it/s). The two-agent machinery adds negligible overhead.
-        \item \textbf{Fair test} — same batch size and budget as the winning single-agent, yet self-play reaches only 6.7--16.7\% vs 80\% (4.8$\times$ gap). The gap is structural.
-      \end{enumerate}
-    \end{column}
-    \begin{column}{0.50\textwidth}
-      \centering
-      \includegraphics[width=\textwidth,height=0.55\textheight,keepaspectratio]{figures/isaac_vs_gym.png}
-      \vspace{2pt}
-      {\footnotesize Throughput is comparable; batch size is the differentiator.}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-% ~~~~~ SPEAKER NOTES ~~~~~
-\note[itemize]{
-\item Isaac GPU-batched: 528 envs stepped in parallel → 7{,}920 transitions per PPO update. gym-pusht HPC at 32 CPU cores only reaches 960 per update. Large batches are essential to stabilize PPO+LSTM gradients under non-stationary self-play objectives
-\item Throughput (isaac\_vs\_gym.png): Isaac 172 push/s at 528 envs vs Gym 209 push/s at 32 cores — raw speed is comparable. The 8× batch-size difference drives the performance gap, not raw throughput
-\item Self-play and single-agent run at identical per-iteration wall-clock (\textasciitilde0.022 it/s) on the same GPU — the 2-agent machinery (Alice + Bob, GoalEncoder, ABC) adds no measurable overhead
-\item Takeaway: Isaac gives self-play its best shot — same budget, same batch size as the winning single-agent — and it still reaches only 6.7--16.7\% SR. The 4.8× gap is structural, not a compute artifact
-}
 
 
 \sectionframe{6.\ Results}
@@ -771,9 +780,6 @@ penalty terms dominate the improvement.}
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
-      \centering
-      \mediabox{1.0}{rec_push_s21_key.png}\\[2pt]
-      {\scriptsize Overhead view — PPO-PBRS solving a pos+rot scene}\quad\playclip{rec_push_s21.mp4}
     \end{column}
   \end{columns}
 
@@ -822,27 +828,18 @@ penalty terms dominate the improvement.}
 
 \end{frame}
 
+\begin{frame}[t]{ASP vs TASP training}
+  \centering
+  \vspace{-2pt}
+  \includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/asp_vs_tasp_training.png}\\[1pt]
+  {\scriptsize ASP-dPose (outcome) vs TASP-dPose (time): displacement (top), valid-goal density (bottom). Bob solves few valid goals (3.9\% vs 5.5\%).}
+
+\end{frame}
+
 \begin{frame}[t]{PPO-PBRS — Validation Runs (overhead)}
   {\small Three held-out T-block scenes, top-down camera — the trained PPO-PBRS policy:}
 
-  \vspace{4pt}
-  \begin{columns}[T,onlytextwidth]
-    \begin{column}{0.32\textwidth}
-      \centering
-      \mediabox{1.0}{rec_push_s11_key.png}\\[2pt]
-      {\scriptsize Forward (pos-only)}\quad\playclip{rec_push_s11.mp4}
-    \end{column}
-    \begin{column}{0.32\textwidth}
-      \centering
-      \mediabox{1.0}{rec_push_s14_key.png}\\[2pt]
-      {\scriptsize Lateral push (pos-only)}\quad\playclip{rec_push_s14.mp4}
-    \end{column}
-    \begin{column}{0.32\textwidth}
-      \centering
-      \mediabox{1.0}{rec_push_s21_key.png}\\[2pt]
-      {\scriptsize Translate + rotate}\quad\playclip{rec_push_s21.mp4}
-    \end{column}
-  \end{columns}
+ 
 
 \end{frame}
 
@@ -958,7 +955,7 @@ penalty terms dominate the improvement.}
 \begin{frame}[t]{Conclusion — Environment Efficiency (RQ1)}
   \begin{block}{\textbf{RQ1 — PBRS reduces parallel-environment requirements}}
     \small
-    PBRS achieves 80.0\% SR at 528 parallel envs — 4$\times$ fewer than the fractional reward requires (2{,}048 envs) for the same performance. Dense, correctly-signed, bounded rewards on every push. Policy invariance (Ng et al.\ 1999) holds with stochastic PhysX.
+    PBRS achieves 80.0\% SR at 528 parallel envs — 4$\times$ fewer than the fractional reward requires (2{,}048 envs) for the same performance (83.3\%). Dense, correctly-signed, bounded rewards on every push. Policy invariance (Ng et al.\ 1999) holds with stochastic PhysX.
   \end{block}
 
   \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Harutyunyan et al.\ 2015]}
@@ -966,7 +963,7 @@ penalty terms dominate the improvement.}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item RQ1: PPO-PBRS at 528 envs matches PPO-Baseline at 2{,}048 envs — both reach 80.0\% validation SR
+\item RQ1: PPO-PBRS at 528 envs matches PPO-Baseline at 2{,}048 envs — both reach 80--83\% validation SR
 \item PBRS reduces the parallel-environment requirement by 4$\times$ for this multi-objective planar pushing task
 \item Correctly-signed, bounded, Markovian rewards on every push enable stable on-policy GAE at lower parallelism
 \item The policy invariance theorem is supported empirically: PBRS does not alter the optimal policy, only the learning speed

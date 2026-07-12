@@ -803,6 +803,7 @@ def main():
         writer.add_scalar("Metrics/EpisodicSR",      ep_sr if not np.isnan(ep_sr) else 0.0, iteration)
         writer.add_scalar("Metrics/AvgPushesPerEpisode", avg_pushes if not np.isnan(avg_pushes) else 0.0, iteration)
         writer.add_scalar("Metrics/Episodes",        n_episodes,    iteration)
+        writer.add_scalar("Diagnostics/GradientUpdates", iteration, iteration)
 
         # Single compact iteration line — machine-parseable
         avg_pushes_str = f"{avg_pushes:.1f}" if not np.isnan(avg_pushes) else "nan"

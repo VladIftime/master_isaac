@@ -1,2 +1,0 @@
-train_e_pbrs_asp_dpose.py 42 1024 1547 100 pbrsE_e1024_i1547_s42 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --no_abc
-train_g_tasp_dpose.py 42 1024 1547 100 pbrsG_e1024_i1547_s42 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --no_abc --alice_reward_scale 0.5

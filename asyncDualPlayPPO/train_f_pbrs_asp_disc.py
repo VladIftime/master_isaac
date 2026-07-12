@@ -1475,6 +1475,7 @@ def main():
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
         _ik_fail_rate = _iter_ik_fails / max(1, _iter_ik_steps)
         writer.add_scalar("Metrics/IKFailRate", _ik_fail_rate, bob_updates)
+        writer.add_scalar("Diagnostics/GradientUpdates", bob_updates, bob_updates)
 
         _mean_pos_err = np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0
         _mean_rot_err = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0

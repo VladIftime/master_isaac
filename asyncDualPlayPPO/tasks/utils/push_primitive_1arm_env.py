@@ -104,6 +104,53 @@ UR5e_CFG = ArticulationCfg(
 
 
 ##
+# Visual-only body (torso + head + LEFT arm).  The single push arm (RobotUnified)
+# visually serves as this body's RIGHT arm.  The right arm + right gripper have been
+# removed from the URDF and all collisions stripped, so this is purely decorative and
+# never interacts with the push arm, objects, or IK.
+#
+# The LEFT arm pose is baked directly into the URDF as *fixed* joints (crane pose,
+# base turned +90 deg CCW so it points left), so the body is a fully rigid static
+# prop that cannot drift back to a default pose.  It is spawned as a plain AssetBase
+# (not an Articulation) so nothing drives or manages its joints.
+#
+# Placement: the body's (removed) right-arm socket lands on the push arm base at the
+# world origin (0,0,0).  From the URDF, right_base = body_root + (0.255, 0.05, 0.030)
+# after the built-in Rz+90 body rotation, so the body root sits at the negative of that.
+##
+
+_BODY_RIGHT_SOCKET_OFFSET = (0.255, 0.05, 0.030)
+_BODY_ROOT_POS = (
+    -_BODY_RIGHT_SOCKET_OFFSET[0],
+    -_BODY_RIGHT_SOCKET_OFFSET[1],
+    -_BODY_RIGHT_SOCKET_OFFSET[2],
+)
+
+BODY_DISPLAY_CFG = AssetBaseCfg(
+    prim_path="{ENV_REGEX_NS}/BodyDisplay",
+    init_state=AssetBaseCfg.InitialStateCfg(pos=_BODY_ROOT_POS),
+    spawn=UrdfFileCfg(
+        asset_path=f"{ISAACLAB_DUAL_ARM_EXT_DIR}/asyncDualPlayPPO/urdf/dual_arm_body_display.urdf",
+        fix_base=True,
+        joint_drive=sim_utils.UrdfConverterCfg.JointDriveCfg(
+            gains=sim_utils.UrdfConverterCfg.JointDriveCfg.PDGainsCfg(
+                stiffness=1000.0,
+                damping=50.0,
+            ),
+        ),
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity=True),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False,
+            solver_position_iteration_count=4,
+            solver_velocity_iteration_count=0,
+            fix_root_link=True,
+        ),
+        activate_contact_sensors=False,
+    ),
+)
+
+
+##
 # Scene definition
 ##
 
@@ -116,6 +163,23 @@ class Push1ArmSceneCfg(InteractiveSceneCfg):
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.0),
             joint_pos=UR5e_CFG.init_state.joint_pos,
+        ),
+    )
+
+    # ── Visual-only body (torso + head + left arm); the push arm is the right arm ──
+    body_display: AssetBaseCfg = BODY_DISPLAY_CFG.replace(
+        prim_path="{ENV_REGEX_NS}/BodyDisplay",
+    )
+
+    # ── Stand under the body (throwing-env style, visual only) ─────────────────
+    body_stand = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/BodyStand",
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=[_BODY_ROOT_POS[0], _BODY_ROOT_POS[1], -0.33], rot=[1.0, 0, 0, 0]
+        ),
+        spawn=sim_utils.CuboidCfg(
+            size=(0.5, 0.5, 0.6),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.3, 0.3, 0.32)),
         ),
     )
 

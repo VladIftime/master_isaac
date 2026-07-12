@@ -901,6 +901,7 @@ def main():
         # ── Curriculum check: episodic position-only SR ───────────────────────
         pos_ep_sr_this = sum(pos_ep_oks) / max(1, len(pos_ep_oks)) if pos_ep_oks else 0.0
         writer.add_scalar("Curriculum/PosEpisodicSR", pos_ep_sr_this, iteration)
+        writer.add_scalar("Diagnostics/GradientUpdates", iteration, iteration)
         pos_ep_oks.clear()
         pos_ep_sr_buf.append(pos_ep_sr_this)
 

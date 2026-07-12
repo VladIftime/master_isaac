@@ -1,76 +1,80 @@
 ~\hfill \textbf {Page}\par 
-\contentsline {section}{Abstract}{5}{}%
-\contentsline {section}{\numberline {1}Introduction}{6}{}%
-\contentsline {subsection}{\numberline {1.1}Contributions}{7}{}%
-\contentsline {subsection}{\numberline {1.2}Thesis Outline}{8}{}%
-\contentsline {section}{\numberline {2}Background and Related Work}{9}{}%
-\contentsline {subsection}{\numberline {2.1}Reinforcement Learning}{9}{}%
-\contentsline {subsubsection}{\numberline {2.1.1}Markov Decision Processes}{9}{}%
-\contentsline {paragraph}{Value functions.}{10}{}%
-\contentsline {paragraph}{Bellman equations.}{10}{}%
-\contentsline {paragraph}{Exploration versus exploitation.}{10}{}%
-\contentsline {subsubsection}{\numberline {2.1.2}Partial Observability and the POMDP}{11}{}%
-\contentsline {subsubsection}{\numberline {2.1.3}Model-Free and Model-Based Reinforcement Learning}{11}{}%
-\contentsline {subsection}{\numberline {2.2}Proximal Policy Optimization}{12}{}%
-\contentsline {subsection}{\numberline {2.3}Soft Actor-Critic}{12}{}%
-\contentsline {subsection}{\numberline {2.4}Potential-Based Reward Shaping}{13}{}%
-\contentsline {subsection}{\numberline {2.5}Curriculum Learning and Automatic Curricula}{14}{}%
-\contentsline {subsection}{\numberline {2.6}Asymmetric Self-Play}{14}{}%
-\contentsline {subsection}{\numberline {2.7}Goal-Conditioned and Hierarchical Reinforcement Learning}{15}{}%
-\contentsline {subsection}{\numberline {2.8}Mechanics and Geometry of Planar Pushing}{16}{}%
-\contentsline {subsection}{\numberline {2.9}Positioning of This Work}{17}{}%
-\contentsline {section}{\numberline {3}Methods}{18}{}%
-\contentsline {subsection}{\numberline {3.1}Simulation Environment}{18}{}%
-\contentsline {subsection}{\numberline {3.2}The Planar-Pushing Markov Decision Process}{19}{}%
-\contentsline {paragraph}{State.}{19}{}%
-\contentsline {paragraph}{Action.}{19}{}%
-\contentsline {paragraph}{Transition.}{19}{}%
-\contentsline {paragraph}{Reward.}{19}{}%
-\contentsline {paragraph}{Success criterion.}{19}{}%
-\contentsline {subsection}{\numberline {3.3}Why the Improvement Reward Fails}{19}{}%
-\contentsline {subsection}{\numberline {3.4}Potential-Based Reward Shaping for Pushing}{20}{}%
-\contentsline {subsection}{\numberline {3.5}The SE(2) Unified Distance}{21}{}%
-\contentsline {subsection}{\numberline {3.6}The Five Models}{21}{}%
-\contentsline {paragraph}{PPO-Baseline.}{22}{}%
-\contentsline {paragraph}{PPO-PBRS.}{22}{}%
-\contentsline {paragraph}{PPO-Curriculum.}{22}{}%
-\contentsline {paragraph}{ASP-dPose.}{22}{}%
-\contentsline {paragraph}{TASP-dPose.}{22}{}%
-\contentsline {subsection}{\numberline {3.7}Why PBRS Assists Self-Play but Does Not Solve It}{23}{}%
-\contentsline {subsection}{\numberline {3.8}Experimental Campaign Overview}{24}{}%
-\contentsline {subsection}{\numberline {3.9}Validation Protocol}{26}{}%
-\contentsline {subsection}{\numberline {3.10}Training Instrumentation for the Self-Play Mechanism}{27}{}%
-\contentsline {section}{\numberline {4}Experimental Setup}{28}{}%
-\contentsline {subsection}{\numberline {4.1}Tools and Infrastructure}{28}{}%
-\contentsline {subsection}{\numberline {4.2}Training Configuration}{28}{}%
-\contentsline {subsection}{\numberline {4.3}Validation Protocol}{28}{}%
-\contentsline {subsection}{\numberline {4.4}Cross-Environment Protocol}{29}{}%
-\contentsline {subsection}{\numberline {4.5}Off-Policy Baseline: SAC with Hindsight Experience Replay}{30}{}%
-\contentsline {subsection}{\numberline {4.6}Metrics}{30}{}%
-\contentsline {section}{\numberline {5}Results}{31}{}%
-\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{31}{}%
-\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{32}{}%
-\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{33}{}%
-\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{34}{}%
-\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{35}{}%
-\contentsline {section}{\numberline {6}Discussion and Conclusion}{37}{}%
-\contentsline {subsection}{\numberline {6.1}Interpretation}{37}{}%
-\contentsline {subsection}{\numberline {6.2}Relation to Prior Work}{37}{}%
-\contentsline {subsection}{\numberline {6.3}Contributions Revisited}{39}{}%
-\contentsline {subsection}{\numberline {6.4}Limitations}{39}{}%
-\contentsline {subsection}{\numberline {6.5}Future Work}{40}{}%
-\contentsline {subsection}{\numberline {6.6}Conclusion}{40}{}%
-\contentsline {section}{Bibliography}{41}{}%
-\contentsline {section}{Appendices}{45}{}%
-\contentsline {subsection}{\numberline {A}Push Mechanics: Limit Surface and Characteristic Length}{45}{}%
-\contentsline {subsection}{\numberline {B}Training Curves}{45}{}%
-\contentsline {subsection}{\numberline {C}PBRS Parameter Sensitivity}{46}{}%
-\contentsline {subsection}{\numberline {D}Validation Scene Descriptions}{46}{}%
-\contentsline {subsection}{\numberline {E}cuRobo IK Pipeline and Workspace}{46}{}%
-\contentsline {subsection}{\numberline {F}Observation Space Specifications}{46}{}%
-\contentsline {subsection}{\numberline {G}Per-Test Error Bars}{46}{}%
-\contentsline {subsection}{\numberline {H}Curriculum Trigger Correction}{47}{}%
-\contentsline {subsection}{\numberline {I}Symmetric Self-Play Fail-Fast Equilibrium}{47}{}%
-\contentsline {subsection}{\numberline {J}Confounded Ablation Disaggregation}{48}{}%
-\contentsline {subsection}{\numberline {K}Training Budget Comparison}{48}{}%
-\contentsline {subsection}{\numberline {L}Secondary Variants}{48}{}%
+\contentsline {section}{Abstract}{6}{}%
+\contentsline {section}{\numberline {1}Introduction}{7}{}%
+\contentsline {subsection}{\numberline {1.1}Contributions}{8}{}%
+\contentsline {subsection}{\numberline {1.2}Thesis Outline}{9}{}%
+\contentsline {section}{\numberline {2}Background and Related Work}{10}{}%
+\contentsline {subsection}{\numberline {2.1}Reinforcement Learning}{10}{}%
+\contentsline {subsubsection}{\numberline {2.1.1}Markov Decision Processes}{10}{}%
+\contentsline {paragraph}{Value functions.}{11}{}%
+\contentsline {paragraph}{Bellman equations.}{11}{}%
+\contentsline {paragraph}{Exploration versus exploitation.}{11}{}%
+\contentsline {subsubsection}{\numberline {2.1.2}Partial Observability and the POMDP}{12}{}%
+\contentsline {subsubsection}{\numberline {2.1.3}Model-Free and Model-Based Reinforcement Learning}{12}{}%
+\contentsline {subsection}{\numberline {2.2}Proximal Policy Optimization}{13}{}%
+\contentsline {subsection}{\numberline {2.3}Soft Actor-Critic}{13}{}%
+\contentsline {subsection}{\numberline {2.4}Potential-Based Reward Shaping}{14}{}%
+\contentsline {subsection}{\numberline {2.5}Curriculum Learning and Automatic Curricula}{15}{}%
+\contentsline {subsection}{\numberline {2.6}Asymmetric Self-Play}{15}{}%
+\contentsline {subsection}{\numberline {2.7}Goal-Conditioned and Hierarchical Reinforcement Learning}{16}{}%
+\contentsline {subsection}{\numberline {2.8}Mechanics and Geometry of Planar Pushing}{17}{}%
+\contentsline {subsection}{\numberline {2.9}Positioning of This Work}{18}{}%
+\contentsline {section}{\numberline {3}Methods}{19}{}%
+\contentsline {subsection}{\numberline {3.1}Simulation Environment}{19}{}%
+\contentsline {subsection}{\numberline {3.2}The Planar-Pushing Markov Decision Process}{20}{}%
+\contentsline {paragraph}{State.}{20}{}%
+\contentsline {paragraph}{Action.}{20}{}%
+\contentsline {paragraph}{Transition.}{20}{}%
+\contentsline {paragraph}{Reward.}{20}{}%
+\contentsline {paragraph}{Success criterion.}{20}{}%
+\contentsline {subsection}{\numberline {3.3}The Object-Relative Push Primitive}{20}{}%
+\contentsline {subsection}{\numberline {3.4}Why the Improvement Reward Underperforms}{21}{}%
+\contentsline {subsection}{\numberline {3.5}Potential-Based Reward Shaping for Pushing}{22}{}%
+\contentsline {subsection}{\numberline {3.6}The SE(2) Unified Distance}{23}{}%
+\contentsline {subsection}{\numberline {3.7}The Models}{23}{}%
+\contentsline {paragraph}{PPO-Baseline.}{25}{}%
+\contentsline {paragraph}{PPO-PBRS.}{25}{}%
+\contentsline {paragraph}{PPO-Curriculum.}{25}{}%
+\contentsline {paragraph}{ASP-dPose.}{26}{}%
+\contentsline {paragraph}{TASP-dPose.}{26}{}%
+\contentsline {paragraph}{ASP-disc and TASP-disc.}{28}{}%
+\contentsline {paragraph}{Bob-penalty.}{28}{}%
+\contentsline {paragraph}{Cross-environment counterparts.}{28}{}%
+\contentsline {subsection}{\numberline {3.8}Why PBRS Assists Self-Play but Does Not Solve It}{29}{}%
+\contentsline {subsection}{\numberline {3.9}Experiment-Set Overview}{29}{}%
+\contentsline {subsection}{\numberline {3.10}Validation Protocol}{30}{}%
+\contentsline {subsection}{\numberline {3.11}Training Instrumentation for the Self-Play Mechanism}{31}{}%
+\contentsline {section}{\numberline {4}Experimental Setup}{33}{}%
+\contentsline {subsection}{\numberline {4.1}Tools and Infrastructure}{33}{}%
+\contentsline {subsection}{\numberline {4.2}Training Configuration and the Experiment Set}{33}{}%
+\contentsline {subsection}{\numberline {4.3}Validation Protocol}{34}{}%
+\contentsline {subsection}{\numberline {4.4}Cross-Environment Protocol}{35}{}%
+\contentsline {subsection}{\numberline {4.5}Off-Policy Baseline: SAC with Hindsight Experience Replay}{35}{}%
+\contentsline {subsection}{\numberline {4.6}Metrics}{36}{}%
+\contentsline {section}{\numberline {5}Results}{37}{}%
+\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{37}{}%
+\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{38}{}%
+\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{39}{}%
+\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{40}{}%
+\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{41}{}%
+\contentsline {section}{\numberline {6}Discussion and Conclusion}{43}{}%
+\contentsline {subsection}{\numberline {6.1}Interpretation}{43}{}%
+\contentsline {subsection}{\numberline {6.2}Relation to Prior Work}{43}{}%
+\contentsline {subsection}{\numberline {6.3}Contributions Revisited}{45}{}%
+\contentsline {subsection}{\numberline {6.4}Limitations}{45}{}%
+\contentsline {subsection}{\numberline {6.5}Future Work}{46}{}%
+\contentsline {subsection}{\numberline {6.6}Conclusion}{46}{}%
+\contentsline {section}{Bibliography}{47}{}%
+\contentsline {section}{Appendices}{51}{}%
+\contentsline {subsection}{\numberline {A}Push Mechanics: Limit Surface and Characteristic Length}{51}{}%
+\contentsline {subsection}{\numberline {B}Training Curves}{51}{}%
+\contentsline {subsection}{\numberline {C}PBRS Parameter Sensitivity}{52}{}%
+\contentsline {subsection}{\numberline {D}Validation Scene Descriptions}{52}{}%
+\contentsline {subsection}{\numberline {E}cuRobo IK Pipeline and Workspace}{52}{}%
+\contentsline {subsection}{\numberline {F}Observation Space Specifications}{52}{}%
+\contentsline {subsection}{\numberline {G}Per-Test Error Bars}{53}{}%
+\contentsline {subsection}{\numberline {H}Curriculum Trigger Correction}{53}{}%
+\contentsline {subsection}{\numberline {I}Symmetric Self-Play Fail-Fast Equilibrium}{54}{}%
+\contentsline {subsection}{\numberline {J}Confounded Ablation Disaggregation}{54}{}%
+\contentsline {subsection}{\numberline {K}Training Budget Comparison}{54}{}%
+\contentsline {subsection}{\numberline {L}Secondary Variants}{54}{}%

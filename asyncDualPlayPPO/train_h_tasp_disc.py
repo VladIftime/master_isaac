@@ -500,22 +500,42 @@ def main():
 
     bob_success_buf = deque(maxlen=200)
 
+    if (args.chkpt_alice and args.chkpt_bob
+            and os.path.isfile(args.chkpt_alice) and os.path.isfile(args.chkpt_bob)):
+        def _peek_iter(_p):
+            try:
+                return torch.load(_p, map_location="cpu").get("iteration")
+            except Exception:
+                return None
+        _ai, _bi = _peek_iter(args.chkpt_alice), _peek_iter(args.chkpt_bob)
+        if _ai is not None and _bi is not None and _ai != _bi:
+            print(f"[Resume][GUARD] MISMATCHED Alice/Bob checkpoints (alice_iter={_ai} "
+                  f"!= bob_iter={_bi}; latest_iter.txt={args.resume_iteration} is advisory) — "
+                  f"refusing to resume co-evolved adversaries from different points; "
+                  f"starting this run FRESH.", flush=True)
+            args.chkpt_alice = None
+            args.chkpt_bob = None
+            args.resume_iteration = 0
+
     if args.chkpt_alice and os.path.isfile(args.chkpt_alice):
         alice_ppo.load(args.chkpt_alice)
         print(f"[Resume] Loaded Alice from {args.chkpt_alice}")
     if args.chkpt_bob and os.path.isfile(args.chkpt_bob):
         bob_ppo.load(args.chkpt_bob)
         print(f"[Resume] Loaded Bob from {args.chkpt_bob}")
+        if bob_ppo.loaded_iteration is not None:
+            args.resume_iteration = int(bob_ppo.loaded_iteration)
+            print(f"[Resume] Iteration from checkpoint (authoritative): {args.resume_iteration}")
         _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
         if os.path.isfile(_abc_buf_path):
             bob_ppo.abc_buffer.load(_abc_buf_path)
             print(f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries)")
-        _ep_mgr_path = args.chkpt_bob.replace("model_", "episode_manager_")
+        _ep_mgr_path = os.path.join(os.path.dirname(args.chkpt_bob), "episode_manager_latest.pt")
         if os.path.isfile(_ep_mgr_path):
             ep_sd = torch.load(_ep_mgr_path, map_location=env.device)
             env.episode_manager.load_state_dict(ep_sd)
             print(f"[Resume] Loaded EpisodeManager state")
-        _train_state_path = args.chkpt_bob.replace("model_", "train_state_")
+        _train_state_path = os.path.join(os.path.dirname(args.chkpt_bob), "train_state_latest.pt")
         if os.path.isfile(_train_state_path):
             _ts = torch.load(_train_state_path, map_location="cpu")
             alice_ppo.entropy_coef = float(_ts.get("entropy_coef", 0.005))
@@ -1399,6 +1419,7 @@ def main():
         writer.add_scalar("Metrics/Alice/EMAReward", ema_alice_rew, bob_updates)
         _ik_fail_rate = _iter_ik_fails / max(1, _iter_ik_steps)
         writer.add_scalar("Metrics/IKFailRate", _ik_fail_rate, bob_updates)
+        writer.add_scalar("Diagnostics/GradientUpdates", bob_updates, bob_updates)
 
         _mean_pos_err = np.mean(bob_pos_err_buf) if bob_pos_err_buf else 0.0
         _mean_rot_err = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0

@@ -93,6 +93,9 @@ class Suite:
 
     def write(self):
         os.makedirs(PARAMS_DIR, exist_ok=True)
+        import glob
+        for old in glob.glob(os.path.join(PARAMS_DIR, "*.txt")):
+            os.remove(old)
         tpl = {"single": TPL_SINGLE, "self": TPL_SELF, "gym": TPL_GYM}
         manifest = []
         for (phase, family, mem), lines in sorted(self.buckets.items()):

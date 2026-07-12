@@ -78,8 +78,8 @@ ALL_TESTS: List[PushTestConfig] = [
     # ═══════════════════════════════════════════════════════════════════════
     # DEMO SCENES — object already within success thresholds (static hold)
     # ═══════════════════════════════════════════════════════════════════════
-    PushTestConfig("Demo_Pos",    31, "demo", "demo", "tblock", StartPos(+0.05,+0.50), +0.00,+0.50, 0.0),
-    PushTestConfig("Demo_PosRot", 32, "demo", "demo", "tblock", StartPos(+0.05,+0.50), +0.00,+0.50, 0.2),
+    PushTestConfig("Demo_Pos",    31, "demo", "demo", "tblock", StartPos(+0.00,+0.50), +0.00,+0.50, +1.5708),
+    PushTestConfig("Demo_PosRot", 32, "demo", "demo", "tblock", StartPos(+0.05,+0.50), +0.00,+0.50, +0.2),
 ]
 
 

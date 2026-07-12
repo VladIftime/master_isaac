@@ -106,15 +106,39 @@ class PPO:
         self.actor_critic.load_state_dict(torch.load(path))
         self.actor_critic.eval()
 
+    def _warn_shape_mismatch(self, src_state, dst_state, context=""):
+        """Compare checkpoint keys/shapes against current model; warn on any gap."""
+        src_keys, dst_keys = set(src_state.keys()), set(dst_state.keys())
+        missing = dst_keys - src_keys
+        unexpected = src_keys - dst_keys
+        shape_diff = []
+        for k in src_keys & dst_keys:
+            if src_state[k].shape != dst_state[k].shape:
+                shape_diff.append((k, tuple(src_state[k].shape), tuple(dst_state[k].shape)))
+        if missing or unexpected or shape_diff:
+            msg = [f"[PPO LOAD] Shape mismatch{context}:"]
+            if missing:
+                msg.append(f"  Missing in checkpoint (uninitialised): {sorted(missing)}")
+            if unexpected:
+                msg.append(f"  Unexpected in checkpoint (ignored): {sorted(unexpected)}")
+            for k, s, d in shape_diff:
+                msg.append(f"  Shape mismatch: {k} checkpoint {s} != model {d}")
+            print("\n".join(msg), flush=True)
+
     def load(self, path):
         checkpoint = torch.load(path)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-            self.actor_critic.load_state_dict(checkpoint["model_state_dict"], strict=False)
+            src = checkpoint["model_state_dict"]
+            self._warn_shape_mismatch(src, self.actor_critic.state_dict(),
+                                      context=f" (from {os.path.basename(path)})")
+            self.actor_critic.load_state_dict(src, strict=False)
             if self.optimizer is not None and "optimizer_state_dict" in checkpoint:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             # Iteration this checkpoint was saved at (None for legacy pre-embed files).
             self.loaded_iteration = checkpoint.get("iteration", None)
         else:
+            self._warn_shape_mismatch(checkpoint, self.actor_critic.state_dict(),
+                                      context=f" (legacy plain state_dict from {os.path.basename(path)})")
             self.actor_critic.load_state_dict(checkpoint, strict=False)
             self.loaded_iteration = None
         try:

@@ -39,6 +39,10 @@ class MultiCategorical:
         probs = torch.softmax(self.logits, dim=-1).reshape(batch * ndim, nbins)
         return torch.multinomial(probs, 1).reshape(batch, ndim)
 
+    def mode(self) -> torch.Tensor:
+        """Returns (batch, num_dims) argmax bin indices (deterministic)."""
+        return self.logits.argmax(dim=-1)
+
     def log_prob(self, bin_indices: torch.Tensor) -> torch.Tensor:
         """
         Args:

@@ -1,40 +1,43 @@
+% !TEX root = ../main.tex
 \thispagestyle{acknowledgements}
 \section*{Abstract}
 \addcontentsline{toc}{section}{Abstract}
 
-On-policy reinforcement learning for contact-rich manipulation is limited in
-practice by the amount of interaction it requires. Two families of techniques aim
-to reduce this cost: reward shaping, which makes each sampled transition more
-informative, and structured training, which orders or generates tasks through a
-curriculum. This thesis compares the two on a single multi-objective task: planar
-pushing of a T-shaped block by a simulated Universal Robots UR5e arm in NVIDIA
-Isaac Lab, under a fixed compute budget and success criterion. The mechanics of
-pushing couple translation and rotation, so a goal that specifies both a target
-position and orientation cannot be decomposed into independent sub-problems. This
-makes the task a stringent test of any method that treats the two objectives
-separately. \\
+On-policy reinforcement learning for contact-rich robotic manipulation is limited
+in practice by the amount of interaction it requires. This thesis studies a single
+goal-reaching task: planar pushing of a T-shaped block to a target pose by a
+simulated Universal Robots UR5e arm in NVIDIA Isaac Lab, under a fixed compute
+budget and one success criterion. The mechanics of pushing couple translation and
+rotation, so a goal that specifies both a target position and a target orientation
+cannot be decomposed into independent sub-problems. Asymmetric Self-Play (ASP) is
+an automatic curriculum that has succeeded on goal-reaching problems elsewhere,
+including robotic manipulation. On this multi-objective task, however, ASP
+underperforms a plain single-agent policy trained with a shaped reward, and this
+thesis identifies the regime conditions under which that occurs. \\
 
-Five models are compared under an identical protocol of 30 held-out scenes. These
-are a single-agent baseline with a hand-tuned improvement reward, a single-agent
-model with a potential-based reward, a forced position-to-orientation curriculum,
-and two asymmetric self-play variants that differ only in how the goal-proposing
-agent is rewarded. Potential-Based Reward Shaping (PBRS) uses bounded exponential
-potentials over position and orientation, together with a unified Special
-Euclidean group $\mathrm{SE}(2)$ distance. It reaches an 80.0\,\% scene success
-rate at 528 parallel environments, matching the improvement reward at 2{,}048
-environments and improving combined-objective success by 35 percentage points.
-Neither the forced curriculum nor either self-play variant beats the shaped
-single-agent model. The curriculum is statistically equivalent to it, while the
-self-play variants reach at most 16.7\,\%. A cross-environment comparison in a
-second simulator shows that the value of the curriculum depends on the per-update
-batch size. \\
+Nine models are compared under one protocol of 30 held-out scenes with best-of-20
+stochastically-sampled trials. Three single-agent anchors establish that the task
+is solvable: a baseline with a hand-tuned improvement reward, a model with a
+Potential-Based Reward Shaping (PBRS) reward, and a forced position-to-orientation
+curriculum. Two self-play subjects, differing only in how the goal-proposing agent
+is rewarded, are the primary objects of study. Four further models isolate the
+cause: two repeat self-play on a rotationally symmetric disc whose goal constrains
+position alone, one uses a symmetric reward, and three cross-environment
+counterparts retrain the methods in a second simulator. PBRS combines bounded
+exponential potentials over position and orientation with a unified Special
+Euclidean group $\mathrm{SE}(2)$ distance, and reaches single-agent success with
+roughly four times fewer parallel environments than the improvement reward. The
+final success rates are \TBD until the seed runs are collated. \\
 
-A per-axis analysis explains the self-play failure. Self-play learns the individual
-position and orientation skills, each to roughly 50\,\%, but combines them at only
-about 10\,\%, roughly 2.5 times below what independent skills would predict. The
-goal-proposing agent, meanwhile, remains a reliable source of valid goals. The
-failure is therefore one of skill composition under a non-stationary goal
-distribution, not of skill acquisition. For this class of contact-rich
-multi-objective task, the results indicate a clear priority: investment in
-principled reward design produces a larger and more reliable improvement than
+A per-axis analysis explains the self-play result. The self-play models learn the
+individual position and orientation skills, yet combine them far less often than
+two independent skills would predict. The coupled multi-objective gate, rather than
+the reward or the goal encoder, is the factor that separates self-play from the
+single-agent anchors. The disc contrast isolates this gate, and a replay diagnostic
+shows that the goal-proposing agent's demonstrations are not reliably reproduced
+under stochastic contact. The result is scoped to this regime: ASP succeeds in the
+settings prior work used, and this thesis explains why it underperforms in
+contact-rich multi-objective goal-reaching under a single Graphical Processing Unit
+(GPU) budget. For this class of task, the practical priority is clear: investment
+in principled reward design produces a larger and more reliable improvement than
 investment in structured training dynamics.

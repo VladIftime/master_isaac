@@ -1,8 +1,0 @@
-validate_pusht_gym.py gymA_e64_p15_s42
-validate_pusht_gym.py gymA_e64_p45_s42
-validate_pusht_gym.py gymA_e256_p15_s42
-validate_pusht_gym.py gymA_e256_p45_s42
-validate_pusht_gym.py gymB_e64_p15_s42
-validate_pusht_gym.py gymB_e64_p45_s42
-validate_pusht_gym.py gymB_e256_p15_s42
-validate_pusht_gym.py gymB_e256_p45_s42

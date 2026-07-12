@@ -212,6 +212,7 @@ def main():
         writer.add_scalar("Curriculum/w_rot", w_rot, iteration)
         writer.add_scalar("Curriculum/PosEpisodicSR", pos_sr_this, iteration)
         writer.add_scalar("Curriculum/phase", 2 if curriculum_active else 1, iteration)
+        writer.add_scalar("Diagnostics/GradientUpdates", iteration, iteration)
 
         print(f"[Iter {iteration:5d}|{phase}] Loss={loss_surr:.4f} Val={loss_val:.4f} "
               f"Rew={mean_rew:+.4f} PosErr={mean_pos:.4f} CosRot={mean_rot:.4f} SR={sr:.4f} "

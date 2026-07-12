@@ -589,6 +589,7 @@ def main():
         mean_rot = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0
         writer.add_scalar("Metrics/SR", current_sr, bob_updates)
         writer.add_scalar("Metrics/Alice/ValidGoals", st["valid_goals"], bob_updates)
+        writer.add_scalar("Diagnostics/GradientUpdates", bob_updates, bob_updates)
         print(f"[Iter {bob_updates}] SR={current_sr:.3f} PosErr={mean_pos:.4f} RotErr={mean_rot:.4f} "
               f"goals(v/i)={st['valid_goals']}/{st['invalid_goals']} "
               f"bob(s/f)={st['bob_successes']}/{st['bob_failures']} "

@@ -183,7 +183,7 @@ Source of truth (2026-06-30): `results_validation/SUMMARY.md` + gym HPC latest c
 |---|---|---|---|
 | PPO-PBRS **80% SR**, **24/30** scenes | `A_simp/20_isaac_30t.csv` = 80.0% (24/30) | ✅ MATCH |
 | pos-only 100%, pos+rot 70% | 10/10 pos-only, 14/20 pos+rot | ✅ MATCH |
-| PPO-Baseline (orig reward, 2048 env) 80% SR | `orig_loss/0_orig_rew_30_isaac.csv` = 24/30 (80.0%) | ✅ MATCH (added 2026-07-01) |
+| PPO-Baseline (orig reward, 2048 env) 83.3% SR | `orig_loss/0_orig_rew_30_isaac.csv` = 25/30 (83.3%) | ✅ MATCH (added 2026-07-01) |
 | ASP-Baseline (orig reward, 2048 env) 0% SR | `orig_loss/reults_valid_asp_orig_Rew.csv` = 0/30 | ✅ MATCH (added 2026-07-01) |
 | PPO-Sparse 16.7% SR | `0_PPO_sparse/26_isaac.csv` = 5/30 | ✅ MATCH (added 2026-07-01) |
 | PPO-PBRS PosErr 0.032 m / RotErr 0.568 rad | mean over all 30 scenes (incl. failures) = 0.0322 / 0.5685 | ✅ MATCH; clarified as "mean over all 30" in deck |
@@ -198,8 +198,8 @@ Source of truth (2026-06-30): `results_validation/SUMMARY.md` + gym HPC latest c
 ### Current definitive validation (30 T-block scenes, best-of-20, max-30 pushes, thesis gate)
 
 | Model | SR | PosErr | RotErr | Pos-only / Pos+rot |
-|---|---|---|---|
-| PPO-Baseline (orig.\ reward, 2048 env) | **80.0\%** | $\sim$0.03 m | $\sim$0.50 rad | 100\% / 70\% |
+|---|---|---|---|---|
+| PPO-Baseline (orig.\ reward, 2048 env) | **83.3\%** | — | — | 100\% / 75\% |
 | PPO-PBRS (no curriculum) | **80.0\%** | 0.032 m | 0.568 rad | 100\% / 70\% |
 | PPO-Curriculum | **76.7\%** | 0.023 m | 0.663 rad | 100\% / 65\% |
 | PPO-Sparse (no PBRS) | 16.7\% | — | — | 30\% / 10\% |
@@ -208,7 +208,7 @@ Source of truth (2026-06-30): `results_validation/SUMMARY.md` + gym HPC latest c
 | TASP-dPose-BP (Bob penalty) | 0.0\% | — | — | 0\% / 0\% |
 | ASP-Baseline (orig.\ reward, 2048 env) | 0.0\% | — | — | 0\% / 0\% |
 
-**Key takeaways:** PPO-Baseline and PPO-PBRS tie at 80\% — PBRS achieves same performance with 4$\times$ fewer parallel envs. No ASP variant exceeds 16.7\%. The symmetric Bob penalty (TASP-dPose-BP) collapses to 0\%. PPO-Sparse at 16.7\% shows reward starvation without PBRS even for single-agent.
+**Key takeaways:** PPO-Baseline at 83.3\% slightly outperforms PPO-PBRS at 80.0\% on the same 30-scene protocol — but PBRS achieves comparable performance with 4$\times$ fewer parallel envs. No ASP variant exceeds 16.7\%. Symmetric Bob penalty (TASP-dPose-BP) collapses to 0\%. PPO-Sparse at 16.7\% shows reward starvation without PBRS even for single-agent.
 
 ---
 
@@ -591,6 +591,7 @@ best scene. ~30 minutes of GPU time.
 | 8 | Record ASP-dPose failure clip + TASP-dPose best clip | Medium | 30 min | ❌ NOT DONE — needs GPU/simulation time |
 | 9 | Drop TASP-dPose-BP from main deck (keep in Appendix I + Limitations) | Medium | 10 min | ✅ DONE (2026-07-02) — removed from All Models table, speaker notes; kept in Appendix I, Limitations, Empirical Result table |
 | 10 | PBRS sensitivity → Limitations & Future Work (if appendix data missing) | Low | 5 min | ❌ NOT DONE — appendix section C may not exist; move to Limitations if absent |
+| 11 | **Add Alice goal-spread plots to the deck** (§12.5) | Medium | 20 min | ❌ NOT DONE — 4 PNGs generated in `figures/`; need slide + speaker notes |
 
 ### 12.2a Remaining Items (2026-07-02)
 
@@ -603,7 +604,7 @@ best scene. ~30 minutes of GPU time.
 - **PBRS sensitivity** (#10): Appendix C (PBRS parameter sensitivity) may not exist. Move to Limitations slide if missing, or add grid plot of k_p ∈ {10,20,30,50} × w ∈ {5,10,20}.
 
 **Discrepancy to verify:**
-- **PPO-Baseline shows 83.3% (25/30) from CSV, not 80.0% (24/30)** as listed in the definitive table (§4). The CSV `orig_loss/0_orig_rew_30_isaac.csv` was re-read 2026-07-02 and shows 25/30. Verify whether the CSV was re-evaluated or whether the plan needs updating. If 83.3% is correct, update deck numbers (PPO-Baseline baseline slide, appendix tables) accordingly.
+- **PPO-Baseline confirmed at 83.3% (25/30)** — CSV `orig_loss/0_orig_rew_30_isaac.csv` re-read 2026-07-02, deck, plan, and speaker notes updated.
 
 **Ongoing (lower priority, for future work):**
 - Multi-seed validation (C7) — re-eval Model A checkpoints across 5 chains for model-level CIs
@@ -655,6 +656,63 @@ validation slides rather than training curves.
 **Recommended to record:**
 1. ASP-dPose failing on the same pos+rot scene (scene 21) — strongest visual contrast
 2. TASP-dPose solving its best pos-only scene — shows what 16.7\% looks like in practice
+
+### 12.5 Alice goal-spread plots — ADD TO DECK (2026-07-03)
+
+**Motivation:** the deck argues ASP fails structurally but never *shows what goals Alice
+actually proposes*. Visualising Alice's goal distribution makes the "adversarial goal
+distribution" argument (C1, C4, RQ3) concrete — the examiner can see where/how Alice
+places goals and how badly Bob solves them.
+
+**Generator script (new):** `asyncDualPlayPPO/extras/plot_alice_goal_spread.py`
+- Reads `bob/episode_manager_best.pt` (per-env snapshot of current goals; **not** a full
+  history — checkpoints never accumulate every goal). Best snapshot = 528 goals, 360 valid
+  (68.2\%), Bob solved only 18 (3.9\% of valid). Coordinates are local/table frame.
+- Run: `python -m asyncDualPlayPPO.extras.plot_alice_goal_spread --run-dir <run> --out-dir literature/paper-async/presentation/figures`
+- Defaults to the ASP-dPose run `ppo_pbrs_reward/26.06.26/runs/hpc_pbrs_asp_dpose_528env`.
+- Output filenames carry a **model tag** derived from the run dir (override with `--tag`);
+  e.g. `hpc_pbrs_asp_dpose_528env` \u2192 `asp_dpose`. Re-run per model to get per-model files.
+
+**Generated figures (in `figures/`), one set per model — same 4 plot types:**
+
+Plot types (suffix `_<tag>`):
+| File | Content |
+|------|---------|
+| `alice_goal_spread_xy_<tag>.png` | Goal XY scatter (valid vs invalid vs Bob-solved) with placement-zone + table bounds and marginal x/y histograms; hexbin density of valid goals |
+| `alice_goal_yaw_<tag>.png` | Goal-orientation distribution — histogram + polar rose (yaw spans full ±\u03c0) |
+| `alice_goal_displacement_<tag>.png` | init\u2192goal XY displacement histogram + quiver of displacement vectors |
+| `alice_goal_training_curves_<tag>.png` | `Metrics/Alice/MeanDisp3D` and `GoalValidityRate` over training (from the run's TB events) |
+
+Sets generated so far (best snapshot, 528 goals):
+| tag | run | valid goals | Bob solved (of valid) | mean disp |
+|-----|-----|-------------|-----------------------|-----------|
+| `asp_dpose` | `hpc_pbrs_asp_dpose_528env` (outcome-based Alice) | 360 (68.2\%) | 18 (3.9\%) | 0.196 m |
+| `tasp_dpose` | `hpc_pbrs_tasp_dpose_528env` (time-based Alice) | 344 (65.2\%) | 26 (5.5\%) | — |
+
+**Contrast for the deck:** time-based Alice (TASP-dPose) is marginally *less* adversarial —
+Bob solves a higher fraction of valid goals (5.5\% vs 3.9\%), consistent with TASP-dPose's
+higher validation SR (16.7\% vs 6.7\%). Showing the two `alice_goal_spread_xy_*` side by side
+makes the "toxic vs self-regulating curriculum" argument visual.
+
+**ADDED TO DECK (2026-07-03):** new slide **"ASP vs TASP training"** inserted after the
+"ASP-dPose — Per-Test Error" frame (`presentation.tex`). Uses a single composite 2\u00d72
+figure `figures/asp_vs_tasp_training.png` (cols = model ASP-dPose | TASP-dPose; rows =
+goal-displacement histogram (top) + valid-goal hexbin density (bottom)) with a one-line
+caption. Generated via the new `--compare` mode:
+`python -m asyncDualPlayPPO.extras.plot_alice_goal_spread --compare <asp_run> <tasp_run> --compare-labels ASP-dPose TASP-dPose`.
+
+**Deck action items:**
+1. Add a **"What Goals Does Alice Propose?"** slide in the Discussion/ASP-Diagnostic section
+   using `alice_goal_spread_xy.png` (primary) — highlight that valid goals fill the whole
+   placement zone but Bob solves almost none (18/360), evidence for the adversarial
+   distribution / combined-gate bottleneck (ties to C4 + RQ3).
+2. Optionally add `alice_goal_yaw.png` (goals demand full-range rotation → why the combined
+   pos+rot gate is so hard) and `alice_goal_displacement.png` (goal difficulty distribution)
+   to Appendix (J or a new goal-analysis appendix).
+3. Speaker note / caveat: this is a **snapshot** of 528 goals near end of training, a
+   representative sample of Alice's distribution, not a full-training accumulation.
+4. (Optional) regenerate for other ASP runs (e.g. TASP-dPose, orig ASP) to contrast goal
+   distributions across variants.
 
 ---
 

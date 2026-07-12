@@ -1,3 +1,4 @@
+% !TEX root = ../main.tex
 \section{Background and Related Work}
 \label{sec:drl_robotics}
 
@@ -399,6 +400,21 @@ performance, but only at very large scale. These two observations define the
 scope of the present study: the self-play results here are obtained under a
 single-Graphical-Processing-Unit budget, and are interpreted accordingly.
 
+The goal criterion also separates this thesis from the settings in which ASP
+succeeded, and the difference determines what the method must achieve. In the
+original formulation of \cite{Sukhbaatar2018IntrinsicMotivation}, a goal is a
+single state Bob must reach, often in a domain where position dominates and
+orientation is absent or loosely constrained. In the manipulation setting of
+\cite{OpenAI2021AsymmetricSF}, a goal is the final pose of Alice's trajectory,
+scored within a tolerance on each component. The task studied here instead applies
+a strict combined gate. A goal counts as reached only when position and orientation
+both lie within tolerance at the same time. The contact mechanics of
+Section~\ref{sec:pushing} couple the two, so neither can be optimised alone. The
+goal is therefore genuinely multi-objective in a sense the prior settings did not
+require. This is a difference in regime, not a defect in the earlier work, and it
+defines one of the axes along which this thesis explains why a proven method
+underperforms here.
+
 \subsection{Goal-Conditioned and Hierarchical Reinforcement Learning}
 \label{sec:gcrl}
 
@@ -469,6 +485,24 @@ consequences of this mechanics for stable pushing, and \cite{HoweCutkosky1996}
 gave practical force-motion models. The survey of \cite{Stuber2020PushingSurvey}
 and the high-fidelity dataset of \cite{Yu2016MillionWays} document how strongly
 real pushing behaviour depends on object shape and pressure distribution.
+
+This dependence on object shape distinguishes the two objects used in this thesis
+and motivates one of its experiments. A rotationally symmetric disc has a radially
+symmetric pressure distribution about its centre. A push whose line of action
+passes through that centre applies a wrench with no moment component, so the
+limit-surface normal points opposite the push direction and the resulting twist is
+a pure translation. The disc therefore has no orientation to control, and a goal on
+the disc constrains position alone. The T-block has an asymmetric mass
+distribution, and few pushes pass through its centre of friction; each off-centre
+push carries a moment, and by the normality condition of
+Equation~\ref{eq:normality} the resulting twist contains an angular velocity.
+Orientation is then an independent quantity that must be controlled alongside
+position. This mechanical difference is the basis of the coupling-isolation
+experiment of Chapter~\ref{section:methods}. The disc removes the orientation
+objective at the level of the physics. A self-play model that reaches the
+single-agent level on the disc, yet underperforms it on the T-block, thereby
+identifies the coupled objective, rather than the object itself, as the source of
+the difficulty.
 
 Because position and orientation are coupled, it is natural to measure goal error
 with a single metric on the space of planar poses, rather than with two separate

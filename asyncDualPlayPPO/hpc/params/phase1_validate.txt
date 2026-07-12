@@ -1,8 +1,0 @@
-validate_push_asp.py pbrsE_e256_i6188_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsE_e512_i3094_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsE_e1024_i1547_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsE_e2048_i773_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsG_e256_i6188_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsG_e512_i3094_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsG_e1024_i1547_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055
-validate_push_asp.py pbrsG_e2048_i773_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055

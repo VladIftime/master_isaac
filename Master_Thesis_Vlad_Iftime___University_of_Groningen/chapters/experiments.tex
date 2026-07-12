@@ -1,11 +1,13 @@
+% !TEX root = ../main.tex
 \section{Experimental Setup}
 \label{sec:experiments}
 
-This chapter describes how the five models of Chapter~\ref{section:methods} are
+This chapter describes how the nine models of Chapter~\ref{section:methods} are
 trained and evaluated. It specifies the tools and hardware, the training
-configuration and budget, and the held-out validation protocol. It then describes
-the cross-environment comparison against a second simulator, an off-policy
-baseline based on Soft Actor-Critic, and the metrics reported in the results.
+configuration and the experiment set, and the held-out validation protocol. It
+then describes the cross-environment comparison against a second simulator, an
+off-policy baseline based on Soft Actor-Critic, and the metrics reported in the
+results.
 
 \subsection{Tools and Infrastructure}
 \label{sec:tools}
@@ -20,7 +22,7 @@ Section~\ref{sec:sac_baseline} uses Stable-Baselines3 2.7.0. Running the same
 models in two simulators of different fidelity separates conclusions that hold
 across environments from artefacts of a single implementation.
 
-\subsection{Training Configuration}
+\subsection{Training Configuration and the Experiment Set}
 \label{sec:train_config}
 
 All potential-based models are trained with 528 parallel environments for
@@ -41,6 +43,45 @@ and earlier runs are excluded. Second, the training budget differs between the
 PPO-Baseline and the potential-based models by design. The baseline is given more
 parallelism precisely so that its lower performance cannot be attributed to an
 unfairly small batch. The budgets are tabulated in Appendix~K.
+
+Every run in the experiment set is budget-matched. The total experience is held at
+about 23.8 million pushes, and the iteration count is set inversely proportional to
+the number of parallel environments, so a change in the number of environments
+changes the per-update batch size alone. This design has one confound that is
+stated wherever a scale result appears: a larger batch also means fewer gradient
+updates over training, so batch size and update count move together and cannot be
+fully separated. Table~\ref{tab:phases} lists the phases, the models each one
+trains, the environment counts, the matched iteration counts, and the seeds.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabularx}{\textwidth}{l X c c c c}
+        \hline
+        \textbf{Phase} & \textbf{Models} & \textbf{Envs} & \textbf{Iterations} &
+        \textbf{Seeds} & \textbf{Runs} \\
+        \hline
+        Anchor and efficiency & PPO-Baseline, PPO-PBRS & 256--2{,}048 &
+        770--6{,}200 & 3 & 24 \\
+        Seed intervals & Baseline, PBRS, Curriculum, ASP-dPose, TASP-dPose & 528 &
+        3{,}000 & 5 & 25 \\
+        Coupling isolation & ASP-disc, TASP-disc & 528 & 3{,}000 & 5 & 10 \\
+        Self-play scale & ASP-dPose, TASP-dPose & 256--2{,}048 & 770--6{,}200 & 3 &
+        24 \\
+        Component ablations & ASP-dPose, TASP-dPose & 528 & 3{,}000 & 3 & 12 \\
+        Imitation positive control & ASP-disc & 528 & 3{,}000 & 3 & 6 \\
+        Reward structure & Bob-penalty & 528 & 3{,}000 & 5 & 5 \\
+        Cross-environment & single agent, curriculum, self-play & two batches &
+        matched & 3 & 10 \\
+        Reward sensitivity & PPO-PBRS grid & 528 & 3{,}000 & 1 & 12 \\
+        \hline
+    \end{tabularx}
+    \caption{The phases of the experiment set. Environments and iterations trade
+    off to hold the total experience at about 23.8 million pushes. Several anchor
+    runs are shared across phases, so the distinct executed total is approximately
+    94 training runs in Isaac Lab and 10 in the second simulator.}
+    \label{tab:phases}
+\end{table}
 
 \subsection{Validation Protocol}
 \label{sec:val_protocol}
@@ -64,17 +105,19 @@ rotation.
 \end{figure}
 
 Each scene is attempted 20 times, and within each attempt the policy is allowed up
-to 30 pushes. Two success measures are reported and kept distinct throughout. The
-\emph{scene success rate} counts a scene as solved if at least one of its 20
-attempts satisfies the combined gate of Section~\ref{sec:mdp}. This is the
-headline number, and follows the convention common in manipulation evaluation. The
-\emph{trial success rate} is the fraction of individual attempts that satisfy the
-gate, and is always lower than the scene success rate. Reporting both prevents the
-best-of-20 protocol from overstating performance. For the strongest model the
-scene success rate is 80.0\,\% while the trial success rate is 66.0\,\%, and the
-gap is stated wherever the headline number appears. Validation uses a single seed
-per model, and the resulting absence of validation confidence intervals is
-recorded as a limitation in Chapter~\ref{sec:conclusion}.
+to 30 pushes. Both the single-agent and the self-play validators sample actions
+from the policy, rather than taking the most probable action, so every model is
+scored under one protocol. Two success measures are reported and kept distinct
+throughout. The \emph{scene success rate} counts a scene as solved if at least one
+of its 20 attempts satisfies the combined gate of Section~\ref{sec:mdp}. This is
+the headline number, and follows the convention common in manipulation evaluation.
+The \emph{trial success rate} is the fraction of individual attempts that satisfy
+the gate, and is always lower than the scene success rate. Reporting both prevents
+the best-of-20 protocol from overstating performance, and the gap between them is
+stated wherever the headline number appears; the final values are \TBD until the
+seed runs are collated. Each model is evaluated across its trained seeds, and the
+results are aggregated into a mean with a 95\,\% confidence interval per model,
+batch size, and iteration count.
 
 \subsection{Cross-Environment Protocol}
 \label{sec:cross_env}
@@ -102,7 +145,7 @@ batch size of the two environments.
 \subsection{Off-Policy Baseline: SAC with Hindsight Experience Replay}
 \label{sec:sac_baseline}
 
-The five principal models are all on-policy. To provide an external point of
+The principal models are all on-policy. To provide an external point of
 calibration from a different algorithm family, an off-policy baseline is built
 from Soft Actor-Critic (SAC) \cite{Haarnoja2018SoftAO} combined with Hindsight
 Experience Replay (HER) \cite{Andrychowicz2017}. SAC is a natural counterpart to
@@ -139,5 +182,12 @@ training logs also provide the per-axis success rates: the fraction of pushes th
 satisfy the position gate alone and the orientation gate alone. These are compared
 against the combined-gate rate to diagnose whether the two skills are learned but
 not combined. Average push count per attempt is reported as a measure of
-efficiency. All reported numbers trace to the validation records summarised in the
+efficiency. Three further quantities are logged during self-play training and
+reported in the results. The first is the mean absolute value error, which
+measures the bias of the value function under the shifting goal distribution. The
+second is the share of demonstrated actions the imitation term clips away, a direct
+measure of how strongly the imitation signal is suppressed. The third is the
+Alice-replay rate: the fraction of proposed goals that the goal-proposing agent's
+own action sequence reaches when replayed from the goal-solving agent's start
+state. All reported numbers trace to the validation records summarised in the
 results.
