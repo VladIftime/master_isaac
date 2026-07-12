@@ -5,8 +5,7 @@
 # Launcher sets --array / --mem / --time and exports:
 #   PARAMS JOB_MEM JOB_TIME TEMPLATE MAX_RESUBMITS
 #SBATCH --job-name=gym_train
-#SBATCH --partition=gpu
-#SBATCH --gpus-per-node=rtx_pro_6000:1
+#SBATCH --partition=regular
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=16G
 #SBATCH --time=23:00:00

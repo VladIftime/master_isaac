@@ -6,8 +6,7 @@
 # Prefers model_best.pt; with ALLOW_LATEST=1 falls back to latest_checkpoint.pt
 # (results in validation_latest/). Launcher exports PARAMS / RESULTS_ROOT / ALLOW_LATEST.
 #SBATCH --job-name=gymvalidate
-#SBATCH --partition=gpu
-#SBATCH --gpus-per-node=rtx_pro_6000:1
+#SBATCH --partition=regular
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=16G
 #SBATCH --time=04:00:00
