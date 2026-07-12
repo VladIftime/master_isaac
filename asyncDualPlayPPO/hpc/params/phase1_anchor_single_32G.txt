@@ -1,0 +1,6 @@
+train_a_pbrs_simple.py 7 1024 1547 100 pbrsA_e1024_i1547_s7
+train_a_pbrs_simple.py 42 1024 1547 100 pbrsA_e1024_i1547_s42
+train_a_pbrs_simple.py 123 1024 1547 100 pbrsA_e1024_i1547_s123
+train_push.py 7 1024 1547 100 base_e1024_i1547_s7 --rel-obs --rel-act
+train_push.py 42 1024 1547 100 base_e1024_i1547_s42 --rel-obs --rel-act
+train_push.py 123 1024 1547 100 base_e1024_i1547_s123 --rel-obs --rel-act

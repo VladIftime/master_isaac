@@ -36,19 +36,40 @@ NFS_RUN_DIR="$RESULTS_ROOT/$EXP_NAME"
 
 if [ ! -d "$NFS_RUN_DIR" ]; then echo "[ERROR] run dir not found: $NFS_RUN_DIR"; exit 1; fi
 
-# Select checkpoint + CSV tag by validator family.  CKPT is validated on the
-# host (scratch) BEFORE launching the container, so a missing/mislocated
-# checkpoint fails fast instead of after a slow container boot.
+# Select checkpoint + CSV tag by validator family.  Prefer model_best.pt; if
+# absent and ALLOW_LATEST=1, fall back to latest_checkpoint.pt and write results
+# into a separate validation_latest/ subfolder (distinct filenames, and excluded
+# from collate_seeds which globs only one level).  Validated on the host first so
+# a missing checkpoint fails fast before the slow container boot.
+ALLOW_LATEST="${ALLOW_LATEST:-0}"
 case "$VALIDATOR" in
-    *asp*)  CKPT_REL="runs/$EXP_NAME/bob/model_best.pt";   CKPT_HOST="$NFS_RUN_DIR/bob/model_best.pt";   CKPT_ARGS="--chkpt_bob $CKPT_REL"; TAG="asp" ;;
-    *)      CKPT_REL="runs/$EXP_NAME/agent/model_best.pt"; CKPT_HOST="$NFS_RUN_DIR/agent/model_best.pt"; CKPT_ARGS="--chkpt $CKPT_REL";     TAG="push" ;;
+    *asp*)  SUB="bob";   FLAG="--chkpt_bob"; TAG="asp" ;;
+    *)      SUB="agent"; FLAG="--chkpt";     TAG="push" ;;
 esac
-if [ ! -f "$CKPT_HOST" ]; then
-    echo "[ERROR] checkpoint not found on scratch: $CKPT_HOST"
-    echo "        (training may not have produced model_best.pt yet for $EXP_NAME)"
+BEST_HOST="$NFS_RUN_DIR/$SUB/model_best.pt"
+LATEST_HOST="$NFS_RUN_DIR/$SUB/latest_checkpoint.pt"
+if [ -f "$BEST_HOST" ]; then
+    CKPT_REL="runs/$EXP_NAME/$SUB/model_best.pt"
+    OUT_HOST="$NFS_RUN_DIR"
+    OUT_CONT="$CONTAINER_PROJECT/runs/$EXP_NAME"
+    MODE="best"
+elif [ "$ALLOW_LATEST" = "1" ] && [ -f "$LATEST_HOST" ]; then
+    CKPT_REL="runs/$EXP_NAME/$SUB/latest_checkpoint.pt"
+    OUT_HOST="$NFS_RUN_DIR/validation_latest"
+    OUT_CONT="$CONTAINER_PROJECT/runs/$EXP_NAME/validation_latest"
+    MODE="latest"
+    echo "[WARN] model_best.pt absent — validating latest_checkpoint.pt (results in validation_latest/)."
+else
+    echo "[ERROR] no model_best.pt$([ "$ALLOW_LATEST" = "1" ] && echo ' or latest_checkpoint.pt') for $EXP_NAME"
     exit 1
 fi
-CSV_OUT="$CONTAINER_PROJECT/runs/$EXP_NAME/validation_results_${TAG}.csv"
+mkdir -p "$OUT_HOST" 2>/dev/null
+CKPT_ARGS="$FLAG $CKPT_REL"
+# Disc-scene evaluations get an _sdisc suffix so a T-block model's cross-eval on
+# disc scenes never overwrites its own T-block validation CSV in the same run dir.
+SCENE_SUFFIX=""
+case " $EXTRA " in *" --scene-set disc "*) SCENE_SUFFIX="_sdisc" ;; esac
+CSV_OUT="$OUT_CONT/validation_results_${TAG}${SCENE_SUFFIX}.csv"
 
 # Ensure the nested bind mount-point exists on the host (runs/ under the
 # project bind); RESULTS_ROOT is mounted over it inside the container.
@@ -56,9 +77,9 @@ mkdir -p "$PROJECT_ROOT/runs"
 
 echo "==================================================================="
 echo "  Validation | task $SLURM_ARRAY_TASK_ID | $VALIDATOR"
-echo "  Exp: $EXP_NAME   Tag: $TAG"
+echo "  Exp: $EXP_NAME   Tag: $TAG   Checkpoint mode: $MODE"
 echo "  Protocol: num_tests=$NUM_TESTS max_pushes=$MAX_PUSHES max_tries=$MAX_TRIES"
-echo "  CSV -> $NFS_RUN_DIR/validation_results_${TAG}.csv"
+echo "  CSV -> $OUT_HOST/validation_results_${TAG}${SCENE_SUFFIX}.csv"
 echo "  Extra: $EXTRA"
 echo "==================================================================="
 

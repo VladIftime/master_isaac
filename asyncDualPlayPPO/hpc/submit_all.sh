@@ -36,6 +36,7 @@ THROTTLE_OVERRIDE=""
 DRYRUN=false
 LIST=false
 RECONCILE=true
+ALLOW_LATEST=false
 CAMPAIGN_ID=""
 
 while [ $# -gt 0 ]; do
@@ -45,6 +46,7 @@ while [ $# -gt 0 ]; do
         --dry-run)      DRYRUN=true; shift ;;
         --list)         LIST=true; shift ;;
         --no-reconcile) RECONCILE=false; shift ;;
+        --allow-latest) ALLOW_LATEST=true; shift ;;
         --campaign)     CAMPAIGN_ID="$2"; shift 2 ;;
         -h|--help)      grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "[ERROR] unknown arg: $1"; exit 1 ;;
@@ -121,6 +123,24 @@ config_state() {   # echoes: done | running | idle
     echo idle
 }
 
+# validate_tag / validate_state — CSV-existence + checkpoint-readiness reconcile
+# for validator arrays (V5/V6). Skips lines whose output CSV already exists, and
+# skips (does not submit) runs with no usable checkpoint yet.
+validate_tag() { case "$1" in *asp*) echo asp;; *gym*) echo gym;; *) echo push;; esac; }
+validate_state() {   # <exp> <validator> <line> -> done | submit | notready
+    local exp="$1" val="$2" line="$3" tag rundir sub suffix=""
+    tag=$(validate_tag "$val"); rundir="$RESULTS_ROOT/$exp"
+    case " $line " in *" --scene-set disc "*) suffix="_sdisc" ;; esac
+    [ -f "$rundir/validation_results_${tag}${suffix}.csv" ] && { echo done; return; }
+    if [ "$ALLOW_LATEST" = true ] && [ -f "$rundir/validation_latest/validation_results_${tag}${suffix}.csv" ]; then
+        echo done; return
+    fi
+    sub=agent; [ -d "$rundir/bob" ] && sub=bob
+    if [ -f "$rundir/$sub/model_best.pt" ]; then echo submit; return; fi
+    if [ "$ALLOW_LATEST" = true ] && [ -f "$rundir/$sub/latest_checkpoint.pt" ]; then echo submit; return; fi
+    echo notready
+}
+
 submitted=0
 while read -r pf tpl mem tlim thr phase; do
     [[ "$pf" =~ ^#.*$ || -z "$pf" ]] && continue
@@ -136,8 +156,26 @@ while read -r pf tpl mem tlim thr phase; do
     thr="${THROTTLE_OVERRIDE:-$thr}"
 
     # ── Reconcile: build the index list to submit ────────────────────────────
-    is_validate=false; [[ "$tpl" == *validate.slurm ]] && is_validate=true
-    if [ "$RECONCILE" = true ] && [ "$is_validate" = false ]; then
+    is_validate=false; [[ "$tpl" == *validate*.slurm ]] && is_validate=true
+    if [ "$RECONCILE" = true ] && [ "$is_validate" = true ]; then
+        indices=""; skip_done=0; skip_nr=0; idx=0
+        while IFS= read -r line; do
+            [[ -z "${line// }" ]] && continue
+            idx=$((idx + 1))
+            exp=$(exp_from_line "$line"); val=$(echo "$line" | awk '{print $1}')
+            case "$(validate_state "$exp" "$val" "$line")" in
+                done)     skip_done=$((skip_done + 1)) ;;
+                notready) skip_nr=$((skip_nr + 1)) ;;
+                *)        indices="${indices:+$indices,}$idx" ;;
+            esac
+        done < "$params_abs"
+        if [ -z "$indices" ]; then
+            echo "[SKIP]   $phase : $(basename "$pf")  (${skip_done} done, ${skip_nr} not-ready)"
+            continue
+        fi
+        array_spec="${indices}%${thr}"
+        note="reconcile(val): submit [$indices]; skip ${skip_done} done, ${skip_nr} not-ready"
+    elif [ "$RECONCILE" = true ] && [ "$is_validate" = false ]; then
         indices=""; skip_done=0; skip_run=0
         idx=0
         while IFS= read -r line; do
@@ -161,8 +199,9 @@ while read -r pf tpl mem tlim thr phase; do
         note="full 1-${n}"
     fi
 
+    _al=$([ "$ALLOW_LATEST" = true ] && echo 1 || echo 0)
     cmd=(sbatch --array="$array_spec" --mem="$mem" --time="$tlim"
-         --export=ALL,PARAMS="$params_abs",JOB_MEM="$mem",JOB_TIME="$tlim",TEMPLATE="$tpl_abs",MAX_RESUBMITS="$MAX_RESUBMITS",RESULTS_ROOT="$RESULTS_ROOT",CAMPAIGN_DIR="$CAMPAIGN_DIR",FAIL_LOG="$FAIL_LOG",ABORT_ON_FAIL=1
+         --export=ALL,PARAMS="$params_abs",JOB_MEM="$mem",JOB_TIME="$tlim",TEMPLATE="$tpl_abs",MAX_RESUBMITS="$MAX_RESUBMITS",RESULTS_ROOT="$RESULTS_ROOT",CAMPAIGN_DIR="$CAMPAIGN_DIR",FAIL_LOG="$FAIL_LOG",ABORT_ON_FAIL=1,ALLOW_LATEST="$_al"
          "$tpl_abs")
 
     echo "[SUBMIT] $phase : $(basename "$pf")  (array=$array_spec, mem=$mem, time=$tlim) — $note"

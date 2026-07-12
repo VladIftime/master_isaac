@@ -474,6 +474,13 @@ def main():
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     best_success_rate = -1.0
+    _best_path = os.path.join(agent.log_dir, "best_sr.txt")
+    if args.chkpt and os.path.isfile(_best_path):
+        try:
+            best_success_rate = float(open(_best_path).read().strip())
+            print(f"[Resume] Restored best SR: {best_success_rate:.4f}")
+        except Exception:
+            pass
     iteration = args.resume_iteration if args.chkpt else 0
     rew_buf     = deque(maxlen=push_nsteps * env.num_envs)
     sr_buf      = deque(maxlen=push_nsteps * env.num_envs)
@@ -822,6 +829,12 @@ def main():
         if sr > best_success_rate:
             best_success_rate = sr
             agent.save(os.path.join(agent.log_dir, "model_best.pt"))
+            try:
+                with open(_best_path + ".tmp", "w") as _bf:
+                    _bf.write(repr(float(best_success_rate)))
+                os.replace(_best_path + ".tmp", _best_path)
+            except Exception:
+                pass
 
         # ── Checkpoint ────────────────────────────────────────────────────────
         if iteration > 0 and iteration % args.save_interval == 0:

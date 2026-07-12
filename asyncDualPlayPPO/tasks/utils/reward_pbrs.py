@@ -158,6 +158,44 @@ def compute_dpose(
     return torch.sqrt(d_sq + 1e-12)
 
 
+def dpose_and_zero_yaw(
+    obs: torch.Tensor,
+    robot_dim: int,
+    obj_state_dim: int,
+    goal_dim: int,
+    char_length: float,
+) -> torch.Tensor:
+    """Shared d_pose observation transform used identically by the training
+    wrapper (`_get_push_obs`, `construct_bob_observation`) and the validator
+    (`_build_obs`), so training and every eval path produce byte-identical obs.
+
+    Writes the [d_pose, bearing] tail into the last two slots, and — when
+    ``char_length == 0`` (the orientation-free disc subspace) — zeros the object
+    and goal YAW obs slots so a T-block-trained policy sees a disc scene as a
+    yaw-aligned in-distribution input. Roll/pitch are left intact (tip-over
+    detection still reads them). Operates in place and returns ``obs``.
+
+    obs layout: [robot(robot_dim) | obj_state(obj_state_dim) | goal_pose(goal_dim) | tail(2)]
+    """
+    dist_idx = robot_dim + obj_state_dim + goal_dim
+    obj_pos = obs[:, robot_dim:robot_dim + 3]
+    obj_yaw = obs[:, robot_dim + 5]
+    goal_pos = obs[:, robot_dim + obj_state_dim:robot_dim + obj_state_dim + 3]
+    goal_yaw = obs[:, robot_dim + obj_state_dim + 5]
+    d_pose = compute_dpose(obj_pos, goal_pos, obj_yaw, goal_yaw, char_length)
+    dx = goal_pos[:, 0] - obj_pos[:, 0]
+    dy = goal_pos[:, 1] - obj_pos[:, 1]
+    obs[:, dist_idx] = d_pose
+    obs[:, dist_idx + 1] = torch.atan2(dy, dx)
+    # Tolerant zero-test: any char_length below this is the orientation-free disc
+    # subspace. Exact == 0.0 was fragile (a future 1e-9 would silently disable the
+    # yaw-zeroing while d_pose stayed ~position-only → subtle train/eval mismatch).
+    if char_length < 1e-6:
+        obs[:, robot_dim + 5] = 0.0
+        obs[:, robot_dim + obj_state_dim + 5] = 0.0
+    return obs
+
+
 def potential_dpose(
     obj_pos: torch.Tensor,
     goal_pos: torch.Tensor,

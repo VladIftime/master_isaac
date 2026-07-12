@@ -83,11 +83,39 @@ ALL_TESTS: List[PushTestConfig] = [
 ]
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DISC test set — the 30 T-block scenes mirrored onto the rotationally-symmetric
+# disc: identical start/goal positions and difficulty, but goal_yaw forced to 0
+# (orientation always passes) and object_type="disc", test_type="disc_pos".
+# Used by the ABC-on disc positive control (phase4_pc) so a disc-trained Bob is
+# evaluated on disc scenes, not the T-block scenes it never saw.
+# ═══════════════════════════════════════════════════════════════════════════════
+DISC_TESTS: List[PushTestConfig] = [
+    PushTestConfig(f"D_{t.name}", t.test_id, t.difficulty, "disc_pos", "disc",
+                   StartPos(t.main_start.x, t.main_start.y),
+                   t.main_goal_x, t.main_goal_y, 0.0)
+    for t in ALL_TESTS[:30]
+]
+
+
+# Active test set (switchable via set_test_set); defaults to the T-block suite.
+_TEST_SETS = {"all": ALL_TESTS, "tblock": ALL_TESTS, "disc": DISC_TESTS}
+_ACTIVE_TESTS: List[PushTestConfig] = ALL_TESTS
+
+
+def set_test_set(name: str) -> None:
+    """Select which scene list get_test_config/get_test_count return."""
+    global _ACTIVE_TESTS
+    if name not in _TEST_SETS:
+        raise ValueError(f"unknown scene set '{name}' (choose from {list(_TEST_SETS)})")
+    _ACTIVE_TESTS = _TEST_SETS[name]
+
+
 def get_test_config(test_index: int) -> PushTestConfig:
-    if 1 <= test_index <= len(ALL_TESTS):
-        return ALL_TESTS[test_index - 1]
+    if 1 <= test_index <= len(_ACTIVE_TESTS):
+        return _ACTIVE_TESTS[test_index - 1]
     return None
 
 
 def get_test_count() -> int:
-    return len(ALL_TESTS)
+    return len(_ACTIVE_TESTS)

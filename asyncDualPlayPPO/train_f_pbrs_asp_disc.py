@@ -101,6 +101,9 @@ def main():
                         help="Number of push macro-actions Bob gets per phase")
     parser.add_argument("--max_goals_per_episode", type=int, default=2,
                         help="Number of Alice-Bob cycles per episode")
+    parser.add_argument("--smoke_obs", type=int, default=0,
+                        help="Diagnostic: run N obs-only steps on the given envs, print + "
+                             "assert yaw-slot zeroing (disc subspace), then exit. 0 = train.")
     parser.add_argument("--no_abc", action="store_true",
                         help="Disable ABC — recommended for push-primitive ASP")
     parser.add_argument("--no_hist_pool", action="store_true",
@@ -123,6 +126,13 @@ def main():
     import copy
     import gymnasium as gym_mc
     from torch.utils.tensorboard import SummaryWriter
+
+    import random as _random
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    np.random.seed(args.seed)
+    _random.seed(args.seed)
+    print(f"[SEED] RNG seeded with {args.seed}")
 
     from isaaclab.envs import ManagerBasedRLEnv
     import isaaclab.envs.mdp as mdp
@@ -170,6 +180,7 @@ def main():
     print(f"[Config] Push action space: {num_cat_dims}D x {num_bins} bins")
 
     env_cfg = PushTaskCuRoboDiscEnvCfg()
+    env_cfg.seed = args.seed
     env_cfg.scene.num_envs = args.num_envs
 
     env_cfg.actions.arm_action = mdp.JointPositionActionCfg(
@@ -197,6 +208,48 @@ def main():
         device=base_env.device,
     )
     print("Environment ready.")
+
+    if args.smoke_obs > 0:
+        import torch as _t
+        _R, _O, _G = _OBS_ROBOT_DIM, 14, 6
+        _is_disc = args.char_length < 1e-6
+        _ok = True
+        print(f"[SMOKE] obs subspace check: {args.smoke_obs} steps, "
+              f"char_length={args.char_length} ({'disc/zeroed' if _is_disc else 'T-block/live'})", flush=True)
+        for _step in range(args.smoke_obs):
+            env.reset()
+            _N = env.num_envs
+            _eids = _t.arange(_N, device=env.device)
+            _goal = _t.zeros(_N, 6, device=env.device)
+            _goal[:, 0] = _t.empty(_N, device=env.device).uniform_(-0.3, 0.3)
+            _goal[:, 1] = _t.empty(_N, device=env.device).uniform_(0.35, 0.65)
+            _goal[:, 2] = 0.02
+            _goal[:, 5] = _t.empty(_N, device=env.device).uniform_(-3.14, 3.14)  # random goal YAW
+            env.episode_manager.store_goal_state(_goal, _eids)
+            try:
+                env.episode_manager.current_phase[:] = 1
+                env.episode_manager.goal_valid[:] = True
+            except Exception:
+                pass
+            if getattr(env.episode_manager, "goal_states", None) is None:
+                print("[SMOKE][FATAL] goal_states could not be populated — the yaw "
+                      "injection would be a silent no-op; failing so it is visible.", flush=True)
+                env.close(); simulation_app.close(); sys.exit(2)
+            _obs = env._get_push_obs()
+            _oy = _obs[:, _R + 5]; _gy = _obs[:, _R + _O + 5]; _dp = _obs[:, _R + _O + _G]
+            _ay = env._get_alice_obs(_obs)[:, _R + 5]
+            print(f"[SMOKE {_step}] obj_yaw={_oy.tolist()} goal_yaw={_gy.tolist()} "
+                  f"d_pose={_dp.tolist()} alice_obj_yaw={_ay.tolist()}", flush=True)
+            if _is_disc:
+                for _n, _v in (("obj_yaw", _oy), ("goal_yaw", _gy), ("alice_obj_yaw", _ay)):
+                    if not _t.allclose(_v, _t.zeros_like(_v), atol=1e-6):
+                        _ok = False
+                        print(f"  [FAIL] disc {_n} not zeroed: {_v.tolist()}", flush=True)
+        print(("[SMOKE] PASS — disc yaw slots are zero." if _ok else "[SMOKE] FAIL — see above.")
+              if _is_disc else "[SMOKE] T-block: yaw slots printed above (expect non-zero).", flush=True)
+        env.close()
+        simulation_app.close()
+        sys.exit(0 if _ok else 1)
 
     print("[cuRobo] Initialising IK solver...")
     _tensor_args = TensorDeviceType(device=torch.device(env.device), dtype=torch.float32)
@@ -488,27 +541,55 @@ def main():
 
     bob_success_buf = deque(maxlen=200)
 
+    # ── Group-consistency guard (self-play checkpoint set is multi-file) ──────
+    # A preemption can leave scratch with a mismatched set (e.g. new bob + old
+    # alice, or desynced latest_iter). Per-file atomicity does not prevent that.
+    # Each checkpoint embeds its iteration; if alice/bob/latest_iter disagree,
+    # refuse the mismatched pair and start THIS run fresh (loud warning) rather
+    # than silently resuming co-evolved adversaries from different points.
+    if (args.chkpt_alice and args.chkpt_bob
+            and os.path.isfile(args.chkpt_alice) and os.path.isfile(args.chkpt_bob)):
+        def _peek_iter(_p):
+            try:
+                return torch.load(_p, map_location="cpu").get("iteration")
+            except Exception:
+                return None
+        _ai, _bi = _peek_iter(args.chkpt_alice), _peek_iter(args.chkpt_bob)
+        if _ai is not None and _bi is not None and _ai != _bi:
+            print(f"[Resume][GUARD] MISMATCHED Alice/Bob checkpoints (alice_iter={_ai} "
+                  f"!= bob_iter={_bi}; latest_iter.txt={args.resume_iteration} is advisory) — "
+                  f"refusing to resume co-evolved adversaries from different points; "
+                  f"starting this run FRESH.", flush=True)
+            args.chkpt_alice = None
+            args.chkpt_bob = None
+            args.resume_iteration = 0
+
+    _resume_best_sr = -1.0  # restored from train_state below if resuming (Fix#2)
     if args.chkpt_alice and os.path.isfile(args.chkpt_alice):
         alice_ppo.load(args.chkpt_alice)
         print(f"[Resume] Loaded Alice from {args.chkpt_alice}")
     if args.chkpt_bob and os.path.isfile(args.chkpt_bob):
         bob_ppo.load(args.chkpt_bob)
         print(f"[Resume] Loaded Bob from {args.chkpt_bob}")
+        if bob_ppo.loaded_iteration is not None:
+            args.resume_iteration = int(bob_ppo.loaded_iteration)
+            print(f"[Resume] Iteration from checkpoint (authoritative): {args.resume_iteration}")
         _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
         if os.path.isfile(_abc_buf_path):
             bob_ppo.abc_buffer.load(_abc_buf_path)
             print(f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries)")
-        _ep_mgr_path = args.chkpt_bob.replace("model_", "episode_manager_")
+        _ep_mgr_path = os.path.join(os.path.dirname(args.chkpt_bob), "episode_manager_latest.pt")
         if os.path.isfile(_ep_mgr_path):
             ep_sd = torch.load(_ep_mgr_path, map_location=env.device)
             env.episode_manager.load_state_dict(ep_sd)
             print(f"[Resume] Loaded EpisodeManager state")
-        _train_state_path = args.chkpt_bob.replace("model_", "train_state_")
+        _train_state_path = os.path.join(os.path.dirname(args.chkpt_bob), "train_state_latest.pt")
         if os.path.isfile(_train_state_path):
             _ts = torch.load(_train_state_path, map_location="cpu")
             alice_ppo.entropy_coef = float(_ts.get("entropy_coef", 0.005))
             bob_ppo.abc_coef = float(_ts.get("abc_coef", 0.5))
             bob_success_buf.extend(_ts.get("bob_success_buf", []))
+            _resume_best_sr = float(_ts.get("best_bob_success_rate", -1.0))
             print(f"[Resume] Restored train state: entropy_coef={alice_ppo.entropy_coef:.4f}")
 
     alice_updates = args.resume_iteration
@@ -524,7 +605,7 @@ def main():
     bob_pos_sr_buf = deque(maxlen=args.num_envs * bob_pushes)
     bob_rot_sr_buf = deque(maxlen=args.num_envs * bob_pushes)
 
-    best_bob_success_rate = -1.0
+    best_bob_success_rate = _resume_best_sr
     last_alice_mean_rew = 0.0
     ema_alice_rew = 0.0
 
@@ -612,7 +693,7 @@ def main():
                        os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
-                        "bob_success_buf": list(bob_success_buf)},
+                        "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                        os.path.join(bob_ppo.log_dir, "train_state_best.pt"))
 
         bob_rew_buf.clear()
@@ -1411,14 +1492,14 @@ def main():
 
         if _shutdown_requested:
             print(f"[INFO] Emergency checkpoint at iter {bob_updates}", flush=True)
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(env.episode_manager.state_dict(),
                        os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
-                        "bob_success_buf": list(bob_success_buf)},
+                        "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                        os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
             with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
                 _f.write(str(bob_updates))
@@ -1426,27 +1507,27 @@ def main():
             break
 
         if args.save_interval > 0 and bob_updates % args.save_interval == 0:
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(env.episode_manager.state_dict(),
                        os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
-                        "bob_success_buf": list(bob_success_buf)},
+                        "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                        os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
             with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
                 _f.write(str(bob_updates))
             print(f"  [Checkpoint] Saved latest_checkpoint.pt (iter {bob_updates})")
 
-    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
-    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
+    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
     bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
     torch.save(env.episode_manager.state_dict(),
                os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
     torch.save({"entropy_coef": alice_ppo.entropy_coef,
                 "abc_coef": bob_ppo.abc_coef,
-                "bob_success_buf": list(bob_success_buf)},
+                "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
     with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
         _f.write(str(bob_updates))

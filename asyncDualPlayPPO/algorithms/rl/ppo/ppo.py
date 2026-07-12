@@ -112,19 +112,34 @@ class PPO:
             self.actor_critic.load_state_dict(checkpoint["model_state_dict"], strict=False)
             if self.optimizer is not None and "optimizer_state_dict" in checkpoint:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            # Iteration this checkpoint was saved at (None for legacy pre-embed files).
+            self.loaded_iteration = checkpoint.get("iteration", None)
         else:
             self.actor_critic.load_state_dict(checkpoint, strict=False)
+            self.loaded_iteration = None
         try:
             self.current_learning_iteration = int(path.split("_")[-1].split(".")[0])
         except ValueError:
             self.current_learning_iteration = 0
         self.actor_critic.train()
 
-    def save(self, path):
-        state = {"model_state_dict": self.actor_critic.state_dict()}
+    def save(self, path, iteration=None):
+        """Atomically save the checkpoint (write to <path>.tmp in the SAME
+        directory, then os.replace) so a preemption mid-save can never leave a
+        truncated file. The .tmp MUST be same-dir as `path` (node-local) or
+        os.replace degrades to a non-atomic cross-filesystem copy.
+
+        `iteration` (defaults to current_learning_iteration) is embedded so the
+        resume-time group-consistency guard can verify the Alice/Bob/iter set
+        was written as a single coherent snapshot.
+        """
+        it = iteration if iteration is not None else int(getattr(self, "current_learning_iteration", 0))
+        state = {"model_state_dict": self.actor_critic.state_dict(), "iteration": int(it)}
         if self.optimizer is not None:
             state["optimizer_state_dict"] = self.optimizer.state_dict()
-        torch.save(state, path)
+        tmp = path + ".tmp"
+        torch.save(state, tmp)
+        os.replace(tmp, path)
 
     def run(self, num_learning_iterations, log_interval=1):
         current_obs = self.vec_env.reset()

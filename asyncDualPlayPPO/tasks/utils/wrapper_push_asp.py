@@ -34,7 +34,7 @@ from ...utils.episode_manager import EpisodeManager, Phase
 from ...utils.goal_validator import validate_goal
 from . import rewards as reward_utils
 from .events import reset_objects_to_random_safe_pose, reset_robot_joints
-from .reward_pbrs import compute_dpose
+from .reward_pbrs import compute_dpose, dpose_and_zero_yaw
 
 # Observation layout indices (matches push_task_curobo.py, Fix P39: no gripper):
 # [ee_pose(6) | obj_state(14) | goal_pose(6) | goal_dist(2)] = 28D total
@@ -209,7 +209,9 @@ class PushASPEnvWrapper:
               f"Bob {bob_pushes} pushes, max_goals={max_goals_per_episode}"
               f"{' TIME-BASED γ_sp=' + str(alice_reward_scale) if time_based_alice else ''}")
         _obs_tag = " (dpose L={:.3f} thr={:.3f})".format(char_length, dpose_threshold) if dpose_obs else \
-                   " (rel_obs)" if rel_obs else ""
+            " (rel_obs)" if rel_obs else ""
+        if dpose_obs and char_length < 1e-6:
+            _obs_tag += " [orientation-free subspace: obj/goal yaw zeroed]"
         print(f"  Alice obs: {self.alice_obs_dim}D, Bob obs: {self.bob_obs_dim}D{_obs_tag}")
 
         # Tight spawn bounds (10cm × 10cm box) + random yaw to limit OOB
@@ -266,17 +268,11 @@ class PushASPEnvWrapper:
         obs = obs_dict["push_policy"]
         dist_idx = _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + _OBS_GOAL_DIM
         if self.dpose_obs:
-            obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
-            obj_yaw = obs[:, _OBS_ROBOT_DIM + 5]
-            goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
-                           _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
-            goal_yaw = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 5]
-            d_pose = compute_dpose(obj_pos, goal_pos, obj_yaw, goal_yaw, self.char_length)
-            dx = goal_pos[:, 0] - obj_pos[:, 0]
-            dy = goal_pos[:, 1] - obj_pos[:, 1]
-            bearing = torch.atan2(dy, dx)
-            obs[:, dist_idx] = d_pose
-            obs[:, dist_idx + 1] = bearing
+            # Shared transform: writes [d_pose, bearing] and (when char_length==0)
+            # zeros obj/goal yaw so disc = orientation-free subspace of T-block.
+            obs = dpose_and_zero_yaw(
+                obs, _OBS_ROBOT_DIM, _OBS_OBJ_STATE_DIM, _OBS_GOAL_DIM, self.char_length,
+            )
         elif self.rel_obs:
             obj_pos = obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
             goal_pos = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM:
@@ -288,8 +284,18 @@ class PushASPEnvWrapper:
         return obs
 
     def _get_alice_obs(self, push_obs: torch.Tensor) -> torch.Tensor:
-        """Alice sees robot state + object state only (no goal info)."""
-        return push_obs[:, :self.alice_obs_dim]
+        """Alice sees robot state + object state only (no goal info).
+
+        In the orientation-free disc subspace (dpose_obs and char_length<1e-6)
+        Alice's object-yaw slot is zeroed to match Bob's observation exactly. The
+        upstream `_get_push_obs` already zeros it, so this is a defensive,
+        idempotent guarantee that holds regardless of the caller's `push_obs`.
+        """
+        alice = push_obs[:, :self.alice_obs_dim]
+        if self.dpose_obs and self.char_length < 1e-6:
+            alice = alice.clone()
+            alice[:, _OBS_ROBOT_DIM + 5] = 0.0
+        return alice
 
     def _get_bob_obs(self, push_obs: torch.Tensor) -> torch.Tensor:
         """Bob sees the full observation including goal info."""
@@ -300,8 +306,19 @@ class PushASPEnvWrapper:
         return obs[:, _OBS_ROBOT_DIM: _OBS_ROBOT_DIM + 3]
 
     def _get_obj_euler(self, obs: torch.Tensor) -> torch.Tensor:
-        """Extract first object's Euler angles from push observation."""
-        return obs[:, _OBS_ROBOT_DIM + 3: _OBS_ROBOT_DIM + 6]
+        """Extract first object's Euler angles from push observation.
+
+        Mirrors `_get_goal_euler`: in the orientation-free disc subspace the
+        object-yaw is zeroed so `_rot_distance_rad(cur_obj_euler, goal_euler)`
+        compares a zeroed object against a zeroed goal → rot_err is genuinely 0
+        (no spurious rot_err from a live object yaw vs a zeroed goal). Idempotent
+        with the obs-level zeroing; keeps the two euler accessors symmetric.
+        """
+        oe = obs[:, _OBS_ROBOT_DIM + 3: _OBS_ROBOT_DIM + 6]
+        if self.dpose_obs and self.char_length < 1e-6:
+            oe = oe.clone()
+            oe[:, 2] = 0.0
+        return oe
 
     def _get_goal_pos(self, obs: torch.Tensor) -> torch.Tensor:
         """Extract first object's goal position."""
@@ -309,9 +326,19 @@ class PushASPEnvWrapper:
                    _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3]
 
     def _get_goal_euler(self, obs: torch.Tensor) -> torch.Tensor:
-        """Extract first object's goal Euler angles."""
-        return obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3:
-                   _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 6]
+        """Extract first object's goal Euler angles.
+
+        In the orientation-free disc subspace, zero the goal-yaw so every
+        reward/metric consumer (`_rot_distance_rad`, `_yaw_distance_rad`,
+        `compute_dpose`) sees a yaw-free goal — no random disc goal-yaw can leak
+        into rot_err or the dense reward. Idempotent with the obs-level zeroing.
+        """
+        ge = obs[:, _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 3:
+                 _OBS_ROBOT_DIM + _OBS_OBJ_STATE_DIM + 6]
+        if self.dpose_obs and self.char_length < 1e-6:
+            ge = ge.clone()
+            ge[:, 2] = 0.0
+        return ge
 
     def capture_pre_push(self, obs: torch.Tensor):
         """Snapshot object pose before a push for improvement/reward computation."""
@@ -941,7 +968,14 @@ class PushASPEnvWrapper:
             rot_dist = _rot_distance_rad(obj_euler, goal_euler).unsqueeze(-1)
             tail = torch.cat([pos_dist, rot_dist], dim=-1)
 
-        return torch.cat([robot, obj_state, goal_pose, tail], dim=-1)
+        full = torch.cat([robot, obj_state, goal_pose, tail], dim=-1)
+        if self.dpose_obs:
+            # Re-apply via the shared transform so ABC demos are byte-identical to
+            # rollout obs (incl. char_length==0 yaw-zeroing).
+            full = dpose_and_zero_yaw(
+                full, self.robot_dim, self.obj_state_dim, _OBS_GOAL_DIM, self.char_length,
+            )
+        return full
 
     def close(self):
         self.env.close()

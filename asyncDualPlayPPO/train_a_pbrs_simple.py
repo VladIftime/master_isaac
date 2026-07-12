@@ -475,6 +475,10 @@ def main():
     if args.chkpt and os.path.isfile(args.chkpt):
         agent.load(args.chkpt)
         print(f"[Resume] Loaded agent from {args.chkpt}")
+        # Embedded checkpoint iteration is authoritative (latest_iter.txt is advisory).
+        if agent.loaded_iteration is not None:
+            args.resume_iteration = int(agent.loaded_iteration)
+            print(f"[Resume] Iteration from checkpoint (authoritative): {args.resume_iteration}")
 
     # ── LSTM hidden state ─────────────────────────────────────────────────────
     if use_lstm:
@@ -490,6 +494,13 @@ def main():
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
     run_dir = os.path.abspath(f"runs/{args.exp_name}")
     best_success_rate = -1.0
+    _best_path = os.path.join(agent.log_dir, "best_sr.txt")
+    if args.chkpt and os.path.isfile(_best_path):
+        try:
+            best_success_rate = float(open(_best_path).read().strip())
+            print(f"[Resume] Restored best SR: {best_success_rate:.4f}")
+        except Exception:
+            pass
     iteration = args.resume_iteration if args.chkpt else 0
     rew_buf     = deque(maxlen=push_nsteps * env.num_envs)
     sr_buf      = deque(maxlen=push_nsteps * env.num_envs)
@@ -854,6 +865,7 @@ def main():
         writer.add_scalar("Metrics/EpisodicSR",      ep_sr if not np.isnan(ep_sr) else 0.0, iteration)
         writer.add_scalar("Metrics/AvgPushesPerEpisode", avg_pushes if not np.isnan(avg_pushes) else 0.0, iteration)
         writer.add_scalar("Metrics/Episodes",        n_episodes,    iteration)
+        writer.add_scalar("Diagnostics/GradientUpdates", iteration, iteration)
         writer.add_scalar("Reward/Dense/Pos", pbrs_result["dense_pos"].mean().item(), iteration)
         writer.add_scalar("Reward/Dense/Rot", pbrs_result["dense_rot"].mean().item(), iteration)
 
@@ -875,10 +887,16 @@ def main():
         if sr > best_success_rate:
             best_success_rate = sr
             agent.save(os.path.join(agent.log_dir, "model_best.pt"))
+            try:
+                with open(_best_path + ".tmp", "w") as _bf:
+                    _bf.write(repr(float(best_success_rate)))
+                os.replace(_best_path + ".tmp", _best_path)
+            except Exception:
+                pass
 
         # ── Checkpoint ────────────────────────────────────────────────────────
         if iteration > 0 and iteration % args.save_interval == 0:
-            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"), iteration=iteration)
             with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as _f:
                 _f.write(str(iteration))
             print(f"  [Checkpoint] Saved latest_checkpoint.pt (iter {iteration})")
@@ -891,14 +909,14 @@ def main():
         iteration += 1
 
         if _shutdown_requested:
-            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"), iteration=iteration)
             with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as _f:
                 _f.write(str(iteration))
             print(f"[INFO] Emergency checkpoint saved (iter {iteration}). Shutting down.")
             break
 
     print(f"\nTraining complete. Best SR: {best_success_rate:.4f}")
-    agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+    agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"), iteration=iteration)
     with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as _f:
         _f.write(str(iteration))
     simulation_app.close()

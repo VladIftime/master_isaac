@@ -1,0 +1,10 @@
+train_f_pbrs_asp_disc.py 7 528 3000 100 discF_e528_i3000_s7 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
+train_f_pbrs_asp_disc.py 42 528 3000 100 discF_e528_i3000_s42 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
+train_f_pbrs_asp_disc.py 123 528 3000 100 discF_e528_i3000_s123 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
+train_f_pbrs_asp_disc.py 202 528 3000 100 discF_e528_i3000_s202 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
+train_f_pbrs_asp_disc.py 707 528 3000 100 discF_e528_i3000_s707 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05
+train_h_tasp_disc.py 7 528 3000 100 taspH_e528_i3000_s7 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05 --alice_reward_scale 0.5
+train_h_tasp_disc.py 42 528 3000 100 taspH_e528_i3000_s42 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05 --alice_reward_scale 0.5
+train_h_tasp_disc.py 123 528 3000 100 taspH_e528_i3000_s123 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05 --alice_reward_scale 0.5
+train_h_tasp_disc.py 202 528 3000 100 taspH_e528_i3000_s202 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05 --alice_reward_scale 0.5
+train_h_tasp_disc.py 707 528 3000 100 taspH_e528_i3000_s707 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.0 --dpose_threshold 0.05 --alice_reward_scale 0.5

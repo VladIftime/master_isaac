@@ -1,0 +1,6 @@
+train_a_pbrs_simple.py 7 2048 773 100 pbrsA_e2048_i773_s7
+train_a_pbrs_simple.py 42 2048 773 100 pbrsA_e2048_i773_s42
+train_a_pbrs_simple.py 123 2048 773 100 pbrsA_e2048_i773_s123
+train_push.py 7 2048 773 100 base_e2048_i773_s7 --rel-obs --rel-act
+train_push.py 42 2048 773 100 base_e2048_i773_s42 --rel-obs --rel-act
+train_push.py 123 2048 773 100 base_e2048_i773_s123 --rel-obs --rel-act

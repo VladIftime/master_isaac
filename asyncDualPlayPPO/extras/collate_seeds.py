@@ -33,8 +33,13 @@ _T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
         6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
         15: 2.131, 20: 2.086, 30: 2.042}
 
-# EXP_NAME convention: <model>_e<envs>_i<iters>_s<seed>
-_RUN_RE = re.compile(r"^(?P<model>.+?)_e(?P<envs>\d+)_i(?P<iters>\d+)_s(?P<seed>\d+)$")
+# EXP_NAME conventions (both allow an optional trailing _<tag> ablation suffix,
+# e.g. _noge / _abc / _nohist — the tag is folded into the model label so each
+# ablation aggregates as its own row):
+#   training/self : <model>_e<envs>_i<iters>_s<seed>[_<tag>]
+#   gym crossover : <model>_e<envs>_p<push_nsteps>_s<seed>[_<tag>]
+_RUN_RE = re.compile(r"^(?P<model>.+?)_e(?P<envs>\d+)_i(?P<xval>\d+)_s(?P<seed>\d+)(?:_(?P<tag>.+))?$")
+_GYM_RE = re.compile(r"^(?P<model>.+?)_e(?P<envs>\d+)_p(?P<xval>\d+)_s(?P<seed>\d+)(?:_(?P<tag>.+))?$")
 
 
 def t95(n):
@@ -50,12 +55,14 @@ def t95(n):
 
 
 def parse_run_name(name):
-    m = _RUN_RE.match(name)
-    if not m:
-        return None
-    d = m.groupdict()
-    return {"model": d["model"], "envs": int(d["envs"]),
-            "iters": int(d["iters"]), "seed": int(d["seed"])}
+    for rx, xkey in ((_RUN_RE, "iters"), (_GYM_RE, "push_nsteps")):
+        m = rx.match(name)
+        if m:
+            d = m.groupdict()
+            model = d["model"] + (f"_{d['tag']}" if d.get("tag") else "")
+            return {"model": model, "envs": int(d["envs"]),
+                    "xkey": xkey, "xval": int(d["xval"]), "seed": int(d["seed"])}
+    return None
 
 
 def summarize_csv(path):
@@ -122,7 +129,7 @@ def main():
             print(f"[skip] no usable rows: {csv_path}")
             continue
         validator = os.path.basename(csv_path)[len("validation_results_"):-len(".csv")]
-        gkey = (meta["model"], meta["envs"], meta["iters"])
+        gkey = (meta["model"], meta["envs"], meta["xkey"], meta["xval"])
         group_meta[gkey] = meta
         for metric, val in summary.items():
             if metric == "n_scenes":
@@ -137,12 +144,12 @@ def main():
     # Build rows
     rows = []
     for gkey in sorted(groups):
-        model, envs, iters = gkey
+        model, envs, xkey, xval = gkey
         for validator in sorted(groups[gkey]):
             metrics = groups[gkey][validator]
             overall = metrics.get("overall", [])
             mean, ci, n = agg(overall)
-            row = {"model": model, "envs": envs, "iters": iters,
+            row = {"model": model, "envs": envs, "batch_var": xkey, "iters_or_pns": xval,
                    "validator": validator, "n_seeds": n,
                    "overall_mean": round(mean, 4),
                    "overall_ci95": round(ci, 4) if not math.isnan(ci) else ""}
@@ -170,12 +177,12 @@ def main():
     with open(md_out, "w") as f:
         f.write("# Validation summary (mean +/- 95% CI across seeds)\n\n")
         f.write(f"Source: `{root}`  |  runs collated: {seen_runs}\n\n")
-        f.write("| model | envs | iters | validator | n | overall SR (95% CI) |\n")
-        f.write("|---|---|---|---|---|---|\n")
+        f.write("| model | envs | batch_var | iters/pns | validator | n | overall SR (95% CI) |\n")
+        f.write("|---|---|---|---|---|---|---|\n")
         for r in rows:
             ci = r["overall_ci95"]
             ci_str = f"{r['overall_mean']:.3f} +/- {ci:.3f}" if ci != "" else f"{r['overall_mean']:.3f} (n=1)"
-            f.write(f"| {r['model']} | {r['envs']} | {r['iters']} | "
+            f.write(f"| {r['model']} | {r['envs']} | {r['batch_var']} | {r['iters_or_pns']} | "
                     f"{r['validator']} | {r['n_seeds']} | {ci_str} |\n")
 
     print(f"[ok] collated {seen_runs} runs -> {csv_out}")

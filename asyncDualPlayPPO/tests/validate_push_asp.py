@@ -51,7 +51,7 @@ import torch.optim      # noqa
 from isaaclab.app import AppLauncher
 
 from asyncDualPlayPPO.tasks.utils.validation_configs import (
-    ALL_TESTS, get_test_config, get_test_count,
+    ALL_TESTS, get_test_config, get_test_count, set_test_set,
 )
 
 _ARM_JOINT_NAMES = [
@@ -125,8 +125,11 @@ def main():
                         help="Use absolute goal observations")
     parser.add_argument("--rel-act", "--rel_act", action="store_true", dest="rel_act", default=True,
                         help="Use object-relative action decoding (default: True, always on for ASP)")
+    parser.add_argument("--scene-set", choices=["all", "tblock", "disc"], default="all",
+                        help="Which validation scene list to run (disc = 30 position-only disc scenes)")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+    set_test_set(args.scene_set)
 
     if not args.dpose_obs and "dpose" in os.path.abspath(args.chkpt_bob).lower():
         args.dpose_obs = True
@@ -146,9 +149,11 @@ def main():
     from isaaclab.managers import SceneEntityCfg
     from asyncDualPlayPPO.tasks.push_task_curobo import PushTaskCuRoboEnvCfg
     from asyncDualPlayPPO.tasks.utils.wrapper_push_asp import PushASPEnvWrapper, _OBS_ROBOT_DIM
+    from asyncDualPlayPPO.tasks.utils.reward_pbrs import dpose_and_zero_yaw
     from asyncDualPlayPPO.tasks.utils.action_push import compute_push_waypoints
     from asyncDualPlayPPO.tasks.utils.action_push_relative import decode_push_action_relative
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo_abc import PPOABC
+    from asyncDualPlayPPO.algorithms.rl.ppo.module import MultiCategorical
     from asyncDualPlayPPO.algorithms.rl.ppo.ppo import PPO
     from asyncDualPlayPPO.tasks.utils.observations import (
         ee_poses as _obs_ee_poses,
@@ -406,7 +411,14 @@ def main():
         obj = _obs_object_states(env.env, obj_cfg, _tblock_grip_cfg, None)
         goal = _obs_goal_states(env.env, obj_cfg)
         dist = _obs_goal_distance(env.env, obj_cfg)
-        return torch.cat([ee, obj, goal, dist], dim=-1)
+        obs = torch.cat([ee, obj, goal, dist], dim=-1)
+        # Match the training wrapper's d_pose transform exactly: rewrite the tail
+        # to [d_pose, bearing] and (char_length==0) zero the yaw slots. Without
+        # this the disc/cross-eval obs tail would be [pos_dist, rot_dist] — a
+        # train/eval mismatch on the bearing slot.
+        if args.dpose_obs:
+            obs = dpose_and_zero_yaw(obs, _OBS_ROBOT_DIM, 14, 6, args.char_length)
+        return obs
 
     # ── Load Bob ──────────────────────────────────────────────────────────────
     _mc_space = gym_mc.spaces.Box(
@@ -585,7 +597,12 @@ def main():
                 with torch.no_grad():
                     h_in = (bob_hidden[0], bob_hidden[1])
                     raw_logits, new_bh = bob_ppo.actor_critic._actor_forward(bob_obs, h_in)
-                    b_acts = raw_logits.view(1, num_cat_dims, num_bins).argmax(dim=-1).float()
+                    # BEST-OF-20: sample from the MultiCategorical distribution so the
+                    # 20 trials are genuinely stochastic draws (not argmax → 20× identical
+                    # result in a deterministic env). Matches the single-agent validator
+                    # (which already samples via act_with_hidden → dist.sample()).
+                    _dist = MultiCategorical(raw_logits.view(1, num_cat_dims, num_bins))
+                    b_acts = _dist.sample()
                     if new_bh is not None:
                         bob_hidden[0] = new_bh[0]
                         bob_hidden[1] = new_bh[1]

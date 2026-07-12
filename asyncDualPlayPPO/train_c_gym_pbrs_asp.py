@@ -59,6 +59,8 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--num_envs", type=int, default=16)
     p.add_argument("--max_iterations", type=int, default=3000)
+    p.add_argument("--push_nsteps", type=int, default=10,
+                   help="PPO rollout length (not used by ASP — accepted for gym-template compatibility; ASP rollout is alice_pushes+bob_pushes)")
     p.add_argument("--save_interval", type=int, default=100)
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--alice_pushes", type=int, default=5)
@@ -143,10 +145,27 @@ def main():
         states_shape=env.bob_observation_space.shape, actions_shape=(num_cat_dims,),
         device=device, traj_maxlen=ppo_cfg["params"]["learn"].get("abc_traj_maxlen", 500))
 
+    # Group-consistency guard: refuse a mismatched Alice/Bob pair (embedded iters).
+    if (args.chkpt_alice and args.chkpt_bob
+            and os.path.isfile(args.chkpt_alice) and os.path.isfile(args.chkpt_bob)):
+        def _peek_iter(_p):
+            try:
+                return torch.load(_p, map_location="cpu").get("iteration")
+            except Exception:
+                return None
+        _ai, _bi = _peek_iter(args.chkpt_alice), _peek_iter(args.chkpt_bob)
+        if _ai is not None and _bi is not None and _ai != _bi:
+            print(f"[Resume][GUARD] MISMATCHED Alice/Bob (alice_iter={_ai} != bob_iter={_bi}) "
+                  f"— starting FRESH.", flush=True)
+            args.chkpt_alice = None
+            args.chkpt_bob = None
+            args.resume_iteration = 0
     if args.chkpt_alice and os.path.isfile(args.chkpt_alice):
         alice_ppo.load(args.chkpt_alice)
     if args.chkpt_bob and os.path.isfile(args.chkpt_bob):
         bob_ppo.load(args.chkpt_bob)
+        if bob_ppo.loaded_iteration is not None:
+            args.resume_iteration = int(bob_ppo.loaded_iteration)
 
     lsz = alice_ppo.actor_critic.lstm_hidden_size
     alice_hidden = [torch.zeros(env.num_envs, lsz, device=device),
@@ -168,6 +187,13 @@ def main():
     bob_success_buf = deque(maxlen=200)
     alice_updates = bob_updates = args.resume_iteration
     best_bob_sr = -1.0
+    _best_path = os.path.join(bob_ppo.log_dir, "best_sr.txt")
+    if args.chkpt_bob and os.path.isfile(_best_path):
+        try:
+            best_bob_sr = float(open(_best_path).read().strip())
+            print(f"[Resume] Restored best SR: {best_bob_sr:.4f}")
+        except Exception:
+            pass
     last_alice_mean_rew = 0.0
 
     _a_pdim = _b_pdim = num_cat_dims
@@ -205,6 +231,12 @@ def main():
             best_bob_sr = sr
             bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_best.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
+            try:
+                with open(_best_path + ".tmp", "w") as _bf:
+                    _bf.write(repr(float(best_bob_sr)))
+                os.replace(_best_path + ".tmp", _best_path)
+            except Exception:
+                pass
         bob_rew_buf.clear()
         bob_updates += 1
 
@@ -563,15 +595,15 @@ def main():
               f"AliceRew={last_alice_mean_rew:+.3f}", flush=True)
 
         if args.save_interval > 0 and bob_updates % args.save_interval == 0:
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
             with open(os.path.join(f"runs/{args.exp_name}", "latest_iter.txt"), "w") as f:
                 f.write(str(bob_updates))
         if _stop["flag"]:
             break
 
-    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
-    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
     print(f"Done. Best Bob SR={best_bob_sr:.4f}")
     env.close()
 

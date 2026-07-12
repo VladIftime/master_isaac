@@ -98,6 +98,10 @@ def main():
     if args.chkpt and os.path.isfile(args.chkpt):
         agent.load(args.chkpt)
         print(f"[Resume] {args.chkpt}")
+        # Embedded checkpoint iteration is authoritative (latest_iter.txt advisory).
+        if agent.loaded_iteration is not None:
+            args.resume_iteration = int(agent.loaded_iteration)
+            print(f"[Resume] iter from checkpoint: {args.resume_iteration}")
 
     use_lstm = agent.actor_critic.use_lstm
     lsz = agent.actor_critic.lstm_hidden_size if use_lstm else 0
@@ -107,6 +111,13 @@ def main():
     writer = SummaryWriter(log_dir=f"runs/{args.exp_name}/summary")
     os.makedirs(agent.log_dir, exist_ok=True)
     best_sr = -1.0
+    _best_path = os.path.join(agent.log_dir, "best_sr.txt")
+    if args.chkpt and os.path.isfile(_best_path):
+        try:
+            best_sr = float(open(_best_path).read().strip())
+            print(f"[Resume] Restored best SR: {best_sr:.4f}")
+        except Exception:
+            pass
     iteration = args.resume_iteration if args.chkpt else 0
     ema_rew = 0.0
 
@@ -176,17 +187,23 @@ def main():
         if sr > best_sr:
             best_sr = sr
             agent.save(os.path.join(agent.log_dir, "model_best.pt"))
+            try:
+                with open(_best_path + ".tmp", "w") as _bf:
+                    _bf.write(repr(float(best_sr)))
+                os.replace(_best_path + ".tmp", _best_path)
+            except Exception:
+                pass
         if iteration > 0 and iteration % args.save_interval == 0:
-            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"), iteration=iteration)
             with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as f:
                 f.write(str(iteration))
 
         iteration += 1
         if _stop["flag"]:
-            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+            agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"), iteration=iteration)
             break
 
-    agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"))
+    agent.save(os.path.join(agent.log_dir, "latest_checkpoint.pt"), iteration=iteration)
     with open(os.path.join(agent.log_dir, "latest_iter.txt"), "w") as f:
         f.write(str(iteration))
     print(f"Done. Best SR={best_sr:.4f}")

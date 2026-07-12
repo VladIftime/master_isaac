@@ -13,6 +13,7 @@
 #SBATCH --time=23:00:00
 #SBATCH --output=slurm-%A_%a-sa_train.out
 #SBATCH --signal=B:USR1@120
+#SBATCH --requeue                        # preempt/qos cluster: let SLURM auto-requeue on preemption
 
 set -o pipefail
 PROJECT_ROOT=$(pwd)
@@ -44,6 +45,7 @@ LOCAL_RUNS="${TMPDIR:-/tmp}/runs_${SLURM_JOB_ID}"
 mkdir -p "$LOCAL_RUNS" "$RESULTS_ROOT"
 
 cleanup() {
+    kill "${FLUSHER_PID:-}" 2>/dev/null
     echo "[INFO] Syncing $LOCAL_RUNS -> $RESULTS_ROOT ..."
     rsync -a --no-perms "$LOCAL_RUNS/" "$RESULTS_ROOT/" 2>/dev/null
     campaign_clear_running
@@ -72,22 +74,47 @@ cleanup() {
 trap cleanup EXIT
 campaign_start
 
+# ── Requeue cap (preempt/qos REQUEUE cluster) ────────────────────────────────
+# SLURM_RESTART_COUNT increments on every requeue (preemption included). Past the
+# cap we assume a node faulting on every requeue (indistinguishable from a real
+# preemption by exit code) and stop THIS task from looping — WITHOUT braking the
+# campaign (a legitimately-preempted low-QoS job can hit high counts). Exiting 0
+# with no .done leaves the config idle, so the next submit_all.sh reconcile
+# resubmits it (self-heal). USR1 time-limit resubmits spawn a fresh jobid, so this
+# counts preemptions PER 23h segment, not cumulatively.
+RESTART_CAP="${RESTART_CAP:-25}"
+echo "[INFO] SLURM_RESTART_COUNT=${SLURM_RESTART_COUNT:-0} (cap ${RESTART_CAP})"
+if [ "${SLURM_RESTART_COUNT:-0}" -ge "$RESTART_CAP" ]; then
+    echo "[WARN] restart count ${SLURM_RESTART_COUNT} >= ${RESTART_CAP} for $EXP_NAME —"\
+         " disabling further requeue and exiting (campaign NOT braked; reconcile self-heals)."
+    echo "[REQUEUE-CAP] $(date '+%F %T') $EXP_NAME jobid=$SLURM_JOB_ID restarts=${SLURM_RESTART_COUNT}" \
+        >> "${FAIL_LOG:-$HOME/FAIL_$(date +%y%m%d).log}" 2>/dev/null
+    scontrol update JobId="$SLURM_JOB_ID" Requeue=0 2>/dev/null
+    exit 0
+fi
+
 # ── Resume detection (scheme-agnostic: PBRS latest_checkpoint OR baseline model_*) ──
 RESUME_ARGS=""
 ITER_NUM=""
+RESUME_CKPT=""
 AGENT_DIR="$NFS_RUN_DIR/agent"
-if [ -f "$AGENT_DIR/latest_checkpoint.pt" ] && [ -f "$AGENT_DIR/latest_iter.txt" ]; then
+if [ -f "$AGENT_DIR/latest_checkpoint.pt" ]; then
+    # latest_iter.txt is ADVISORY (may be torn on a partial flush). Resume whenever
+    # the checkpoint exists; Python (train_a/b) derives the authoritative iteration
+    # from the embedded checkpoint value and overrides --resume_iteration.
     ITER_NUM=$(cat "$AGENT_DIR/latest_iter.txt" 2>/dev/null)
-    [ -n "$ITER_NUM" ] && RESUME_CKPT="runs/$EXP_NAME/agent/latest_checkpoint.pt"
+    RESUME_CKPT="runs/$EXP_NAME/agent/latest_checkpoint.pt"
 elif ls "$AGENT_DIR"/model_*.pt >/dev/null 2>&1; then
+    # Baseline (train_push) model_<iter>.pt scheme: iteration is in the filename
+    # (authoritative), no latest_iter.txt involved.
     ITER_NUM=$(ls "$AGENT_DIR"/model_*.pt 2>/dev/null | grep -v -e best -e final -e emergency \
         | sed 's/.*model_//;s/\.pt//' | sort -n | tail -1)
     [ -n "$ITER_NUM" ] && RESUME_CKPT="runs/$EXP_NAME/agent/model_${ITER_NUM}.pt"
 fi
-if [ -n "$ITER_NUM" ]; then
-    echo "[INFO] Resuming $EXP_NAME from iter $ITER_NUM ($RESUME_CKPT)"
+if [ -n "$RESUME_CKPT" ]; then
+    echo "[INFO] Resuming $EXP_NAME ($RESUME_CKPT; latest_iter hint=${ITER_NUM:-<unreadable>})"
     rsync -a --no-perms "$NFS_RUN_DIR/" "$LOCAL_RUNS/$EXP_NAME/" 2>/dev/null
-    RESUME_ARGS="--chkpt $RESUME_CKPT --resume_iteration $ITER_NUM"
+    RESUME_ARGS="--chkpt $RESUME_CKPT --resume_iteration ${ITER_NUM:-0}"
 fi
 
 echo "==================================================================="
@@ -115,18 +142,33 @@ apptainer exec --nv --pwd /workspace/isaaclab/user_project/asyncDualPlayPPO \
     /workspace/isaaclab/isaaclab.sh -p "/workspace/isaaclab/user_project/asyncDualPlayPPO/$SCRIPT" \
     --num_envs "$NUM_ENVS" --max_iterations "$MAX_ITERS" --save_interval "$SAVE_INTERVAL" \
     --seed "$SEED" --exp_name "$EXP_NAME" --headless $EXTRA $RESUME_ARGS \
-    2>&1 | grep --line-buffered -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
-                                   -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined" &
-APPTAINER_PID=$!
+    > >(grep --line-buffered -v -e "\[Lula\] Joint .* is specified as a mimic joint" \
+                                 -e "Warning: link 'robotiq_coupler' material 'flat_black' undefined") 2>&1 &
+APPTAINER_PID=$!   # PID of apptainer (not grep): TRAIN_EXIT + USR1 forwarding now target the container
+# Periodic durable flush: node-local $LOCAL_RUNS -> scratch $RESULTS_ROOT every
+# FLUSH_SECS, so a preemption/OOM that cuts cleanup() short still leaves a recent
+# checkpoint on scratch. Atomic per-file saves (ppo.save tmp->os.replace; rsync
+# temp-then-rename) guarantee a mid-flush copy is never truncated.
+FLUSH_SECS="${FLUSH_SECS:-600}"
+( while true; do sleep "$FLUSH_SECS"; rsync -a --no-perms "$LOCAL_RUNS/" "$RESULTS_ROOT/" 2>/dev/null; done ) &
+FLUSHER_PID=$!
 wait $APPTAINER_PID
 TRAIN_EXIT=$?
+kill "$FLUSHER_PID" 2>/dev/null
 echo "[INFO] Exit code: $TRAIN_EXIT"
 if [ "$WILL_RESUBMIT" = "true" ]; then
     echo "[INFO] Time-limit path — resubmitting."
 elif [ "$TRAIN_EXIT" -eq 0 ]; then
     JOB_DONE=true
 elif [ "$TRAIN_EXIT" -eq 137 ] || [ "$TRAIN_EXIT" -eq 143 ]; then
-    echo "[INFO] Preempted (exit $TRAIN_EXIT); will resubmit."; WILL_RESUBMIT=true
+    # This partition is PreemptMode=REQUEUE (preempt/qos): a preemption exits 137/143
+    # and SLURM AUTO-REQUEUES this same job (our resume logic continues from
+    # latest_checkpoint). So do NOTHING here: self-resubmitting would create a
+    # duplicate job racing on the same checkpoint (corruption), and braking would
+    # kill the whole campaign on an unrelated preemption. Genuine VRAM/CUDA OOM
+    # surfaces as a Python RuntimeError (non-137 exit) and is caught by the brake
+    # below; a host-RAM OOM (rare, mem is right-sized) is left to SLURM's requeue.
+    echo "[INFO] Exit $TRAIN_EXIT — leaving to SLURM --requeue (preemption); no self-action."
 else
     echo "[ERROR] Crash (exit $TRAIN_EXIT) — tripping campaign brake."
     campaign_trip_abort "$TRAIN_EXIT"

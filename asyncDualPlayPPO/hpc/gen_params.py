@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Generate SLURM job-array params files + a manifest for the training suite.
 
+ASP-Failure Thesis campaign (thesis_plan.md §2.1).
 Writes one params file per (phase, family, memory-tier) so that every array
-submission has uniform --mem (a job array shares resource directives across all
-its tasks).  Also writes a matching validation params file per phase and a
-manifest that submit_all.sh consumes.
+submission has uniform --mem.
 
 Params line formats:
   single-agent : SCRIPT SEED NUM_ENVS MAX_ITERS SAVE_INTERVAL EXP_NAME [EXTRA]
@@ -32,11 +31,17 @@ TPL_SINGLE = "hpc/arrays/train_single_agent.slurm"
 TPL_SELF = "hpc/arrays/train_self_play.slurm"
 TPL_GYM = "hpc/arrays/train_gym.slurm"
 TPL_VAL = "hpc/arrays/validate.slurm"
+TPL_GYM_VAL = "hpc/arrays/validate_gym.slurm"
 
-SELFPLAY_EXTRA = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
-                  "--char_length 0.07 --dpose_threshold 0.055 --no_abc")
+# ── Canonical ASP = ABC-on (β=0.5 from yaml). NO --no_abc here.  The ablation
+#    arms add --no_abc where needed (phase5_ablate, phase6_abcpc_off). ──────────
+SELFPLAY_COMMON = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 ")
+SELFPLAY_EXTRA = (SELFPLAY_COMMON + "--char_length 0.07 --dpose_threshold 0.055")
 G_EXTRA = SELFPLAY_EXTRA + " --alice_reward_scale 0.5"
-BASE_EXTRA = "--rel-obs --rel-act"          # train_push baseline
+DISC_EXTRA = (SELFPLAY_COMMON + "--char_length 0.0 --dpose_threshold 0.05")
+H_EXTRA = DISC_EXTRA + " --alice_reward_scale 0.5"
+I_EXTRA = SELFPLAY_EXTRA + " --alice_reward_scale 0.5"
+BASE_EXTRA = "--rel-obs --rel-act"
 SAVE = 100
 
 # model -> (script, family, extra, validator, val_extra)
@@ -48,28 +53,30 @@ MODELS = {
               "--dpose-obs --char-length 0.07 --dpose-threshold 0.055"),
     "pbrsG": ("train_g_tasp_dpose.py", "self", G_EXTRA, "validate_push_asp.py",
               "--dpose-obs --char-length 0.07 --dpose-threshold 0.055"),
-    # Disc (position-only d_pose) — ABC-on positive control substrate.
-    "discF": ("train_f_pbrs_asp_disc.py", "self",
-              "--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
-              "--char_length 0.0 --dpose_threshold 0.05 --no_abc",
-              "validate_push_asp.py", "--dpose-obs --char-length 0.0 --dpose-threshold 0.05"),
+    # discF (Model F, position-only disc). Canonical = ABC-on (no --no_abc).
+    "discF": ("train_f_pbrs_asp_disc.py", "self", DISC_EXTRA, "validate_push_asp.py",
+              "--dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc"),
+    # taspH — TASP disc (time-based Alice, disc).
+    "taspH": ("train_h_tasp_disc.py", "self", H_EXTRA, "validate_push_asp.py",
+              "--dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc"),
+    # taspI — TASP T-block + Bob time penalty (full symmetric Sukhbaatar reward).
+    "taspI": ("train_i_tasp_dpose_bobpen.py", "self", I_EXTRA, "validate_push_asp.py",
+              "--dpose-obs --char-length 0.07 --dpose-threshold 0.055"),
 }
 
 
 class Suite:
     def __init__(self):
         self.buckets = {}   # (phase, family, mem) -> list[train line]
-        self.val = {}       # phase -> list[validate line]
+        self.val = {}       # phase -> list[validate line]   (Isaac)
+        self.gymval = {}    # phase -> list[validate line]   (gym)
 
     def add(self, phase, model, seed, envs, extra_override=None, name_suffix=""):
         script, family, extra, validator, val_extra = MODELS[model]
         iters = iters_for(envs)
         exp = f"{model}_e{envs}_i{iters}_s{seed}{name_suffix}"
         ex = extra if extra_override is None else extra_override
-        if family == "single":
-            line = f"{script} {seed} {envs} {iters} {SAVE} {exp} {ex}".rstrip()
-        else:
-            line = f"{script} {seed} {envs} {iters} {SAVE} {exp} {ex}".rstrip()
+        line = f"{script} {seed} {envs} {iters} {SAVE} {exp} {ex}".rstrip()
         mem = MEM_TIER[envs]
         self.buckets.setdefault((phase, family, mem), []).append(line)
         self.val.setdefault(phase, []).append(f"{validator} {exp} {val_extra}".rstrip())
@@ -78,6 +85,11 @@ class Suite:
         iters = 3000
         line = f"{model_script} {seed} {envs} {push_nsteps} {iters} {SAVE} {exp}"
         self.buckets.setdefault((phase, "gym", "16G"), []).append(line)
+        self.gymval.setdefault(phase, []).append(f"validate_pusht_gym.py {exp}")
+
+    def add_xeval(self, phase, exp, val_extra):
+        self.val.setdefault(phase, []).append(
+            f"validate_push_asp.py {exp} {val_extra}".rstrip())
 
     def write(self):
         os.makedirs(PARAMS_DIR, exist_ok=True)
@@ -94,13 +106,17 @@ class Suite:
             with open(os.path.join(PARAMS_DIR, fname), "w") as f:
                 f.write("\n".join(lines) + "\n")
             manifest.append(f"hpc/params/{fname} {TPL_VAL} 24G 06:00:00 4 {phase}_validate")
+        for phase, lines in sorted(self.gymval.items()):
+            fname = f"{phase}_validate.txt"
+            with open(os.path.join(PARAMS_DIR, fname), "w") as f:
+                f.write("\n".join(lines) + "\n")
+            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 16G 04:00:00 4 {phase}_validate")
         with open(os.path.join(PARAMS_DIR, "manifest.txt"), "w") as f:
             f.write("# PARAMS_FILE  TEMPLATE  MEM  TIME  THROTTLE  PHASE\n")
             f.write("\n".join(manifest) + "\n")
-        # report
         print(f"Wrote params to {PARAMS_DIR}")
         for (phase, family, mem), lines in sorted(self.buckets.items()):
-            print(f"  {phase:16s} {family:7s} {mem:4s} : {len(lines):3d} jobs")
+            print(f"  {phase:20s} {family:7s} {mem:4s} : {len(lines):3d} jobs")
 
 
 def build():
@@ -109,63 +125,77 @@ def build():
     seeds5 = [7, 42, 123, 202, 707]
     envs4 = [256, 512, 1024, 2048]
 
-    # Phase 1 (E9): self-play scale sweep, E + G, seed 42
-    for model in ("pbrsE", "pbrsG"):
-        for e in envs4:
-            s.add("phase1", model, 42, e)
-
-    # Phase 2 (E2): single-agent env frontier, pbrsA + baseline, 3 seeds
+    # ── Phase 1 (anchor+efficiency) -------------------------------------------
+    # Single-agent PPO-Baseline and PBRS across {256,512,1024,2048} × 3 seeds.
+    # Earns the "task solvable; 4×-fewer-environments" result.
     for model in ("pbrsA", "base"):
         for e in envs4:
             for seed in seeds3:
-                s.add("phase2", model, seed, e)
+                s.add("phase1_anchor", model, seed, e)
 
-    # Phase 3 (E1): multi-seed CIs @528, all five models, 5 seeds
+    # ── Phase 2 (seed CIs) ─────────────────────────────────────────────────────
+    # Headline success rate table with confidence intervals.
+    # Baseline, PBRS(A), Curriculum(B), E, G at 528 × 5 seeds.
     for model in ("pbrsA", "pbrsB", "pbrsE", "pbrsG", "base"):
         for seed in seeds5:
-            s.add("phase3", model, seed, 528)
+            s.add("phase2_ci", model, seed, 528)
 
-    # Phase 4 (E4): self-play ablations from E @528, 3 seeds
-    _, _, e_extra, _, _ = MODELS["pbrsE"]
-    for tag, flag in (("noabc", "--no_abc"), ("nohist", "--no_abc --no_hist_pool"),
-                      ("noge", "--no_abc --no_ge")):
-        base_extra = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
-                      "--char_length 0.07 --dpose_threshold 0.055")
+    # ── Phase 3 (coupled-gate isolation) ───────────────────────────────────────
+    # disc F and disc-TASP H at 528 × 5 seeds — the key "ASP succeeds when gate
+    # is position-only" result. ABC-on canonical for both.
+    for model in ("discF", "taspH"):
+        for seed in seeds5:
+            s.add("phase3_disc", model, seed, 528)
+
+    # ── Phase 4 (ASP scale sweep — endpoints only) ─────────────────────────────
+    # E and G across {256, 2048} × 3 seeds. "Does scale rescue ASP?"
+    for model in ("pbrsE", "pbrsG"):
+        for e in (256, 2048):
+            for seed in seeds3:
+                s.add("phase4_scale", model, seed, e)
+
+    # ── Phase 5 (component ablations) ──────────────────────────────────────────
+    # E and G: no-ABC, no-GE — which component matters?
+    # no-ABC arm: drop ABC, keep GE.
+    for model in ("pbrsE", "pbrsG"):
+        ablate_abc = SELFPLAY_COMMON + "--char_length 0.07 --dpose_threshold 0.055 --no_abc"
         for seed in seeds3:
-            s.add("phase4", "pbrsE", seed, 528,
-                  extra_override=f"{base_extra} {flag}", name_suffix=f"_{tag}")
+            s.add("phase5_ablate", model, seed, 528, extra_override=ablate_abc, name_suffix="_noabc")
+    # no-GE arm: keep ABC on (canonical), drop GoalEncoder.
+    for model in ("pbrsE", "pbrsG"):
+        ablate_noge = SELFPLAY_COMMON + "--char_length 0.07 --dpose_threshold 0.055 --no_ge"
+        for seed in seeds3:
+            s.add("phase5_ablate", model, seed, 528, extra_override=ablate_noge, name_suffix="_noge")
 
-    # Phase 4 (ABC-on): E with ABC enabled (beta=0.5) — tests the clip-saturation
-    # claim on the T-block d_pose model. NOTE: no --no_abc → ABC active.
-    abc_extra = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
-                 "--char_length 0.07 --dpose_threshold 0.055")
+    # ── Phase 6 (ABC positive control) ─────────────────────────────────────────
+    # disc F: ABC-on (3 seeds) AND ABC-off (3 seeds) — "ABC helps when easy, not
+    # when coupled." ABC-on reuses discF's canonical extra (DISC_EXTRA, no --no_abc).
     for seed in seeds3:
-        s.add("phase4", "pbrsE", seed, 528, extra_override=abc_extra, name_suffix="_abc")
-
-    # Phase 4 positive control (E4-PC): ABC-on on the easy/symmetric disc
-    # (position-only d_pose). If ABC helps anywhere it should help here — rules
-    # out "the BC was broken" for the negative ABC-on-E result.
-    disc_abc_extra = ("--alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 "
-                      "--char_length 0.0 --dpose_threshold 0.05")
+        s.add("phase6_abcpc", "discF", seed, 528, name_suffix="_abc")
+    disc_abc_off = SELFPLAY_COMMON + "--char_length 0.0 --dpose_threshold 0.05 --no_abc"
     for seed in seeds3:
-        s.add("phase4_pc", "discF", seed, 528, extra_override=disc_abc_extra, name_suffix="_abc")
+        s.add("phase6_abcpc", "discF", seed, 528, extra_override=disc_abc_off, name_suffix="_noabc")
 
-    # Phase 5a (E6): PBRS grid on pbrsA @528, seed 42
-    for k_p in (10, 20, 30, 50):
-        for w in (5, 10, 20):
-            extra = f"--k_p {k_p} --k_r 5 --w_pos {w} --w_rot {w}"
-            s.add("phase5_grid", "pbrsA", 42, 528,
-                  extra_override=extra, name_suffix=f"_kp{k_p}_w{w}")
+    # ── Phase 7 (reward-structure — Bob-penalty) ───────────────────────────────
+    # Bob-penalty I at 528 × 5 seeds. Full symmetric Sukhbaatar reward.
+    for seed in seeds5:
+        s.add("phase7_bobpen", "taspI", seed, 528)
 
-    # Phase 5b (E3): gym-pusht batch crossover, seed 42
-    gym_scripts = {"gymA": "train_a_gym_pbrs_simple.py",
-                   "gymB": "train_b_gym_pbrs_curriculum.py",
-                   "gymC": "train_c_gym_pbrs_asp.py"}
-    for name, script in gym_scripts.items():
+    # ── Phase 8 (cross-environment gym A/B/C) ──────────────────────────────────
+    # A/B sweep push_nsteps {15,45}; C (ASP) is fixed alice+bob, push_nsteps ignored.
+    for name, script in (("gymA", "train_a_gym_pbrs_simple.py"),
+                         ("gymB", "train_b_gym_pbrs_curriculum.py")):
         for envs in (64, 256):
             for pns in (15, 45):
-                exp = f"{name}_e{envs}_p{pns}_s42"
-                s.add_gym("phase5_gym", script, 42, envs, pns, exp)
+                s.add_gym("phase8_gym", script, 42, envs, pns, f"{name}_e{envs}_p{pns}_s42")
+    for envs in (64, 256):
+        s.add_gym("phase8_gym", "train_c_gym_pbrs_asp.py", 42, envs, 15, f"gymC_e{envs}_p15_s42")
+
+    # ── Cross-eval (E, G on disc scenes; validation-only) ─────────────────────
+    xeval_extra = "--dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc"
+    for model in ("pbrsE", "pbrsG"):
+        for seed in seeds3:
+            s.add_xeval("phase_xeval", f"{model}_e528_i3000_s{seed}", xeval_extra)
 
     s.write()
 

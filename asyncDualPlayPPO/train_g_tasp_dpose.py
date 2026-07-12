@@ -110,6 +110,8 @@ def main():
                         help="Disable ABC — recommended for push-primitive ASP")
     parser.add_argument("--no_hist_pool", action="store_true",
                         help="Disable historical policy pool")
+    parser.add_argument("--no_ge", action="store_true",
+                        help="Ablate Bob's GoalEncoder (PI-encoder sees full 22D per-object chunk)")
     parser.add_argument("--debug_rewards", action="store_true")
     parser.add_argument("--char_length", type=float, default=0.07,
                         help="SE(2) characteristic length L (radians to metres)")
@@ -434,12 +436,17 @@ def main():
     bob_cfg["policy"]["use_pi_encoder"] = True
     bob_cfg["policy"]["use_multicategorical"] = True
     bob_cfg["policy"]["use_lstm"] = True
-    bob_cfg["policy"]["use_goal_encoder"] = True
+    bob_cfg["policy"]["use_goal_encoder"] = not args.no_ge
     bob_cfg["policy"]["num_cat_dims"] = num_cat_dims
     bob_cfg["policy"]["num_bins"] = num_bins
     bob_cfg["policy"]["num_objects"] = 1
     bob_cfg["policy"]["robot_state_dim"] = 6
     bob_cfg["policy"]["goal_embed_dim"] = 8
+    if args.no_ge:
+        # GoalEncoder ablation: PI-encoder consumes the full 22D per-object chunk
+        # (obj_state 14 + goal_pose 6 + dist 2), no 8D latent bottleneck.
+        bob_cfg["policy"]["pi_obj_dim"] = 22
+        print("[ABLATION] Bob GoalEncoder DISABLED (--no_ge): pi_obj_dim=22")
 
     bob_ppo = PPOABC(
         vec_env=env,
@@ -506,27 +513,55 @@ def main():
 
     bob_success_buf = deque(maxlen=200)
 
+    # ── Group-consistency guard (self-play checkpoint set is multi-file) ──────
+    # A preemption can leave scratch with a mismatched set (e.g. new bob + old
+    # alice, or desynced latest_iter). Per-file atomicity does not prevent that.
+    # Each checkpoint embeds its iteration; if alice/bob/latest_iter disagree,
+    # refuse the mismatched pair and start THIS run fresh (loud warning) rather
+    # than silently resuming co-evolved adversaries from different points.
+    if (args.chkpt_alice and args.chkpt_bob
+            and os.path.isfile(args.chkpt_alice) and os.path.isfile(args.chkpt_bob)):
+        def _peek_iter(_p):
+            try:
+                return torch.load(_p, map_location="cpu").get("iteration")
+            except Exception:
+                return None
+        _ai, _bi = _peek_iter(args.chkpt_alice), _peek_iter(args.chkpt_bob)
+        if _ai is not None and _bi is not None and _ai != _bi:
+            print(f"[Resume][GUARD] MISMATCHED Alice/Bob checkpoints (alice_iter={_ai} "
+                  f"!= bob_iter={_bi}; latest_iter.txt={args.resume_iteration} is advisory) — "
+                  f"refusing to resume co-evolved adversaries from different points; "
+                  f"starting this run FRESH.", flush=True)
+            args.chkpt_alice = None
+            args.chkpt_bob = None
+            args.resume_iteration = 0
+
+    _resume_best_sr = -1.0  # restored from train_state below if resuming (Fix#2)
     if args.chkpt_alice and os.path.isfile(args.chkpt_alice):
         alice_ppo.load(args.chkpt_alice)
         print(f"[Resume] Loaded Alice from {args.chkpt_alice}")
     if args.chkpt_bob and os.path.isfile(args.chkpt_bob):
         bob_ppo.load(args.chkpt_bob)
         print(f"[Resume] Loaded Bob from {args.chkpt_bob}")
+        if bob_ppo.loaded_iteration is not None:
+            args.resume_iteration = int(bob_ppo.loaded_iteration)
+            print(f"[Resume] Iteration from checkpoint (authoritative): {args.resume_iteration}")
         _abc_buf_path = os.path.join(os.path.dirname(args.chkpt_bob), "abc_buffer.pt")
         if os.path.isfile(_abc_buf_path):
             bob_ppo.abc_buffer.load(_abc_buf_path)
             print(f"[Resume] Loaded ABC buffer ({bob_ppo.abc_buffer.size} entries)")
-        _ep_mgr_path = args.chkpt_bob.replace("model_", "episode_manager_")
+        _ep_mgr_path = os.path.join(os.path.dirname(args.chkpt_bob), "episode_manager_latest.pt")
         if os.path.isfile(_ep_mgr_path):
             ep_sd = torch.load(_ep_mgr_path, map_location=env.device)
             env.episode_manager.load_state_dict(ep_sd)
             print(f"[Resume] Loaded EpisodeManager state")
-        _train_state_path = args.chkpt_bob.replace("model_", "train_state_")
+        _train_state_path = os.path.join(os.path.dirname(args.chkpt_bob), "train_state_latest.pt")
         if os.path.isfile(_train_state_path):
             _ts = torch.load(_train_state_path, map_location="cpu")
             alice_ppo.entropy_coef = float(_ts.get("entropy_coef", 0.005))
             bob_ppo.abc_coef = float(_ts.get("abc_coef", 0.5))
             bob_success_buf.extend(_ts.get("bob_success_buf", []))
+            _resume_best_sr = float(_ts.get("best_bob_success_rate", -1.0))
             print(f"[Resume] Restored train state: entropy_coef={alice_ppo.entropy_coef:.4f}")
 
     alice_updates = args.resume_iteration
@@ -541,8 +576,10 @@ def main():
     bob_rot_err_buf = deque(maxlen=args.num_envs * bob_pushes)
     bob_pos_sr_buf = deque(maxlen=args.num_envs * bob_pushes)
     bob_rot_sr_buf = deque(maxlen=args.num_envs * bob_pushes)
+    # Combined-gate SR (pos<0.05m AND rot<0.2rad) — matches the validation gate (V2 fix).
+    bob_combined_sr_buf = deque(maxlen=args.num_envs * bob_pushes)
 
-    best_bob_success_rate = -1.0
+    best_bob_success_rate = _resume_best_sr
     last_alice_mean_rew = 0.0
     ema_alice_rew = 0.0
 
@@ -602,10 +639,12 @@ def main():
         mean_rot_err = np.mean(bob_rot_err_buf) if bob_rot_err_buf else 0.0
         bob_pos_sr_val = np.mean(bob_pos_sr_buf) if bob_pos_sr_buf else 0.0
         bob_rot_sr_val = np.mean(bob_rot_sr_buf) if bob_rot_sr_buf else 0.0
+        bob_combined_sr = np.mean(bob_combined_sr_buf) if bob_combined_sr_buf else 0.0
 
         writer.add_scalar("Loss/Bob/Value", loss_val, bob_updates)
         writer.add_scalar("Loss/Bob/Surrogate", loss_surr, bob_updates)
         writer.add_scalar("Metrics/Bob/ValueError", bob_value_error, bob_updates)
+        writer.add_scalar("Metrics/Bob/CombinedSR", bob_combined_sr, bob_updates)
         if not args.no_abc:
             _abc = bob_ppo.last_abc_stats
             writer.add_scalar("Loss/Bob/ABC", loss_abc, bob_updates)
@@ -619,20 +658,21 @@ def main():
         writer.add_scalar("Metrics/Bob/RotError", mean_rot_err, bob_updates)
         writer.add_scalar("Metrics/Bob/PositionSR", bob_pos_sr_val, bob_updates)
         writer.add_scalar("Metrics/Bob/RotationSR", bob_rot_sr_val, bob_updates)
+        writer.add_scalar("Diagnostics/GradientUpdates", bob_updates, bob_updates)
 
         print(f"  [Bob Update {bob_updates}] Loss: {loss_surr:.4f} | "
               f"Val: {loss_val:.4f} | Rew: {mean_bob_rew:.4f} | "
               f"SR: {bob_success_rate:.4f}", flush=True)
 
-        if bob_success_rate > best_bob_success_rate:
-            best_bob_success_rate = bob_success_rate
+        if bob_combined_sr > best_bob_success_rate:
+            best_bob_success_rate = bob_combined_sr
             bob_ppo.save(os.path.join(bob_ppo.log_dir, "model_best.pt"))
             alice_ppo.save(os.path.join(alice_ppo.log_dir, "model_best.pt"))
             torch.save(env.episode_manager.state_dict(),
                        os.path.join(bob_ppo.log_dir, "episode_manager_best.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
-                        "bob_success_buf": list(bob_success_buf)},
+                        "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                        os.path.join(bob_ppo.log_dir, "train_state_best.pt"))
 
         bob_rew_buf.clear()
@@ -1306,6 +1346,10 @@ def main():
                 bob_rot_sr_buf.extend(
                     (bob_rot_err_now[bob_done_envs] < 0.01).cpu().tolist(),
                 )
+                bob_combined_sr_buf.extend(
+                    ((bob_pos_err_now[bob_done_envs] < 0.05)
+                     & (bob_rot_err_now[bob_done_envs] < 0.2)).cpu().tolist(),
+                )
                 iter_sr_counts[0] += len(bob_done_envs)
                 succ_count = int(bob_success_now[bob_done_envs].sum().item())
                 iter_sr_counts[1] += succ_count
@@ -1431,14 +1475,14 @@ def main():
 
         if _shutdown_requested:
             print(f"[INFO] Emergency checkpoint at iter {bob_updates}", flush=True)
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(env.episode_manager.state_dict(),
                        os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
-                        "bob_success_buf": list(bob_success_buf)},
+                        "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                        os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
             with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
                 _f.write(str(bob_updates))
@@ -1446,27 +1490,27 @@ def main():
             break
 
         if args.save_interval > 0 and bob_updates % args.save_interval == 0:
-            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
-            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
+            bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+            alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
             bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
             torch.save(env.episode_manager.state_dict(),
                        os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
             torch.save({"entropy_coef": alice_ppo.entropy_coef,
                         "abc_coef": bob_ppo.abc_coef,
-                        "bob_success_buf": list(bob_success_buf)},
+                        "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                        os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
             with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
                 _f.write(str(bob_updates))
             print(f"  [Checkpoint] Saved latest_checkpoint.pt (iter {bob_updates})")
 
-    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"))
-    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"))
+    alice_ppo.save(os.path.join(alice_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
+    bob_ppo.save(os.path.join(bob_ppo.log_dir, "latest_checkpoint.pt"), iteration=bob_updates)
     bob_ppo.abc_buffer.save(os.path.join(bob_ppo.log_dir, "abc_buffer.pt"))
     torch.save(env.episode_manager.state_dict(),
                os.path.join(bob_ppo.log_dir, "episode_manager_latest.pt"))
     torch.save({"entropy_coef": alice_ppo.entropy_coef,
                 "abc_coef": bob_ppo.abc_coef,
-                "bob_success_buf": list(bob_success_buf)},
+                "bob_success_buf": list(bob_success_buf), "best_bob_success_rate": best_bob_success_rate},
                os.path.join(bob_ppo.log_dir, "train_state_latest.pt"))
     with open(os.path.join(run_dir, "latest_iter.txt"), "w") as _f:
         _f.write(str(bob_updates))
