@@ -187,10 +187,11 @@ def build():
         s.add("phase7_bobpen", "taspI", seed, 528)
 
     # ── Phase 8 (cross-environment gym A/B/C) ──────────────────────────────────
-    # A/B sweep push_nsteps {15,45}; C (ASP) is fixed alice+bob, push_nsteps ignored.
+    # A/B are AsyncVectorEnv (spawn N workers) — 256 envs OOMs at 32G; cap at 64.
+    # C is single-process ASP, no spawn workers — 64/256 both safe.
     for name, script in (("gymA", "train_a_gym_pbrs_simple.py"),
                          ("gymB", "train_b_gym_pbrs_curriculum.py")):
-        for envs in (64, 256):
+        for envs in (64,):
             for pns in (15, 45):
                 s.add_gym("phase8_gym", script, 42, envs, pns, f"{name}_e{envs}_p{pns}_s42")
     for envs in (64, 256):
