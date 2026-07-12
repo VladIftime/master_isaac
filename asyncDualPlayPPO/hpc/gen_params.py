@@ -25,7 +25,7 @@ def iters_for(envs):
     return round(BUDGET_PUSHES / (envs * 15))
 
 MEM_TIER = {256: "12G", 512: "12G", 528: "12G", 1024: "12G", 2048: "48G"}
-GYM_MEM = {64: "16G", 256: "16G"}
+GYM_MEM = {64: "32G", 256: "32G"}
 TIME = "23:00:00"
 
 TPL_SINGLE = "hpc/arrays/train_single_agent.slurm"
@@ -115,7 +115,7 @@ class Suite:
             fname = f"{phase}_validate.txt"
             with open(os.path.join(PARAMS_DIR, fname), "w") as f:
                 f.write("\n".join(lines) + "\n")
-            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 16G 04:00:00 4 {phase}_validate")
+            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 32G 04:00:00 4 {phase}_validate")
         with open(os.path.join(PARAMS_DIR, "manifest.txt"), "w") as f:
             f.write("# PARAMS_FILE  TEMPLATE  MEM  TIME  THROTTLE  PHASE\n")
             f.write("\n".join(manifest) + "\n")
