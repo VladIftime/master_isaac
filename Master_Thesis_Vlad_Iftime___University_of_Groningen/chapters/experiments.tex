@@ -1,0 +1,143 @@
+\section{Experimental Setup}
+\label{sec:experiments}
+
+This chapter describes how the five models of Chapter~\ref{section:methods} are
+trained and evaluated. It specifies the tools and hardware, the training
+configuration and budget, and the held-out validation protocol. It then describes
+the cross-environment comparison against a second simulator, an off-policy
+baseline based on Soft Actor-Critic, and the metrics reported in the results.
+
+\subsection{Tools and Infrastructure}
+\label{sec:tools}
+
+Training and Isaac-Lab evaluation run on a single RTX Pro 6000 GPU with 96\,GB of
+memory. The software stack is Isaac Sim 5.1.0, Isaac Lab 2.3.0, cuRobo 0.7.5 for
+batched Inverse Kinematics (IK), and PyTorch 2.7.0. A second environment, the
+two-dimensional \texttt{gym-pusht} simulator, is used for the cross-environment
+comparison of Section~\ref{sec:cross_env}. It runs on 32 CPU cores and uses
+neither IK nor three-dimensional contact physics. The off-policy baseline of
+Section~\ref{sec:sac_baseline} uses Stable-Baselines3 2.7.0. Running the same
+models in two simulators of different fidelity separates conclusions that hold
+across environments from artefacts of a single implementation.
+
+\subsection{Training Configuration}
+\label{sec:train_config}
+
+All potential-based models are trained with 528 parallel environments for
+approximately 3{,}000 iterations. This corresponds to about 1.3 days of
+wall-clock time per model on the RTX Pro 6000. At 15 pushes per rollout it yields a
+batch of roughly 7{,}920 push transitions per PPO update. The PPO-Baseline is
+trained at 2{,}048 environments, a deliberately larger batch. This ensures the
+reward comparison of Section~\ref{sec:frac_reward} is not confounded by the
+baseline having too little parallelism. The PPO hyperparameters are a learning
+rate of $3\times10^{-4}$, a clipping range of 0.2, a discount factor of 0.998, a
+GAE parameter of 0.95, and an entropy coefficient of 0.005. The self-play models
+additionally use Alice Behavioral Cloning at $\beta = 0.5$.
+
+Two points about the training history are stated for reproducibility. First, all
+reported checkpoints post-date a sequence of corrections to the reward and the
+environment. The reported numbers are therefore produced on the corrected code,
+and earlier runs are excluded. Second, the training budget differs between the
+PPO-Baseline and the potential-based models by design. The baseline is given more
+parallelism precisely so that its lower performance cannot be attributed to an
+unfairly small batch. The budgets are tabulated in Appendix~K.
+
+\subsection{Validation Protocol}
+\label{sec:val_protocol}
+
+Every model is evaluated on the same held-out suite of 30 T-block scenes,
+illustrated in Figure~\ref{fig:val_layout}. The suite is divided into three groups
+of ten. The first ten are rotation-dominant scenes with large orientation
+changes. The next ten are position-only scenes whose goal orientation equals the
+start orientation. The last ten are combined scenes that require both a position
+and an orientation change. Within each group the difficulty ranges from easy to
+hard, graded by the start-to-goal distance and the magnitude of the required
+rotation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{val_test_layout.png}
+    \caption{The 30-scene held-out validation suite. Each panel shows the block
+    start pose and the goal pose for one scene. The suite is identical for every
+    model.}
+    \label{fig:val_layout}
+\end{figure}
+
+Each scene is attempted 20 times, and within each attempt the policy is allowed up
+to 30 pushes. Two success measures are reported and kept distinct throughout. The
+\emph{scene success rate} counts a scene as solved if at least one of its 20
+attempts satisfies the combined gate of Section~\ref{sec:mdp}. This is the
+headline number, and follows the convention common in manipulation evaluation. The
+\emph{trial success rate} is the fraction of individual attempts that satisfy the
+gate, and is always lower than the scene success rate. Reporting both prevents the
+best-of-20 protocol from overstating performance. For the strongest model the
+scene success rate is 80.0\,\% while the trial success rate is 66.0\,\%, and the
+gap is stated wherever the headline number appears. Validation uses a single seed
+per model, and the resulting absence of validation confidence intervals is
+recorded as a limitation in Chapter~\ref{sec:conclusion}.
+
+\subsection{Cross-Environment Protocol}
+\label{sec:cross_env}
+
+To test whether the ordering of the models is a property of the methods rather
+than of Isaac Lab, the single-agent, curriculum, and self-play models are
+retrained and evaluated in \texttt{gym-pusht} under the same 30-scene gate. The
+two environments differ mainly in the size of the PPO batch. Isaac Lab produces
+about 7{,}920 transitions per update, while \texttt{gym-pusht} on 32 CPU cores
+produces about 960, a factor of roughly eight smaller. The total number of pushes
+seen over training is matched between the two environments. Any difference in
+outcome is therefore attributable to the per-update batch size, rather than to the
+amount of experience. Figure~\ref{fig:isaac_vs_gym} summarises the throughput and
+batch size of the two environments.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth,height=0.4\textheight,keepaspectratio]{isaac_vs_gym.png}
+    \caption{Throughput and PPO batch size for Isaac Lab and \texttt{gym-pusht}.
+    Raw throughput is comparable; the per-update batch differs by roughly a factor
+    of eight, which is the variable the cross-environment comparison isolates.}
+    \label{fig:isaac_vs_gym}
+\end{figure}
+
+\subsection{Off-Policy Baseline: SAC with Hindsight Experience Replay}
+\label{sec:sac_baseline}
+
+The five principal models are all on-policy. To provide an external point of
+calibration from a different algorithm family, an off-policy baseline is built
+from Soft Actor-Critic (SAC) \cite{Haarnoja2018SoftAO} combined with Hindsight
+Experience Replay (HER) \cite{Andrychowicz2017}. SAC is a natural counterpart to
+PPO for this problem. It is sample-efficient through experience replay, and its
+maximum-entropy objective (Equation~\ref{eq:sac}) supports exploration under
+sparse reward. HER addresses the sparse goal-conditioned setting directly: it
+relabels the object pose actually reached in a failed attempt as if it had been
+the goal, so every attempt yields usable transitions.
+
+The baseline runs on a direct control environment through Stable-Baselines3, and
+reuses the shared push primitive and the cuRobo IK pipeline of
+Section~\ref{sec:mdp}. Two adaptations are required. First, SAC is a
+continuous-action algorithm, so the four push parameters become a continuous
+action in $[-1, 1]^4$ and are decoded to the same object-relative primitive,
+rather than the MultiCategorical variable used by the PPO models. Second, the
+goal-conditioned observation is expressed in the dictionary form the replay buffer
+expects, with separate observation, achieved-goal, and desired-goal entries. The
+baseline is trained and evaluated under the same 30-scene protocol as the
+principal models, so its success rate is directly comparable. Its role is
+calibration rather than competition. It indicates whether an off-policy,
+replay-based method reaches performance similar to the on-policy potential-based
+model, and its status against the compute budget is reported with the results.
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+The results report the following quantities, each with its sample size and
+protocol stated at the point of use. The primary metric is the scene success rate
+over the 30-scene suite, with the trial success rate reported alongside it. The
+breakdown by scene type, position-only against combined, is reported because it
+localises where each model fails. Mean position error and mean orientation error
+are reported as continuous measures of near-misses. For the self-play models the
+training logs also provide the per-axis success rates: the fraction of pushes that
+satisfy the position gate alone and the orientation gate alone. These are compared
+against the combined-gate rate to diagnose whether the two skills are learned but
+not combined. Average push count per attempt is reported as a measure of
+efficiency. All reported numbers trace to the validation records summarised in the
+results.

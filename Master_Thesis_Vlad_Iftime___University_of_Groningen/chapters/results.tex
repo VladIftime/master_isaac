@@ -1,0 +1,255 @@
+\section{Results}
+\label{sec:results}
+
+This chapter reports the outcome of the five models on the 30-scene validation
+suite, organised by research question. Section~\ref{sec:rq1} addresses the
+environment-efficiency of potential-based shaping (RQ1), Section~\ref{sec:rq2}
+compares curriculum and self-play against single-agent training (RQ2), and
+Section~\ref{sec:rq3} examines whether self-play learns the two constituent skills
+(RQ3). Section~\ref{sec:cross_env_results} confirms the ordering in a second
+simulator, and Section~\ref{sec:qualitative} reports qualitative behaviour and the
+off-policy baseline. Unless stated otherwise, every number is for the 30-scene
+suite, best of 20 attempts, up to 30 pushes, under the combined gate of
+Section~\ref{sec:mdp}. Table~\ref{tab:main_results} collects the principal numbers.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{l c c c c c}
+        \hline
+        \textbf{Model} & \textbf{Scene SR} & \textbf{Trial SR} & \textbf{Pos-only} & \textbf{Pos+rot} & \textbf{Envs} \\
+        \hline
+        PPO-Baseline (improvement reward) & 80.0\,\% & 70.5\,\% & 100\,\% & 35\,\% & 2{,}048 \\
+        PPO-PBRS & \textbf{80.0\,\%} & 66.0\,\% & 100\,\% & 70\,\% & 528 \\
+        PPO-Curriculum & 76.7\,\% & 68.3\,\% & 100\,\% & 65\,\% & 528 \\
+        TASP-dPose (time-based self-play) & 16.7\,\% & 1.2\,\% & 30\,\% & 10\,\% & 528 \\
+        ASP-dPose (outcome-based self-play) & 6.7\,\% & 0.3\,\% & 20\,\% & 0\,\% & 528 \\
+        \hline
+    \end{tabular}
+    \caption{Principal validation results on the 30-scene held-out suite (best of
+    20 attempts, up to 30 pushes, combined gate). Scene SR counts a scene solved
+    if any of its 20 attempts passes the gate; trial SR is the per-attempt rate.
+    The PPO-Baseline row uses the improvement reward and the original,
+    non-simplified potential formulation reported at the position-only gate; its
+    combined-gate performance is discussed in the text.}
+    \label{tab:main_results}
+\end{table}
+
+\subsection{RQ1: Environment-Efficiency of Reward Shaping}
+\label{sec:rq1}
+
+The potential-based reward reaches the same scene success rate as the improvement
+reward while using a quarter of the parallel environments. PPO-PBRS attains a
+scene success rate of 80.0\,\% at 528 environments, matching the 80.0\,\% reached
+by the improvement-reward baseline at 2{,}048 environments. The reduction from
+2{,}048 to 528 is a factor of roughly four in the parallelism required for the
+same performance. This answers RQ1 in the affirmative: for this task,
+potential-based shaping reduces the number of parallel environments needed for
+on-policy learning.
+
+The benefit of shaping is larger on the combined objective than the headline
+number alone conveys. On the ten position-only scenes both rewards reach 100\,\%,
+so the parallelism reduction is the whole of the effect there. The ten combined
+scenes tell a different story. There, the potential-based reward reaches 70\,\%,
+while the earlier non-simplified formulation evaluated at the same gate reaches
+only 35\,\%, an improvement of 35 percentage points. The per-scene error plot for
+PPO-PBRS in Figure~\ref{fig:pbrs_errors} shows why the six failing scenes fail.
+All six are rotation-dominant: position is solved on every scene, and the residual
+failures are limited by orientation error rather than position error. This
+localises the remaining difficulty of the single-agent task to the orientation
+component of the combined gate.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{A_simp_20_isaac_errors.png}
+    \caption{Per-scene position and orientation error for PPO-PBRS on the 30-scene
+    suite. Position is within tolerance on every scene; the failing scenes are
+    limited by orientation error on rotation-dominant scenes.}
+    \label{fig:pbrs_errors}
+\end{figure}
+
+\subsection{RQ2: Curriculum and Self-Play Against Single-Agent}
+\label{sec:rq2}
+
+Neither the forced curriculum nor either self-play variant improves on the plain
+single-agent model. PPO-Curriculum reaches 76.7\,\%, which is 3.3 percentage
+points below PPO-PBRS at 80.0\,\%. Across the 30 independent scenes this
+difference is not statistically significant: the standard error of the difference
+is approximately $\pm 10.6$ percentage points, so the two models are equivalent on
+this evidence. The staged curriculum does change the error profile. It attains a
+lower mean position error (0.023\,m against 0.032\,m), consistent with its
+position-only first phase, but a slightly higher mean orientation error
+(0.663\,rad against 0.568\,rad). The staging therefore reallocates precision
+between the two axes without improving the combined result.
+
+The self-play models perform far worse than single-agent training.
+Figure~\ref{fig:val_multi} shows the full comparison. TASP-dPose, the stronger
+variant, reaches 16.7\,\%, and ASP-dPose reaches 6.7\,\%. These are factors of
+roughly 4.8 and 11.9 below PPO-PBRS. The time-based Alice reward of TASP-dPose is
+markedly better than the outcome-based reward of ASP-dPose, a difference of 10
+percentage points. This indicates that the self-regulating time-based formulation
+of Section~\ref{sec:asp} produces a more usable goal distribution than the
+outcome-based one, yet neither approaches the single-agent result. A controlled
+measurement puts the per-iteration cost of self-play at roughly equal to that of
+single-agent training. The gap therefore cannot be attributed to self-play
+receiving less compute: it is a structural difference between the two training
+regimes, not a budget artefact.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.45\textheight,keepaspectratio]{val_multi_combined.png}
+    \caption{Scene success rate (left) and the position-only against combined
+    breakdown (right) for the five models. The single-agent and curriculum models
+    cluster at the top; the self-play variants reach at most 16.7\,\%. The
+    combined position-and-orientation gate is the discriminating objective.}
+    \label{fig:val_multi}
+\end{figure}
+
+The per-scene error plots for the two self-play variants,
+Figure~\ref{fig:selfplay_errors}, show the pattern behind these numbers. Both
+solve only a small number of the easiest scenes, and their orientation error
+remains above 1.4\,rad on almost every scene, far outside the 0.2\,rad tolerance.
+The self-play models never satisfy the combined gate on any rotation-requiring
+scene.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.49\textwidth]{G_tasp_dpose_isaac_errors.png}\hfill
+    \includegraphics[width=0.49\textwidth]{reults_valid_pbrs_asp_dpose_errors.png}
+    \caption{Per-scene error for TASP-dPose (left, 16.7\,\%) and ASP-dPose (right,
+    6.7\,\%). Both solve only the easiest scenes; orientation error remains far
+    above tolerance on the rest.}
+    \label{fig:selfplay_errors}
+\end{figure}
+
+\subsection{RQ3: Skill Composition Under Self-Play}
+\label{sec:rq3}
+
+The failure of self-play on the combined gate is not a failure to learn the two
+skills; it is a failure to combine them. For the goal-solving agent, the training
+logs record the per-axis success rates alongside the combined-gate rate. These are
+shown in Figure~\ref{fig:asp_diagnostic} and summarised in Table~\ref{tab:rq3}.
+Under the potential-based reward, the agent reaches a position-only success rate of
+54\,\% and an orientation-only rate of 45\,\%, each individually substantial. If
+the two skills were satisfied independently, their product would give a combined
+rate of about 24 to 25\,\%. The measured combined rate is about 10\,\%, roughly 2.5
+times below that prediction. The two skills exist but are not satisfied at the same
+time, which is the precise sense in which self-play fails on this task.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{l c c c c}
+        \hline
+        \textbf{Self-play variant} & \textbf{Alice validity} & \textbf{Position SR} & \textbf{Orientation SR} & \textbf{Combined SR} \\
+        \hline
+        Original reward (2{,}048 envs) & 89.3\,\% & 1.3\,\% & 7.1\,\% & 0.07\,\% \\
+        PBRS, outcome-based & 83.9\,\% & 54.1\,\% & 45.0\,\% & 10.0\,\% \\
+        PBRS, time-based + penalty & 90.5\,\% & 54.1\,\% & 46.3\,\% & 8.5\,\% \\
+        \hline
+    \end{tabular}
+    \caption{Training-time per-axis and combined success rates for the goal-solving
+    agent under self-play. Under the improvement reward the agent learns almost
+    nothing; under the potential-based reward it learns each axis to roughly
+    50\,\% but the combined gate remains near 10\,\%, well below the independence
+    product of about 24 to 25\,\%. Alice's goal-validity rate is high throughout.}
+    \label{tab:rq3}
+\end{table}
+
+Two further observations from Table~\ref{tab:rq3} sharpen the diagnosis. Under the
+improvement reward, the agent learns essentially nothing: a position-only rate of
+1.3\,\% and a combined rate of 0.07\,\%. The potential-based reward is what raises
+the per-axis skills to roughly 50\,\%, consistent with the GAE argument of
+Section~\ref{sec:pbrs_asp}. The goal-proposing agent, in turn, is not the
+bottleneck. Its goal-validity rate stays between 83 and 91\,\% across variants, so
+it reliably proposes valid goals. The obstacle is the goal-solving agent's
+inability to satisfy the coupled criterion under the non-stationary goal
+distribution, not a breakdown in goal proposal.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{asp_diagnostic_2panel.png}
+    \caption{Self-play training diagnostics. Left: the goal-proposing agent's
+    goal-validity rate, between 83 and 91\,\% across variants. Right: the
+    goal-solving agent's per-axis success rates against its combined-gate success
+    rate. Each axis reaches roughly 50\,\% while the combined gate remains near
+    10\,\%.}
+    \label{fig:asp_diagnostic}
+\end{figure}
+
+This answers RQ3. Asymmetric self-play does enable the learning of the individual
+position and orientation skills, each to about 50\,\%. It does not, however,
+enable their combination: the combined success rate is roughly 2.5 times below
+what the independent skills would predict. The distinction matters for
+interpretation. It locates the difficulty in skill composition under a shifting
+goal distribution, rather than in the acquisition of the skills themselves.
+
+\subsection{Cross-Environment Confirmation}
+\label{sec:cross_env_results}
+
+The ordering single-agent $\approx$ curriculum $\gg$ self-play holds in both
+simulators, which indicates it is a property of the methods rather than of Isaac
+Lab. Figure~\ref{fig:cross_env} shows the success rates in Isaac Lab and in
+\texttt{gym-pusht}, and Figure~\ref{fig:heatmap} shows the per-scene outcomes as a
+heatmap. In both environments the single-agent and curriculum models dominate
+while the self-play model remains low.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{p1_sr_bars.png}
+    \caption{Scene success rate in Isaac Lab and \texttt{gym-pusht} under the same
+    30-scene gate. The ordering of the methods is preserved across the two
+    simulators.}
+    \label{fig:cross_env}
+\end{figure}
+
+One nuance qualifies the equivalence of single-agent and curriculum training. At
+the small \texttt{gym-pusht} batch of 960 transitions per update, the curriculum
+model reaches 50.0\,\% while the plain single-agent model reaches only 10.0\,\%,
+so the curriculum is a large improvement there. At the large Isaac Lab batch of
+7{,}920 the two are equivalent, at 76.7\,\% and 80.0\,\%. The curriculum therefore
+substitutes for the shaped reward when the batch is small and gradient estimates
+are noisy. It adds nothing once the batch is large enough for stable estimates on
+both objectives at once. The value of the curriculum is thus regime-dependent, a
+point taken up in Chapter~\ref{sec:conclusion}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p3_heatmap.png}
+    \caption{Per-scene outcomes across models and simulators. Colour encodes the
+    number of successful attempts per scene out of 20. The combined
+    position-and-orientation block is the region that only the single-agent and
+    curriculum models on Isaac Lab solve consistently.}
+    \label{fig:heatmap}
+\end{figure}
+
+\subsection{Qualitative Behaviour and the Off-Policy Baseline}
+\label{sec:qualitative}
+
+Figure~\ref{fig:keyframes} shows keyframes of PPO-PBRS solving three
+representative scenes: a forward push, a lateral push, and a combined
+translate-and-rotate scene. The policy approaches the block along the
+object-relative offset, pushes along the decoded direction, and repeats until the
+combined gate is met. This behaviour matches the quantitative result of
+Section~\ref{sec:rq1}: position is controlled reliably, and the harder scenes are
+those requiring a large orientation change.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.32\textwidth]{rec_push_s11_key.png}\hfill
+    \includegraphics[width=0.32\textwidth]{rec_push_s14_key.png}\hfill
+    \includegraphics[width=0.32\textwidth]{rec_push_s21_key.png}
+    \caption{Keyframes of PPO-PBRS on three held-out scenes: a forward push
+    (left), a lateral push (centre), and a combined translate-and-rotate scene
+    (right).}
+    \label{fig:keyframes}
+\end{figure}
+
+The off-policy baseline provides an external point of calibration from a different
+algorithm family. Under the constrained project budget, the SAC with Hindsight
+Experience Replay baseline did not converge within the time available. It is
+therefore not reported as a competitive number. Its role and status are recorded
+so that the on-policy results are read against a concrete off-policy attempt
+rather than in isolation. Published planar-pushing success rates provide the
+external calibration in its place. Completing this baseline is listed among the
+directions for future work in Chapter~\ref{sec:conclusion}.

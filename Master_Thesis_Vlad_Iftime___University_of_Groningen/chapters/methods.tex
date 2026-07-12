@@ -1,0 +1,490 @@
+\section{Methods}
+\label{section:methods}
+
+This chapter defines the pushing task and the five models that are compared on
+it. It begins with the simulation environment and the formal Markov Decision
+Process, including the object-relative push primitive that serves as the action.
+It then explains why the hand-tuned improvement reward of an initial baseline
+fails, and derives the potential-based reward that replaces it. The reward is
+presented first as separate position and orientation potentials, then as a single
+Special Euclidean group $\mathrm{SE}(2)$ distance. The chapter closes with the
+five models and with an analysis of why potential-based shaping partially assists
+self-play without closing the gap to single-agent training.
+
+\subsection{Simulation Environment}
+\label{sec:env}
+
+All experiments are performed in NVIDIA Isaac Lab 2.3.0, built on Isaac Sim
+5.1.0, using the PhysX physics engine on the Graphical Processing Unit (GPU)
+\cite{Mittal2023IsaacLab, Makoviychuk2021IsaacGym}. The agent is a Universal
+Robots UR5e arm fitted with a Robotiq 2F-140 parallel-jaw gripper. The
+manipulated object is a T-shaped block resting on a tabletop, and the goal is
+displayed as a coloured ghost of the same block at the target pose.
+Figure~\ref{fig:task_schematic} shows the setup.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\textwidth]{diagram_task_schematic.png}
+    \caption{The planar-pushing task. A UR5e arm pushes a T-block (blue) across a
+    tabletop toward a goal pose (orange). Goals are defined in $\mathrm{SE}(2)$
+    and combine a target position and a target orientation.}
+    \label{fig:task_schematic}
+\end{figure}
+
+The principal advantage of Isaac Lab for this study is GPU-batched parallelism.
+Many copies of the environment are stepped at the same time on a single device,
+which produces the large sample batches on-policy learning requires. The
+single-agent and curriculum models are trained with 528 parallel environments,
+which yields a batch of roughly 7{,}920 push transitions per Proximal Policy
+Optimization (PPO) update. A hardware upper bound of one RTX Pro 6000 GPU
+(96\,GB of memory) sets the compute budget for every model, so all methods are
+compared on equal terms. Inverse Kinematics (IK) for the arm is solved with
+cuRobo 0.7.5, a GPU-accelerated batched IK solver.
+
+\subsection{The Planar-Pushing Markov Decision Process}
+\label{sec:mdp}
+
+The task is modelled as an episodic Markov Decision Process (MDP) with a
+macro-action, so that a single decision corresponds to one complete push rather
+than to a low-level joint command.
+
+\paragraph{State.}
+The state is a 28-dimensional vector composed of four groups. These are the
+end-effector pose (6 values), the object pose and velocity (14 values), the goal
+pose (6 values), and the two scalar position and orientation errors between object
+and goal. As explained in Section~\ref{sec:pomdp}, the current observation does
+not report the underlying contact state. The problem is therefore formally
+partially observable, and every policy is recurrent.
+
+\paragraph{Action.}
+The policy does not command joint torques. It selects an \emph{object-relative
+push primitive} described by four parameters: a radial approach offset $r$, an
+approach angle $\phi$ in the object frame, a push length $\ell$, and a push
+direction $\theta$ in the world frame. Each parameter is discretised into 21 bins,
+so the action is a four-dimensional MultiCategorical variable with $21^4 =
+194{,}481$ discrete values. Parameterising the approach relative to the object,
+rather than in absolute table coordinates, guarantees contact wherever the object
+lies, which raises the contact rate to roughly 95\,\%. Once decoded, the primitive
+runs as a five-phase trajectory, approach, descend, push, retract, and return,
+spanning 72 physics substeps. Each waypoint is mapped to joint targets by the
+cuRobo IK solver.
+
+\paragraph{Transition.}
+The object moves according to the quasi-static pushing mechanics of
+Section~\ref{sec:pushing}. The limit-surface normality condition of
+Equation~\ref{eq:normality} couples translation and rotation: almost every push
+changes both the position and the orientation of the block. This coupling is a
+property of the environment, not a modelling choice. It is the reason the task
+cannot be decomposed into independent position and orientation sub-problems.
+
+\paragraph{Reward.}
+The reward is the subject of Sections~\ref{sec:frac_reward} to \ref{sec:se2}. It
+is the single component that differs across the models compared in this thesis,
+which is what makes the comparison a controlled one.
+
+\paragraph{Success criterion.}
+A push episode is counted as successful when the object is within
+$0.05\,\text{m}$ of the goal position \emph{and} within $0.2\,\text{rad}$ of the
+goal orientation. This combined gate is applied identically in training and
+evaluation. The two conditions must hold at the same time, and the physics couples
+the two axes. The combined gate is therefore the central difficulty of the task,
+and the quantity every model is ultimately measured against.
+
+\subsection{Why the Improvement Reward Fails}
+\label{sec:frac_reward}
+
+An initial baseline used a hand-tuned reward based on fractional improvement. It
+rewards each push in proportion to the fraction of the remaining error it removes.
+Let $d_{\text{prev}}$ and $d_{\text{now}}$ be the position error before and after
+a push, and $y_{\text{prev}}$, $y_{\text{now}}$ the orientation error. The reward
+is then
+\begin{equation}
+    R = \alpha\,\frac{d_{\text{prev}} - d_{\text{now}}}{d_{\text{prev}}}
+        - \beta_{\text{pos}}\, d_{\text{now}}
+        - \beta_{\text{rot}}\, y_{\text{now}},
+    \qquad \alpha = 3.0,\; \beta_{\text{pos}} = 0.5,\; \beta_{\text{rot}} = 0.25.
+    \label{eq:fractional}
+\end{equation}
+
+This reward performs poorly for two related reasons. Both concern the gradient it
+supplies to PPO, not the optimal policy it defines. Consider a representative push
+that moves the object $1\,\text{cm}$ closer to a goal $30\,\text{cm}$ away. The
+improvement term contributes $3.0 \times 0.01/0.30 \approx 0.10$. The two penalty
+terms contribute $-0.5 \times 0.29 \approx -0.145$ and $-0.25 \times 0.5 =
+-0.125$, for a net reward of about $-0.17$. A push that makes genuine progress
+therefore receives negative reward, because the standing penalty on the remaining
+distance dominates the small improvement. This is the first problem: the reward is
+negative for most useful pushes, so the policy gradient points away from
+goal-directed behaviour.
+
+The second problem is near-zero variance. Across a rollout, roughly 99\,\% of
+pushes produce a reward in the narrow interval $[-0.5, +0.1]$, and the sparse
+completion bonuses fire on about 1\,\% of pushes. At 528 environments and 15
+pushes per rollout, only about 79 bonus events occur per iteration, too few to
+overcome the noise in the dense term. The Generalized Advantage Estimation (GAE)
+advantage is then dominated by noise, and the gradient is uninformative. The
+failure is therefore one of gradient quality and reward variance, not of a
+mis-specified optimum. The reward defines a reasonable objective but supplies a
+poor learning signal.
+
+\subsection{Potential-Based Reward Shaping for Pushing}
+\label{sec:pbrs_design}
+
+The remedy is to replace the improvement reward with a potential-based reward.
+The per-push signal is then dense, correctly signed, and bounded, while the
+optimal policy is provably unchanged (Section~\ref{sec:pbrs}). The design uses two
+bounded exponential potentials, one for position and one for orientation:
+\begin{align}
+    \Phi_{\text{pos}}(s) &= w_{\text{pos}}\, \exp\!\left(-k_p\, d^2\right), \label{eq:phi_pos}\\
+    \Phi_{\text{rot}}(s) &= w_{\text{rot}}\, \exp\!\left(-k_r\, c(s)\right),
+    \qquad c(s) = \frac{1 - \cos(\theta^{*} - \theta)}{2}, \label{eq:phi_rot}
+\end{align}
+where $d$ is the planar position error and $c(s)$ is a cosine orientation
+distance. The cosine form is smooth and free of the discontinuity a modular angle
+difference would introduce at $\pm\pi$; $\theta^{*}$ and $\theta$ are the goal and
+object yaw. The parameters are $k_p = 30$, $k_r = 5$, and $w_{\text{pos}} =
+w_{\text{rot}} = 10$. The dense reward on a transition is the difference of the
+summed potential,
+\begin{equation}
+    F(s, s') = \big[\Phi_{\text{pos}}(s') - \Phi_{\text{pos}}(s)\big]
+             + \big[\Phi_{\text{rot}}(s') - \Phi_{\text{rot}}(s)\big],
+    \label{eq:pbrs_dense}
+\end{equation}
+which is Equation~\ref{eq:pbrs} with $\gamma_{\text{shaping}} = 1$. The
+undiscounted setting is admissible because the task is episodic and every episode
+terminates, as established for episodic MDPs by \cite{Grzes2017RewardShaping}. Two
+sparse bonuses are layered on the dense term. A completion bonus of $+5$ is given
+when the position gate is satisfied, and a further $+2$ when the combined gate is
+satisfied. A penalty of $-5$ is applied if the block tips over. These bonuses are
+not themselves potential-based, but they fire only at terminal or near-terminal
+events, where they do not create the reward-collecting cycles that
+Section~\ref{sec:pbrs} identifies as the danger of non-potential shaping.
+
+On the same representative push, the potential-based reward inverts the sign of
+the baseline. For a $1\,\text{cm}$ improvement from $30\,\text{cm}$, the position
+potential difference is $10 \times [\exp(-30 \times 0.29^2) - \exp(-30 \times
+0.30^2)] \approx +0.13$. Every push toward the goal now receives positive reward,
+and every push away from it negative reward. Because the potential is bounded in
+$[0, w]$, the reward magnitude cannot be inflated by a physics contact spike.
+Figure~\ref{fig:pbrs_signal} contrasts the per-push reward of the two schemes over
+a representative episode, and shows the potential landscape and the gradient
+comparison.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.48\textwidth]{a3_episode_simulation.png}\hfill
+    \includegraphics[width=0.48\textwidth]{a2_gradient_comparison.png}
+    \caption{Left: per-push reward over a representative five-push episode for the
+    improvement reward and the potential-based reward. The improvement reward is
+    negative or near-zero for most pushes; the potential-based reward is
+    correctly signed on every push. Right: the gradient supplied by the two
+    schemes as a function of distance to the goal.}
+    \label{fig:pbrs_signal}
+\end{figure}
+
+The reward is implemented as a potential-based reward function. Four properties
+make it suitable for a contact-rich task, and all follow from its form. It is
+Markovian, since it depends only on the current and successor state. It is
+bounded. It produces zero net reward over any cycle that returns to the same
+state, which removes the incentive for reward-collecting loops. And it produces
+zero reward while the object is stationary, so it imposes no penalty for
+deliberation.
+
+\subsection{The SE(2) Unified Distance}
+\label{sec:se2}
+
+The two-potential reward treats position and orientation as separate terms whose
+gradients can point in different directions. For the self-play models
+(Section~\ref{sec:models}) the reward instead uses a single $\mathrm{SE}(2)$
+distance, so one potential governs the whole pose. Following the Lie-group
+formulation of Section~\ref{sec:pushing}, the pose error is summarised by the
+scalar
+\begin{equation}
+    d_{\text{pose}} = \sqrt{\Delta x^2 + \Delta y^2 + L^2\, \Delta\theta^2},
+    \label{eq:dpose_methods}
+\end{equation}
+where $\Delta x$, $\Delta y$ are the position error components and $\Delta\theta$
+the orientation error. Here $L$ is a characteristic length that converts an
+angular error into an equivalent linear displacement. For the T-block $L =
+0.07\,\text{m}$, the block's radius of gyration; it is a physical property of the
+object, not a tuning parameter. The corresponding single potential and its dense
+reward are
+\begin{equation}
+    \Phi_{\text{pose}}(s) = w\, \exp\!\left(-k\, d_{\text{pose}}^2\right),
+    \qquad F(s,s') = \Phi_{\text{pose}}(s') - \Phi_{\text{pose}}(s),
+    \label{eq:phi_dpose}
+\end{equation}
+with $k = 30$ and $w = 10$. The success threshold for this metric is
+$d_{\text{pose}} < 0.055\,\text{m}$ for the T-block. The single potential removes
+the competing-gradient problem of the two-potential form. A push that reduces
+$d_{\text{pose}}$ is rewarded whether the reduction comes from position or
+orientation, so the reward is aligned with the coupled physics of the task. Both
+the two-potential and the unified formulations share the same reward
+implementation.
+
+\subsection{The Five Models}
+\label{sec:models}
+
+All five models share the same backbone: a single PPO agent with an LSTM of
+hidden size 256 followed by a multilayer perceptron, and a MultiCategorical head
+over the four-dimensional, 21-bin push primitive. They differ only in the reward
+and the training dynamics, which is what makes the comparison controlled. The
+five models are summarised in Table~\ref{tab:models}.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabularx}{\textwidth}{l l X}
+        \hline
+        \textbf{Model} & \textbf{Training dynamics} & \textbf{Reward} \\
+        \hline
+        PPO-Baseline & single agent & improvement reward (Equation~\ref{eq:fractional}) \\
+        PPO-PBRS & single agent & two-potential PBRS (position, orientation) \\
+        PPO-Curriculum & single agent, staged & two-potential PBRS with forced position-then-orientation staging \\
+        ASP-dPose & asymmetric self-play & $\mathrm{SE}(2)$ PBRS for Bob, outcome-based Alice reward \\
+        TASP-dPose & asymmetric self-play & $\mathrm{SE}(2)$ PBRS for Bob, time-based Alice reward \\
+        \hline
+    \end{tabularx}
+    \caption{The five models. Every model uses the same PPO+LSTM backbone and the
+    same object-relative push primitive; only the reward and the training
+    dynamics change.}
+    \label{tab:models}
+\end{table}
+
+\paragraph{PPO-Baseline.}
+A single PPO agent trained with the improvement reward of
+Equation~\ref{eq:fractional}. It serves as the reference point for the reward
+comparison of Section~\ref{sec:frac_reward} and is trained at 2{,}048 parallel
+environments, a larger batch than the other models use.
+
+\paragraph{PPO-PBRS.}
+A single PPO agent trained with the two-potential reward of
+Equations~\ref{eq:phi_pos} to \ref{eq:pbrs_dense}. This is the simplest model that
+uses the potential-based reward, with no curriculum and no second agent, and it
+is trained at 528 environments.
+
+\paragraph{PPO-Curriculum.}
+PPO-PBRS with a forced three-phase curriculum that stages the two objectives.
+Phase 1 trains position only, with the orientation weight set to zero. Phase 2
+begins when the episodic position-only success rate reaches 0.5 over a
+20-iteration window; the orientation weight is then increased from 0 to 10 over
+200 iterations. Phase 3 is the full two-objective reward. The trigger gates on the
+episodic position-only success rate, rather than on a per-push error mean. This is
+the corrected version of a trigger that in an earlier implementation never
+activated; the earlier failure and its correction are documented in Appendix~H.
+
+\paragraph{ASP-dPose.}
+An asymmetric self-play model that uses the $\mathrm{SE}(2)$ reward of
+Equation~\ref{eq:phi_dpose} for the goal-solving agent, Bob. The loop is shown in
+Figure~\ref{fig:asp_loop}. The goal-setting agent, Alice, performs five pushes to
+propose a goal. The goal is accepted only if it passes a validity check: the block
+has moved sufficiently, remains on the table, and lies inside the workspace. Bob
+then attempts the goal from a clean reset over up to ten pushes. Alice's reward is
+\emph{outcome-based}, following \cite{OpenAI2021AsymmetricSF}: she receives a
+reward when Bob fails, a shaping bonus for a valid goal, and a penalty for an
+out-of-bounds goal. Bob additionally uses a GoalEncoder, a small multilayer
+perceptron that maps the six-dimensional goal pose into an eight-dimensional
+latent, in the difference variant of \cite{Sukhbaatar2018GoalEmbeddings}. Bob is
+trained with Alice Behavioral Cloning at $\beta = 0.5$.
+
+\paragraph{TASP-dPose.}
+Identical to ASP-dPose except that Alice's reward is \emph{time-based}, following
+\cite{Sukhbaatar2018IntrinsicMotivation}: $R_A = \gamma_{sp}\max(0, t_B - t_A)$.
+This rewards Alice for proposing goals that take Bob more pushes to solve than
+Alice took to set, subject to a penalty on Alice's own effort. It is the
+self-regulating reward of Equation~\ref{eq:sukh_alice}. The two self-play models
+therefore differ only in Alice's reward, which isolates the effect of the goal
+proposal mechanism.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth,height=0.5\textheight,keepaspectratio]{asp_loop_diagram.png}
+    \caption{The asymmetric self-play loop. Alice proposes a goal by acting for a
+    fixed number of pushes; the goal is validated; Bob then attempts it from a
+    clean reset. Alice's reward differs between ASP-dPose (outcome-based) and
+    TASP-dPose (time-based); Bob's $\mathrm{SE}(2)$ potential-based reward is the
+    same in both.}
+    \label{fig:asp_loop}
+\end{figure}
+
+\subsection{Why PBRS Assists Self-Play but Does Not Solve It}
+\label{sec:pbrs_asp}
+
+Potential-based shaping improves self-play but does not make it competitive with
+single-agent training, and the reason is visible in the structure of the GAE
+advantage. The advantage estimate is a discounted sum of one-step temporal
+differences, each of which decomposes into a reward term and a value-bootstrap
+term:
+\begin{equation}
+    \hat{A}_t = \sum_{l \geq 0} (\gamma\lambda)^l
+    \underbrace{\big[\Phi(s_{t+l+1}) - \Phi(s_{t+l})\big]}_{\text{potential term, correctly signed}}
+    \;+\; \sum_{l \geq 0} (\gamma\lambda)^l
+    \underbrace{\big[\gamma V(s_{t+l+1}) - V(s_{t+l})\big]}_{\text{value term, biased when } V \text{ is stale}}.
+    \label{eq:gae_decomp}
+\end{equation}
+The potential term is correctly signed on every push, regardless of the accuracy
+of the value function, because the potential increases whenever the object moves
+toward the goal. The value term, by contrast, depends on the accuracy of $V$. In
+single-agent training the goal distribution is stationary, so $V$ is accurate and
+both terms agree. Under self-play, Alice changes the goal distribution at every
+iteration, so $V$ is perpetually estimated on a distribution that no longer holds,
+and the value term is biased. The potential term supplies a floor of correct
+learning signal, which lifts self-play above the level it reaches under the sparse
+or improvement reward. It cannot, however, remove the bias contributed by the
+stale value term. The consequence, quantified in Chapter~\ref{sec:results}, is
+that
+potential-based shaping raises self-play from near-zero to a modest success rate
+without approaching the single-agent result.
+
+This account is a hypothesis about the learning dynamics, not a result. Both of
+its claims, the elevated value error under a shifting goal distribution and the
+suppression of the imitation signal, are measured directly through the training
+instrumentation described in Section~\ref{sec:instrumentation}, and the
+measurements are reported in Chapter~\ref{sec:results} rather than asserted here.
+
+\subsection{Experimental Campaign Overview}
+\label{sec:campaign}
+
+The five models of Section~\ref{sec:models} are the objects of study. A single
+training run of each, at one batch size and one seed, cannot support the
+statistical and causal claims this thesis makes. The evaluation is therefore
+organised as a campaign of budget-matched training runs, summarised in
+Table~\ref{tab:campaign}. Its per-phase configurations and job counts are given in
+Chapter~\ref{sec:experiments}. This section states the two principles that make
+the campaign a controlled study, together with the validation protocol and
+training instrumentation that every run shares. The numerical outcomes appear in
+Chapter~\ref{sec:results}.
+
+The first principle is \textbf{multiple seeds with reported confidence intervals}.
+Single-seed reinforcement-learning results are known to be unreliable, because the
+variance between random seeds can exceed the difference between methods
+\cite{Henderson2018DeepRLMatters, Agarwal2021StatisticalPrecipice}. Every headline
+comparison in this thesis is therefore repeated across several seeds. Each is
+reported as a mean with a 95\,\% confidence interval, so a claimed difference
+between two models is distinguished from seed noise.
+
+The second principle is \textbf{budget matching}. The aim is to compare batch
+sizes without confounding them with the amount of experience. The total number of
+pushes seen over training is therefore held constant while the number of parallel
+environments is varied. The iteration count is set inversely proportional to the
+number of environments, so each configuration consumes the same total experience
+of about 23.8 million pushes. The temporal window of the recurrent policy is fixed
+at 15 pushes per rollout; only the number of parallel environments, and therefore
+the per-update batch size, changes. This isolates the per-update batch size, the
+quantity that drives the value-function bias of Section~\ref{sec:pbrs_asp}, from
+the total experience.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabularx}{\textwidth}{l l X}
+        \hline
+        \textbf{Phase} & \textbf{Question} & \textbf{Design} \\
+        \hline
+        Scale sweep & Does the self-play deficit close as the batch grows? &
+        the two self-play models across four environment counts \\
+        Environment frontier & How few environments does each single-agent reward need? &
+        potential-based single agent and the improvement-reward baseline across four environment counts, three seeds \\
+        Seed intervals & Are the model differences larger than seed noise? &
+        single agent, curriculum, and both self-play models at the anchor budget, five seeds \\
+        Self-play ablations & Which component of the self-play package matters? &
+        the self-play model with the goal encoder, behavioural cloning, or the historical pool removed one at a time, three seeds \\
+        Positive control & Does behavioural cloning help on an easy symmetric task? &
+        self-play on the rotationally symmetric disc with behavioural cloning enabled, three seeds \\
+        Reward sensitivity & Is the potential-based reward robust to its parameters? &
+        the single agent over a grid of the position sharpness $k_p$ and the potential weight $w$ \\
+        Cross-environment & Does the ordering hold in a second simulator? &
+        single agent, curriculum, and self-play in the two-dimensional pushing simulator across two batch sizes \\
+        \hline
+    \end{tabularx}
+    \caption{The experimental campaign. Each phase answers one question flagged in
+    review; the per-phase training configurations, environment counts, seeds, and
+    job counts are tabulated in Chapter~\ref{sec:experiments}.}
+    \label{tab:campaign}
+\end{table}
+
+\subsection{Validation Protocol}
+\label{sec:val_protocol_methods}
+
+Every trained policy is evaluated on the same held-out suite of 30 T-block
+scenes, illustrated in Figure~\ref{fig:val_layout_methods}. The suite is divided
+into three groups of ten. The first ten are rotation-dominant scenes with large
+orientation changes. The next ten are position-only scenes whose goal orientation
+equals the start orientation. The last ten are combined scenes that require both a
+position and an orientation change. Within each group the difficulty ranges from
+easy to hard, graded by the start-to-goal distance and the required rotation. The
+held-out scenes are fixed in advance and never seen during training, so
+performance on them measures generalisation rather than memorisation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{val_test_layout.png}
+    \caption{The 30-scene held-out validation suite. Each panel shows the block
+    start pose and the goal pose for one scene. The suite is identical for every
+    model and every seed.}
+    \label{fig:val_layout_methods}
+\end{figure}
+
+Each scene is attempted 20 times, and within each attempt the policy is allowed
+up to 30 pushes. Two success measures are reported and kept distinct throughout
+the thesis. The \textbf{scene success rate} counts a scene as solved if at least
+one of its 20 attempts satisfies the combined gate of Section~\ref{sec:mdp}. This
+is the headline measure, and follows the convention common in manipulation
+evaluation, where a task counts as achievable if the policy can achieve it at all.
+The \textbf{trial success rate} is the fraction of individual attempts that satisfy
+the gate, and is always the lower of the two. Reporting both prevents the
+best-of-20 protocol from overstating performance, and the gap between them is
+stated wherever the headline number appears.
+
+Three protocol decisions make the numbers comparable across models. Each corrects
+a subtle way the comparison could otherwise be invalidated. First, the checkpoint
+selected for validation is the one that maximised the \emph{combined}
+position-and-orientation success rate during training, not the looser
+single-distance threshold used internally by the self-play reward. Selecting on a
+different criterion than the one reported would flatter the self-play models.
+Second, the self-play policies trained on the rotationally symmetric disc are
+validated on disc scenes, whose goal orientation is unconstrained, not on the
+T-block scenes they never trained on. Validating an agent on a task it never
+trained for would void its result. Third, checkpoints that lack a combined-gate
+best model, and are validated only from their latest checkpoint, are recorded
+separately and excluded from the confidence-interval aggregation. A
+partially-trained run therefore cannot contaminate a headline mean. The per-seed
+results are aggregated into a mean with a 95\,\% confidence interval per model,
+batch size, and iteration count.
+
+\subsection{Training Instrumentation for the Self-Play Mechanism}
+\label{sec:instrumentation}
+
+The account in Section~\ref{sec:pbrs_asp} of why potential-based shaping only
+partially assists self-play rests on two claims. The first is that the
+value-function term of the advantage estimate is biased under the shifting goal
+distribution. The second is that the behavioural-cloning signal is suppressed when
+the goal-proposing agent's demonstrated actions lie far from the goal-solving
+agent's policy. Rather than leave these as arguments, the training runs are
+instrumented so that both are measured directly, and the measurements are reported
+in Chapter~\ref{sec:results}.
+
+For the value-function claim, the mean absolute difference between the value
+estimates and the empirical returns is logged at every policy update. This is done
+for the single-agent, self-play, and time-based self-play models alike. Under the
+budget-matched scale sweep, this quantity can be plotted against the number of
+parallel environments. The mechanism of Section~\ref{sec:pbrs_asp} makes two
+predictions: the value error is larger under self-play than under single-agent
+training at the same batch size, and it falls as the batch grows. A value error
+that declines toward the single-agent level with scale would support a
+budget-limitation account. One that remains elevated would indicate a structural
+deficit independent of budget.
+
+For the behavioural-cloning claim, the imitation term is instrumented in three
+ways: the share of demonstrated actions whose probability ratio falls outside the
+clipping interval, the mean ratio, and the mean probability the goal-solving agent
+assigns to the goal-proposing agent's demonstrated actions. The clipping mechanism
+inherited from the imitation loss of \cite{OpenAI2021AsymmetricSF} zeroes the
+gradient for any demonstrated action whose ratio leaves the trust interval. A large
+clipped fraction is therefore the direct signature of a suppressed imitation
+signal. Measuring this fraction converts the clip-saturation account into a
+reported quantity. A positive control on the rotationally symmetric disc, where
+behavioural cloning is enabled and the task is easy, tests whether the mechanism
+can help at all in this setting. If imitation assists anywhere it should assist
+there, so its failure on the coupled T-block task cannot then be dismissed as a
+broken implementation.

@@ -1,0 +1,190 @@
+\pagestyle{appendix}
+\appendix
+\section*{Appendices}
+\addcontentsline{toc}{section}{Appendices}
+\renewcommand{\thesubsection}{\Alph{subsection}}
+
+\subsection{Push Mechanics: Limit Surface and Characteristic Length}
+\label{app:mechanics}
+
+The limit-surface normality condition of Equation~\ref{eq:normality} states that
+the instantaneous motion twist of a quasi-statically pushed object is normal to
+its friction limit surface at the point corresponding to the applied wrench. Its
+practical consequence for the task concerns any off-centre push, one whose line of
+action does not pass through the object's centre of friction. Such a push produces
+a wrench with a non-zero moment component, and therefore a twist that contains an
+angular velocity. Almost every push consequently changes both position and
+orientation.
+The characteristic length $L$ used in the $\mathrm{SE}(2)$ distance of
+Equation~\ref{eq:dpose_methods} is the radius of gyration of the object, a
+physical constant; for the T-block $L = 0.07\,\text{m}$. It is not a tuning
+parameter, and it sets the weight of an orientation error relative to a position
+error in a manner consistent with the object's mass distribution.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{diagram_limit_surface.png}
+    \caption{An off-centre push produces coupled translation and rotation of the
+    T-block. The motion twist is normal to the friction limit surface.}
+    \label{fig:app_limit_surface}
+\end{figure}
+
+\subsection{Training Curves}
+\label{app:curves}
+
+Figure~\ref{fig:app_curves} shows the training-time success rate and value loss
+for the single-agent and curriculum models. The single-agent model improves
+steadily over roughly 3{,}000 iterations, the curriculum model follows a similar
+trajectory, and the value loss remains stable throughout, which reflects the
+bounded range of the exponential potentials.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.48\textwidth]{cmp_Success_Rate.png}\hfill
+    \includegraphics[width=0.48\textwidth]{cmp_Value_Loss.png}
+    \caption{Training success rate (left) and value loss (right) for the
+    potential-based models.}
+    \label{fig:app_curves}
+\end{figure}
+
+\subsection{PBRS Parameter Sensitivity}
+\label{app:sensitivity}
+
+The potential-based reward uses $k_p = 30$, $k_r = 5$, and $w_{\text{pos}} =
+w_{\text{rot}} = 10$, chosen from pilot runs. A systematic grid over these
+parameters was not performed within the available budget. The robustness of the
+reward to its parameters is therefore not established here. It is recorded as a
+limitation in Section~\ref{sec:limitations} and as a direction for future work in
+Section~\ref{sec:future_work}. A grid over $k_p \in \{10, 20, 30, 50\}$ and
+$w \in \{5, 10, 20\}$, evaluated at the 30-scene gate, would provide the missing
+sensitivity analysis.
+
+\subsection{Validation Scene Descriptions}
+\label{app:scenes}
+
+The 30-scene held-out suite is defined in \texttt{validation\_configs.py} and
+comprises three groups of ten. Scenes 1 to 10 are rotation-dominant, with
+orientation changes up to $\pi$ radians and mixed translations. Scenes 11 to 20
+are position-only, with the goal orientation equal to the start orientation.
+Scenes 21 to 30 combine a position change with an orientation change. Within each
+group, difficulty is graded easy, medium, and hard by the start-to-goal distance
+and the magnitude of the required rotation. All coordinates are expressed in the
+environment-local frame in metres, and orientations in radians.
+
+\subsection{cuRobo IK Pipeline and Workspace}
+\label{app:ik}
+
+Each decoded push primitive is executed as a five-phase Cartesian trajectory,
+approach, descend, push, retract, and return, spanning 72 physics substeps. Every
+waypoint is mapped to arm joint targets by the cuRobo 0.7.5 batched Inverse
+Kinematics solver, with the gripper held closed throughout. The reachable
+workspace is bounded to the region over the table where the solver returns
+elbow-up solutions. Pushes whose start or end points fall outside this region are
+clamped to the boundary before execution, so the credit assigned to an action
+matches the motion actually performed.
+
+\subsection{Observation Space Specifications}
+\label{app:obs}
+
+The single-agent models use a 28-dimensional observation: end-effector pose (6),
+object pose and velocity (14), goal pose (6), and the position and orientation
+errors (2). The goal-solving agent in the self-play models uses the same
+28-dimensional layout, with the goal encoded through the GoalEncoder into an
+eight-dimensional latent in the difference variant. The goal-proposing agent uses
+a 20-dimensional observation that omits the goal, since it sets the goal rather
+than solving it.
+
+\subsection{Per-Test Error Bars}
+\label{app:error_bars}
+
+Figure~\ref{fig:app_error_bars} shows the per-scene trial-level success rate with
+95\,\% binomial confidence intervals for the single-agent and curriculum models
+head to head, and for all models together. The confidence intervals of the
+single-agent and curriculum models overlap on most scenes, consistent with the
+finding of Section~\ref{sec:rq2} that the two are statistically equivalent.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{val_multi_error_bars.png}
+    \caption{Per-scene trial-level success rate with 95\,\% binomial confidence
+    intervals.}
+    \label{fig:app_error_bars}
+\end{figure}
+
+\subsection{Curriculum Trigger Correction}
+\label{app:trigger}
+
+An earlier implementation of the forced curriculum gated the transition to the
+orientation phase on the per-push mean position error falling below
+$0.08\,\text{m}$ for 50 consecutive iterations. This condition never activated.
+The per-push mean is dominated by early-episode pushes far from a freshly
+randomised goal, and has a structural floor above $0.08\,\text{m}$. Even the best
+model's per-push mean position error does not fall below this value, and a single
+noisy iteration reset the 50-iteration streak. The orientation weight therefore
+remained at zero for the entire run, and the model reduced to a position-only
+learner. The corrected trigger, used for the PPO-Curriculum results in this
+thesis, gates instead on the episodic position-only success rate reaching 0.5 over
+a 20-iteration window, which is a "position is solved" signal rather than a
+per-push error mean, and which activates as intended.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{modelB_curriculum_stuck.png}
+    \caption{The original curriculum trigger never activated: the per-push mean
+    position error remained above the $0.08\,\text{m}$ threshold throughout
+    training.}
+    \label{fig:app_trigger}
+\end{figure}
+
+\subsection{Symmetric Self-Play Fail-Fast Equilibrium}
+\label{app:failfast}
+
+A symmetric variant of time-based self-play, in which the goal-solving agent is
+penalised for its own solve time in addition to the goal-proposing agent being
+rewarded for it, collapses to a 0\,\% success rate. The penalty applies on all
+phase ends, including catastrophic ones, so the agent obtains a higher return by
+failing on the first push than by attempting a longer solution and failing later.
+Because failing is easier than succeeding under contact-rich physics, the policy
+converges to immediate failure, and the goal-proposing agent's reward collapses to
+zero at the same time. The lesson is that an asymmetric reward structure is
+necessary in this domain: the goal-proposing agent must be incentivised, and the
+goal-solving agent must not be penalised for time. This is a reward-design outcome
+specific to the setting, not a refutation of the symmetric formulation in general.
+
+\subsection{Confounded Ablation Disaggregation}
+\label{app:confound}
+
+The single-agent and self-play models differ on at least seven axes at once:
+the number of agents (one against two), the goal distribution (fixed random
+against adversarial and shifting), the goal encoder (absent against present), the
+behavioural-cloning term (absent against present), the historical opponent pool
+(absent against present), the episode budget (15 pushes for one agent against
+5 plus 10 split between two), and the number of policy updates per iteration (one
+against two). The comparison in this thesis therefore isolates self-play as a
+package rather than any single mechanism within it. The one clean single-axis
+comparison available is between the two self-play variants, which differ only in
+the goal-proposing agent's reward and show a 10-percentage-point advantage for the
+time-based formulation.
+
+\subsection{Training Budget Comparison}
+\label{app:budget}
+
+The single-agent and curriculum models and both self-play models were trained at
+528 environments for approximately 3{,}000 iterations. The PPO-Baseline was
+trained at 2{,}048 environments, a deliberately larger batch, so that its lower
+combined-objective performance could not be attributed to insufficient
+parallelism. Both the baseline and the potential-based single-agent model reach
+80.0\,\% scene success, but the potential-based model does so with a quarter of
+the parallel environments, which is the environment-efficiency result of
+Section~\ref{sec:rq1}.
+
+\subsection{Secondary Variants}
+\label{app:secondary}
+
+Beyond the five principal models, several secondary variants were trained and
+evaluated. These are self-play on a rotationally symmetric disc, for which the
+$\mathrm{SE}(2)$ distance reduces to pure position distance; the original,
+non-simplified potential formulation at the position-only gate; and the non-HPC
+\texttt{gym-pusht} runs at reduced core counts. All are consistent with the
+principal findings: self-play remains far below single-agent training across every
+one of them. They are omitted from the main text for concision.

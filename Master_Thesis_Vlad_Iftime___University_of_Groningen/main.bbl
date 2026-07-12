@@ -1,0 +1,291 @@
+\begin{thebibliography}{10}
+
+\bibitem{Mohammed2022ClutterReview}
+M.~Q. Mohammed, L.~C. Kwek, S.~C. Chua, A.~Al-Dhaqm, S.~Nahavandi, T.~A.~E.
+  Eisa, M.~F. Miskon, M.~N. Al-Mhiqani, A.~Ali, M.~Abaker, and E.~A. Alandoli,
+  ``Review of learning-based robotic manipulation in cluttered environments,''
+  {\em Sensors}, vol.~22, no.~20, p.~7938, 2022.
+
+\bibitem{Zeng2018VPG}
+A.~Zeng, S.~Song, S.~Welker, J.~Lee, A.~Rodriguez, and T.~Funkhouser,
+  ``Learning synergies between pushing and grasping with self-supervised deep
+  reinforcement learning,'' in {\em 2018 IEEE/RSJ International Conference on
+  Intelligent Robots and Systems (IROS)}, pp.~4238--4245, IEEE, 2018.
+
+\bibitem{Mokhtar2022SelfSupervisedLF}
+K.~Mokhtar, C.~J.~M. Heemskerk, and H.~Kasaei, ``Self-supervised learning for
+  joint pushing and grasping policies in highly cluttered environments,'' {\em
+  ArXiv}, vol.~abs/2203.02511, 2022.
+
+\bibitem{Kasaei2024HarnessingTS}
+H.~Kasaei and M.~M. Kasaei, ``Harnessing the synergy between pushing, grasping,
+  and throwing to enhance object manipulation in cluttered scenarios,'' 2024.
+
+\bibitem{Schulman2017ProximalPO}
+J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov, ``Proximal
+  policy optimization algorithms,'' {\em ArXiv}, vol.~abs/1707.06347, 2017.
+
+\bibitem{Ng1999PolicyInvariance}
+A.~Y. Ng, D.~Harada, and S.~Russell, ``Policy invariance under reward
+  transformations: Theory and application to reward shaping,'' in {\em
+  Proceedings of the Sixteenth International Conference on Machine Learning
+  (ICML)}, pp.~278--287, 1999.
+
+\bibitem{Narvekar2020}
+S.~Narvekar, B.~Peng, M.~Leonetti, J.~Sinapov, M.~E. Taylor, and P.~Stone,
+  ``Curriculum learning for reinforcement learning domains: A framework and
+  survey,'' {\em arXiv preprint arXiv:2003.04960}, 2020.
+
+\bibitem{Sukhbaatar2018IntrinsicMotivation}
+S.~Sukhbaatar, Z.~Lin, I.~Kostrikov, G.~Synnaeve, A.~Szlam, and R.~Fergus,
+  ``Intrinsic motivation and automatic curricula via asymmetric self-play,'' in
+  {\em International Conference on Learning Representations (ICLR)}, 2018.
+
+\bibitem{OpenAI2021AsymmetricSF}
+O.~OpenAI, M.~Plappert, R.~Sampedro, T.~Xu, I.~Akkaya, V.~Kosaraju,
+  P.~Welinder, R.~D'Sa, A.~Petron, H.~P. de~Oliveira~Pinto, A.~Paino, H.~Noh,
+  L.~Weng, Q.~Yuan, C.~Chu, and W.~Zaremba, ``Asymmetric self-play for
+  automatic goal discovery in robotic manipulation,'' {\em ArXiv},
+  vol.~abs/2101.04882, 2021.
+
+\bibitem{Mason1986Pushing}
+M.~T. Mason, ``Mechanics and planning of manipulator pushing operations,'' {\em
+  The International Journal of Robotics Research}, vol.~5, no.~3, pp.~53--71,
+  1986.
+
+\bibitem{Goyal1991}
+S.~Goyal, A.~Ruina, and J.~Papadopoulos, ``Planar sliding with dry friction
+  part 1. limit surface and moment function,'' {\em Wear}, vol.~143, no.~2,
+  pp.~307--330, 1991.
+
+\bibitem{Mittal2023IsaacLab}
+M.~Mittal, C.~Yu, Q.~Yu, J.~Liu, N.~Rudin, D.~Hoeller, J.~L. Yuan, R.~Singh,
+  Y.~Guo, H.~Mazhar, A.~Mandlekar, B.~Babich, G.~State, M.~Hutter, and A.~Garg,
+  ``Orbit: A unified simulation framework for interactive robot learning
+  environments,'' {\em IEEE Robotics and Automation Letters}, vol.~8, no.~6,
+  pp.~3740--3747, 2023.
+
+\bibitem{Sutton1998}
+R.~S. Sutton and A.~G. Barto, {\em Reinforcement Learning: An Introduction}.
+\newblock The MIT Press, second~ed., 1998.
+
+\bibitem{Yang2023SimtoRealMA}
+M.~Yang, Y.~Lin, A.~Church, J.~Lloyd, D.~Zhang, D.~A.~W. Barton, and N.~F.
+  Lepora, ``Sim-to-real model-based and model-free deep reinforcement learning
+  for tactile pushing,'' {\em IEEE Robotics and Automation Letters}, vol.~8,
+  pp.~5480--5487, 2023.
+
+\bibitem{DQN}
+V.~Mnih, K.~Kavukcuoglu, D.~Silver, A.~A. Rusu, J.~Veness, M.~G. Bellemare,
+  A.~Graves, M.~A. Riedmiller, A.~K. Fidjeland, G.~Ostrovski, S.~Petersen,
+  C.~Beattie, A.~Sadik, I.~Antonoglou, H.~King, D.~Kumaran, D.~Wierstra,
+  S.~Legg, and D.~Hassabis, ``Human-level control through deep reinforcement
+  learning,'' {\em Nature}, vol.~518, pp.~529--533, 2015.
+
+\bibitem{Haarnoja2018SoftAO}
+T.~Haarnoja, A.~Zhou, P.~Abbeel, and S.~Levine, ``Soft actor-critic: Off-policy
+  maximum entropy deep reinforcement learning with a stochastic actor,'' {\em
+  ArXiv}, vol.~abs/1801.01290, 2018.
+
+\bibitem{Schulman2015TrustRP}
+J.~Schulman, S.~Levine, P.~Abbeel, M.~I. Jordan, and P.~Moritz, ``Trust region
+  policy optimization,'' {\em ArXiv}, vol.~abs/1502.05477, 2015.
+
+\bibitem{Andrychowicz2017}
+M.~Andrychowicz, F.~Wolski, A.~Ray, J.~Schneider, R.~Fong, P.~Welinder,
+  B.~McGrew, J.~Tobin, O.~Abbeel, and W.~Zaremba, ``Hindsight experience
+  replay,'' {\em Advances in Neural Information Processing Systems}, vol.~30,
+  2017.
+
+\bibitem{Grzes2017RewardShaping}
+M.~Grze{\'s}, ``Reward shaping in episodic reinforcement learning,'' in {\em
+  Proceedings of the 16th Conference on Autonomous Agents and MultiAgent
+  Systems (AAMAS)}, pp.~565--573, 2017.
+
+\bibitem{Devlin2012DynamicPBRS}
+S.~Devlin and D.~Kudenko, ``Dynamic potential-based reward shaping,'' in {\em
+  Proceedings of the 11th International Conference on Autonomous Agents and
+  Multiagent Systems (AAMAS)}, pp.~433--440, 2012.
+
+\bibitem{Harutyunyan2015}
+A.~Harutyunyan, S.~Devlin, P.~Vrancx, and A.~Now{\'e}, ``Expressing arbitrary
+  reward functions as potential-based advice,'' in {\em Proceedings of the
+  Twenty-Ninth AAAI Conference on Artificial Intelligence}, pp.~2652--2658,
+  2015.
+
+\bibitem{GrzesKudenko2009}
+M.~Grze{\'s} and D.~Kudenko, ``Theoretical and empirical analysis of reward
+  shaping in reinforcement learning,'' in {\em 2009 International Conference on
+  Machine Learning and Applications (ICMLA)}, pp.~337--344, IEEE, 2009.
+
+\bibitem{Florensa2017ReverseCurriculum}
+C.~Florensa, D.~Held, M.~Wulfmeier, M.~Zhang, and P.~Abbeel, ``Reverse
+  curriculum generation for reinforcement learning,'' in {\em Conference on
+  Robot Learning (CoRL)}, pp.~482--495, PMLR, 2017.
+
+\bibitem{Luo2020AcceleratingRL}
+S.~Luo, H.~Kasaei, and L.~Schomaker, ``Accelerating reinforcement learning for
+  reaching using continuous curriculum learning,'' {\em 2020 International
+  Joint Conference on Neural Networks (IJCNN)}, pp.~1--8, 2020.
+
+\bibitem{Portelas2020ACLSurvey}
+R.~Portelas, C.~Colas, L.~Weng, K.~Hofmann, and P.-Y. Oudeyer, ``Automatic
+  curriculum learning for deep rl: A short survey,'' {\em Proceedings of the
+  Twenty-Ninth International Joint Conference on Artificial Intelligence
+  (IJCAI)}, pp.~4819--4825, 2020.
+
+\bibitem{Torabi2018BCO}
+F.~Torabi, G.~Warnell, and P.~Stone, ``Behavioral cloning from observation,''
+  in {\em Proceedings of the Twenty-Seventh International Joint Conference on
+  Artificial Intelligence (IJCAI)}, pp.~4950--4957, 2018.
+
+\bibitem{Florence2022ImplicitBC}
+P.~Florence, C.~Lynch, A.~Zeng, O.~A. Ramirez, A.~Wahid, L.~Downs, A.~Wong,
+  J.~Lee, I.~Mordatch, and J.~Tompson, ``Implicit behavioral cloning,'' in {\em
+  Conference on Robot Learning (CoRL)}, pp.~158--168, PMLR, 2022.
+
+\bibitem{Hester2017DeepQF}
+T.~Hester, M.~Vecer{\'i}k, O.~Pietquin, M.~Lanctot, T.~Schaul, B.~Piot,
+  D.~Horgan, J.~Quan, A.~Sendonaris, I.~Osband, G.~Dulac-Arnold, J.~P. Agapiou,
+  J.~Z. Leibo, and A.~Gruslys, ``Deep q-learning from demonstrations,'' in {\em
+  AAAI Conference on Artificial Intelligence}, 2017.
+
+\bibitem{Silver2018ResidualPolicy}
+T.~Silver, K.~Allen, J.~Tenenbaum, and L.~Kaelbling, ``Residual policy
+  learning,'' {\em arXiv preprint arXiv:1812.06298}, 2018.
+
+\bibitem{Dennis2020PAIRED}
+M.~Dennis, N.~Jaques, E.~Vinitsky, A.~Bayen, S.~Russell, A.~Critch, and
+  S.~Levine, ``Emergent complexity and zero-shot transfer via unsupervised
+  environment design,'' in {\em Advances in Neural Information Processing
+  Systems (NeurIPS)}, vol.~33, pp.~13049--13061, 2020.
+
+\bibitem{Campero2021AMIGo}
+A.~Campero, R.~Raileanu, H.~K{\"u}ttler, J.~B. Tenenbaum, T.~Rockt{\"a}schel,
+  and E.~Grefenstette, ``Learning with amigo: Adversarially motivated intrinsic
+  goals,'' in {\em International Conference on Learning Representations
+  (ICLR)}, 2021.
+
+\bibitem{Durugkar2021AIM}
+I.~Durugkar, M.~Tec, S.~Niekum, and P.~Stone, ``Adversarial intrinsic
+  motivation for reinforcement learning,'' in {\em Advances in Neural
+  Information Processing Systems (NeurIPS)}, vol.~34, pp.~8622--8636, 2021.
+
+\bibitem{Letcher2019GameMechanics}
+A.~Letcher, D.~Balduzzi, S.~Racani{\`e}re, J.~Martens, J.~Foerster, K.~Tuyls,
+  and T.~Graepel, ``Differentiable game mechanics,'' {\em Journal of Machine
+  Learning Research}, vol.~20, no.~84, pp.~1--40, 2019.
+
+\bibitem{Berner2019Dota2}
+C.~Berner, G.~Brockman, B.~Chan, V.~Cheung, P.~Debiak, C.~Dennison, D.~Farhi,
+  Q.~Fischer, S.~Hashme, C.~Hesse, {\em et~al.}, ``Dota 2 with large scale deep
+  reinforcement learning,'' {\em arXiv preprint arXiv:1912.06680}, 2019.
+
+\bibitem{Sukhbaatar2018GoalEmbeddings}
+S.~Sukhbaatar, E.~Denton, A.~Szlam, and R.~Fergus, ``Learning goal embeddings
+  via self-play for hierarchical reinforcement learning,'' in {\em arXiv
+  preprint arXiv:1811.09083}, 2018.
+
+\bibitem{Tishby2015InfoBottleneck}
+N.~Tishby and N.~Zaslavsky, ``Deep learning and the information bottleneck
+  principle,'' in {\em 2015 IEEE Information Theory Workshop (ITW)}, pp.~1--5,
+  IEEE, 2015.
+
+\bibitem{Goyal2019InfoBot}
+A.~Goyal, R.~Islam, D.~Strouse, Z.~Ahmed, H.~Larochelle, M.~Botvinick,
+  S.~Levine, and Y.~Bengio, ``Infobot: Transfer and exploration via the
+  information bottleneck,'' in {\em International Conference on Learning
+  Representations (ICLR)}, 2019.
+
+\bibitem{Nachum2018DataEfficientHR}
+O.~Nachum, S.~S. Gu, H.~Lee, and S.~Levine, ``Data-efficient hierarchical
+  reinforcement learning,'' in {\em Neural Information Processing Systems},
+  2018.
+
+\bibitem{Vezhnevets2017FeUdal}
+A.~S. Vezhnevets, S.~Osindero, T.~Schaul, N.~Heess, M.~Jaderberg, D.~Silver,
+  and K.~Kavukcuoglu, ``Feudal networks for hierarchical reinforcement
+  learning,'' in {\em International Conference on Machine Learning (ICML)},
+  pp.~3540--3549, PMLR, 2017.
+
+\bibitem{Bacon2017OptionCritic}
+P.-L. Bacon, J.~Harb, and D.~Precup, ``The option-critic architecture,'' in
+  {\em Proceedings of the Thirty-First AAAI Conference on Artificial
+  Intelligence}, pp.~1726--1734, 2017.
+
+\bibitem{Hutsebaut2022HRLSurvey}
+M.~Hutsebaut-Buysse, K.~Mets, and S.~Latr{\'e}, ``Hierarchical reinforcement
+  learning: A survey and open research challenges,'' {\em Machine Learning and
+  Knowledge Extraction}, vol.~4, no.~1, pp.~172--221, 2022.
+
+\bibitem{Nair2018ImaginedGoals}
+A.~V. Nair, V.~Pong, M.~Dalal, S.~Bahl, S.~Lin, and S.~Levine, ``Visual
+  reinforcement learning with imagined goals,'' in {\em Advances in Neural
+  Information Processing Systems (NeurIPS)}, vol.~31, 2018.
+
+\bibitem{LynchMason1996}
+K.~M. Lynch and M.~T. Mason, ``Stable pushing: Mechanics, controllability, and
+  planning,'' {\em The International Journal of Robotics Research}, vol.~15,
+  no.~6, pp.~533--556, 1996.
+
+\bibitem{HoweCutkosky1996}
+R.~D. Howe and M.~R. Cutkosky, ``Practical force-motion models for sliding
+  manipulation,'' {\em The International Journal of Robotics Research},
+  vol.~15, no.~6, pp.~557--572, 1996.
+
+\bibitem{Stuber2020PushingSurvey}
+J.~St{\"u}ber, C.~Zito, and R.~Stolkin, ``Let's push things forward: A survey
+  on robot pushing,'' {\em Frontiers in Robotics and AI}, vol.~7, p.~8, 2020.
+
+\bibitem{Yu2016MillionWays}
+K.-T. Yu, M.~Bauza, N.~Fazeli, and A.~Rodriguez, ``More than a million ways to
+  be pushed: A high-fidelity experimental dataset of planar pushing,'' {\em
+  2016 IEEE/RSJ International Conference on Intelligent Robots and Systems
+  (IROS)}, pp.~30--37, 2016.
+
+\bibitem{Park1995LieGroup}
+F.~C. Park, J.~E. Bobrow, and S.~R. Ploen, ``A lie group formulation of robot
+  dynamics,'' {\em The International Journal of Robotics Research}, vol.~14,
+  no.~6, pp.~609--618, 1995.
+
+\bibitem{Urain2023SE3Diffusion}
+J.~Urain, N.~Funk, J.~Peters, and G.~Chalvatzaki, ``Se(3)-diffusionfields:
+  Learning smooth cost functions for joint grasp and motion optimization
+  through diffusion,'' in {\em 2023 IEEE International Conference on Robotics
+  and Automation (ICRA)}, pp.~5923--5930, IEEE, 2023.
+
+\bibitem{VanderPol2020MDPHomomorphic}
+E.~van~der Pol, D.~E. Worrall, H.~van Hoof, F.~A. Oliehoek, and M.~Welling,
+  ``Mdp homomorphic networks: Group symmetries in reinforcement learning,'' in
+  {\em Advances in Neural Information Processing Systems (NeurIPS)}, vol.~33,
+  pp.~4199--4210, 2020.
+
+\bibitem{Huang2022EquivariantTransporter}
+H.~Huang, D.~Wang, R.~Walters, and R.~Platt, ``Equivariant transporter
+  network,'' in {\em Robotics: Science and Systems (RSS)}, 2022.
+
+\bibitem{Nguyen2024EquivariantRL}
+H.~Nguyen, A.~Baisero, D.~Klee, D.~Wang, R.~Platt, and C.~Amato, ``Equivariant
+  reinforcement learning under partial observability,'' in {\em Conference on
+  Robot Learning (CoRL)}, 2024.
+
+\bibitem{Makoviychuk2021IsaacGym}
+V.~Makoviychuk, L.~Wawrzyniak, Y.~Guo, M.~Lu, K.~Storey, M.~Macklin,
+  D.~Hoeller, N.~Rudin, A.~Allshire, A.~Handa, and G.~State, ``Isaac gym: High
+  performance gpu-based physics simulation for robot learning,'' in {\em
+  Advances in Neural Information Processing Systems (NeurIPS) Datasets and
+  Benchmarks Track}, 2021.
+
+\bibitem{Henderson2018DeepRLMatters}
+P.~Henderson, R.~Islam, P.~Bachman, J.~Pineau, D.~Precup, and D.~Meger, ``Deep
+  reinforcement learning that matters,'' in {\em Proceedings of the
+  Thirty-Second AAAI Conference on Artificial Intelligence}, pp.~3207--3214,
+  2018.
+
+\bibitem{Agarwal2021StatisticalPrecipice}
+R.~Agarwal, M.~Schwarzer, P.~S. Castro, A.~C. Courville, and M.~G. Bellemare,
+  ``Deep reinforcement learning at the edge of the statistical precipice,'' in
+  {\em Advances in Neural Information Processing Systems (NeurIPS)}, vol.~34,
+  pp.~29304--29320, 2021.
+
+\end{thebibliography}

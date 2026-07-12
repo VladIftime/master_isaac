@@ -1,0 +1,237 @@
+\section{Discussion and Conclusion}
+\label{sec:conclusion}
+
+This chapter interprets the results, states the contributions against the three
+research questions, records the limitations of the study, and lists directions for
+future work.
+
+\subsection{Interpretation}
+\label{sec:interpretation}
+
+The central result of this thesis is a priority ordering. For a contact-rich
+multi-objective planar-pushing task under a single-GPU budget, effort spent on
+principled reward design produces a larger and more reliable improvement than
+effort spent on structured training dynamics. The three research questions
+decompose this result into an efficiency claim, a comparison claim, and a
+mechanistic explanation.
+
+The efficiency claim is direct. Potential-based shaping reduces the parallelism
+required for a given success rate by a factor of about four, from 2{,}048 to 528
+environments. It also improves the combined-objective success rate by 35
+percentage points over the earlier reward at the same gate. The reason was
+developed in Section~\ref{sec:pbrs_design}. The potential-based reward is dense,
+correctly signed on every push, and bounded, whereas the improvement reward is
+negative for most useful pushes and has near-zero variance. The policy-invariance
+guarantee of Section~\ref{sec:pbrs} allows this dense signal to be added without
+changing the task. The result confirms empirically that the guarantee holds under
+stochastic contact physics.
+
+The comparison claim is that neither a forced curriculum nor asymmetric self-play
+improves on the plain shaped single-agent model. The curriculum is statistically
+equivalent to the single-agent model at the large batch used in Isaac Lab, and
+self-play is far worse. This does not contradict the literature that motivates
+curricula and self-play; it locates a regime in which they do not pay. The
+cross-environment result of Section~\ref{sec:cross_env_results} makes the regime
+explicit. The curriculum substitutes for the shaped reward when the batch is small
+and gradient estimates are noisy, and adds nothing once the batch is large enough
+for stable estimates on both objectives. Reward design and curriculum design are
+therefore not independent levers of equal standing. At a sufficient batch size,
+the shaped reward already supplies what the curriculum would otherwise provide.
+
+The mechanistic explanation concerns why self-play in particular fails.
+Section~\ref{sec:rq3} showed that self-play learns the two constituent skills, each
+to roughly 50\,\%, but combines them at about 10\,\%, well below the independence
+prediction. Three factors act together to produce this outcome, and all are
+specific to this task. First, the physics couples translation and rotation, so the
+combined gate cannot be satisfied by treating the objectives separately. Second,
+the goal distribution is non-stationary, because the goal-proposing agent changes
+it at every iteration, which biases the value term of the GAE advantage as shown
+in Section~\ref{sec:pbrs_asp}. Third, the combined gate is strict, so partial
+competence on each axis does not accumulate into success. The potential-based
+reward supplies enough correctly-signed signal to learn each axis, but it cannot
+remove the value-term bias that prevents their composition. This is why shaping
+lifts self-play above the near-zero level it reaches under the improvement reward,
+yet leaves it far below single-agent training.
+
+\subsection{Relation to Prior Work}
+\label{sec:relation}
+
+The findings of this thesis agree with the theory of the papers it builds on,
+while qualifying the empirical claims of the papers it tests. The distinction
+between the two is worth stating precisely.
+
+On reward shaping, the result confirms \cite{Ng1999PolicyInvariance} under
+conditions the original theorem did not examine. Ng, Harada, and Russell proved
+policy invariance for finite, discrete Markov Decision Processes with
+deterministic dynamics. The present task is continuous, high-dimensional, and
+driven by stochastic PhysX contact. The shaping potential is a bounded exponential,
+rather than the distance-to-goal heuristics of the original paper. The
+potential-based reward reaches the same success rate as the hand-tuned reward
+while requiring a quarter of the environments, and never exceeds it. This is the
+empirical signature the theorem predicts: shaping changes how quickly the optimal
+policy is found, not which policy is optimal. The episodic treatment of
+\cite{Grzes2017RewardShaping} licences the undiscounted shaping used here, and the
+stable value loss in Appendix~\ref{app:curves} matches the bounded-potential
+construction. In this respect the thesis extends an established theoretical result
+into a contact-rich robotic regime rather than contesting it.
+
+On asymmetric self-play the relationship is more nuanced, and the negative result
+must not be overstated. \cite{Sukhbaatar2018IntrinsicMotivation} demonstrated
+self-play in reversible or resettable gridworlds and continuous control tasks,
+where the goal is a single state to be reached. \cite{OpenAI2021AsymmetricSF}
+scaled it to robotic manipulation with large distributed compute and a continuous
+action space. The present study differs from both on three axes that
+Sections~\ref{sec:pbrs_asp} and \ref{sec:interpretation} identify as decisive. The
+goal is multi-objective with a strict combined gate, not a single reachable state.
+The action is a discrete macro-action over a large MultiCategorical space, not a
+smooth continuous control. The compute budget is a single Graphical Processing
+Unit, not a distributed cluster. The finding is therefore not that self-play is
+ineffective. Rather, in this specific setting it does not compose the two learned
+skills, and it stays far below single-agent training under a budget realistic for
+one laboratory. This framing is consistent with \cite{Berner2019Dota2}, whose
+success with competitive self-play required months of training at very large
+scale. Through that lens, the modest self-play result here supports rather than
+contradicts the observation that self-play is demanding of scale.
+
+The behaviour of the Alice Behavioral Cloning term deserves specific comment. It
+connects a design choice in \cite{OpenAI2021AsymmetricSF} to an outcome observed
+here. Plappert and colleagues introduced Proximal Policy Optimization-style
+clipping on the behavioural-cloning loss (Equation~\ref{eq:abc}), to prevent the
+imitation term from producing aggressive policy updates. In their continuous-action
+grasping domain, the demonstrated actions of the goal-proposing agent stay close to
+the goal-solving agent's policy, so the clipping is rarely active and the imitation
+signal flows. In the discrete, contact-rich pushing domain of this thesis, the
+goal-proposing agent's unguided pushes lie far from the goal-solving agent's
+goal-directed policy. The probability ratio in Equation~\ref{eq:abc} is therefore
+extreme, the clip saturates, and the imitation gradient vanishes. The same
+mechanism that stabilises imitation in the original setting removes it here. This
+is not a flaw in the original formulation. It is a consequence of applying that
+formulation to a domain whose action distribution differs sharply from the one it
+was designed for. This also explains why the two self-play variants differ only
+through Alice's reward, not through the cloning term.
+
+On curriculum learning, the regime-dependence of
+Section~\ref{sec:cross_env_results} refines rather than rejects the surveys of
+\cite{Narvekar2020} and \cite{Portelas2020ACLSurvey}. Those surveys motivate
+curricula primarily for settings where reward is sparse or exploration is hard.
+The present result is consistent with that motivation and makes it quantitative.
+The forced curriculum contributes substantially when the batch is small and
+gradient estimates are noisy: at the small \texttt{gym-pusht} batch it raises scene
+success from 10.0\,\% to 50.0\,\%. It contributes nothing once the batch is large
+enough for stable estimates on both objectives. A well-shaped dense reward and a
+curriculum are therefore partial substitutes, not independent and additive
+interventions. The point at which one ceases to add value over the other is
+governed by the gradient-variance regime. To the best of the author's knowledge,
+this observation is not made explicit in the cited surveys, and it is one of the
+more transferable findings of the study.
+
+Finally, the collapse of the symmetric time-based self-play variant to a fail-fast
+equilibrium (Appendix~\ref{app:failfast}) is best read through the game-dynamics
+analysis of \cite{Letcher2019GameMechanics}. In the symmetric reward, the
+goal-solving agent is penalised for the very solve time that rewards the
+goal-proposing agent. This defines a near-zero-sum game whose only stable point
+under the observed physics is immediate failure. The asymmetric reward of
+\cite{Sukhbaatar2018IntrinsicMotivation} incentivises the proposer without
+penalising the solver, and so avoids this degenerate equilibrium. The present
+study provides a concrete manipulation-domain instance of why that asymmetry is
+not incidental but necessary.
+
+\subsection{Contributions Revisited}
+\label{sec:contributions}
+
+The contributions stated in Chapter~\ref{sec:introduction} can now be given
+quantitative content, one per research question.
+
+For RQ1, the thesis formulates a potential-based reward for multi-objective planar
+pushing. It combines bounded exponential position and orientation potentials with
+a unified $\mathrm{SE}(2)$ distance. This reward reaches 80.0\,\% scene success at
+528 environments, matching the improvement reward at 2{,}048 environments and
+improving the combined-objective rate by 35 percentage points.
+
+For RQ2, the thesis provides a controlled comparison of four training regimes
+under an identical reward, budget, and evaluation protocol. The forced curriculum
+is statistically equivalent to the single-agent model, at 76.7\,\% against
+80.0\,\%, a difference that is not significant. Both self-play variants are far
+worse, at 16.7\,\% and 6.7\,\%. The cross-environment comparison establishes that
+the value of the curriculum depends on the per-update batch size.
+
+For RQ3, the thesis diagnoses the self-play failure by separating per-axis
+competence from combined success. Self-play learns each of position and
+orientation to roughly 50\,\%, but combines them at about 10\,\%, roughly 2.5 times
+below the independence product. The goal-proposing agent, meanwhile, remains a
+reliable source of valid goals. This locates the failure in skill composition
+under a non-stationary goal distribution, not in skill acquisition.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+Several limitations bound the scope of these conclusions. Validation uses a single
+seed per model, so the reported scene success rates carry no confidence intervals.
+Only the training-time success rate has variance data, across five chains for the
+single-agent model. The best-of-20 protocol raises the scene success rate above
+the trial success rate by 14 percentage points for the strongest model. Both
+numbers are reported, but the headline figure is the more favourable of the two by
+construction. The comparison between self-play and single-agent training differs on
+more than one axis at once. These include the number of agents, the goal
+distribution, the episode budget, the goal encoder, and the behavioural-cloning
+term. The comparison therefore isolates self-play as implemented, rather than the
+goal-proposal mechanism alone, and the axes of variation are enumerated in
+Appendix~J. The sensitivity of the potential-based reward to its parameters $k_p$,
+$k_r$, and $w$ was not systematically tested; the values used were chosen from
+pilot runs. Finally, the off-policy SAC with Hindsight Experience Replay baseline
+did not converge within the available budget, so the external calibration relies
+on published planar-pushing results rather than a converged in-house baseline.
+
+\subsection{Future Work}
+\label{sec:future_work}
+
+Each limitation suggests a concrete continuation. Repeating the validation across
+multiple seeds would attach confidence intervals to the scene success rates. It
+would also place the 3.3-percentage-point single-agent-against-curriculum
+difference on a firmer statistical footing. A relaxed or partial-credit success
+gate, which rewards satisfying each axis rather than only the conjunction, would
+test whether the composition failure can be alleviated by softening the strict
+gate. The symmetric time-based self-play variant collapses to a fail-fast
+equilibrium (Appendix~\ref{app:failfast}); the zero-sum stability analysis of
+\cite{Letcher2019GameMechanics} suggests where a stabilised formulation might be
+sought. A systematic sweep of the per-update batch size would map the boundary of
+the regime in which the curriculum substitutes for the shaped reward, identified
+qualitatively in Section~\ref{sec:cross_env_results}. Completing the SAC with
+Hindsight Experience Replay baseline to convergence would supply the off-policy
+calibration that the present study leaves open. Finally, transferring the shaped
+single-agent policy to a physical UR5e would test whether the efficiency gain
+survives the reality gap.
+
+Beyond these direct continuations, the relation to prior work in
+Section~\ref{sec:relation} points to two deeper questions. The first is whether
+self-play can be made competitive by addressing the specific failure identified,
+rather than by adding scale. The value term of the Generalized Advantage
+Estimation advantage is biased by the non-stationary goal distribution
+(Section~\ref{sec:pbrs_asp}). A goal-proposing agent that changes the distribution
+more slowly might keep the value estimate accurate enough for the two skills to
+compose. One could constrain the rate of change of the proposed goal distribution,
+or train the goal-solving agent against a mixture of current and past proposers.
+This would test directly whether the composition failure is intrinsic to
+self-play or an artefact of an over-aggressive proposer. The second question
+concerns the behavioural-cloning term. The clipping mechanism of
+\cite{OpenAI2021AsymmetricSF} removes the imitation signal in the discrete action
+space used here. An unclipped or adaptively clipped cloning loss, or one defined
+on the decoded continuous push parameters rather than the discrete bins, might
+restore the demonstration signal the original formulation relies on. Both
+directions treat the negative self-play result not as a dead end, but as a
+localisation of where the method breaks in this domain.
+
+\subsection{Conclusion}
+\label{sec:final}
+
+This thesis compared reward shaping against structured training dynamics on a
+single contact-rich planar-pushing task, under a common budget and a common
+success criterion. Potential-based reward shaping reduced the parallel-environment
+requirement by a factor of about four and improved combined-objective success by
+35 percentage points. A forced curriculum added no value at a sufficient batch
+size, and asymmetric self-play performed far worse than single-agent training. The
+self-play failure was traced to an inability to combine two individually-learned
+skills under a non-stationary goal distribution, not to any failure to learn the
+skills themselves. The practical recommendation that follows is simple: invest
+first in a principled dense reward, and add structured training dynamics only in
+the small-batch regime where they demonstrably contribute.

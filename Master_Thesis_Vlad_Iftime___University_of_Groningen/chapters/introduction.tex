@@ -1,0 +1,139 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Service robots are expected to become part of everyday life, assisting people at
+home and at work with ordinary manipulation tasks. Meeting that expectation
+requires a robot to handle objects it has never seen, in cluttered and
+unstructured surroundings \cite{Mohammed2022ClutterReview}. Bin picking is the
+canonical instance of this challenge: a robot must retrieve target items from a
+dense, disordered container, where objects rest against one another and few are
+graspable as they lie. Traditional pipelines that assume known object models and
+a clear grasp pose become brittle here, because the required information is often
+occluded or simply unavailable. Learning-based methods, and deep Reinforcement
+Learning (RL) in particular, have therefore become the dominant approach to
+manipulation in clutter \cite{Mohammed2022ClutterReview}.
+
+A recurring insight in this literature is that grasping alone is not enough. When
+objects are packed together, the robot must first rearrange them, and
+non-prehensile actions such as pushing create the space and the poses that make a
+later grasp feasible. Push-grasp synergy, in which pushing and grasping are learned
+jointly, improves picking success in dense clutter beyond what grasping achieves
+on its own \cite{Zeng2018VPG, Mokhtar2022SelfSupervisedLF, Kasaei2024HarnessingTS}.
+This positions pushing as a foundational pre-grasp skill for service robots: the
+ability to move an object into a target pose is what turns an ungraspable
+configuration into a graspable one. This thesis studies that skill in isolation,
+and asks how it can be learned efficiently and reliably. In doing so it works
+toward the same broad goal as the clutter-manipulation literature it builds on,
+namely competent, general manipulation in unstructured environments.
+
+Progress on this goal is limited less by what RL can express than by what it costs
+to train. On-policy algorithms such as Proximal Policy Optimization (PPO) are
+stable and widely used \cite{Schulman2017ProximalPO}, but they discard each batch
+of experience after a single update. Their sample requirement is therefore high,
+and it grows with the difficulty of the reward signal. When the reward is sparse
+or poorly shaped, most of the interaction budget yields little useful gradient,
+and the number of parallel environments needed for a stable update becomes the
+dominant practical constraint. How that budget is used, rather than how large it
+is, is the central question of this thesis.
+
+Two families of techniques aim to reduce this constraint, and they act on
+different parts of the problem. The first is reward shaping, which adds an
+auxiliary signal that directs the agent toward useful behaviour without changing
+what the task ultimately rewards. Potential-Based Reward Shaping (PBRS) is the
+principled form of this idea \cite{Ng1999PolicyInvariance}: its shaping term is
+the difference of a state potential, which leaves the optimal policy unchanged.
+The second family modifies the training process rather than the reward. Curriculum
+learning orders tasks from easy to hard \cite{Narvekar2020}, and its automatic
+variants derive that order from the agent's own competence. Asymmetric Self-Play
+(ASP) is the most prominent automatic form
+\cite{Sukhbaatar2018IntrinsicMotivation, OpenAI2021AsymmetricSF}: one agent
+proposes goals while a second learns to reach them, so the goal distribution
+adapts to the learner without human specification. Both families are well
+motivated, yet they are rarely compared directly. Such a comparison needs the same
+task, the same budget, and the same success criterion.
+
+The task studied here is planar pushing, the non-prehensile skill motivated above,
+reduced to a single object so that the learning question can be isolated. A robot
+must slide the object across a surface to a target pose. Pushing suits this study
+for a specific mechanical reason. Under the quasi-static assumption, a pushed
+object's motion follows its friction limit surface, and the resulting twist
+couples translation and rotation \cite{Mason1986Pushing, Goyal1991}. Almost every
+push therefore changes both the position and the orientation of the object. A goal
+that fixes both a target position and orientation is thus multi-objective, and the
+two objectives cannot be optimised independently. This coupling makes planar
+pushing a compact and demanding evaluation task: the reward must give an accurate
+gradient for two interacting quantities, and any curriculum or self-play mechanism
+must satisfy both criteria at once.
+
+The experiments use a simulated Universal Robots UR5e arm with a Robotiq gripper,
+pushing a T-shaped block on a tabletop in NVIDIA Isaac Lab
+\cite{Mittal2023IsaacLab}. Isaac Lab runs many environment instances in parallel
+on a single Graphical Processing Unit (GPU), which lets every model train at a
+fixed compute budget on equal terms. The policy does not command joint torques
+directly; instead, it selects an object-relative push primitive with four
+parameters: an approach offset, an approach angle, a push length, and a push
+direction. A cuRobo Inverse Kinematics (IK) solver then executes the chosen push.
+Goals lie in the planar rigid-body configuration space $\mathrm{SE}(2)$, and a
+push succeeds only when the object reaches a small position and orientation
+tolerance of the goal. Chapter~\ref{section:methods} gives the full state, action,
+and reward definitions.
+
+Against this background, the thesis poses three research questions.
+\begin{itemize}
+  \item \textbf{RQ1:} Can potential-based reward shaping reduce the number of
+        parallel environments required for on-policy learning of this
+        multi-objective planar pushing task?
+  \item \textbf{RQ2:} Given a well-shaped PBRS reward, does staging objectives or
+        generating goals adversarially improve final performance over a direct
+        single-agent approach?
+  \item \textbf{RQ3:} Does asymmetric self-play enable the learning of individual
+        position and orientation skills in this multi-objective planar pushing
+        task?
+\end{itemize}
+
+The first question isolates the contribution of reward shaping alone: it asks
+whether a principled dense reward reduces the parallelism needed to reach a given
+level of performance. The second question fixes the reward and varies the training
+process, measuring a hand-designed position-then-rotation curriculum and an
+adversarial self-play curriculum against a single-agent learner. The third
+question examines the self-play result in more detail. Even where self-play fails
+the combined task, it may still learn the two constituent skills, and that
+distinction separates a failure to learn from a failure to combine.
+
+\subsection{Contributions}
+
+This thesis makes four contributions. First, it formulates a potential-based
+reward for multi-objective planar pushing, combining bounded exponential
+potentials over position and orientation with a unified $\mathrm{SE}(2)$ distance.
+This reward lets a single-agent PPO policy solve the task with far fewer parallel
+environments than a hand-tuned improvement reward. Second, it compares four
+training regimes under one reward, budget, and evaluation protocol: a single-agent
+baseline, a forced position-to-rotation curriculum, and two self-play variants
+that differ only in how the goal-proposing agent is rewarded. Third, it diagnoses
+why self-play underperforms in this setting. By measuring per-axis competence
+separately from joint success, it shows that the learner acquires each objective
+alone yet fails the coupled success criterion. Fourth, it confirms the ordering of
+the methods across two independent simulators, establishing that the finding is
+not an artefact of a single environment. Taken together, the results carry one
+practical message for this class of task: effort spent on principled reward design
+yields a larger and more reliable improvement than effort spent on training
+dynamics.
+
+\subsection{Thesis Outline}
+
+The remainder of this thesis is organised as follows.
+Chapter~\ref{sec:drl_robotics} reviews the background and related work, covering
+RL and PPO, potential-based reward shaping, curriculum learning and self-play,
+goal-conditioned learning, and the mechanics of pushing.
+Chapter~\ref{section:methods} defines the task and its Markov Decision Process,
+explains why a naive improvement reward fails, then derives the potential-based
+reward and its $\mathrm{SE}(2)$ form and describes the five models that are
+compared. Chapter~\ref{sec:experiments} presents the experimental setup: the
+simulation and training configuration, the held-out validation protocol, the
+cross-environment comparison, and an off-policy baseline. Chapter~\ref{sec:results}
+reports the results for each research question, namely the environment-efficiency
+of shaping, the training-regime comparison, the per-axis diagnostic, and the
+cross-environment confirmation. Chapter~\ref{sec:conclusion} discusses the
+findings, states the limitations, and outlines future work. The appendices collect
+training curves, parameter sensitivity, scene descriptions, and detailed
+failure-mode analyses.

@@ -1,0 +1,516 @@
+\section{Background and Related Work}
+\label{sec:drl_robotics}
+
+This chapter develops the theory the thesis relies on and situates the work
+within the surrounding literature. It begins with the formal definitions of
+reinforcement learning, first for fully observable problems and then for the
+partially observable case that motivates the recurrent policy used here. It then
+describes the two algorithms used in the experiments, Proximal Policy
+Optimization and Soft Actor-Critic, before describing the two techniques the
+thesis compares: potential-based reward shaping, and structured training through
+curriculum learning and asymmetric self-play. The chapter ends with the
+mechanics and geometry of planar pushing, which explain why the task is
+multi-objective and why its two objectives cannot be optimised in
+isolation.
+
+\subsection{Reinforcement Learning}
+
+Reinforcement Learning (RL) is the branch of machine learning concerned with how
+an agent should act in an environment so as to maximise a cumulative scalar
+reward. Unlike supervised learning, the agent is never told the correct action;
+it receives only an evaluative signal and must discover, through trial and error,
+which behaviours lead to high long-term return. The agent observes the state of
+the environment, selects an action, and receives a reward together with a new
+state; repeating this loop produces a trajectory whose total reward the agent
+learns to improve. This interaction is formalised through the Markov Decision
+Process.
+
+\subsubsection{Markov Decision Processes}
+
+A Markov Decision Process (MDP) is the standard model of a fully observable
+sequential decision problem. Following \cite{Ng1999PolicyInvariance,
+Sutton1998}, it is a tuple $\mathcal{M} = (\mathcal{S}, \mathcal{A}, P, R,
+\gamma)$, where:
+\begin{itemize}
+  \item $\mathcal{S}$ is the \textbf{state space}, the set of all configurations
+        the environment can occupy. At time step $t$ the agent perceives a state
+        $s_t \in \mathcal{S}$.
+  \item $\mathcal{A}$ is the \textbf{action space}, the set of actions available
+        to the agent; in robotics this may be a set of joint commands or, as in
+        this thesis, a set of parameterised motion primitives.
+  \item $P(s_{t+1} \mid s_t, a_t)$ is the \textbf{transition function}, giving the
+        probability of reaching $s_{t+1}$ after taking action $a_t$ in state
+        $s_t$. It encodes the environment dynamics.
+  \item $R(s_t, a_t, s_{t+1})$ is the \textbf{reward function}, the scalar
+        feedback for a transition.
+  \item $\gamma \in [0, 1]$ is the \textbf{discount factor}, which sets the
+        relative weight of immediate against future reward.
+\end{itemize}
+
+The defining property is the \emph{Markov} assumption: the transition and reward
+depend only on the current state and action, not on the history that preceded
+them. Formally, $P(s_{t+1} \mid s_t, a_t) = P(s_{t+1} \mid s_0, a_0, \dots, s_t,
+a_t)$. The state is therefore a sufficient statistic of the past, which is what
+makes value functions and the Bellman recursion well defined.
+
+The agent acts according to a \textbf{policy} $\pi(a \mid s)$, a mapping from
+states to a distribution over actions. Its objective is to maximise the
+\textbf{expected return}, the expected discounted sum of future rewards:
+\begin{equation}
+    J(\pi) = \mathbb{E}_{\pi}\!\left[ \sum_{t=0}^{\infty} \gamma^t R(s_t, a_t, s_{t+1}) \right].
+    \label{eq:return}
+\end{equation}
+The discount factor $\gamma$ has a dual role. Mathematically it keeps the
+infinite sum bounded; behaviourally it interpolates between a myopic agent
+($\gamma \to 0$), which optimises only the immediate reward, and a far-sighted
+agent ($\gamma \to 1$), which weighs distant rewards almost as heavily as
+immediate ones. In episodic tasks such as the pushing problem studied here, the
+horizon is finite and the undiscounted case $\gamma = 1$ is admissible provided
+every trajectory eventually terminates, a subtlety that becomes important for
+reward shaping in Section~\ref{sec:pbrs}.
+
+\paragraph{Value functions.}
+To reason about long-term consequences, RL introduces two value functions. The
+\textbf{state-value function} $V^{\pi}(s)$ is the expected return obtained by
+starting in state $s$ and following $\pi$ thereafter,
+\begin{equation}
+    V^{\pi}(s) = \mathbb{E}_{\pi}\!\left[ \sum_{t=0}^{\infty} \gamma^t R(s_t, a_t, s_{t+1}) \;\middle|\; s_0 = s \right],
+\end{equation}
+while the \textbf{action-value function} $Q^{\pi}(s, a)$ conditions additionally
+on taking action $a$ first,
+\begin{equation}
+    Q^{\pi}(s, a) = \mathbb{E}_{\pi}\!\left[ \sum_{t=0}^{\infty} \gamma^t R(s_t, a_t, s_{t+1}) \;\middle|\; s_0 = s,\, a_0 = a \right].
+\end{equation}
+The two are linked by $V^{\pi}(s) = \mathbb{E}_{a \sim \pi(\cdot \mid s)}[Q^{\pi}(s,
+a)]$, and their difference defines the \textbf{advantage} $A^{\pi}(s, a) =
+Q^{\pi}(s, a) - V^{\pi}(s)$, which measures how much better action $a$ is than
+the policy's average behaviour in state $s$. The advantage is central to the
+policy-gradient methods used in this thesis.
+
+\paragraph{Bellman equations.}
+Value functions satisfy a recursive consistency condition. For the action-value
+function,
+\begin{equation}
+    Q^{\pi}(s, a) = \mathbb{E}_{s' \sim P(\cdot \mid s, a)}\!\left[ R(s, a, s') + \gamma\, V^{\pi}(s') \right],
+    \label{eq:bellman}
+\end{equation}
+which decomposes the value of a state-action pair into the immediate reward and
+the discounted value of the successor state. The optimal value functions
+$V^{*}(s) = \sup_{\pi} V^{\pi}(s)$ and $Q^{*}(s, a) = \sup_{\pi} Q^{\pi}(s, a)$
+induce the optimal policy $\pi^{*}(s) = \arg\max_{a} Q^{*}(s, a)$. Whether solved
+by dynamic programming, value iteration, or sampled approximation, essentially
+all RL algorithms can be seen as ways of estimating or improving the quantities
+in Equation~\ref{eq:bellman}.
+
+\paragraph{Exploration versus exploitation.}
+Because the agent learns from its own experience, it faces a fundamental
+trade-off. \emph{Exploitation} chooses the action currently believed to be best,
+which secures known reward; \emph{exploration} tries alternatives to improve
+those beliefs, at the risk of short-term loss for long-term gain. An agent that
+only exploits may converge to a suboptimal behaviour, while one that only
+explores never applies what it has learned. Mechanisms such as $\epsilon$-greedy
+action selection and entropy regularisation, the latter central to Soft
+Actor-Critic (Section~\ref{sec:sac}), exist to manage this trade-off. In
+sparse-reward manipulation the trade-off is difficult, because informative reward
+is encountered so rarely that undirected exploration is unlikely to reach it, a
+difficulty that both reward shaping and automatic curricula attempt to address.
+
+\subsubsection{Partial Observability and the POMDP}
+\label{sec:pomdp}
+
+The MDP assumes the agent perceives the full state. Real and simulated robots
+rarely enjoy this: sensors are noisy, occlusions hide part of the scene, and
+quantities such as contact forces or friction coefficients are simply not
+observable. Such problems are modelled as a Partially Observable Markov Decision
+Process (POMDP), a tuple $(\mathcal{S}, \mathcal{A}, P, R, \Omega, O, \gamma)$
+that augments the MDP with an \textbf{observation space} $\Omega$ and an
+\textbf{observation function} $O(o \mid s', a)$ giving the probability of
+observation $o$ after a transition to $s'$. The agent no longer sees $s_t$; it
+sees only $o_t$, and a single observation is generally not a sufficient statistic
+of the state.
+
+Because the observation breaks the Markov property, an optimal policy cannot in
+general be a function of the current observation alone. The classical solution is
+to act on a \textbf{belief state}, the posterior $b_t(s) = P(s_t = s \mid o_0,
+a_0, \dots, o_t)$ over states given the entire interaction history, which is
+itself Markovian; maintaining the exact belief, however, is intractable for
+continuous state spaces. A practical alternative, and the one adopted in this
+thesis, is to have the policy summarise the history with a recurrent network. A
+Long Short-Term Memory (LSTM) network maintains a hidden state that is updated at
+each step, which provides the policy with a learned, compressed approximation of
+the belief. In the pushing task the current observation reports object and goal
+poses, but not the underlying contact state or the outcome of prior pushes. The
+problem is therefore formally a POMDP. Conditioning the policy on the sequence of
+pushes through an LSTM lets it combine information across the episode, rather than
+respond to a single frame. For this reason every policy compared in this thesis
+is recurrent.
+
+\subsubsection{Model-Free and Model-Based Reinforcement Learning}
+
+RL algorithms divide into two families according to whether they build an
+explicit model of the environment dynamics $P(s_{t+1} \mid s_t, a_t)$
+\cite{Yang2023SimtoRealMA}. \textbf{Model-free} methods learn a policy or value
+function directly from sampled interaction, without ever estimating the
+transition function. They subdivide further:
+\begin{itemize}
+  \item \textbf{Value-based} methods, such as Deep Q-Networks \cite{DQN}, learn
+        an action-value function and act greedily with respect to it, obeying the
+        recursion $Q(s, a) = \mathbb{E}[R(s, a, s') + \gamma \max_{a'} Q(s',
+        a')]$.
+  \item \textbf{Policy-based} methods, such as PPO
+        \cite{Schulman2017ProximalPO}, parameterise the policy directly and
+        ascend the gradient of the expected return in Equation~\ref{eq:return}.
+  \item \textbf{Actor-critic} methods, such as Soft Actor-Critic
+        \cite{Haarnoja2018SoftAO}, combine the two, maintaining an actor that
+        represents the policy and a critic that estimates value to reduce the
+        variance of the policy gradient.
+\end{itemize}
+Model-free methods make no assumptions about the dynamics and are robust to
+complex, contact-rich physics, which makes them the default choice in
+manipulation; their weakness is high sample complexity, since every unit of
+information must be extracted from interaction.
+
+\textbf{Model-based} methods instead learn an approximate dynamics model
+$\hat{P}(s_{t+1} \mid s_t, a_t)$ and use it to plan or to generate synthetic
+experience, typically by minimising a prediction error such as
+\begin{equation}
+    L_{\text{model}} = \mathbb{E}_{\mathcal{D}}\!\left[ \left\lVert P(s_{t+1} \mid s_t, a_t) - \hat{P}(s_{t+1} \mid s_t, a_t) \right\rVert^2 \right],
+\end{equation}
+over a dataset $\mathcal{D}$ of observed transitions. They can be far more
+sample-efficient, but their performance is bounded by the fidelity of the learned
+model, and small errors compound over long rollouts. The choice between the two
+families is therefore a choice between robustness and sample efficiency. This
+thesis works entirely in the model-free, on-policy regime and asks a
+complementary question: rather than learning a dynamics model to save samples,
+can a principled reward do so instead, by making each sampled transition more
+informative? Section~\ref{sec:pbrs} takes up this question.
+
+\subsection{Proximal Policy Optimization}
+\label{sec:ppo}
+
+Proximal Policy Optimization (PPO) \cite{Schulman2017ProximalPO} is the on-policy,
+model-free algorithm used to train every policy in this thesis. It belongs to the
+policy-gradient family, which optimises a parameterised policy $\pi_{\theta}(a
+\mid s)$ by ascending an estimate of the gradient of the expected return. The
+basic policy-gradient estimator,
+\begin{equation}
+    \nabla_{\theta} J(\pi_{\theta}) = \mathbb{E}_{\tau \sim \pi_{\theta}}\!\left[ \nabla_{\theta} \log \pi_{\theta}(a_t \mid s_t)\, \hat{A}_t \right],
+\end{equation}
+scales the score function of each action by its estimated advantage $\hat{A}_t$,
+so that actions better than average are made more likely. In practice the
+advantage is computed with Generalized Advantage Estimation (GAE), which trades
+bias against variance by exponentially weighting multi-step temporal-difference
+errors; GAE reappears in Chapter~\ref{section:methods}, where its decomposition
+explains how reward shaping interacts with a stale value estimate.
+
+PPO improves on the earlier Trust Region Policy Optimization
+\cite{Schulman2015TrustRP}, which constrained each update to a trust region
+through a costly second-order optimisation. PPO achieves a similar effect with a
+first-order \textbf{clipped surrogate objective}. Writing the probability ratio
+between the new and old policies as $r_t(\theta) = \pi_{\theta}(a_t \mid s_t) /
+\pi_{\theta_{\text{old}}}(a_t \mid s_t)$, the objective is
+\begin{equation}
+    L^{\text{CLIP}}(\theta) = \mathbb{E}_t\!\left[ \min\!\left( r_t(\theta)\, \hat{A}_t,\; \operatorname{clip}\!\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\, \hat{A}_t \right) \right].
+    \label{eq:ppo_clip}
+\end{equation}
+The clipping removes the incentive to move the policy ratio beyond $[1 - \epsilon,
+1 + \epsilon]$, which keeps each update inside an implicit trust region and
+prevents the large, destabilising steps that occur in unconstrained policy
+gradients. This same clipping mechanism is later reused in the behavioural-cloning
+loss of asymmetric self-play (Section~\ref{sec:asp}), where it has an unintended
+consequence that this thesis diagnoses. The full PPO objective adds a value-function
+loss $L^{\text{VF}}(\phi) = \mathbb{E}_t[(V_{\phi}(s_t) - \hat{R}_t)^2]$ and an
+entropy bonus $L^{\text{ENT}} = \mathbb{E}_t[\mathcal{H}(\pi_{\theta}(\cdot \mid
+s_t))]$ that encourages exploration:
+\begin{equation}
+    L(\theta) = L^{\text{CLIP}}(\theta) - c_1 L^{\text{VF}}(\phi) + c_2 L^{\text{ENT}},
+\end{equation}
+with coefficients $c_1$ and $c_2$ balancing the three terms.
+
+\subsection{Soft Actor-Critic}
+\label{sec:sac}
+
+Soft Actor-Critic (SAC) \cite{Haarnoja2018SoftAO} is an off-policy actor-critic
+algorithm built on the maximum-entropy framework. Where standard RL maximises
+return alone, SAC augments the objective with the entropy of the policy,
+\begin{equation}
+    J(\pi) = \sum_{t=0}^{T} \mathbb{E}_{(s_t, a_t) \sim \rho_{\pi}}\!\left[ R(s_t, a_t) + \alpha\, \mathcal{H}\big(\pi(\cdot \mid s_t)\big) \right],
+    \label{eq:sac}
+\end{equation}
+where $\mathcal{H}(\pi(\cdot \mid s_t)) = \mathbb{E}[-\log \pi(\cdot \mid s_t)]$
+is the policy entropy and the temperature $\alpha$ sets the weight of exploration
+against reward. Maximising entropy encourages the policy to remain as stochastic
+as the reward permits. This improves exploration and robustness, and discourages
+premature convergence to a single mode, an advantage in sparse-reward or
+multimodal problems. Being off-policy, SAC reuses past experience from a replay
+buffer, and is typically far more sample-efficient than on-policy methods. SAC is
+relevant here as the basis of an off-policy comparison baseline. Combined with
+Hindsight Experience Replay \cite{Andrychowicz2017}, which relabels failed
+trajectories with the goals they happened to achieve, it provides a natural
+goal-conditioned learner against which the on-policy results can be calibrated, as
+described in Chapter~\ref{sec:experiments}.
+
+\subsection{Potential-Based Reward Shaping}
+\label{sec:pbrs}
+
+Reward shaping supplies an agent with additional reward beyond the sparse task
+signal, to guide learning through the temporal credit-assignment problem
+\cite{Grzes2017RewardShaping}. Its danger is equally well known: an ill-chosen
+shaping reward can change the optimal policy, so that the agent learns to exploit
+the shaping rather than to solve the task. \cite{Ng1999PolicyInvariance} give the
+canonical illustration, a bicycle agent rewarded for progress toward a goal that
+learns to ride in circles near the start, collecting the progress reward
+repeatedly without ever advancing.
+
+Potential-Based Reward Shaping (PBRS) is the principled resolution of this
+danger. \cite{Ng1999PolicyInvariance} prove that a shaping reward of the form
+\begin{equation}
+    F(s, a, s') = \gamma\, \Phi(s') - \Phi(s),
+    \label{eq:pbrs}
+\end{equation}
+defined as the discounted difference of a \textbf{potential function}
+$\Phi: \mathcal{S} \to \mathbb{R}$ over states, leaves the optimal policy of the
+MDP unchanged for \emph{any} choice of $\Phi$. The intuition is that the shaping
+term telescopes along a trajectory: summed over an episode it collapses to a
+boundary term that depends only on the first and last states, so it cannot create
+the reward-collecting cycles that non-potential shaping permits. Formally, adding
+Equation~\ref{eq:pbrs} to the task reward shifts every action-value by the same
+state-dependent constant, $Q'(s, a) = Q(s, a) - \Phi(s)$, and since the shift is
+independent of the action it does not alter the arg-max that defines the optimal
+policy. This decoupling is the property the thesis exploits: it permits a dense,
+informative reward to be designed purely to accelerate learning, with a guarantee
+that the task being solved is unchanged.
+
+Subsequent work extended the framework in directions this thesis uses.
+\cite{Devlin2012DynamicPBRS} generalised the potential to depend on time as well
+as state, $F(s, t, s', t') = \gamma \Phi(s', t') - \Phi(s, t)$. This preserves
+policy invariance while letting the shaping adapt during learning, and so licences
+shaping that changes across a curriculum. \cite{Harutyunyan2015} showed that an
+arbitrary reward function can be expressed as potential-based advice, widening the
+class of admissible potentials. Crucial for the present setting is the episodic
+case. \cite{GrzesKudenko2009} and \cite{Grzes2017RewardShaping} analysed PBRS in
+the finite-horizon setting and clarified when the undiscounted case $\gamma = 1$ is
+safe. Provided every trajectory terminates and terminal states are handled
+consistently, the shaping sum telescopes to $\Phi(s_T) - \Phi(s_0)$ and remains
+bounded. This result justifies the use of $\gamma_{\text{shaping}} = 1$ in the
+potentials constructed in Chapter~\ref{section:methods}. The theorem and its
+episodic refinement are the foundation of the reward design in this thesis. The
+specific potentials, which combine bounded exponential functions of position and
+orientation error, are introduced there rather than here, since they are a
+contribution of the work rather than prior art.
+
+\subsection{Curriculum Learning and Automatic Curricula}
+\label{sec:curriculum}
+
+An orthogonal approach to sample inefficiency is to change not the reward but
+the order in which the agent encounters tasks. Curriculum learning organises
+training from easy to hard, so that competence acquired on simple problems
+supports progress on difficult ones \cite{Narvekar2020}. The survey of
+\cite{Narvekar2020} provides a taxonomy that distinguishes, among other axes,
+\emph{forced} curricula, in which a designer fixes the sequence of tasks or
+objectives in advance, from \emph{automatic} curricula, in which the sequence is
+derived from the learner's own progress. Both appear in this thesis: a forced
+position-then-rotation curriculum, and an automatic curriculum generated by
+self-play.
+
+Several forced and semi-automatic schemes inform the design. Reverse curriculum
+generation \cite{Florensa2017ReverseCurriculum} starts the agent near the goal
+and expands the start distribution outward as competence increases, so that the
+agent always trains at the boundary of what it can already achieve. Precision-based
+curricula such as Continuous Curriculum Learning \cite{Luo2020AcceleratingRL}
+progressively tighten the success tolerance, which is a close analogue of staging
+a pushing task from coarse positioning to fine orientation control. The survey of
+\cite{Portelas2020ACLSurvey} organises automatic curriculum methods into families
+that include self-paced learning, teacher-student setups, and goal-generation, and
+notes the recurring difficulty that an automatic curriculum can propose goals
+faster than the learner masters them. That failure mode is the one the self-play
+experiments in this thesis encounter.
+
+\subsection{Asymmetric Self-Play}
+\label{sec:asp}
+
+Asymmetric Self-Play (ASP) is the automatic curriculum at the centre of the
+thesis. Introduced by \cite{Sukhbaatar2018IntrinsicMotivation}, it pits two
+policies embodied in the same agent against each other: Alice proposes a task by
+acting in the environment, and Bob must then solve it. Because Alice
+demonstrates each task by performing it, every proposed goal is achievable by
+construction, and the competition between the two produces a curriculum of
+increasing difficulty with no external reward or human specification. Sukhbaatar
+et al. define a self-regulating reward structure,
+\begin{align}
+    R_B &= -\gamma\, t_B, \label{eq:sukh_bob}\\
+    R_A &= \gamma \max(0,\, t_B - t_A), \label{eq:sukh_alice}
+\end{align}
+where $t_A$ is the time Alice takes to set the task, $t_B$ the time Bob takes to
+solve it, and $\gamma$ a scaling coefficient. Alice is rewarded when Bob is slow
+but penalised for her own effort, so her optimal behaviour is to find the
+\emph{simplest} tasks that Bob cannot yet solve, placing each new task just beyond
+his current ability. This time-based reward is one of the two Alice reward
+formulations the thesis evaluates.
+
+\cite{OpenAI2021AsymmetricSF} scaled ASP to robotic manipulation and introduced
+the second formulation. They model the problem as a goal-augmented MDP
+$\mathcal{M} = \langle \mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R},
+\mathcal{G} \rangle$ with an explicit goal space $\mathcal{G}$, run Alice to
+produce a trajectory whose final state $s_T$ becomes the goal for Bob, and train
+Bob from the same initial state on the resulting goal distribution $\mathcal{G}(g
+\mid s_0)$. Their Alice reward is \emph{outcome-based} rather than time-based:
+Alice receives a reward when Bob fails to reach the goal, a shaping bonus for
+proposing a valid goal, and a penalty for placing objects out of bounds, while
+Bob receives a sparse reward for reaching the goal. Both the outcome-based and
+the time-based Alice rewards are compared in this thesis.
+
+A distinctive feature of the manipulation formulation is that Alice's own
+trajectory is itself a demonstration of the goal she sets, which
+\cite{OpenAI2021AsymmetricSF} use through Alice Behavioral Cloning (ABC). Bob
+is trained on a combined objective $\mathcal{L} = \mathcal{L}_{\text{RL}} + \beta
+\mathcal{L}_{\text{abc}}$, where the behavioural-cloning term imitates Alice's
+relabelled trajectory on goals Bob failed to solve. To prevent the imitation term
+from producing destabilising policy updates, they apply the PPO clipping mechanism
+of Equation~\ref{eq:ppo_clip}, with the advantage fixed to one:
+\begin{equation}
+    \mathcal{L}_{\text{abc}} = -\,\mathbb{E}_{(s_t, g_t, a_t) \in \mathcal{D}_{\text{BC}}}\!\left[ \operatorname{clip}\!\left( \frac{\pi_B(a_t \mid s_t, g_t; \theta)}{\pi_B(a_t \mid s_t, g_t; \theta_{\text{old}})},\, 1 - \epsilon,\, 1 + \epsilon \right) \right].
+    \label{eq:abc}
+\end{equation}
+This clipped behavioural-cloning loss behaves as intended only when Alice's
+demonstrated actions lie close to Bob's current policy. When the two diverge
+strongly, as they do under the discrete, contact-rich action space of this thesis,
+the clip saturates and the imitation gradient vanishes; this interaction is
+analysed in the results. Behavioural cloning more broadly provides the wider
+context for ABC. This includes cloning from observation \cite{Torabi2018BCO},
+implicit energy-based cloning \cite{Florence2022ImplicitBC}, and
+demonstration-boosted RL \cite{Hester2017DeepQF, Silver2018ResidualPolicy}, all
+methods for adding a demonstration signal to an RL objective.
+
+The broader set of automatic curricula based on adversarial goal generation
+places ASP among several related methods. PAIRED \cite{Dennis2020PAIRED} generates
+environments that maximise the regret between a protagonist and an antagonist.
+AMIGo \cite{Campero2021AMIGo} trains a teacher to propose goals a student finds
+challenging but achievable. Adversarial Intrinsic Motivation
+\cite{Durugkar2021AIM} directs exploration with a Wasserstein distance to the goal
+distribution. All share ASP's central premise, that a well-tuned adversary
+produces a useful curriculum, and all share its central risk, that the adversary
+may generate tasks the learner cannot use. The stability of such coupled
+optimisation is itself a subject of study. \cite{Letcher2019GameMechanics}
+decompose the dynamics of differentiable games into potential and Hamiltonian
+components, and identify when adversarial training converges or cycles.
+\cite{Berner2019Dota2} demonstrate that competitive self-play can reach very high
+performance, but only at very large scale. These two observations define the
+scope of the present study: the self-play results here are obtained under a
+single-Graphical-Processing-Unit budget, and are interpreted accordingly.
+
+\subsection{Goal-Conditioned and Hierarchical Reinforcement Learning}
+\label{sec:gcrl}
+
+ASP produces a goal-conditioned policy, and the way a goal is represented
+influences what the policy can learn. Goal-conditioned RL augments the state with
+a goal and learns a single policy $\pi(a \mid s, g)$ that generalises across
+goals; Hindsight Experience Replay \cite{Andrychowicz2017} makes this practical
+under sparse reward by relabelling achieved states as goals. Sukhbaatar et al. in
+their goal-embedding work \cite{Sukhbaatar2018GoalEmbeddings} showed that
+compressing goals into a learned latent through a goal encoder can improve
+hierarchical learning, an idea the thesis adopts in the form of the GoalEncoder
+used by Bob. The effect of such a compression can be positive or negative, and the
+information-bottleneck literature explains why. \cite{Tishby2015InfoBottleneck}
+formalise the trade-off between compression and predictive sufficiency. InfoBot
+\cite{Goyal2019InfoBot} applies it in RL, and shows that a bottleneck can either
+improve generalisation by discarding distractors or reduce precision by discarding
+task-relevant detail. Whether the goal encoder improves or reduces performance in
+the pushing task is one of the questions the ablations address.
+
+Hierarchical RL provides further context for the two-level Alice-Bob structure.
+Methods such as HIRO \cite{Nachum2018DataEfficientHR} and FeUdal Networks
+\cite{Vezhnevets2017FeUdal} decompose control into a high-level policy that sets
+sub-goals and a low-level policy that achieves them. The Option-Critic architecture
+\cite{Bacon2017OptionCritic} learns temporally extended actions with their own
+termination conditions, a useful lens on the push primitive used here as a
+macro-action. The survey of \cite{Hutsebaut2022HRLSurvey} situates these
+approaches and their open challenges. Imagined-goal methods
+\cite{Nair2018ImaginedGoals} generate goals from a learned latent, mirroring how
+Alice's proposals define Bob's training distribution.
+
+\subsection{Mechanics and Geometry of Planar Pushing}
+\label{sec:pushing}
+
+The final body of theory explains why the pushing task is genuinely
+multi-objective. When a robot slides an object across a surface, the motion is
+governed by friction between the object and the support. The analysis is made
+tractable by the \textbf{quasi-static} assumption: pushing is slow enough that
+inertial forces are negligible and the applied load is balanced entirely by
+friction \cite{Mason1986Pushing}. Under this assumption the object moves only
+while it is being pushed and stops the instant the push stops, so its trajectory
+is determined by the geometry of frictional contact rather than by dynamics.
+
+The central tool is the \textbf{limit surface} \cite{Goyal1991}. At a sliding
+contact, the set of all friction forces and moments the interface can sustain
+forms a convex surface in the three-dimensional load space of planar forces and
+moment, $P = [F_x, F_y, M]$. For isotropic Coulomb friction this surface is a
+convex, closed shape often approximated by an ellipsoid. Its importance lies in
+the \textbf{normality (maximum-power) principle}: the object's instantaneous
+motion twist $\mathbf{t} = [v_x, v_y, \omega]$, comprising a linear velocity and
+an angular velocity, is normal to the limit surface at the point corresponding to
+the applied load,
+\begin{equation}
+    \mathbf{t} \;\propto\; \nabla f(\mathbf{w}),
+    \label{eq:normality}
+\end{equation}
+where $f(\mathbf{w}) = 0$ is the limit surface and $\mathbf{w}$ the applied wrench.
+The consequence is important for this thesis. Consider any push not directed
+exactly through the object's centre of friction. Its wrench lies where the surface
+normal has a non-zero moment component, so the resulting twist contains an angular
+velocity: \emph{almost every push rotates the object as well as translating it}.
+Translation and rotation are mechanically coupled, and a goal that constrains both
+cannot be decomposed into two independent sub-problems. This coupling is the
+physical origin of the combined position-and-orientation success criterion that
+recurs throughout the results. It is also the reason a reward or curriculum that
+treats the two objectives as separable is inconsistent with the underlying
+physics. \cite{LynchMason1996} developed the controllability and planning
+consequences of this mechanics for stable pushing, and \cite{HoweCutkosky1996}
+gave practical force-motion models. The survey of \cite{Stuber2020PushingSurvey}
+and the high-fidelity dataset of \cite{Yu2016MillionWays} document how strongly
+real pushing behaviour depends on object shape and pressure distribution.
+
+Because position and orientation are coupled, it is natural to measure goal error
+with a single metric on the space of planar poses, rather than with two separate
+quantities. The configuration of a planar rigid body is an element of the
+\textbf{Special Euclidean group} $\mathrm{SE}(2)$, the group of rigid-body
+transformations of the plane. Its elements combine a translation $(x, y) \in
+\mathbb{R}^2$ with a rotation $\theta \in \mathrm{SO}(2)$. \cite{Park1995LieGroup}
+formulated rigid-body kinematics and dynamics in the language of Lie groups, which
+provides the tools to define a distance on this space. A left-invariant Riemannian
+metric on $\mathrm{SE}(2)$ yields a geodesic distance between two poses. Because
+translation is measured in metres and rotation in radians, combining them requires
+a \textbf{characteristic length} $L$ that converts an angular error into an
+equivalent linear displacement. A pose error
+can then be summarised by a single scalar of the form
+\begin{equation}
+    d_{\text{pose}} \;=\; \sqrt{\,\Delta x^2 + \Delta y^2 + L^2\, \Delta\theta^2\,},
+    \label{eq:se2_distance}
+\end{equation}
+in which $L$ sets the relative weight of orientation against position and is
+naturally identified with a physical length scale of the object. This unified
+$\mathrm{SE}(2)$ distance underlies the single-potential reward used for the
+self-play variants in Chapter~\ref{section:methods}. The idea of respecting the
+geometry and symmetry of the configuration space also appears in recent
+manipulation learning: SE(3)-equivariant and diffusion-based methods
+\cite{Urain2023SE3Diffusion}, MDP homomorphic networks
+\cite{VanderPol2020MDPHomomorphic}, equivariant transporter networks
+\cite{Huang2022EquivariantTransporter}, and equivariant RL under partial
+observability \cite{Nguyen2024EquivariantRL} all exploit the group structure of
+the task, and provide broader context for a geometry-aware treatment of planar
+pushing.
+
+\subsection{Positioning of This Work}
+
+The literature provides two well-founded but rarely compared techniques for
+reducing the sample cost of on-policy manipulation learning: shaping the reward,
+with the policy-invariance guarantee of PBRS, and structuring the training
+process, through forced or automatic curricula such as ASP. Each has strong
+theoretical support and prominent empirical results, yet the two are seldom
+evaluated directly against each other on a single task, under a common budget,
+and against a common success criterion. The planar-pushing setting makes the
+comparison more stringent, because the limit-surface coupling of
+Equation~\ref{eq:normality} makes the task irreducibly multi-objective and
+therefore places a strong demand on any method that implicitly assumes the two
+objectives can be handled separately. The chapters that follow implement both
+techniques in this setting and measure what each contributes.
