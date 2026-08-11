@@ -39,7 +39,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from asyncDualPlayPPO.tasks.utils.validation_configs import get_test_config, get_test_count
 
