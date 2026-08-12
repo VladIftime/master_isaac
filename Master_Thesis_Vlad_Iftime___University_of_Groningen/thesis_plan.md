@@ -34,10 +34,12 @@ failure is a genuine finding and not task-impossibility.
    family) along five axes: goal coupling, reward formulation, imitation signal,
    goal representation, and compute scale. Each axis is both a literature claim
    and an experiment.
-3. **Supporting (reward efficiency).** Potential-Based Reward Shaping (PBRS)
-   reaches single-agent success with roughly four times fewer parallel
-   environments than the hand-tuned improvement reward. This anchors the task as
-   solvable and gives the practical "invest in the reward first" takeaway.
+3. **Supporting (anchored task solvability).** Potential-Based Reward Shaping
+    (PBRS) and the improvement-reward baseline both converge on this task,
+    confirming the ASP underperformance is a genuine regime finding rather than
+    evidence that the task is unsolvable. The single-agent results anchor the
+    thesis and give the practical recommendation that a well-shaped dense reward
+    is the first investment for this class of task.
 
 **Sources of truth**
 - Final numbers: the job-array campaign outputs collated by the seed collator
@@ -201,9 +203,12 @@ referenced in the prose at least once before it appears.
   ABC on vs off; goal encoder on vs off) and which do not.
 - Frame the improvement reward's failure as gradient starvation and near-zero
   variance, not as non-Markovianity.
-- Pending campaign results are written as `\TBD` (red) until the collated
-  seed-mean and confidence interval exist; no placeholder number is stated as if
-  measured.
+- Pending results are written as `\TBD` (red) until a seed-mean is available; no
+  placeholder number is stated as if measured. Headline comparisons report the
+  number of seeds behind every mean: 3--5 seeds for models with confidence
+  intervals; 2 seeds noted as an informed estimate with a stated limitation; 1
+  seed treated as qualitative pilot evidence. All reported numbers carry the
+  seed count, the CI (where computed), and the validation protocol.
 
 ---
 
@@ -349,14 +354,12 @@ the campaign outputs once they exist.
     in this contact-rich multi-objective pushing task under a single-GPU budget?
   - RQ2: Which regime difference from the ASP successes (goal coupling, reward
     formulation, imitation signal, goal representation, or compute scale) causes
-    the failure?
+    the underperformance?
   - RQ3: What is the underlying mechanism — where, in the learning dynamics, does
     ASP break?
-  - RQ (supporting): Can potential-based reward shaping reach single-agent success
-    with fewer parallel environments than a hand-tuned improvement reward?
 - **1.4 Contributions.** State the three from Section 0 (ASP-failure mechanism;
-  regime contrast; reward efficiency). Preview the disc-vs-T-block isolation and
-  the Alice-replay diagnostic as the two most distinctive results.
+  regime contrast; anchored task solvability). Preview the disc-vs-T-block
+  isolation and the Alice-replay diagnostic as the two most distinctive results.
 - **1.5 Thesis outline.**
 - Guardrail: ASP succeeds elsewhere; the contribution is the regime analysis, not
   a refutation.
@@ -481,17 +484,152 @@ the model list so ASP-dPose is ABC-on canonical.
 
 ---
 
-## 5. Execution Order
-1. Apply the mandatory code fixes (Section 2.4): both validators sample; ABC-on
-   canonical for the headline self-play phases; disc ABC-off control arm; log
-   gradient-update count; implement the Alice-replay diagnostic.
-2. Launch the campaign (Section 2.1), highest-payoff phases first: anchor +
-   efficiency, seed CIs, coupled-gate isolation, then ASP scale and ablations.
-3. Collate seed means with confidence intervals; regenerate every figure in
-   Section 3 from the campaign outputs.
-4. Draft in dependency order: Methods → Experimental Setup → Related Work →
-   Results → Introduction/Abstract → Discussion/Conclusion → Appendices.
-5. Keep every number traceable to the collated campaign outputs; write `\TBD`
-   (red) for any result still pending, and never state a placeholder as measured.
-6. After each chapter rewrite, run the sentence-length checker
-   (`tools/style_check.py`) and confirm the diction rules (1.4a, 1.4b) hold.
+## 6. Data Analysis
+
+This section describes what data to extract from the completed training runs,
+what to look for in each output, what figures to generate, and how the headline
+results table should be laid out.
+
+### 6.1 Data sources
+
+| Source | Format | Location | Content |
+|---|---|---|---|
+| Validation CSV | one CSV per run dir | `final_results_thesis/<exp>/validation_results_*.csv` | per-scene: `test_index, test_type, success (0/1), pushes_used, pos_err, rot_err` (30 scenes × 20 trials) |
+| TensorBoard event files | `.tfevents` | `final_results_thesis/<exp>/summary/` | training curves: `Metrics/Bob/CombinedSR, PositionSR, RotationSR, ValueError, ABC/ClipFraction, Diagnostics/GradientUpdates` |
+| Alice-replay CSV | to generate offline | via `tests/alice_replay.py` on each saved checkpoint | per-replay: `success, pushes, pos_err, rot_err, stop_reason` — measures whether Alice's own actions reach her proposed goals |
+| Collated summary | CSV | produced by `extras/collate_seeds.py` | per-model mean ± 95 % CI for overall scene SR, per-test-type SR, per-difficulty SR |
+
+### 6.2 TB tag availability by model
+
+The TensorBoard tags differ between single-agent and self-play scripts, and
+between the d_pose (E, G, I) and legacy (C, D) variants. The cross-model
+comparison relies on the following shared tags:
+
+| Tag | base/pbrsA | pbrsE | pbrsG | discF | taspI | Purpose |
+|---|---|---|---|---|---|---|
+| `Metrics/SuccessRate` | yes | — | — | — | — | single-agent combined SR |
+| `Metrics/Bob/CombinedSR` | — | yes | —* | — | yes | self-play combined-gate SR (d_pose only) |
+| `Metrics/Bob/PositionSR` | — | yes | yes | yes | yes | per-axis position SR |
+| `Metrics/Bob/RotationSR` | — | yes | yes | yes | yes | per-axis orientation SR |
+| `Metrics/Bob/ValueError` | pbrsA only | yes | —* | — | — | value-bias measurement |
+| `ABC/ClipFraction` | — | yes* | —* | yes* | —* | imitation-signal suppression |
+| `Diagnostics/GradientUpdates` | yes | yes | —* | — | — | update-count confound |
+
+\* Conditionally logged (only when ABC is enabled, or only in the d_pose scripts).
+
+### 6.3 Headline results table
+
+A single table showing every model with its environment count, number of seeds,
+and scene success rate with a confidence interval, plus a column flagging the
+research question or comparison each row serves.
+
+| Model | Envs | Seeds | Scene SR ± CI | Trial SR | Pos SR | Rot SR | Answers |
+|---|---|---|---|---|---|---|---|
+| PPO-Baseline (base) | 528 | 3 | \TBD | \TBD | — | — | RQ1 anchor |
+| PPO-Baseline (base) | 256 | 2 | \TBD* | \TBD | — | — | RQ1 anchor |
+| PPO-PBRS (pbrsA) | 1024 | 3 | \TBD | \TBD | — | — | RQ1 anchor |
+| PPO-Curriculum (pbrsB) | 1024 | 2 | \TBD* | \TBD | — | — | RQ1 anchor |
+| ASP-dPose (pbrsE) | 528 | 5 | \TBD | \TBD | \TBD | \TBD | RQ1 primary subject |
+| TASP-dPose (pbrsG) | 528 | 5 | \TBD | \TBD | \TBD | \TBD | RQ1, RQ2 reward |
+| ASP-disc (discF) | 528 | 5 | \TBD | \TBD | — | — | RQ2 coupling isolation |
+| Bob-penalty (taspI) | 528 | 5 | \TBD | \TBD | \TBD | \TBD | RQ2 reward structure |
+| E — ABC off | 528 | 3 | \TBD | \TBD | — | — | RQ2 imitation |
+| G — ABC off | 528 | 3 | \TBD | \TBD | — | — | RQ2 imitation |
+| E — encoder off | 528 | 3 | \TBD | \TBD | — | — | RQ2 goal representation |
+| G — encoder off | 528 | 3 | \TBD | \TBD | — | — | RQ2 goal representation |
+| E — scale | 256, 2 048 | 3 | \TBD | \TBD | — | — | RQ2 scale |
+| G — scale | 256, 2 048 | 3 | \TBD | \TBD | — | — | RQ2 scale |
+| gym A (PBRS) | 64 | 1 | \TBD* | \TBD | — | — | cross-environment |
+| gym B (Curriculum) | 64 | 1 | \TBD* | \TBD | — | — | cross-environment |
+| gym C (ASP) | 64 | 1 | \TBD* | \TBD | — | — | cross-environment |
+
+Rows marked \TBD* carry a footnote that fewer than three seeds were available
+(2 seeds for an informed estimate; 1 seed for qualitative evidence). Per-axis
+SR for ASP models is the training-final value from TensorBoard (last iteration
+of the `Metrics/Bob/PositionSR` / `Metrics/Bob/RotationSR` curve, averaged
+across seeds). Single-agent models log a single `Metrics/SuccessRate`, not per-
+axis. The disc models (discF) lack rotation entirely, so only the overall SR is
+relevant.
+
+### 6.4 Figure inventory
+
+All figures are generated with a new standalone script `tools/plot_results.py`,
+following the conventions of `tools/plot_push_primitive.py` (matplotlib, Agg
+backend, ColorBrewer palette, DPI 150, PDF + PNG output to `images/`).
+
+**Figure 1 — head-to-head scene SR with CIs (RQ1).**
+Grouped bar chart, one bar per headline model (base@528, pbrsA@1024, pbrsB@1024,
+pbrsE@528, pbrsG@528, discF@528, taspI@528) with CI whiskers. The single-agent
+anchors cluster at the top; E and G sit far below; discF sits near the anchors.
+Data source: `collated_summary.csv`.
+
+**Figure 2 — coupling isolation (RQ2 axis 1, the flagship).**
+Two-panel figure. Left: discF scene SR with 5-seed CI alongside E and G with
+5-seed CI. Right: per-test-type SR breakdown (discF `pos_only` vs E/G
+`pos_rot`), showing discF solves what E/G cannot. Data source: `collated_summary.csv`
+per-test-type columns.
+
+**Figure 3 — scale sweep (RQ2 axis 5).**
+Line plot: E and G scene SR vs environment count (256, 528, 2 048) with 3-seed
+CI error bars. Second panel: value error vs environment count (E only, since
+pbrsG does not log `ValueError`). Data source: `collated_summary.csv` for SR;
+TensorBoard event files for value error.
+
+**Figure 4 — component ablations (RQ2 axes 3–4).**
+Grouped bar chart: E canonical (ABC-on, 5-seed) vs E ABC-off (3-seed) vs E
+encoder-off (3-seed), same for G. Inset bar chart: discF ABC-on vs ABC-off
+(positive control). Data source: `collated_summary.csv` — collate_seeds.py
+parses the `_noabc` and `_noge` name suffixes as separate model rows.
+
+**Figure 5 — per-axis vs combined (RQ3).**
+Grouped bar chart: for E and G, show PositionSR, RotationSR, and CombinedSR
+(training-final values from TensorBoard, averaged across seeds). The gap between
+the independence product (PositionSR × RotationSR) and the measured CombinedSR
+is the composition gap — the mechanism of the underperformance. Data source:
+TensorBoard event files (`Metrics/Bob/PositionSR`, `Metrics/Bob/RotationSR`,
+`Metrics/Bob/CombinedSR`).
+
+**Figure 6 — training-time diagnostics (RQ2 axis 3, RQ3).**
+Multi-panel time-series plot from TensorBoard:
+- (a) `ABC/ClipFraction` over training for E and G (ABC-on canonical only);
+- (b) `Metrics/Bob/ValueError` over training, pbrsA (single-agent) vs E
+  (self-play) overlaid on one axis (pbrsG does not log this tag);
+- (c) `Metrics/Bob/CombinedSR` (E and G) alongside `Metrics/SuccessRate`
+  (base, pbrsA) over the full training-iteration axis.
+
+Data source: TensorBoard event files.
+
+**Figure 7 — Alice-replay (RQ3, RQ2 axis 7).**
+Bar chart: replay success rate — the share of Alice's goal-proposing trajectories
+that reach her own goal when replayed from Bob's start state. One bar for E,
+one for G, one for discF. Data source: `tests/alice_replay.py` output CSVs,
+aggregated across seeds. A low rate means the ASP premise (every goal achievable
+by construction) is broken by stochastic PhysX contact. No new training
+required — operates offline on saved checkpoints.
+
+**Figure 8 — cross-environment (supplementary).**
+Bar chart: gym A/B/C scene SR at envs 64, single-seed. Qualitative; confirms the
+ordering (single-agent ≈ curriculum ≫ ASP) survives the second simulator. Data
+source: `collated_summary.csv` gym rows.
+
+### 6.5 Execution order
+
+1. Run `extras/collate_seeds.py` on the done runs — get headline numbers.
+2. Run `tests/alice_replay.py` on E, G, discF checkpoints — get replay rates
+   (offline, no training needed).
+3. After all running jobs finish (~20 h), re-run the collator on the full set.
+4. Extract TensorBoard curves for per-axis-vs-combined, ABC clip-fraction, and
+   value error using `tensorboard.backend.event_processing`.
+5. Run `tools/plot_results.py` — reads `collated_summary.csv` and TB event
+   files, outputs all eight figures to `images/`.
+6. Write the Results chapter, slotting each figure into the corresponding
+    section (Figure 1→§5.3 RQ1, Figure 2→§5.4 RQ2 axis 1, Figures 3–4→§5.5–5.8
+    RQ2 axes 2–5, Figures 5–7→§5.9 RQ3 mechanism, Figure 8→§5.10 cross-env).
+
+The earlier campaign-level execution order (code fixes, submission, collation,
+drafting order, style checks) is superseded by the data-analysis pipeline above
+and by the current chapter-by-chapter drafting sequence begun in Section 4.
+The validation and collation steps are now covered by Section 6.5
+items 1–3; the figure regeneration by items 4–5; the chapter drafting order
+remains Methods → Experiments → Results → Introduction/Abstract →
+Discussion/Conclusion → Appendices.

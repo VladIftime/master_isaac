@@ -8,11 +8,11 @@
 # Protocol is fixed to SUMMARY.md: 30 scenes, best-of-20, max 30 pushes.
 # Launcher sets --array / --mem / --time and exports: PARAMS
 #SBATCH --job-name=validate
-#SBATCH --partition=gpu
+#SBATCH --partition=gpushort
 #SBATCH --gpus-per-node=rtx_pro_6000:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=12G
-#SBATCH --time=06:00:00
+#SBATCH --time=03:00:00
 #SBATCH --output=/scratch/%u/slurm_logs/slurm-%A_%a-validate.out
 
 set -o pipefail

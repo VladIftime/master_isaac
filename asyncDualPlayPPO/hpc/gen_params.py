@@ -80,18 +80,18 @@ class Suite:
         line = f"{script} {seed} {envs} {iters} {SAVE} {exp} {ex}".rstrip()
         mem = MEM_TIER[envs]
         self.buckets.setdefault((phase, family, mem), []).append(line)
-        self.val.setdefault(phase, []).append(f"{validator} {exp} {val_extra}".rstrip())
+        self.val.setdefault(phase, []).append(f"{validator} {exp} {val_extra} --max_pushes 10 --max_tries 3".rstrip())
 
     def add_gym(self, phase, model_script, seed, envs, push_nsteps, exp):
         iters = 3000
         line = f"{model_script} {seed} {envs} {push_nsteps} {iters} {SAVE} {exp}"
         mem = GYM_MEM.get(envs, "32G")
         self.buckets.setdefault((phase, "gym", mem), []).append(line)
-        self.gymval.setdefault(phase, []).append(f"validate_pusht_gym.py {exp}")
+        self.gymval.setdefault(phase, []).append(f"validate_pusht_gym.py {exp} --max_pushes 10 --max_tries 3")
 
     def add_xeval(self, phase, exp, val_extra):
         self.val.setdefault(phase, []).append(
-            f"validate_push_asp.py {exp} {val_extra}".rstrip())
+            f"validate_push_asp.py {exp} {val_extra} --max_pushes 10 --max_tries 3".rstrip())
 
     def write(self):
         os.makedirs(PARAMS_DIR, exist_ok=True)
@@ -110,12 +110,12 @@ class Suite:
             fname = f"{phase}_validate.txt"
             with open(os.path.join(PARAMS_DIR, fname), "w") as f:
                 f.write("\n".join(lines) + "\n")
-            manifest.append(f"hpc/params/{fname} {TPL_VAL} 12G 06:00:00 4 {phase}_validate")
+            manifest.append(f"hpc/params/{fname} {TPL_VAL} 12G 03:00:00 4 {phase}_validate")
         for phase, lines in sorted(self.gymval.items()):
             fname = f"{phase}_validate.txt"
             with open(os.path.join(PARAMS_DIR, fname), "w") as f:
                 f.write("\n".join(lines) + "\n")
-            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 32G 04:00:00 4 {phase}_validate")
+            manifest.append(f"hpc/params/{fname} {TPL_GYM_VAL} 8G 02:00:00 4 {phase}_validate")
         with open(os.path.join(PARAMS_DIR, "manifest.txt"), "w") as f:
             f.write("# PARAMS_FILE  TEMPLATE  MEM  TIME  THROTTLE  PHASE\n")
             f.write("\n".join(manifest) + "\n")

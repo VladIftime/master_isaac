@@ -1,6 +1,6 @@
-validate_push_asp.py pbrsE_e528_i3000_s7 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc
-validate_push_asp.py pbrsE_e528_i3000_s42 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc
-validate_push_asp.py pbrsE_e528_i3000_s123 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc
-validate_push_asp.py pbrsG_e528_i3000_s7 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc
-validate_push_asp.py pbrsG_e528_i3000_s42 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc
-validate_push_asp.py pbrsG_e528_i3000_s123 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc
+validate_push_asp.py pbrsE_e528_i3000_s7 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py pbrsE_e528_i3000_s42 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py pbrsE_e528_i3000_s123 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py pbrsG_e528_i3000_s7 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py pbrsG_e528_i3000_s42 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py pbrsG_e528_i3000_s123 --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
