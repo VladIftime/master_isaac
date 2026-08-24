@@ -1,0 +1,533 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Coordinated Dual-Arm Manipulation using\nReinforcement Learning: A Soft Actor-Critic\nApproach on the Poppy Humanoid",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          83.671875,
+          53.09869384765625
+        ],
+        [
+          527.0283813476562,
+          53.09869384765625
+        ],
+        [
+          527.0283813476562,
+          132.79998779296875
+        ],
+        [
+          83.671875,
+          132.79998779296875
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          134.47265625,
+          493.83984375
+        ],
+        [
+          213.37168884277344,
+          493.83984375
+        ],
+        [
+          213.37168884277344,
+          505.1551818847656
+        ],
+        [
+          134.47265625,
+          505.1551818847656
+        ]
+      ]
+    },
+    {
+      "title": "II. RELATED WORKS",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          392.0625,
+          595.93359375
+        ],
+        [
+          482.9216613769531,
+          595.93359375
+        ],
+        [
+          482.9216613769531,
+          607.3559722900391
+        ],
+        [
+          392.0625,
+          607.3559722900391
+        ]
+      ]
+    },
+    {
+      "title": "III. METHODOLOGY",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          390.8671875,
+          305.5078125
+        ],
+        [
+          481.55340576171875,
+          305.5078125
+        ],
+        [
+          481.55340576171875,
+          316.1830139160156
+        ],
+        [
+          390.8671875,
+          316.1830139160156
+        ]
+      ]
+    },
+    {
+      "title": "A. Robot Setup",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          309.287109375,
+          425.77734375
+        ],
+        [
+          374.9615478515625,
+          425.77734375
+        ],
+        [
+          374.9615478515625,
+          436.61944580078125
+        ],
+        [
+          309.287109375,
+          436.61944580078125
+        ]
+      ]
+    },
+    {
+      "title": "B. Policy Architecture and Environment Setup",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          308.98828125,
+          558.6820068359375
+        ],
+        [
+          500.75927734375,
+          558.6820068359375
+        ],
+        [
+          500.75927734375,
+          568.6446075439453
+        ],
+        [
+          308.98828125,
+          568.6446075439453
+        ]
+      ]
+    },
+    {
+      "title": "C. Human Demonstrations",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          48.41015625,
+          657.6417388916016
+        ],
+        [
+          159.39944458007812,
+          657.6417388916016
+        ],
+        [
+          159.39944458007812,
+          667.6043319702148
+        ],
+        [
+          48.41015625,
+          667.6043319702148
+        ]
+      ]
+    },
+    {
+      "title": "D. Reward Design",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          311.9779968261719,
+          119.8387451171875
+        ],
+        [
+          389.373046875,
+          119.8387451171875
+        ],
+        [
+          389.373046875,
+          129.80133056640625
+        ],
+        [
+          311.9779968261719,
+          129.80133056640625
+        ]
+      ]
+    },
+    {
+      "title": "E. Training Procedure",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          48.0,
+          288.0
+        ],
+        [
+          142.5,
+          288.0
+        ],
+        [
+          142.5,
+          297.0
+        ],
+        [
+          48.0,
+          297.0
+        ]
+      ]
+    },
+    {
+      "title": "IV. RESULTS",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          144.75,
+          500.02734375
+        ],
+        [
+          204.0,
+          500.02734375
+        ],
+        [
+          204.0,
+          509.25
+        ],
+        [
+          144.75,
+          509.25
+        ]
+      ]
+    },
+    {
+      "title": "V. CONCLUSIONS",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          135.966796875,
+          527.87109375
+        ],
+        [
+          213.064453125,
+          527.87109375
+        ],
+        [
+          213.064453125,
+          538.9339447021484
+        ],
+        [
+          135.966796875,
+          538.9339447021484
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          409.612060546875,
+          51.3553466796875
+        ],
+        [
+          465.4125061035156,
+          51.3553466796875
+        ],
+        [
+          465.4125061035156,
+          61.31793212890625
+        ],
+        [
+          409.612060546875,
+          61.31793212890625
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          213
+        ],
+        [
+          "Line",
+          101
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "PageFooter",
+          3
+        ],
+        [
+          "PageHeader",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          209
+        ],
+        [
+          "Line",
+          97
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          463
+        ],
+        [
+          "Line",
+          97
+        ],
+        [
+          "Text",
+          13
+        ],
+        [
+          "ListItem",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          78
+        ],
+        [
+          "Span",
+          29
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "Figure",
+          4
+        ],
+        [
+          "Caption",
+          4
+        ],
+        [
+          "FigureGroup",
+          4
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          298
+        ],
+        [
+          "Line",
+          117
+        ],
+        [
+          "ListItem",
+          20
+        ],
+        [
+          "Text",
+          6
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageFooter",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/02_coordinated_dual_arm_manipulation_using_reinforcement_l"
+}

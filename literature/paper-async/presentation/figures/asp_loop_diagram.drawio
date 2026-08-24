@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-06-30T00:00:00.000Z" agent="manual" version="24.0.0">
+  <diagram name="ASP Loop" id="asp-loop-diagram">
+    <mxGraphModel dx="1240" dy="620" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1240" pageHeight="620" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ====== VERTICES (BOXES) ====== -->
+
+        <!-- 2: Init s₀ -->
+        <mxCell id="2" value="&lt;b&gt;Init&lt;/b&gt; s₀" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#590020;strokeWidth=2;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="540" y="40" width="120" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- 3: ALICE -->
+        <mxCell id="3" value="&lt;b&gt;ALICE&lt;/b&gt;&lt;br&gt;&lt;i&gt;Goal Setter&lt;/i&gt;&lt;br&gt;5 pushes, PPO" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F0FF;strokeColor=#0066CC;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="180" y="140" width="200" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- 4: GOAL VALIDATION -->
+        <mxCell id="4" value="&lt;b&gt;GOAL&lt;br&gt;VALIDATION&lt;/b&gt;&lt;br&gt;valid / shallow&lt;br&gt;OOB / airborne" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F0F5;strokeColor=#590020;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="500" y="140" width="200" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- 5: BOB -->
+        <mxCell id="5" value="&lt;b&gt;BOB&lt;/b&gt;&lt;br&gt;&lt;i&gt;Goal Achiever&lt;/i&gt;&lt;br&gt;10 pushes, PPOABC&lt;br&gt;PBRS + GoalEncoder" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F5EC;strokeColor=#008C3C;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="820" y="140" width="200" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- 6: SUCCESS -->
+        <mxCell id="6" value="&lt;b&gt;SUCCESS&lt;/b&gt;&lt;br&gt;+5 / +2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F5EC;strokeColor=#008C3C;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="740" y="300" width="130" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- 7: FAILURE -->
+        <mxCell id="7" value="&lt;b&gt;FAILURE&lt;/b&gt;&lt;br&gt;−10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8E8;strokeColor=#BE1E1E;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="970" y="300" width="130" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- 8: ALICE OUTCOME -->
+        <mxCell id="8" value="&lt;b&gt;ALICE OUTCOME&lt;/b&gt;&lt;br&gt;ASP: +5 fail / −1 win&lt;br&gt;TASP: γ·max(0, tB−tA)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F0FF;strokeColor=#0066CC;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="460" y="420" width="300" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 9: ABC BUFFER -->
+        <mxCell id="9" value="&lt;b&gt;ABC BUFFER&lt;/b&gt;&lt;br&gt;failed traj, β=0.5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F0F5;strokeColor=#590020;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="850" y="420" width="170" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- 10: INVALID -->
+        <mxCell id="10" value="&lt;b&gt;INVALID&lt;/b&gt;&lt;br&gt;−3, reset" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE8E8;strokeColor=#BE1E1E;strokeWidth=2;fontSize=12;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="530" y="270" width="130" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- 11: FM1 non-stationary -->
+        <mxCell id="11" value="&lt;font style=&quot;font-size:9px;color:#BE1E1E;&quot;&gt;&lt;i&gt;▲ non-stationary goal distribution&lt;/i&gt;&lt;/font&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="360" y="108" width="160" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- 12: FM2 GoalEncoder -->
+        <mxCell id="12" value="&lt;font style=&quot;font-size:9px;color:#BE1E1E;&quot;&gt;&lt;i&gt;▲ GoalEncoder bottleneck&lt;/i&gt;&lt;/font&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="880" y="108" width="140" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- 13: FM3 vanishing BC -->
+        <mxCell id="13" value="&lt;font style=&quot;font-size:9px;color:#BE1E1E;&quot;&gt;&lt;i&gt;▲ vanishing BC gradient&lt;/i&gt;&lt;/font&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="880" y="485" width="140" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- 14: FM4 confounded -->
+        <mxCell id="14" value="&lt;font style=&quot;font-size:9px;color:#BE1E1E;&quot;&gt;&lt;i&gt;▲ confounded ablation&lt;/i&gt;&lt;/font&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="740" y="250" width="130" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- ====== EDGES (ARROWS) ====== -->
+
+        <!-- 15: Init → Alice -->
+        <mxCell id="15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="2" target="3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 16: Alice → Goal (label: g) -->
+        <mxCell id="16" value="g" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#590020;" edge="1" parent="1" source="3" target="4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 17: Goal → Bob (label: valid) -->
+        <mxCell id="17" value="valid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#590020;" edge="1" parent="1" source="4" target="5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 18: Goal → Invalid (label: invalid, RED) -->
+        <mxCell id="18" value="invalid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#BE1E1E;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#BE1E1E;" edge="1" parent="1" source="4" target="10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 19: Bob → Success -->
+        <mxCell id="19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="5" target="6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 20: Bob → Failure -->
+        <mxCell id="20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="5" target="7">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 21: Success → Outcome (label: −1) -->
+        <mxCell id="21" value="−1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#590020;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="6" target="8">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="920" y="328"/>
+              <mxPoint x="920" y="450"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 22: Failure → Outcome (label: +5) -->
+        <mxCell id="22" value="+5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#590020;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="7" target="8">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1140" y="328"/>
+              <mxPoint x="1140" y="450"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 23: Failure → ABC (label: store) -->
+        <mxCell id="23" value="store" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#590020;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#590020;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="7" target="9">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 24: Outcome → Alice (label: R_A, curved feedback) -->
+        <mxCell id="24" value="R&lt;sub&gt;A&lt;/sub&gt;" style="curved=1;endArrow=block;endFill=1;html=1;strokeColor=#590020;strokeWidth=2;fontSize=11;fontColor=#590020;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;curvature=-40;" edge="1" parent="1" source="8" target="3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="280" y="450"/>
+              <mxPoint x="280" y="185"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 25: Invalid → Alice (RED, curved) -->
+        <mxCell id="25" style="curved=1;endArrow=block;endFill=1;html=1;strokeColor=#BE1E1E;strokeWidth=2;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;curvature=20;" edge="1" parent="1" source="10" target="3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="295"/>
+              <mxPoint x="280" y="295"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

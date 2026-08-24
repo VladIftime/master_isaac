@@ -1,0 +1,756 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Reward Shaping in Episodic Reinforcement Learning",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          78.0,
+          71.25
+        ],
+        [
+          530.25,
+          71.25
+        ],
+        [
+          530.25,
+          90.10546875
+        ],
+        [
+          78.0,
+          90.10546875
+        ]
+      ]
+    },
+    {
+      "title": "ABSTRACT",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          52.5,
+          206.25
+        ],
+        [
+          118.5,
+          206.25
+        ],
+        [
+          118.5,
+          216.17578125
+        ],
+        [
+          52.5,
+          216.17578125
+        ]
+      ]
+    },
+    {
+      "title": "CCS Concepts",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          52.5,
+          412.62890625
+        ],
+        [
+          129.0,
+          412.62890625
+        ],
+        [
+          129.0,
+          423.75
+        ],
+        [
+          52.5,
+          423.75
+        ]
+      ]
+    },
+    {
+      "title": "Keywords",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          52.5,
+          485.25
+        ],
+        [
+          105.75,
+          485.25
+        ],
+        [
+          105.75,
+          496.16015625
+        ],
+        [
+          52.5,
+          496.16015625
+        ]
+      ]
+    },
+    {
+      "title": "1. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          53.7890625,
+          535.5
+        ],
+        [
+          170.25,
+          535.5
+        ],
+        [
+          170.25,
+          545.66015625
+        ],
+        [
+          53.7890625,
+          545.66015625
+        ]
+      ]
+    },
+    {
+      "title": "2. BACKGROUND",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          313.76953125,
+          570.75
+        ],
+        [
+          423.75,
+          570.75
+        ],
+        [
+          423.75,
+          579.69140625
+        ],
+        [
+          313.76953125,
+          579.69140625
+        ]
+      ]
+    },
+    {
+      "title": "3. FINITE HORIZON PROBLEMS",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          314.3671875,
+          204.0
+        ],
+        [
+          509.25,
+          202.5
+        ],
+        [
+          510.0,
+          213.08203125
+        ],
+        [
+          314.3671875,
+          214.5
+        ]
+      ]
+    },
+    {
+      "title": "4. MAIN ANALYSIS",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          52.294921875,
+          412.5
+        ],
+        [
+          170.25,
+          412.5
+        ],
+        [
+          170.25,
+          423.0
+        ],
+        [
+          52.294921875,
+          423.0
+        ]
+      ]
+    },
+    {
+      "title": "4.1 Model-free Learning",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          52.5,
+          486.75
+        ],
+        [
+          187.5,
+          486.75
+        ],
+        [
+          187.5,
+          496.16015625
+        ],
+        [
+          52.5,
+          496.16015625
+        ]
+      ]
+    },
+    {
+      "title": "4.2 Multi-agent Learning",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          315.0,
+          339.75
+        ],
+        [
+          455.25,
+          339.75
+        ],
+        [
+          455.25,
+          349.98046875
+        ],
+        [
+          315.0,
+          349.98046875
+        ]
+      ]
+    },
+    {
+      "title": "4.3 Model-based PAC-MDP Learning",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          52.5,
+          211.5
+        ],
+        [
+          253.5,
+          211.5
+        ],
+        [
+          253.5,
+          221.58984375
+        ],
+        [
+          52.5,
+          221.58984375
+        ]
+      ]
+    },
+    {
+      "title": "4.3.1 Potential-based Reward Shaping in Model-based Learning",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          54.75,
+          401.80078125
+        ],
+        [
+          232.5,
+          401.80078125
+        ],
+        [
+          232.5,
+          423.0
+        ],
+        [
+          54.75,
+          423.0
+        ]
+      ]
+    },
+    {
+      "title": "4.3.2 Potential-based Reward Shaping and Unknown States",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          317.953125,
+          85.46484375
+        ],
+        [
+          557.25,
+          85.46484375
+        ],
+        [
+          557.25,
+          103.25390625
+        ],
+        [
+          317.953125,
+          103.25390625
+        ]
+      ]
+    },
+    {
+      "title": "5. POTENTIAL-BASED REWARD SHAPING IN PLANNING",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          52.5,
+          669.0234375
+        ],
+        [
+          244.5,
+          669.0234375
+        ],
+        [
+          244.5,
+          694.5
+        ],
+        [
+          52.5,
+          694.5
+        ]
+      ]
+    },
+    {
+      "title": "6. CONCLUSION",
+      "heading_level": null,
+      "page_id": 6,
+      "polygon": [
+        [
+          314.068359375,
+          632.25
+        ],
+        [
+          418.5,
+          632.25
+        ],
+        [
+          418.5,
+          642.0
+        ],
+        [
+          314.068359375,
+          642.0
+        ]
+      ]
+    },
+    {
+      "title": "Acknowledgement",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          51.99609375,
+          402.75
+        ],
+        [
+          148.5,
+          402.75
+        ],
+        [
+          148.5,
+          413.40234375
+        ],
+        [
+          51.99609375,
+          413.40234375
+        ]
+      ]
+    },
+    {
+      "title": "References",
+      "heading_level": null,
+      "page_id": 7,
+      "polygon": [
+        [
+          52.5,
+          441.24609375
+        ],
+        [
+          110.25,
+          441.24609375
+        ],
+        [
+          110.25,
+          450.75
+        ],
+        [
+          52.5,
+          450.75
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          113
+        ],
+        [
+          "Span",
+          92
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          6
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          134
+        ],
+        [
+          "Span",
+          125
+        ],
+        [
+          "Text",
+          12
+        ],
+        [
+          "Equation",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          138
+        ],
+        [
+          "Line",
+          114
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "Equation",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Span",
+          135
+        ],
+        [
+          "Line",
+          124
+        ],
+        [
+          "Text",
+          9
+        ],
+        [
+          "Figure",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "FigureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          119
+        ],
+        [
+          "Span",
+          84
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          3
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          119
+        ],
+        [
+          "Span",
+          103
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Equation",
+          3
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 6,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          118
+        ],
+        [
+          "Span",
+          82
+        ],
+        [
+          "Equation",
+          11
+        ],
+        [
+          "Text",
+          8
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 7,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          173
+        ],
+        [
+          "Span",
+          127
+        ],
+        [
+          "ListItem",
+          23
+        ],
+        [
+          "Text",
+          2
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ],
+        [
+          "PageFooter",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 8,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          38
+        ],
+        [
+          "Span",
+          26
+        ],
+        [
+          "ListItem",
+          6
+        ],
+        [
+          "PageFooter",
+          1
+        ],
+        [
+          "ListGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/grzes2017_reward_shaping_episodic_rl"
+}

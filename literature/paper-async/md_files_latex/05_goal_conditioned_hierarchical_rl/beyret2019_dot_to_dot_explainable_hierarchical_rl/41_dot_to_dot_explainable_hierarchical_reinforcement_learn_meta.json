@@ -1,0 +1,662 @@
+{
+  "table_of_contents": [
+    {
+      "title": "Dot-to-Dot: Explainable Hierarchical Reinforcement Learning\nfor Robotic Manipulation",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          88.453125,
+          72.80853271484375
+        ],
+        [
+          522.3338623046875,
+          72.80853271484375
+        ],
+        [
+          522.3338623046875,
+          108.67376708984375
+        ],
+        [
+          88.453125,
+          108.67376708984375
+        ]
+      ]
+    },
+    {
+      "title": "I. INTRODUCTION",
+      "heading_level": null,
+      "page_id": 0,
+      "polygon": [
+        [
+          134.771484375,
+          397.93359375
+        ],
+        [
+          215.27880859375,
+          397.93359375
+        ],
+        [
+          215.27880859375,
+          409.650146484375
+        ],
+        [
+          134.771484375,
+          409.650146484375
+        ]
+      ]
+    },
+    {
+      "title": "II. BACKGROUND",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          135.75,
+          305.89453125
+        ],
+        [
+          214.55859375,
+          305.89453125
+        ],
+        [
+          214.55859375,
+          314.25
+        ],
+        [
+          135.75,
+          314.25
+        ]
+      ]
+    },
+    {
+      "title": "A. Deep Deterministic Policy Gradients",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          51.99609375,
+          561.90234375
+        ],
+        [
+          218.25,
+          561.90234375
+        ],
+        [
+          218.25,
+          571.5
+        ],
+        [
+          51.99609375,
+          571.5
+        ]
+      ]
+    },
+    {
+      "title": "B. Hindsight Experience Replay",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          311.25,
+          117.75
+        ],
+        [
+          446.25,
+          117.75
+        ],
+        [
+          446.25,
+          127.6171875
+        ],
+        [
+          311.25,
+          127.6171875
+        ]
+      ]
+    },
+    {
+      "title": "C. Hierarchical Reinforcement Learning",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          311.25,
+          376.27734375
+        ],
+        [
+          479.91796875,
+          376.27734375
+        ],
+        [
+          479.91796875,
+          384.78515625
+        ],
+        [
+          311.25,
+          384.78515625
+        ]
+      ]
+    },
+    {
+      "title": "III. DESIGN AND IMPLEMENTATION",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          357.75,
+          679.46484375
+        ],
+        [
+          513.0,
+          679.46484375
+        ],
+        [
+          513.0,
+          690.75
+        ],
+        [
+          357.75,
+          690.75
+        ]
+      ]
+    },
+    {
+      "title": "A. Design",
+      "heading_level": null,
+      "page_id": 1,
+      "polygon": [
+        [
+          310.18359375,
+          697.5
+        ],
+        [
+          354.75,
+          697.5
+        ],
+        [
+          354.75,
+          706.53515625
+        ],
+        [
+          310.18359375,
+          706.53515625
+        ]
+      ]
+    },
+    {
+      "title": "B. Implementation",
+      "heading_level": null,
+      "page_id": 2,
+      "polygon": [
+        [
+          312.57421875,
+          325.4119873046875
+        ],
+        [
+          390.26953125,
+          325.4119873046875
+        ],
+        [
+          390.26953125,
+          335.671875
+        ],
+        [
+          312.57421875,
+          335.671875
+        ]
+      ]
+    },
+    {
+      "title": "Algorithm 1: Dot-to-Dot (DtD)",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          118.3359375,
+          57.62109375
+        ],
+        [
+          233.90699768066406,
+          57.62109375
+        ],
+        [
+          233.90699768066406,
+          66.993408203125
+        ],
+        [
+          118.3359375,
+          66.993408203125
+        ]
+      ]
+    },
+    {
+      "title": "manner.",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          54.0,
+          304.34765625
+        ],
+        [
+          85.82054138183594,
+          304.34765625
+        ],
+        [
+          85.82054138183594,
+          315.21307373046875
+        ],
+        [
+          54.0,
+          315.21307373046875
+        ]
+      ]
+    },
+    {
+      "title": "IV. RESULTS AND ANALYSIS",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          113.255859375,
+          633.05859375
+        ],
+        [
+          238.25877380371094,
+          633.05859375
+        ],
+        [
+          238.25877380371094,
+          644.1388702392578
+        ],
+        [
+          113.255859375,
+          644.1388702392578
+        ]
+      ]
+    },
+    {
+      "title": "A. Training performance",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          51.3984375,
+          648.52734375
+        ],
+        [
+          156.1365966796875,
+          648.52734375
+        ],
+        [
+          156.1365966796875,
+          658.9723968505859
+        ],
+        [
+          51.3984375,
+          658.9723968505859
+        ]
+      ]
+    },
+    {
+      "title": "B. Task performance",
+      "heading_level": null,
+      "page_id": 3,
+      "polygon": [
+        [
+          312.873046875,
+          349.1859130859375
+        ],
+        [
+          399.533203125,
+          349.1859130859375
+        ],
+        [
+          399.533203125,
+          359.14849853515625
+        ],
+        [
+          312.873046875,
+          359.14849853515625
+        ]
+      ]
+    },
+    {
+      "title": "C. High-level agent's inner representation",
+      "heading_level": null,
+      "page_id": 4,
+      "polygon": [
+        [
+          53.7890625,
+          599.02734375
+        ],
+        [
+          227.61822509765625,
+          599.02734375
+        ],
+        [
+          227.61822509765625,
+          610.3744659423828
+        ],
+        [
+          53.7890625,
+          610.3744659423828
+        ]
+      ]
+    },
+    {
+      "title": "V. CONCLUSIONS",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          129.392578125,
+          239.37890625
+        ],
+        [
+          220.94752502441406,
+          239.37890625
+        ],
+        [
+          220.94752502441406,
+          250.89923095703125
+        ],
+        [
+          129.392578125,
+          250.89923095703125
+        ]
+      ]
+    },
+    {
+      "title": "REFERENCES",
+      "heading_level": null,
+      "page_id": 5,
+      "polygon": [
+        [
+          147.919921875,
+          645.43359375
+        ],
+        [
+          204.3054656982422,
+          645.43359375
+        ],
+        [
+          204.3054656982422,
+          656.0640716552734
+        ],
+        [
+          147.919921875,
+          656.0640716552734
+        ]
+      ]
+    }
+  ],
+  "page_stats": [
+    {
+      "page_id": 0,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          201
+        ],
+        [
+          "Line",
+          85
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "PageHeader",
+          1
+        ],
+        [
+          "Footnote",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 1,
+      "text_extraction_method": "surya",
+      "block_counts": [
+        [
+          "Line",
+          125
+        ],
+        [
+          "Span",
+          95
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "SectionHeader",
+          6
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 2,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          464
+        ],
+        [
+          "Line",
+          95
+        ],
+        [
+          "Text",
+          11
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "Caption",
+          1
+        ],
+        [
+          "SectionHeader",
+          1
+        ],
+        [
+          "Reference",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 3,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          511
+        ],
+        [
+          "Line",
+          87
+        ],
+        [
+          "Text",
+          7
+        ],
+        [
+          "SectionHeader",
+          5
+        ],
+        [
+          "Caption",
+          5
+        ],
+        [
+          "Figure",
+          4
+        ],
+        [
+          "Reference",
+          3
+        ],
+        [
+          "Code",
+          1
+        ],
+        [
+          "Picture",
+          1
+        ],
+        [
+          "PictureGroup",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 4,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          216
+        ],
+        [
+          "Line",
+          71
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "Caption",
+          3
+        ],
+        [
+          "Figure",
+          2
+        ],
+        [
+          "FigureGroup",
+          2
+        ],
+        [
+          "Reference",
+          2
+        ],
+        [
+          "SectionHeader",
+          1
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    },
+    {
+      "page_id": 5,
+      "text_extraction_method": "pdftext",
+      "block_counts": [
+        [
+          "Span",
+          321
+        ],
+        [
+          "Line",
+          131
+        ],
+        [
+          "ListItem",
+          25
+        ],
+        [
+          "Text",
+          5
+        ],
+        [
+          "SectionHeader",
+          2
+        ],
+        [
+          "ListGroup",
+          2
+        ]
+      ],
+      "block_metadata": {
+        "llm_request_count": 0,
+        "llm_error_count": 0,
+        "llm_tokens_used": 0,
+        "previous_text": "",
+        "previous_type": "",
+        "previous_order": 0
+      }
+    }
+  ],
+  "debug_data_path": "debug_data/41_dot_to_dot_explainable_hierarchical_reinforcement_learn"
+}
