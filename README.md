@@ -5,6 +5,11 @@ Tabletop-pushing policies trained in **Isaac Lab / Isaac Sim**, combining
 et al. 2018), and **Potential-Based Reward Shaping** (Ng et al. 1999) on a UR5e
 arm that acts through a **push-primitive macro-action** solved with **cuRobo IK**.
 
+<p align="center">
+  <img src="asyncDualPlayPPO/docs/images/simp_train.gif" alt="Single-agent PBRS training in action" width="470">
+  <img src="asyncDualPlayPPO/docs/images/asp_train.gif" alt="Asymmetric self-play training in action (Alice red, Bob blue)" width="470">
+</p>
+
 This README has two parts:
 
 1. **[The project](#1-the-project-idea-and-results)** — what it is, what it
@@ -84,6 +89,7 @@ as a cross-environment check of every finding, at a fraction of the cost.
 
 <p align="center">
   <img src="asyncDualPlayPPO/docs/images/gym_pusht.png" alt="Two-dimensional gym-pusht counterpart" width="480">
+  <img src="asyncDualPlayPPO/docs/images/gym_valid.gif" alt="Trained gym-pusht agent completing a validation run" width="480">
 </p>
 
 ### 1.5 Trained agents in action
@@ -97,6 +103,14 @@ goal ghost.
   <img src="asyncDualPlayPPO/docs/images/rec_push_s11.gif" alt="Trained agent pushing the T-block to goal (scene 11)" width="360">
   <img src="asyncDualPlayPPO/docs/images/rec_push_s14.gif" alt="Trained agent pushing the T-block to goal (scene 14)" width="360">
   <img src="asyncDualPlayPPO/docs/images/rec_push_s21.gif" alt="Trained agent pushing the T-block to goal (scene 21)" width="360">
+</p>
+
+Additional demonstrations of trained agents completing the task:
+
+<p align="center">
+  <img src="asyncDualPlayPPO/docs/images/master_1.gif" alt="Trained agent completing the push task (demo 1)" width="360">
+  <img src="asyncDualPlayPPO/docs/images/master_2.gif" alt="Trained agent completing the push task (demo 2)" width="360">
+  <img src="asyncDualPlayPPO/docs/images/master_5.gif" alt="Trained agent completing the push task (demo 5)" width="360">
 </p>
 
 ### 1.6 What it achieves
