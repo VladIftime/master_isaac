@@ -1,29 +1,82 @@
 params:
   learn:
     optim_stepsize: 3.0e-4
+    # Alice-specific LR floor for cosine decay (Bob keeps optim_stepsize fixed).
+    alice_lr_min: 5.0e-5
     schedule: fixed
-    desired_kl: 0.016
-    init_noise_std: 0.8
-    nsteps: 2048 # Increased to accommodate buffered replay
-    
+    # desired_kl is only valid for Gaussian policies.
+    # With use_multicategorical: true it must be null (set to null here and
+    # also disabled per-agent in train.py for safety).
+    desired_kl: null
+    # init_noise_std: 1.0 ensures PPO gradients are mathematically stable (scale 1.0).
+    # Physical scaling (e.g. 5cm exploration) is now handled in wrapper.py to prevent 
+    # the 1/sigma^2 gradient explosion.
+    init_noise_std: 1.0
+
+    nsteps: 256
+
     # PPO params
     cliprange: 0.2
-    noptepochs: 5
+    noptepochs: 3
     nminibatches: 4
-    
-    ent_coef: 0.05
+
+    # Lowered to prevent entropy bonus from pushing large Cartesian deltas,
+    # but raised to 0.05 (from 0.01) to prevent lazy agent policy collapse.
+    ent_coef: 0.005
     gamma: 0.998
     lam: 0.95
     max_grad_norm: 1.0
     value_loss_coef: 1.0
-    
-    # ABC
-    # Reduced from 0.5 → 0.005: at end of prior run ABC≈86 dominated RL≈0.7 by 100×
-    abc_coef: 0.005
-    abc_clip_param: 0.2
-    abc_batch_size: 2048  # Fixed batch size for ABC updates (independent of num_envs)
-    
+
+    # Alice Behavioral Cloning (ABC) params
+    # Paper uses β=0.5; was 0.1 which underweights BC signal
+    abc_coef: 0.5
+    # abc_anneal_iters: 0 → skip time-based decay; use inverse-SR controller from iter 0.
+    # Controller target = abc_coef * (1 - bob_sr): max signal when Bob fails, fades as Bob learns.
+    abc_coef_end: 0.0
+    abc_anneal_iters: 0
+    # EMA smoothing for the inverse proportional controller (Phase 2).
+    # 0.95 ramps abc_coef over ~20 iterations — fast enough to respond to
+    # Alice's entropy spikes, slow enough to avoid gradient shocks.
+    abc_coef_ema: 0.95
+    # Number of complete Alice trajectories to sample per update for sequential
+    # LSTM evaluation (Fix 1).  Each trajectory runs ~alice_timesteps steps.
+    abc_n_trajs: 16
+    # Sliding window size for the trajectory store. Old demos are evicted as new
+    # failures arrive, keeping BC relevant to Alice's current task distribution.
+    abc_traj_maxlen: 500
+    # Gate disabled: the buffer fill condition (bob_done & ~bob_success & goal_valid)
+    # is the real gate — if Alice produces no valid goals the buffer stays empty and
+    # ABC skips regardless of this value.
+    abc_warmup_threshold: -9999.0
+    abc_batch_size: 2048
+    aux_coef: 0.1
+
+    # Alice adaptive entropy controller (target-SR proportional controller).
+    # Phase 1 (iter < 250): exponential decay 1.0 → 0.10 (unchanged).
+    # Phase 2 (iter ≥ 250): entropy adjusts each iteration by lr * (bob_sr - target_sr).
+    #   Rises when Bob is too successful, falls when Bob is struggling.
+    alice_entropy_target_sr: 0.5   # desired Bob SR; 0.5 sits at the competence edge
+    alice_entropy_lr: 5.0e-3        # proportional gain (step per iteration)
+    alice_entropy_min: 0.10         # hard floor — matches proven decay floor; controller can only raise entropy, never lower it below this
+    alice_entropy_max: 1.0          # hard ceiling
+
   policy:
     pi_hid_sizes: [512, 256, 128]
     vf_hid_sizes: [512, 256, 128]
-    activation: elu
+    activation: relu
+
+    use_multicategorical: true
+    num_cat_dims: 6       # X, Y, Z, Rx, Ry, Gripper
+    num_bins: 11          # bins per dimension (paper uses 11)
+    use_lstm: true
+    lstm_hidden_size: 256
+
+    use_pi_encoder: true
+    robot_state_dim: 7
+    pi_obj_dim: 14
+    pi_emb_dim: 512
+    goal_embed_dim: 8
+    num_objects: 2
+    goal_encoder_hidden_dim: 64
+    goal_encoder_variant: "difference"

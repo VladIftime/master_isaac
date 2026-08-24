@@ -1,0 +1,6 @@
+train_e_pbrs_asp_dpose.py 7 2048 773 100 pbrsE_e2048_i773_s7 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055
+train_e_pbrs_asp_dpose.py 42 2048 773 100 pbrsE_e2048_i773_s42 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055
+train_e_pbrs_asp_dpose.py 123 2048 773 100 pbrsE_e2048_i773_s123 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055
+train_g_tasp_dpose.py 7 2048 773 100 pbrsG_e2048_i773_s7 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --alice_reward_scale 0.5
+train_g_tasp_dpose.py 42 2048 773 100 pbrsG_e2048_i773_s42 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --alice_reward_scale 0.5
+train_g_tasp_dpose.py 123 2048 773 100 pbrsG_e2048_i773_s123 --alice_pushes 5 --bob_pushes 10 --max_goals_per_episode 2 --char_length 0.07 --dpose_threshold 0.055 --alice_reward_scale 0.5

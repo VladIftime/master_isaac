@@ -88,29 +88,23 @@ body_cylinders:
       pt2: [0, 0, 0.0]
       radius: 0.22
 
-    # 2. Left Arm Base & Shoulder (Extended Height)
-    - name: left_base_link_inertia
-      pt1: [0, 0, 0.25] # Increased from 0.15 to cover the shoulder joint
-      pt2: [0, 0, 0.0]
-      radius: 0.13
-
-    # 3. Right Arm Base & Shoulder (Extended Height)
-    - name: right_base_link_inertia
+    # 2. Arm Base & Shoulder (Extended Height)
+    - name: base_link_inertia
       pt1: [0, 0, 0.25] # Increased from 0.15 to cover the shoulder joint
       pt2: [0, 0, 0.0]
       radius: 0.13
 
 # ACTIVE COLLISION CHECKERS
 body_collision_controllers:
-  - name: left_upper_arm_link
+  - name: upper_arm_link
     radius: 0.05 # Reduced from 0.08 to avoid overlap when rotated
-  - name: left_forearm_link
+  - name: forearm_link
     radius: 0.05 # Reduced from 0.07 to avoid overlap when rotated
-  - name: left_wrist_1_link
+  - name: wrist_1_link
     radius: 0.06
-  - name: left_wrist_2_link
+  - name: wrist_2_link
     radius: 0.06
-  - name: left_wrist_3_link
+  - name: wrist_3_link
     radius: 0.05
-  - name: lgripper_robotiq_arg2f_base_link
+  - name: robotiq_arg2f_base_link
     radius: 0.1 # Increased from 0.05 to account for finger spread

@@ -40,38 +40,32 @@ class AsyncDualPlayObservationsCfg:
     class AlicePolicyCfg(ObsGroup):
         """Alice's observations — no goal information."""
 
-        joint_pos = ObsTerm(
-            func=observations.robot_joint_positions,
+        ee_pose = ObsTerm(
+            func=observations.ee_poses,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["left_.*"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["right_.*"]),
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
             },
         )
         gripper_pos = ObsTerm(
             func=observations.gripper_positions,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["lgripper_finger_joint"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["rgripper_finger_joint"]),
+                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
         object_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("target_object"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg": SceneEntityCfg("target_object"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": None,
             },
         )
         cube_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("cube"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg": SceneEntityCfg("cube"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": None,
             },
         )
 
@@ -83,51 +77,49 @@ class AsyncDualPlayObservationsCfg:
     class BobPolicyCfg(ObsGroup):
         """Bob's observations — extends Alice's with goal state and distance to goal."""
 
-        joint_pos = ObsTerm(
-            func=observations.robot_joint_positions,
+        ee_pose = ObsTerm(
+            func=observations.ee_poses,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["left_.*"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["right_.*"]),
+                "ee_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
             },
         )
         gripper_pos = ObsTerm(
             func=observations.gripper_positions,
             params={
-                "left_arm_cfg":  SceneEntityCfg("robot", joint_names=["lgripper_finger_joint"]),
-                "right_arm_cfg": SceneEntityCfg("robot", joint_names=["rgripper_finger_joint"]),
+                "arm_cfg": SceneEntityCfg("robot", joint_names=["finger_joint"]),
             },
         )
+        # Interleaved per-object layout: [s1(14)|g1(6)|d1(2)|s2(14)|g2(6)|d2(2)]
+        # This matches the reshape in _encode_obs (module.py) which does
+        # obj_section.view(batch, num_objects, 22) expecting contiguous per-object chunks.
+        # construct_bob_observation (wrapper.py) also produces this layout for the ABC buffer.
         object_state = ObsTerm(
             func=observations.object_states,
             params={
-                "object_cfg":         SceneEntityCfg("target_object"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
-            },
-        )
-        cube_state = ObsTerm(
-            func=observations.object_states,
-            params={
-                "object_cfg":         SceneEntityCfg("cube"),
-                "left_gripper_cfg":   SceneEntityCfg("robot", body_names="left_wrist_3_link"),
-                "right_gripper_cfg":  SceneEntityCfg("robot", body_names="right_wrist_3_link"),
-                "left_contact_cfg":   SceneEntityCfg("contact_forces_left"),
-                "right_contact_cfg":  SceneEntityCfg("contact_forces_right"),
+                "object_cfg": SceneEntityCfg("target_object"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": None,
             },
         )
         goal_state = ObsTerm(
             func=observations.goal_states,
             params={"object_cfg": SceneEntityCfg("target_object")},
         )
-        cube_goal_state = ObsTerm(
-            func=observations.goal_states,
-            params={"object_cfg": SceneEntityCfg("cube")},
-        )
         goal_distance = ObsTerm(
             func=observations.goal_distance,
             params={"object_cfg": SceneEntityCfg("target_object")},
+        )
+        cube_state = ObsTerm(
+            func=observations.object_states,
+            params={
+                "object_cfg": SceneEntityCfg("cube"),
+                "gripper_cfg": SceneEntityCfg("robot", body_names="wrist_3_link"),
+                "contact_cfg": None,
+            },
+        )
+        cube_goal_state = ObsTerm(
+            func=observations.goal_states,
+            params={"object_cfg": SceneEntityCfg("cube")},
         )
         cube_goal_distance = ObsTerm(
             func=observations.goal_distance,
@@ -139,7 +131,7 @@ class AsyncDualPlayObservationsCfg:
             self.concatenate_terms = True
 
     alice_policy: AlicePolicyCfg = AlicePolicyCfg()
-    bob_policy:   BobPolicyCfg   = BobPolicyCfg()
+    bob_policy: BobPolicyCfg = BobPolicyCfg()
 
 
 @configclass
@@ -154,6 +146,7 @@ class AsyncDualPlayRewardsCfg:
     computed in AsyncDualPlayEnvWrapper._compute_bob_sparse_rewards() to
     avoid IsaacLab's dt-scaling, which would produce fractional values.
     """
+
     pass
 
 
@@ -169,32 +162,30 @@ class AsyncDualPlayEnvCfg(ManagerBasedRLEnvCfg):
 
     @configclass
     class AsyncDualPlaySceneCfg(ReachDualArmSceneCfg):
-        """Scene restricted to two objects and augmented with gripper contact sensors."""
+        """Scene restricted to two objects."""
+
         cylinder = None
-        rect     = None
+        rect = None
         triangle = None
-        camera   = None
+        camera = None
+        contact_forces = None
 
-        contact_forces_left = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/RobotUnified/lgripper_.*finger.*",
-            history_length=3,
-            track_air_time=False,
-        )
-        contact_forces_right = ContactSensorCfg(
-            prim_path="{ENV_REGEX_NS}/RobotUnified/rgripper_.*finger.*",
-            history_length=3,
-            track_air_time=False,
-        )
-
-    scene:        AsyncDualPlaySceneCfg        = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
+    scene: AsyncDualPlaySceneCfg = AsyncDualPlaySceneCfg(num_envs=4, env_spacing=2.5)
     observations: AsyncDualPlayObservationsCfg = AsyncDualPlayObservationsCfg()
-    actions:      ActionsCfg                   = ActionsCfg()
-    rewards:      AsyncDualPlayRewardsCfg      = AsyncDualPlayRewardsCfg()
-    terminations: TerminationsCfg              = TerminationsCfg()
-    events:       EventCfg                     = EventCfg()
+    actions: ActionsCfg = ActionsCfg()
+    rewards: AsyncDualPlayRewardsCfg = AsyncDualPlayRewardsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    events: EventCfg = EventCfg()
 
     def __post_init__(self):
-        self.decimation          = 2
-        self.episode_length_s    = 65.0  # Alice(250) + 5 × Bob(600) steps at dt=0.01, decimation=2
-        self.sim.dt              = 0.01
+        self.decimation = 1
+        self.episode_length_s = (
+            10000.0  # Extremely high value to prevent internal IsaacLab forced timeouts
+        )
+        self.sim.dt = 0.02
         self.sim.render_interval = self.decimation
+        # PhysX GPU buffer capacities — required at large num_envs (≥1024).
+        # Without these, PhysX silently drops contacts and the robot falls through the table.
+        self.sim.physx.gpu_found_lost_pairs_capacity = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_contact_count = 1024 * 1024
+        self.sim.physx.gpu_max_rigid_patch_count = 81920 * 4

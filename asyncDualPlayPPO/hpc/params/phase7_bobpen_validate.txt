@@ -1,0 +1,5 @@
+validate_push_asp.py taspI_e528_i3000_s7 --dpose-obs --char-length 0.07 --dpose-threshold 0.055 --max_pushes 10 --max_tries 3
+validate_push_asp.py taspI_e528_i3000_s42 --dpose-obs --char-length 0.07 --dpose-threshold 0.055 --max_pushes 10 --max_tries 3
+validate_push_asp.py taspI_e528_i3000_s123 --dpose-obs --char-length 0.07 --dpose-threshold 0.055 --max_pushes 10 --max_tries 3
+validate_push_asp.py taspI_e528_i3000_s202 --dpose-obs --char-length 0.07 --dpose-threshold 0.055 --max_pushes 10 --max_tries 3
+validate_push_asp.py taspI_e528_i3000_s707 --dpose-obs --char-length 0.07 --dpose-threshold 0.055 --max_pushes 10 --max_tries 3

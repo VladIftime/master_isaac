@@ -1,0 +1,6 @@
+validate_push_asp.py discF_e528_i3000_s7_abc --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py discF_e528_i3000_s42_abc --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py discF_e528_i3000_s123_abc --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py discF_e528_i3000_s7_noabc --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py discF_e528_i3000_s42_noabc --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3
+validate_push_asp.py discF_e528_i3000_s123_noabc --dpose-obs --char-length 0.0 --dpose-threshold 0.05 --scene-set disc --max_pushes 10 --max_tries 3

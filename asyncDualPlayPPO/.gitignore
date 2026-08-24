@@ -1,5 +1,31 @@
-*.sif
-*.log
-*.pt
-*.out
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+
+# ---- Virtual envs / caches ----
+.venv/
+.master_venv/
+.isaac_cache/
+curobo/
+curobo_repo/
+
+# ---- Training artifacts (regenerated, not part of the published source) ----
 runs/
+logs/
+*.pt
+*.log
+*.out
+*.dat
+*.lock
+
+# ---- HPC / container images ----
+*.sif
+*.img
+
+# ---- Media artifacts ----
+*.mp4
+tests/videos/
+
+# ---- Reference papers (copyright; own notes moved to ../docs/design/) ----
+paper-async/
