@@ -23,8 +23,6 @@ pingpong_dual_arm/
 report_pics/
 overleaf/
 master_isaac_archive_clean/
-pingpong_dual_arm
-curobo_source
 throwing_enviroment/
 diffusion_policy/
 curobo_source/
@@ -39,3 +37,8 @@ Master_Thesis_Vlad_Iftime___University_of_Groningen/
 final_results_thesis/
 literature/
 example_thesis/
+.claude/
+.continue/
+.vscode/
+results_validation/ 
+report_pics/
