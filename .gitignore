@@ -18,6 +18,7 @@ logs
 *.dat
 *.ckpt
 *.pt
+*.zip
 pingpong_dual_arm/
 report_pics/
 overleaf/
@@ -34,3 +35,7 @@ pdf2pptx/
 MinerU/
 NotebookLM2PPT/
 MinerU2PPT/
+Master_Thesis_Vlad_Iftime___University_of_Groningen/
+final_results_thesis/
+literature/
+example_thesis/
