@@ -4,7 +4,7 @@
 
 Service robots are expected to become part of everyday life, assisting people at
 home and at work with ordinary manipulation tasks. Meeting that expectation
-requires a robot to handle objects it has never seen, in cluttered and
+requires a robot to handle objects it has never seen in cluttered and
 unstructured surroundings \cite{Mohammed2022ClutterReview}. Bin picking is the
 canonical instance of this challenge: a robot must retrieve target items from a
 dense, disordered container, where objects rest against one another and few are
@@ -53,16 +53,14 @@ variants derive that order from the agent's own competence. Asymmetric Self-Play
 proposes goals while a second learns to reach them, so the goal distribution
 adapts to the learner without human specification. Both families are well
 motivated. Reward shaping, in the potential-based form used here, produces a
-single-agent policy that solves the task, and serves as the anchor of this study.
+single-agent policy that solves the task, and serves as the baseline of this study.
 ASP is the method under scrutiny: it has succeeded on goal-reaching problems
 elsewhere, including robotic manipulation \cite{OpenAI2021AsymmetricSF} and
 reversible control tasks \cite{Sukhbaatar2018IntrinsicMotivation}, yet on the task
-studied here it underperforms the single-agent anchor. That contrast is the puzzle
-this thesis addresses. A proven method underperforms a simpler one, and the aim is
-to explain why, by identifying the conditions of this task that differ from the
-settings in which the method succeeded.
+studied here it underperforms the single-agent baseline. That contrast is what this
+this thesis addresses. 
 
-The task studied here is planar pushing, the non-prehensile skill motivated above,
+The task studied is planar pushing,
 reduced to a single object and framed as a goal-reaching problem so that the
 learning question can be isolated. A robot must slide the object across a surface
 to a target pose. Pushing suits this study
@@ -78,7 +76,7 @@ must satisfy both criteria at once.
 
 The experiments use a simulated Universal Robots UR5e arm with a Robotiq gripper,
 pushing a T-shaped block on a tabletop in NVIDIA Isaac Lab
-\cite{Mittal2023IsaacLab}. Isaac Lab runs many environment instances in parallel
+\cite{Mittal2023IsaacLab}. Isaac Lab is able to run many environment instances in parallel
 on a single Graphical Processing Unit (GPU), which lets every model train at a
 fixed compute budget on equal terms. The policy does not command joint torques
 directly; instead, it selects an object-relative push primitive with four
@@ -89,56 +87,58 @@ push succeeds only when the object reaches a small position and orientation
 tolerance of the goal. Chapter~\ref{section:methods} gives the full state, action,
 and reward definitions.
 
-Against this background, the thesis poses three research questions, together with
+The thesis poses three research questions, together with
 one supporting question on reward efficiency.
 \begin{itemize}
-  \item \textbf{RQ1:} Does asymmetric self-play, as applied successfully in prior
-        robotic manipulation, succeed in this contact-rich multi-objective
-        goal-reaching task under a single-GPU budget?
-  \item \textbf{RQ2:} Which difference between this task and the settings where
-        self-play succeeded, among goal coupling, reward formulation, imitation
-        signal, goal representation, and compute scale, accounts for the
-        difference in outcome?
-  \item \textbf{RQ3:} Where in the learning dynamics does self-play break down:
-        the coupled success gate, a biased value function, a suppressed imitation
-        signal, or demonstrations that cannot be reproduced under stochastic
-        contact?
-  \item \textbf{Supporting RQ:} Can potential-based reward shaping reach
-        single-agent success with fewer parallel environments than a hand-tuned
+  \item \textbf{Research Question 1:} Does asymmetric self-play match single-agent training in a
+        contact-rich planar goal-reaching task under a single-GPU budget?
+  \item \textbf{Research Question 2:} Which of the five dimensions in the current setup accounts
+        for the performance of the self-play agent?
+  \item \textbf{Research Question 3:} What mechanism prevents self-play from generalising its
+        training-time success?
+  \item \textbf{Supporting Research Question:} Does potential-based reward shaping reach
+        single-agent success with fewer parallel environments than the
         improvement reward?
 \end{itemize}
 
-The first question asks whether the method transfers to this regime at all,
-comparing self-play against the single-agent anchor under one budget and one
-success criterion. The second question decomposes the difference between this task
-and the successful settings into five candidate axes, and tests each in turn. The
+The first question asks whether the method transfers to the contact-rich planar
+goal-reaching task at all,
+comparing self-play against the single-agent baseline under one budget and one
+success criterion. The second question decomposes the difference between the
+contact-rich planar goal-reaching task
+and the settings where self-play succeeded into five candidate dimensions: goal
+coupling, reward
+formulation, imitation signal, goal representation, and compute scale. Each is
+tested in turn. The
 comparison between a rotationally symmetric disc and the T-block isolates the
-coupled goal as a single variable. The third question examines the mechanism, using
-per-axis competence, the value-function bias, the imitation signal, and a
-replay diagnostic that measures whether the goal-proposing agent's own
-demonstrations reach the goals it sets. The supporting question isolates the
-contribution of reward shaping alone.
+coupled goal as a single variable. The third question examines the mechanism,
+using the within-distribution evaluation and the imitation signal. The
+supporting question isolates the contribution of reward shaping alone.
 
 \subsection{Contributions}
 
-This thesis makes three contributions, in order of priority. The first is the
-mechanism behind the self-play result. The models learn the individual position
-and orientation sub-skills, but do not compose them under the coupled success gate;
-the coupled multi-objective gate, rather than the reward or the goal encoder, is
-the dominant cause. Five measurements support this: the disc-against-T-block
-contrast, a per-axis-against-combined diagnostic, a value-bias measurement, an
-imitation clip-saturation measurement, and a replay diagnostic. The second
-contribution is the regime contrast. It sets this task against the settings where
-self-play succeeded, along five axes: goal coupling, reward formulation, imitation
-signal, goal representation, and compute scale. A negative result here is thereby
-explained as a difference in regime, not a refutation of prior work. The third
-contribution is a reward-efficiency result. Potential-based reward shaping reaches
-single-agent success with roughly four times fewer parallel environments than the
-improvement reward, which anchors the task as solvable. The practical message
-follows: principled reward design should come before changes to the training
-dynamics. We scope every self-play result to this regime. Asymmetric self-play
-succeeds in the settings prior work used; the contribution here is the analysis of
-why it underperforms in this one.
+This thesis makes three contributions. The first is the
+mechanism behind the self-play result. A within-distribution evaluation shows
+that the self-play policy solves 61.4\,\% of the disc goals and 11.7\,\% of the
+T-block goals the goal-proposing agent itself produces, against 7.3\,\% and
+0.0\,\% of held-out scenes. The failure therefore separates into two compounding
+effects: the coupled multi-objective gate bounds competence on the proposer's
+own goals, and the narrow goal distribution prevents that competence from
+transferring. Five measurements support this: the disc-against-T-block contrast,
+the within-distribution evaluation, the scale-sweep null result, the imitation
+clip-saturation measurement, and the goal-encoder ablation. The second
+contribution is the setup contrast. It sets this task against the settings where self-play
+succeeded, along five dimensions: goal coupling, reward formulation, imitation signal,
+goal representation, and compute scale. A negative result here is thereby
+explained as a difference in setup, not a denial of prior work done into self-play. The third
+contribution is the established task solvability. Potential-based reward shaping
+produces a single-agent policy that solves 79.3\,\% of held-out scenes with
+confidence intervals across five seeds, which anchors the self-play result as a
+property of the method rather than the task. The practical message follows:
+principled reward design should come before changes to the training dynamics. We
+scope every self-play result to this setup. Asymmetric self-play succeeds in the
+settings prior work used; the contribution here is the analysis of why it does
+not generalise in this one.
 
 \subsection{Thesis Outline}
 
@@ -156,7 +156,7 @@ the experimental setup: the simulation and training configuration, the phases of
 the experiment set, the held-out validation protocol, the cross-environment
 comparison, and an off-policy baseline. Chapter~\ref{sec:results} reports the
 results for each research question, namely whether self-play succeeds here, which
-regime axis accounts for the outcome, the underlying mechanism, and the
+setup dimension accounts for the outcome, the underlying mechanism, and the
 environment-efficiency of shaping. Chapter~\ref{sec:conclusion} discusses the
 findings, states the limitations, and outlines future work. The appendices collect
 training curves, parameter sensitivity, scene descriptions, and detailed

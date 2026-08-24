@@ -29,8 +29,10 @@
 % not available in this TeX install; using default Computer Modern fonts.
 \usepackage{fancyhdr} % Use headers
 \usepackage{float}
-\usepackage{algorithm}      % pseudocode float
-\usepackage{algpseudocode}  % pseudocode body (algorithmicx)
+\usepackage{placeins}        % \FloatBarrier to flush pending floats
+\usepackage{titlesec}        % section heading spacing control
+\usepackage{algorithm}       % pseudocode float
+\usepackage{algpseudocode}   % pseudocode body (algorithmicx)
 % Here I keep the left and right margins equal. You can choose to have unequal margins if you want a two-sided book effect.
 \usepackage[
 	top    = 1.5cm,
@@ -39,6 +41,9 @@
 	right  = 2.00cm,
 	includeheadfoot]{geometry} % Use similar margins to the Word Template
 \setlength{\parindent}{0pt}
+
+% Tighten run-in \paragraph spacing (default 3.25ex -> 1ex before-skip)
+\titlespacing{\paragraph}{0pt}{1ex plus 0.5ex minus 0.2ex}{0.5em}
 
 % Placeholder for results pending from the running HPC experiment set.
 % \TBD prints a red "TBD" token; results filled in once the experiment set completes.
@@ -116,8 +121,7 @@
         {\bf
         {\Huge Contact-Rich Planar Goal-Reaching:\\
         \vspace{2mm}Why Asymmetric Self-Play Underperforms\\
-        \vspace{2mm}Single-Agent Reward Shaping\\
-        \vspace{4mm}{\Large A Regime Analysis of a Method That Succeeds Elsewhere}}
+        \vspace{2mm}Single-Agent Training}
         }\\
         \vspace{9cm}{\LARGE Vlad Iftime}
 }
@@ -135,11 +139,12 @@
 
 \begin{center}
     {\bf{\large University of Groningen}}\\
-    \vspace{1cm}{\bf{\large Contact-Rich Planar Goal-Reaching:\\\vspace{1mm}Why Asymmetric Self-Play Underperforms Single-Agent Reward Shaping\\\vspace{1mm}\normalsize A Regime Analysis of a Method That Succeeds Elsewhere}}\\
+    \vspace{1cm}    {\bf{\large Contact-Rich Planar Goal-Reaching:\\\vspace{1mm}Why Asymmetric Self-Play Underperforms Single-Agent Training}}\\
     \vspace{2cm}{\bf Master's Thesis}\\
     \vspace{0.5cm}To fulfill the requirements for the degree of\\Master of Science in Artificial Intelligence\\
     at University of Groningen under the supervision of\\
-    Prof.\ dr.\ L.R.B.\ Schomaker (Artificial Intelligence, University of Groningen)\\
+    Hamidreza Mohades Kasaei, PhD (Associate Professor)\\
+    and Matthia Sabatelli, PhD (Assistant Professor)\\
     \vspace{3cm}{\bf Vlad Iftime (s3426394)}\\
     \vspace{4cm}\today
     

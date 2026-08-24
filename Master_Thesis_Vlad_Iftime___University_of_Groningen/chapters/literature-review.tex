@@ -3,7 +3,7 @@
 \label{sec:drl_robotics}
 
 This chapter develops the theory the thesis relies on and situates the work
-within the surrounding literature. It begins with the formal definitions of
+within the literature. It begins with the formal definitions of
 reinforcement learning, first for fully observable problems and then for the
 partially observable case that motivates the recurrent policy used here. It then
 describes the two algorithms used in the experiments, Proximal Policy
@@ -181,7 +181,7 @@ over a dataset $\mathcal{D}$ of observed transitions. They can be far more
 sample-efficient, but their performance is bounded by the fidelity of the learned
 model, and small errors compound over long rollouts. The choice between the two
 families is therefore a choice between robustness and sample efficiency. This
-thesis works entirely in the model-free, on-policy regime and asks a
+thesis works entirely in the model-free, on-policy setup and asks a
 complementary question: rather than learning a dynamics model to save samples,
 can a principled reward do so instead, by making each sampled transition more
 informative? Section~\ref{sec:pbrs} takes up this question.
@@ -307,7 +307,7 @@ An orthogonal approach to sample inefficiency is to change not the reward but
 the order in which the agent encounters tasks. Curriculum learning organises
 training from easy to hard, so that competence acquired on simple problems
 supports progress on difficult ones \cite{Narvekar2020}. The survey of
-\cite{Narvekar2020} provides a taxonomy that distinguishes, among other axes,
+\cite{Narvekar2020} provides a taxonomy that distinguishes, among other dimensions,
 \emph{forced} curricula, in which a designer fixes the sequence of tasks or
 objectives in advance, from \emph{automatic} curricula, in which the sequence is
 derived from the learner's own progress. Both appear in this thesis: a forced
@@ -411,8 +411,8 @@ a strict combined gate. A goal counts as reached only when position and orientat
 both lie within tolerance at the same time. The contact mechanics of
 Section~\ref{sec:pushing} couple the two, so neither can be optimised alone. The
 goal is therefore genuinely multi-objective in a sense the prior settings did not
-require. This is a difference in regime, not a defect in the earlier work, and it
-defines one of the axes along which this thesis explains why a proven method
+require. This is a difference in setup, not a defect in the earlier work, and it
+defines one of the dimensions along which this thesis explains why a proven method
 underperforms here.
 
 \subsection{Goal-Conditioned and Hierarchical Reinforcement Learning}

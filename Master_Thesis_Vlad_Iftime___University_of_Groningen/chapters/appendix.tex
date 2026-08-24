@@ -100,111 +100,65 @@ eight-dimensional latent in the difference variant. The goal-proposing agent use
 a 20-dimensional observation that omits the goal, since it sets the goal rather
 than solving it.
 
-\subsection{Per-Test Error Bars}
-\label{app:error_bars}
-
-\oldresults{single-seed per-scene bars and the "statistically equivalent" claim;
-to be regenerated with the seed-CI data.}
-
-Figure~\ref{fig:app_error_bars} shows the per-scene trial-level success rate with
-95\,\% binomial confidence intervals for the single-agent and curriculum models
-head to head, and for all models together. The confidence intervals of the
-single-agent and curriculum models overlap on most scenes, consistent with the
-finding of Section~\ref{sec:rq2} that the two are statistically equivalent.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{val_multi_error_bars.png}
-    \caption{Per-scene trial-level success rate with 95\,\% binomial confidence
-    intervals.}
-    \label{fig:app_error_bars}
-\end{figure}
-
-\subsection{Curriculum Trigger Correction}
-\label{app:trigger}
-
-An earlier implementation of the forced curriculum gated the transition to the
-orientation phase on the per-push mean position error falling below
-$0.08\,\text{m}$ for 50 consecutive iterations. This condition never activated.
-The per-push mean is dominated by early-episode pushes far from a freshly
-randomised goal, and has a structural floor above $0.08\,\text{m}$. Even the best
-model's per-push mean position error does not fall below this value, and a single
-noisy iteration reset the 50-iteration streak. The orientation weight therefore
-remained at zero for the entire run, and the model reduced to a position-only
-learner. The corrected trigger, used for the PPO-Curriculum results in this
-thesis, gates instead on the episodic position-only success rate reaching 0.5 over
-a 20-iteration window, which is a "position is solved" signal rather than a
-per-push error mean, and which activates as intended.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.6\textwidth]{modelB_curriculum_stuck.png}
-    \caption{The original curriculum trigger never activated: the per-push mean
-    position error remained above the $0.08\,\text{m}$ threshold throughout
-    training.}
-    \label{fig:app_trigger}
-\end{figure}
-
-\subsection{Symmetric Self-Play Fail-Fast Equilibrium}
-\label{app:failfast}
-
-\oldresults{the 0\% collapse is an old single-seed observation; the Bob-penalty
-phase of the experiment set will quantify it with confidence intervals.}
-
-A symmetric variant of time-based self-play, in which the goal-solving agent is
-penalised for its own solve time in addition to the goal-proposing agent being
-rewarded for it, collapses to a 0\,\% success rate. The penalty applies on all
-phase ends, including catastrophic ones, so the agent obtains a higher return by
-failing on the first push than by attempting a longer solution and failing later.
-Because failing is easier than succeeding under contact-rich physics, the policy
-converges to immediate failure, and the goal-proposing agent's reward collapses to
-zero at the same time. The lesson is that an asymmetric reward structure is
-necessary in this domain: the goal-proposing agent must be incentivised, and the
-goal-solving agent must not be penalised for time. This is a reward-design outcome
-specific to the setting, not a refutation of the symmetric formulation in general.
-
 \subsection{Confounded Ablation Disaggregation}
 \label{app:confound}
 
-\oldresults{the "10-percentage-point" advantage is an old number, and the new
-single-axis isolations (disc, ABC on/off, encoder on/off) change this account.}
-
-The single-agent and self-play models differ on at least seven axes at once:
+The single-agent and self-play models differ on at least eight dimensions at once:
 the number of agents (one against two), the goal distribution (fixed random
 against adversarial and shifting), the goal encoder (absent against present), the
 behavioural-cloning term (absent against present), the historical opponent pool
-(absent against present), the episode budget (15 pushes for one agent against
-5 plus 10 split between two), and the number of policy updates per iteration (one
+(absent against present), the rollout length (15 pushes for one agent, against
+5 plus 10 split between two), the episode budget (5 pushes for the single agent
+against 10 for the goal-solver), and the number of policy updates per iteration
+(one
 against two). The comparison in this thesis therefore isolates self-play as a
-package rather than any single mechanism within it. The one clean single-axis
-comparison available is between the two self-play variants, which differ only in
-the goal-proposing agent's reward and show a 10-percentage-point advantage for the
-time-based formulation.
+package rather than any single mechanism within it. Four single-dimension
+isolations are provided nonetheless: the disc contrast of
+Section~\ref{sec:rq2_coupling}, the two Alice reward formulations of
+Section~\ref{sec:rq2_reward}, the imitation ablations of
+Section~\ref{sec:rq2_abc}, and the goal-encoder ablation of
+Section~\ref{sec:rq2_encoder}. The cleanest of these is the reward-formulation
+pair, whose members differ only in the goal-proposing agent's reward. It shows no
+consistent advantage for either formulation. At 528 environments the
+outcome-based variant logs a per-push training rate of 35.8\,\%
+($\pm$ 8.8\,pp, 5 seeds) against 32.6\,\% ($\pm$ 0.4\,pp, 5 seeds) for the
+time-based variant on the T-block, and both transfer zero held-out scenes. On the
+disc the time-based variant leads during training (83.8\,\% against 77.9\,\%
+per push,
+5 seeds each) yet trails slightly on held-out scenes (6.7\,\% against
+7.3\,\%).
 
 \subsection{Training Budget Comparison}
 \label{app:budget}
 
-\oldresults{old single-seed 80.0\% figures and the "five principal models" framing.}
-
-The single-agent and curriculum models and both self-play models were trained at
-528 environments for approximately 3{,}000 iterations. The PPO-Baseline was
-trained at 2{,}048 environments, a deliberately larger batch, so that its lower
-combined-objective performance could not be attributed to insufficient
-parallelism. Both the baseline and the potential-based single-agent model reach
-80.0\,\% scene success, but the potential-based model does so with a quarter of
-the parallel environments, which is the environment-efficiency result of
-Section~\ref{sec:rq1}.
+Every Isaac Lab run in the experiment set is budget-matched. The total experience
+is held at about 23.8 million pushes, and the iteration count is set inversely
+proportional to the number of parallel environments. A sweep therefore changes
+the per-update batch size alone. The confound that a larger batch also means
+fewer gradient updates is stated wherever a scale result appears. The headline
+models
+train at 528 environments for approximately 3{,}000 iterations. The
+potential-based agent and the improvement-reward baseline are additionally swept
+across 256 to 2{,}048 environments, and the two self-play subjects across 256 and
+2{,}048. At the 528-environment baseline the potential-based single-agent model
+reaches a held-out scene success rate of 79.3\,\% ($\pm$ 3.5\,pp, 5 seeds), and
+the curriculum model 80.0\,\% ($\pm$ 4.1\,pp, 5 seeds). The improvement-reward
+baseline, trained at up to 2{,}048 environments, is still training at the time
+of writing; its held-out validation is \TBD, and until it completes the
+environment-efficiency comparison between the two reward families remains open.
 
 \subsection{Secondary Variants}
 \label{app:secondary}
 
-\oldresults{treats disc and Bob-penalty as "secondary" and cites old results;
-these are now first-class subjects in the experiment set.}
-
-Beyond the five principal models, several secondary variants were trained and
-evaluated. These are self-play on a rotationally symmetric disc, for which the
-$\mathrm{SE}(2)$ distance reduces to pure position distance; the original,
-non-simplified potential formulation at the position-only gate; and the non-HPC
-\texttt{gym-pusht} runs at reduced core counts. All are consistent with the
-principal findings: self-play remains far below single-agent training across every
-one of them. They are omitted from the main text for concision.
+The two disc self-play models and the Bob-penalty model are headline subjects,
+reported in Table~\ref{tab:main_results} and Sections~\ref{sec:rq1} and
+\ref{sec:rq2_coupling}; they are not repeated here. The ablation arms, with the
+imitation term removed, with the goal encoder removed, and the disc positive
+control, appear in Sections~\ref{sec:rq2_abc} and \ref{sec:rq2_encoder}. Two
+groups remain outside the main text. The first is the original, non-simplified
+potential formulation at the position-only gate. The second is the
+cross-environment set: the single-agent, curriculum, and self-play models
+retrained in \texttt{gym-pusht}, one seed each, which solve 3.3\,\%, 9.0\,\%,
+and 1.0\,\% of the held-out scenes respectively. Both groups are consistent with
+the principal findings: self-play remains far below single-agent training across
+every variant.

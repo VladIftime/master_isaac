@@ -25,7 +25,7 @@ across environments from artefacts of a single implementation.
 \subsection{Training Configuration and the Experiment Set}
 \label{sec:train_config}
 
-At the 528-environment anchor, every model is trained for approximately 3{,}000
+At the 528-environment baseline, every model is trained for approximately 3{,}000
 iterations. This corresponds to about 1.6 days of wall-clock time per model on the
 RTX Pro 6000. At 15 pushes per rollout it yields a batch of roughly 7{,}920 push
 transitions per PPO update. For the reward-efficiency comparison, the
@@ -41,10 +41,15 @@ models additionally use Alice Behavioral Cloning at $\beta = 0.5$.
 Two points about the training history are stated for reproducibility. First, all
 reported checkpoints post-date a sequence of corrections to the reward and the
 environment. The reported numbers are therefore produced on the corrected code,
-and earlier runs are excluded. Second, the improvement-reward baseline and the
-potential-based agent are compared across a shared range of environment counts, so
-that any difference between the two rewards cannot be attributed to unequal
-parallelism. The budgets are tabulated in Appendix~K.
+and earlier runs are excluded. One seed of ASP-dPose stopped at iteration 34 and
+is likewise excluded from the training-curve figures, though its checkpoint
+remains part of the held-out evaluation. The held-out validation for one seed
+each of TASP-dPose and Bob-penalty is still running at the time of writing, so
+both models are reported on the four seeds whose validation has completed.
+Second, the improvement-reward baseline
+and the potential-based agent are compared across a shared range of environment
+counts, so that any difference between the two rewards cannot be attributed to
+unequal parallelism. The budgets are tabulated in Appendix~\ref{app:budget}.
 
 Every Isaac Lab run in the experiment set is budget-matched. The total experience
 is held at about 23.8 million pushes, and the iteration count is set inversely
@@ -63,7 +68,7 @@ trains, the environment counts, the matched iteration counts, and the seeds.
         \textbf{Phase} & \textbf{Models} & \textbf{Envs} & \textbf{Iterations} &
         \textbf{Seeds} & \textbf{Runs} \\
         \hline
-        Anchor and efficiency & PPO-Baseline, PPO-PBRS & 256--2{,}048 &
+        Baseline and efficiency & PPO-Baseline, PPO-PBRS & 256--2{,}048 &
         773--6{,}188 & 3 & 24 \\
         Seed intervals & Baseline, PBRS, Curriculum, ASP-dPose, TASP-dPose & 528 &
         3{,}000 & 5 & 25 \\
@@ -74,7 +79,7 @@ trains, the environment counts, the matched iteration counts, and the seeds.
         Imitation positive control & ASP-disc & 528 & 3{,}000 & 3 & 6 \\
         Reward structure & Bob-penalty & 528 & 3{,}000 & 5 & 5 \\
         Cross-environment & single agent, curriculum, self-play & 64, 256 &
-        3{,}000 & 1 & 10 \\
+        3{,}000 & 1 & 8 \\
         \hline
     \end{tabularx}
     \caption{The phases of the experiment set. Environments and iterations trade
@@ -82,7 +87,7 @@ trains, the environment counts, the matched iteration counts, and the seeds.
     runs; the cross-environment runs instead use a fixed 3{,}000 iterations and a
     single seed, and vary the per-update batch through the environment count and
     the push length. The experiment set comprises 94 training runs in Isaac Lab and
-    10 in the second simulator.}
+    8 in the second simulator.}
     \label{tab:phases}
 \end{table}
 
@@ -116,25 +121,49 @@ of its 20 attempts satisfies the combined gate of Section~\ref{sec:mdp}. This is
 the headline number, and follows the convention common in manipulation evaluation.
 The \emph{trial success rate} is the fraction of individual attempts that satisfy
 the gate, and is always lower than the scene success rate. Reporting both prevents
-the best-of-20 protocol from overstating performance, and the gap between them is
-stated wherever the headline number appears; the final values are \TBD until the
-seed runs are collated. Each model is evaluated across its trained seeds, and the
+the scene protocol from overstating performance, and the gap between them is
+stated wherever the headline number appears. Each model is evaluated across its trained seeds, and the
 results are aggregated into a mean with a 95\,\% confidence interval per model,
 batch size, and iteration count.
+
+A parallel within-distribution evaluation applies the same scene protocol to
+goals drawn from the model's own training distribution rather than from the fixed
+30-scene suite. For the self-play models the frozen goal-proposing agent
+generates each goal by acting for its proposal budget from a sampled start pose.
+The goal is retained only if it passes the validity check of
+Section~\ref{sec:models}. The frozen goal-solving agent then attempts it under
+the same per-goal budget as the held-out suite. For the single-agent models the
+goals are sampled from the training goal distribution. The within-distribution
+scene success rate is the fraction of these goals solved in at least one attempt,
+aggregated across the trained seeds with a 95\,\% confidence interval. It is
+reported alongside the held-out scene success rate wherever the generalisation
+gap of Section~\ref{sec:rq3} is at issue.
+
+Every held-out number reported in this thesis comes from this full evaluation:
+all 20 attempts per scene with up to 30 pushes per attempt, across every trained
+seed of every model. No abbreviated pass is reported.
 
 \subsection{Cross-Environment Protocol}
 \label{sec:cross_env}
 
 To test whether the ordering of the models is a property of the methods rather
 than of Isaac Lab, the single-agent, curriculum, and self-play models are
-retrained and evaluated in \texttt{gym-pusht} under the same 30-scene gate. The
+retrained and evaluated in \texttt{gym-pusht} under the same 30-scene gate, with
+20 attempts per scene. The two-dimensional counterpart is shown in
+Figure~\ref{fig:gym_render}. The
 two environments differ mainly in the size of the PPO batch. Isaac Lab produces
-about 7{,}920 transitions per update at the 528-environment anchor, while
+about 7{,}920 transitions per update at the 528-environment baseline, while
 \texttt{gym-pusht} produces between about 960 and 11{,}520, depending on the
 environment count and the push length. The gym runs use a fixed 3{,}000 iterations
 and sweep the per-update batch through these two settings, so the comparison tests
 whether the ordering of the methods survives a second, lower-fidelity simulator,
-rather than matching the total experience between the two environments.
+rather than matching the total experience between the two environments. The
+single-agent counterpart covers all four combinations of 64 and 256 environments
+with 15 and 45 pushes per rollout. The curriculum counterpart runs at 64
+environments with both push lengths, and the self-play counterpart at 64 and 256
+environments with 15 pushes. The held-out numbers reported in the results come
+from the primary configuration, 64 environments with 15 pushes per rollout; the
+remaining configurations are training-only.
 Figure~\ref{fig:isaac_vs_gym} summarises the throughput and batch size of the two
 environments.
 
@@ -145,6 +174,14 @@ environments.
     Raw throughput is comparable; the per-update batch differs by roughly a factor
     of eight, which is the variable the cross-environment comparison isolates.}
     \label{fig:isaac_vs_gym}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{sim_pics/gym_sim_push_t.png}
+    \caption{The two-dimensional \texttt{gym-pusht} counterpart of the pushing
+    task.}
+    \label{fig:gym_render}
 \end{figure}
 
 \subsection{Off-Policy Baseline: SAC with Hindsight Experience Replay}
@@ -172,27 +209,39 @@ baseline is trained and evaluated under the same 30-scene protocol as the
 principal models, so its success rate is directly comparable. Its role is
 calibration rather than competition. It indicates whether an off-policy,
 replay-based method reaches performance similar to the on-policy potential-based
-model, and its status against the compute budget is reported with the results.
+model. The baseline was attempted but did not converge within the available
+compute budget. That status is final and is reported with the results; the
+published FetchPush result of \cite{Andrychowicz2017} is used as plausibility
+calibration in its place, as stated in Section~\ref{sec:qualitative}.
 
 \subsection{Metrics}
 \label{sec:metrics}
 
-The results report the following quantities, each with its sample size and
-protocol stated at the point of use. The primary metric is the scene success rate
-over the 30-scene suite, with the trial success rate reported alongside it. The
-breakdown by scene type, position-only against combined, is reported because it
-localises where each model fails. Mean position error and mean orientation error
-are reported as continuous measures of near-misses. For the self-play models the
-training logs also provide the per-axis success rates: the fraction of pushes that
-satisfy the position gate alone and the orientation gate alone. These are compared
-against the combined-gate rate to diagnose whether the two skills are learned but
-not combined. Average push count per attempt is reported as a measure of
-efficiency. Three further quantities are logged during self-play training and
-reported in the results. The first is the mean absolute value error, which
-measures the bias of the value function under the shifting goal distribution. The
-second is the share of demonstrated actions the imitation term clips away, a direct
-measure of how strongly the imitation signal is suppressed. The third is the
-Alice-replay rate: the fraction of proposed goals that the goal-proposing agent's
-own action sequence reaches when replayed from the goal-solving agent's start
-state. All reported numbers trace to the validation records summarised in the
-results.
+The results report three success rates, each with its sample size and protocol
+stated at the point of use. The \emph{held-out scene success rate} is the outcome
+of the fixed 30-scene evaluation of Section~\ref{sec:val_protocol}, and is the
+measure of generalisation this thesis reports as its headline. The
+\emph{within-distribution scene success rate} applies the same scene protocol to
+goals drawn from the model's own training distribution. For the self-play models
+these goals are proposed by the frozen goal-proposing agent and accepted by the
+validity check; for the single-agent models they are sampled from the training
+goal distribution. The measure captures competence on the goals the model was
+trained to solve, and its gap against the held-out rate is the quantity of
+interest in Section~\ref{sec:rq3}. The \emph{training-time success rate} is a
+per-push rate on the combined gate, the median of the last five training
+iterations, averaged across seeds. It is retained as an auxiliary diagnostic only
+and does not enter the headline comparisons.
+
+The breakdown by scene type, position-only against position-and-rotation, is
+reported because it localises where each model fails. Mean position error and
+mean orientation error are reported as continuous measures of near-misses. For
+the self-play models the training logs also provide the per-axis success rates:
+the fraction of pushes that satisfy the position gate alone and the rotation
+gate alone. These are compared against the combined-gate rate and against the
+held-out result to diagnose where the within-distribution competence is confined.
+Average push count per attempt is reported as a measure of efficiency. One
+further quantity is logged during self-play training and reported in the results:
+the share of demonstrated actions the imitation term clips away (the ABC clip
+fraction), a direct measure of how strongly the imitation signal is suppressed.
+All reported numbers trace to the experiment set recorded in the implementation
+log.

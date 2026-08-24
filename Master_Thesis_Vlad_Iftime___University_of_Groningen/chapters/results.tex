@@ -2,260 +2,342 @@
 \section{Results}
 \label{sec:results}
 
-\oldresults{the entire chapter still reports the old single-seed numbers and the
-old research-question framing; every table, figure, and quoted rate below is
-provisional and will be regenerated from the experiment set (seed means with 95\%
-confidence intervals), then reorganised around the new RQ1--RQ3.}
+This chapter reports the generalisation of every model to the held-out 30-scene
+suite, organised by research question. Section~\ref{sec:rq_baseline} establishes
+that the task is solvable. Section~\ref{sec:rq1} addresses whether asymmetric
+self-play succeeds under the single-GPU budget (RQ1). Section~\ref{sec:rq2}
+isolates the setup dimension that separates success from failure (RQ2).
+Section~\ref{sec:rq3} identifies the underlying mechanism (RQ3).
+Section~\ref{sec:cross_env_results} reports the second-simulator result.
 
-This chapter reports the outcome of the five models on the 30-scene validation
-suite, organised by research question. Section~\ref{sec:rq1} addresses the
-environment-efficiency of potential-based shaping (RQ1), Section~\ref{sec:rq2}
-compares curriculum and self-play against single-agent training (RQ2), and
-Section~\ref{sec:rq3} examines whether self-play learns the two constituent skills
-(RQ3). Section~\ref{sec:cross_env_results} confirms the ordering in a second
-simulator, and Section~\ref{sec:qualitative} reports qualitative behaviour and the
-off-policy baseline. Unless stated otherwise, every number is for the 30-scene
-suite, best of 20 attempts, up to 30 pushes, under the combined gate of
-Section~\ref{sec:mdp}. Table~\ref{tab:main_results} collects the principal numbers.
-
-\begin{table}[H]
-    \centering
-    \small
-    \begin{tabular}{l c c c c c}
-        \hline
-        \textbf{Model} & \textbf{Scene SR} & \textbf{Trial SR} & \textbf{Pos-only} & \textbf{Pos+rot} & \textbf{Envs} \\
-        \hline
-        PPO-Baseline (improvement reward) & 80.0\,\% & 70.5\,\% & 100\,\% & 35\,\% & 2{,}048 \\
-        PPO-PBRS & \textbf{80.0\,\%} & 66.0\,\% & 100\,\% & 70\,\% & 528 \\
-        PPO-Curriculum & 76.7\,\% & 68.3\,\% & 100\,\% & 65\,\% & 528 \\
-        TASP-dPose (time-based self-play) & 16.7\,\% & 1.2\,\% & 30\,\% & 10\,\% & 528 \\
-        ASP-dPose (outcome-based self-play) & 6.7\,\% & 0.3\,\% & 20\,\% & 0\,\% & 528 \\
-        \hline
-    \end{tabular}
-    \caption{Principal validation results on the 30-scene held-out suite (best of
-    20 attempts, up to 30 pushes, combined gate). Scene SR counts a scene solved
-    if any of its 20 attempts passes the gate; trial SR is the per-attempt rate.
-    The PPO-Baseline row uses the improvement reward and the original,
-    non-simplified potential formulation reported at the position-only gate; its
-    combined-gate performance is discussed in the text.}
-    \label{tab:main_results}
-\end{table}
-
-\subsection{RQ1: Environment-Efficiency of Reward Shaping}
-\label{sec:rq1}
-
-The potential-based reward reaches the same scene success rate as the improvement
-reward while using a quarter of the parallel environments. PPO-PBRS attains a
-scene success rate of 80.0\,\% at 528 environments, matching the 80.0\,\% reached
-by the improvement-reward baseline at 2{,}048 environments. The reduction from
-2{,}048 to 528 is a factor of roughly four in the parallelism required for the
-same performance. This answers RQ1 in the affirmative: for this task,
-potential-based shaping reduces the number of parallel environments needed for
-on-policy learning.
-
-The benefit of shaping is larger on the combined objective than the headline
-number alone conveys. On the ten position-only scenes both rewards reach 100\,\%,
-so the parallelism reduction is the whole of the effect there. The ten combined
-scenes tell a different story. There, the potential-based reward reaches 70\,\%,
-while the earlier non-simplified formulation evaluated at the same gate reaches
-only 35\,\%, an improvement of 35 percentage points. The per-scene error plot for
-PPO-PBRS in Figure~\ref{fig:pbrs_errors} shows why the six failing scenes fail.
-All six are rotation-dominant: position is solved on every scene, and the residual
-failures are limited by orientation error rather than position error. This
-localises the remaining difficulty of the single-agent task to the orientation
-component of the combined gate.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{A_simp_20_isaac_errors.png}
-    \caption{Per-scene position and orientation error for PPO-PBRS on the 30-scene
-    suite. Position is within tolerance on every scene; the failing scenes are
-    limited by orientation error on rotation-dominant scenes.}
-    \label{fig:pbrs_errors}
-\end{figure}
-
-\subsection{RQ2: Curriculum and Self-Play Against Single-Agent}
-\label{sec:rq2}
-
-Neither the forced curriculum nor either self-play variant improves on the plain
-single-agent model. PPO-Curriculum reaches 76.7\,\%, which is 3.3 percentage
-points below PPO-PBRS at 80.0\,\%. Across the 30 independent scenes this
-difference is not statistically significant: the standard error of the difference
-is approximately $\pm 10.6$ percentage points, so the two models are equivalent on
-this evidence. The staged curriculum does change the error profile. It attains a
-lower mean position error (0.023\,m against 0.032\,m), consistent with its
-position-only first phase, but a slightly higher mean orientation error
-(0.663\,rad against 0.568\,rad). The staging therefore reallocates precision
-between the two axes without improving the combined result.
-
-The self-play models perform far worse than single-agent training.
-Figure~\ref{fig:val_multi} shows the full comparison. TASP-dPose, the stronger
-variant, reaches 16.7\,\%, and ASP-dPose reaches 6.7\,\%. These are factors of
-roughly 4.8 and 11.9 below PPO-PBRS. The time-based Alice reward of TASP-dPose is
-markedly better than the outcome-based reward of ASP-dPose, a difference of 10
-percentage points. This indicates that the self-regulating time-based formulation
-of Section~\ref{sec:asp} produces a more usable goal distribution than the
-outcome-based one, yet neither approaches the single-agent result. A controlled
-measurement puts the per-iteration cost of self-play at roughly equal to that of
-single-agent training. The gap therefore cannot be attributed to self-play
-receiving less compute: it is a structural difference between the two training
-regimes, not a budget artefact.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth,height=0.45\textheight,keepaspectratio]{val_multi_combined.png}
-    \caption{Scene success rate (left) and the position-only against combined
-    breakdown (right) for the five models. The single-agent and curriculum models
-    cluster at the top; the self-play variants reach at most 16.7\,\%. The
-    combined position-and-orientation gate is the discriminating objective.}
-    \label{fig:val_multi}
-\end{figure}
-
-The per-scene error plots for the two self-play variants,
-Figure~\ref{fig:selfplay_errors}, show the pattern behind these numbers. Both
-solve only a small number of the easiest scenes, and their orientation error
-remains above 1.4\,rad on almost every scene, far outside the 0.2\,rad tolerance.
-The self-play models never satisfy the combined gate on any rotation-requiring
-scene.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.49\textwidth]{G_tasp_dpose_isaac_errors.png}\hfill
-    \includegraphics[width=0.49\textwidth]{reults_valid_pbrs_asp_dpose_errors.png}
-    \caption{Per-scene error for TASP-dPose (left, 16.7\,\%) and ASP-dPose (right,
-    6.7\,\%). Both solve only the easiest scenes; orientation error remains far
-    above tolerance on the rest.}
-    \label{fig:selfplay_errors}
-\end{figure}
-
-\subsection{RQ3: Skill Composition Under Self-Play}
-\label{sec:rq3}
-
-The failure of self-play on the combined gate is not a failure to learn the two
-skills; it is a failure to combine them. For the goal-solving agent, the training
-logs record the per-axis success rates alongside the combined-gate rate. These are
-shown in Figure~\ref{fig:asp_diagnostic} and summarised in Table~\ref{tab:rq3}.
-Under the potential-based reward, the agent reaches a position-only success rate of
-54\,\% and an orientation-only rate of 45\,\%, each individually substantial. If
-the two skills were satisfied independently, their product would give a combined
-rate of about 24 to 25\,\%. The measured combined rate is about 10\,\%, roughly 2.5
-times below that prediction. The two skills exist but are not satisfied at the same
-time, which is the precise sense in which self-play fails on this task.
+Three success measures are reported and kept distinct throughout, and all are
+defined in Section~\ref{sec:metrics}. The
+\emph{held-out scene success rate} is computed on the fixed 30-scene suite that no
+model saw during training, and is the measure of generalisation this thesis reports
+as its headline. The \emph{within-distribution scene success rate} is computed on
+goals drawn from the model's own training distribution, and its gap against the
+held-out rate is the mechanism of Section~\ref{sec:rq3}. The \emph{training-time
+success rate} is an auxiliary per-push rate computed on the goals the models
+trained on. Unless stated otherwise, headline models report 5 seeds at 528
+environments; ablations and scale sweeps report 3 seeds; confidence intervals are
+95\,\% across seeds. The held-out numbers in this chapter follow the evaluation
+protocol defined in Section~\ref{sec:val_protocol}, and every comparison reported
+here is already decisive under that protocol.
+Table~\ref{tab:main_results} collects the principal numbers.
 
 \begin{table}[H]
     \centering
     \small
     \begin{tabular}{l c c c c}
         \hline
-        \textbf{Self-play variant} & \textbf{Alice validity} & \textbf{Position SR} & \textbf{Orientation SR} & \textbf{Combined SR} \\
+        \textbf{Model} & \textbf{Scene SR} & \textbf{Trial SR} & \textbf{Pos-only} & \textbf{Seeds} \\
         \hline
-        Original reward (2{,}048 envs) & 89.3\,\% & 1.3\,\% & 7.1\,\% & 0.07\,\% \\
-        PBRS, outcome-based & 83.9\,\% & 54.1\,\% & 45.0\,\% & 10.0\,\% \\
-        PBRS, time-based + penalty & 90.5\,\% & 54.1\,\% & 46.3\,\% & 8.5\,\% \\
+        PBRS (potential-based)   & \textbf{79.3\,\% $\pm$ 3.5\,\%} & 70.2\,\% & 100\,\% & 5 \\
+        Curriculum               & \textbf{80.0\,\% $\pm$ 4.1\,\%} & 70.2\,\% & 100\,\% & 5 \\
+        ASP-disc (position-only) & 7.3\,\% $\pm$ 1.8\,\%  & 5.8\,\% & --- & 5 \\
+        TASP-disc                & 6.7\,\% $\pm$ 0.0\,\%  & 4.9\,\% & --- & 5 \\
+        ASP-dPose (outcome)      & 0.0\,\%                & 0.0\,\% & 0\,\%  & 5 \\
+        TASP-dPose (time-based)  & 0.0\,\%                & 0.0\,\% & 0\,\%  & 4 \\
+        Bob-penalty              & 0.0\,\%                & 0.0\,\% & 0\,\%  & 4 \\
         \hline
     \end{tabular}
-    \caption{Training-time per-axis and combined success rates for the goal-solving
-    agent under self-play. Under the improvement reward the agent learns almost
-    nothing; under the potential-based reward it learns each axis to roughly
-    50\,\% but the combined gate remains near 10\,\%, well below the independence
-    product of about 24 to 25\,\%. Alice's goal-validity rate is high throughout.}
+    \caption{Held-out generalisation of the headline models at 528 environments.
+    Scene SR counts a scene solved if any of its attempts passes the combined gate;
+    trial SR is the per-attempt rate. Pos-only is the scene SR on the ten
+    position-only scenes. Values are seed means with 95\,\% confidence intervals
+    across seeds, under the evaluation protocol of Section~\ref{sec:val_protocol}.}
+    \label{tab:main_results}
+\end{table}
+
+\subsection{Baseline}
+\label{sec:rq_baseline}
+
+The single-agent models establish that the task is solvable, which is the
+precondition for interpreting any self-play result as a property of the method
+rather than the task. PBRS reaches a held-out scene success rate of
+79.3\,\% ($\pm$ 3.5 percentage points, 5 seeds) at 528 environments, and the
+curriculum model reaches 80.0\,\% ($\pm$ 4.1\,pp, 5 seeds). On the ten
+position-only scenes both reach 100\,\%; on the twenty scenes that also require
+an orientation change they reach 69\,\% and 70\,\%. The single-agent models
+therefore fail only on rotation-requiring scenes, and never because of position.
+Their trial success rate of 70.2\,\% shows that the policy is reliable as well as
+capable: a scene is solved in the majority of attempts, not in a single lucky one.
+The per-scene errors of Figure~\ref{fig:per_scene_errors} show where the
+remaining failures concentrate: position error stays below tolerance on every
+scene, and the unsolved scenes are those whose orientation error exceeds
+the 0.2\,rad threshold.
+
+The single-agent models show no generalisation gap. Their training goals are
+sampled uniformly over the workspace, so the within-distribution evaluation of
+Section~\ref{sec:metrics} draws goals from the same distribution as the held-out
+suite, and the two success rates coincide. The 79.3\,\% held-out result is
+therefore also the single-agent's within-distribution competence. This
+distinguishes the single-agent models from the self-play models of
+Section~\ref{sec:rq3}, whose within-distribution success collapses on the
+held-out suite.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.5\textheight,keepaspectratio]{per_scene_errors_3models.png}
+    \caption{Per-scene generalisation errors, seed means across 5 seeds
+    ($\pm$ 1 standard deviation). Top row: position error; bottom row:
+    orientation error. Columns: PBRS, Curriculum, and ASP-dPose. Green bars mark
+    scenes solved in the majority of seeds; the dashed line marks the combined-gate
+    threshold. The single-agent models leave only rotation-dominant scenes
+    unsolved, while ASP-dPose solves none.}
+    \label{fig:per_scene_errors}
+\end{figure}
+
+\subsection{Research Question 1: ASP performance under the single-GPU budget}
+\label{sec:rq1}
+
+The self-play models do not generalise to the held-out suite at all. ASP-dPose
+and TASP-dPose each solve zero of the 30 scenes, in every seed (5 and 4 seeds
+respectively). The Bob-penalty model is likewise at zero. This is not a
+marginal underperformance against the 79\,\% of the single-agent model; it is a
+complete failure to transfer.
+
+The two Alice reward formulations are indistinguishable at this level. The
+outcome-based reward of \cite{OpenAI2021AsymmetricSF} and the time-based reward
+of \cite{Sukhbaatar2018IntrinsicMotivation} both produce zero held-out successes,
+so the reward-formulation dimension cannot be resolved on the T-block: both variants
+fail entirely. The same holds for the symmetric Bob-penalty variant. The failure
+is one of transfer, not of learning. On goals the goal-proposing agent itself
+produces, the self-play policy solves 61.4\,\% of disc scenes and 11.7\,\% of
+T-block scenes (5 seeds each, Section~\ref{sec:rq3}), and none of that
+competence reaches the held-out suite. The
+comparisons that can be made at this level are between the within-distribution
+behaviour of Section~\ref{sec:rq3} and the held-out result, where a consistent
+picture emerges.
+
+The disc models, whose goal constrains position alone, are marginally above
+zero. ASP-disc solves 7.3\,\% of its 30 disc scenes ($\pm$ 1.8\,pp, 5 seeds) and
+TASP-disc 6.7\,\% ($\pm$ 0.0\,pp, 5 seeds). The couple of scenes each disc model
+solves are the easiest of the suite. This places the disc contrast of
+Section~\ref{sec:rq2_coupling} in its proper light: self-play fails on both
+objects, and fails completely on the coupled-goal T-block.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.45\textheight,keepaspectratio]{val_multi_combined.png}
+    \caption{Held-out scene success rates for the headline models at 528
+    environments. The single-agent models solve roughly four scenes in five; the
+    disc self-play models solve fewer than one in ten; the T-block self-play
+    models solve none.}
+    \label{fig:val_multi}
+\end{figure}
+
+\subsection{Research Question 2: Setup dimensions}
+\label{sec:rq2}
+
+This section reports the single-dimension isolations that decompose the self-play
+result. Each isolates one factor that differs between the successful prior
+settings and the present setup.
+
+\subsubsection{Goal Coupling}
+\label{sec:rq2_coupling}
+
+The disc self-play models isolate the coupled goal as a single variable. On the
+rotationally symmetric disc, whose goal constrains position alone, self-play
+solves 7.3\,\% of held-out scenes. On the T-block, whose goal couples position
+and orientation, the same mechanism solves 0.0\,\%. The pose, the push primitive,
+the Bob reward, and the self-play loop are identical between the two variants;
+only the object and the success criterion differ.
+
+The within-distribution evaluation of Section~\ref{sec:rq3} measures the coupling
+directly. On goals the goal-proposing agent itself generates, the disc model
+solves 61.4\,\% of scenes ($\pm$ 2.1\,pp, 5 seeds) while the T-block model
+solves 11.7\,\% ($\pm$ 1.5\,pp, 5 seeds). The coupled gate therefore reduces
+within-distribution competence by roughly 50 percentage points before any
+transfer is required. The held-out suite then collapses both rates, the disc to
+7.3\,\% and the T-block to zero. The failure thus separates into two effects of
+comparable size. The coupled gate accounts for the within-distribution drop from
+61.4\,\% to 11.7\,\%; the generalisation collapse accounts for the drop from each
+within-distribution rate to its held-out rate, roughly 54 percentage points on
+the disc. Neither effect alone explains the full result, and the second is the
+subject of Section~\ref{sec:rq3}.
+
+The single-agent models show the same gate effect in a solvable setting. On the
+ten position-only scenes they reach 100\,\%; on the twenty scenes that also
+demand an orientation change they reach 69--70\,\%. The coupled gate is hard even
+for the model that solves the task, which is why it compounds self-play's
+generalisation failure decisively.
+
+\subsubsection{Reward Formulation}
+\label{sec:rq2_reward}
+
+The two Alice reward formulations produce identical held-out outcomes: zero
+scenes solved for both ASP-dPose and TASP-dPose. The self-regulating property of
+the time-based reward of \cite{Sukhbaatar2018IntrinsicMotivation} does not confer
+a measurable advantage in this setup, and neither reward transfers. The
+reward-formulation dimension is therefore not the factor that
+separates the successful prior settings from this one: both formulations fail
+equally here.
+
+\subsubsection{Compute Scale}
+\label{sec:rq2_scale}
+
+The two self-play subjects were trained at 256, 528, and 2{,}048 parallel
+environments with matched total experience, so that the per-update batch size
+varies while the total pushes stay fixed. On the held-out suite ASP-dPose solves
+0.0\,\% of scenes at 256 and 528 environments (3 and 5 seeds), and 1.1\,\%
+($\pm$ 4.8\,pp, 3 seeds) at 2{,}048, where a single seed solves a single scene.
+TASP-dPose solves 0.0\,\% at all three counts. An eightfold increase in the
+parallel batch does not lift the self-play result above the noise floor. Compute
+scale is therefore ruled out as the cause of the underperformance, in the
+strongest sense available: the curve is not merely flat, it is flat at zero.
+
+\subsubsection{Imitation Signal}
+\label{sec:rq2_abc}
+
+The imitation term introduced by \cite{OpenAI2021AsymmetricSF}, Alice
+Behavioural Cloning at $\beta = 0.5$, is instrumented through the fraction of
+demonstrated actions whose probability ratio falls outside the clipping interval.
+For every ABC-enabled model this clip fraction is \textbf{0.000} at every
+training iteration: the goal-proposing agent's exploratory pushes lie so far from
+the goal-solving agent's policy that the clipping zeroes the gradient, and the
+imitation signal never flows.
+
+The ablation shows the signal's absence has no measurable effect because there
+is nothing left to preserve. Removing ABC changes the held-out scene SR of ASP-dPose from
+0.0\,\% to 0.0\,\% (3 seeds), and the same holds for TASP-dPose and for the disc
+models (6.7\,\% with and without). The positive control on the disc, where the
+task is easiest and the imitation term would be most likely to help, also shows
+no effect. The practical consequence is that the imitation term contributes
+nothing in this discrete macro-action domain; the clip-saturation measurement
+explains why.
+
+\subsubsection{Goal Representation}
+\label{sec:rq2_encoder}
+
+Removing the GoalEncoder from Bob and providing the full object-and-goal
+observation directly to the policy encoder changes the held-out scene SR of
+ASP-dPose from 0.0\,\% to 0.0\,\% (3 seeds). The eight-dimensional latent
+compression is not the factor that limits self-play, consistent with the disc
+isolation, where the same encoder is present and self-play retains its marginal
+generalisation.
+
+\subsection{Research Question 3: Mechanism}
+\label{sec:rq3}
+
+The mechanism of the self-play failure is the gap between the within-distribution
+competence and the held-out performance.
+Table~\ref{tab:rq3} and Figure~\ref{fig:train_heldout} place the two measures
+side by side.
+
+\begin{table}[H]
+    \centering
+    \small
+    \begin{tabular}{l c c c}
+        \hline
+        \textbf{Model} & \textbf{Within-dist SR} & \textbf{Held-out SR} & \textbf{Seeds} \\
+        \hline
+        ASP-disc     & 61.4\,\% $\pm$ 2.1\,\%  & 7.3\,\%          & 5 \\
+        ASP-dPose    & 11.7\,\% $\pm$ 1.5\,\%  & 0.0\,\%          & 5 \\
+        \hline
+    \end{tabular}
+    \caption{Within-distribution against held-out scene success for the two
+    self-play subjects. Within-distribution SR is the scene success rate on goals
+    proposed by the frozen goal-proposing agent and accepted by the validity
+    check, under the evaluation protocol of Section~\ref{sec:val_protocol};
+    held-out SR is the 30-scene rate. Values are seed means with 95\,\%
+    confidence intervals across the seeds listed. The single-agent models are
+    omitted because their uniform training goal distribution coincides with the
+    held-out suite, so their within-distribution and held-out rates are the same.}
     \label{tab:rq3}
 \end{table}
 
-Two further observations from Table~\ref{tab:rq3} sharpen the diagnosis. Under the
-improvement reward, the agent learns essentially nothing: a position-only rate of
-1.3\,\% and a combined rate of 0.07\,\%. The potential-based reward is what raises
-the per-axis skills to roughly 50\,\%, consistent with the GAE argument of
-Section~\ref{sec:pbrs_asp}. The goal-proposing agent, in turn, is not the
-bottleneck. Its goal-validity rate stays between 83 and 91\,\% across variants, so
-it reliably proposes valid goals. The obstacle is the goal-solving agent's
-inability to satisfy the coupled criterion under the non-stationary goal
-distribution, not a breakdown in goal proposal.
+The within-distribution evaluation separates the two effects that the headline
+numbers confound. On goals the goal-proposing agent itself produces, the disc
+model solves 61.4\,\% of scenes and the T-block model 11.7\,\%, across five seeds
+each. The same models solve 7.3\,\% and 0.0\,\% of held-out scenes. The
+single-agent models show no such separation: their uniform training goal
+distribution coincides with the held-out suite, so their within-distribution and
+held-out rates agree at roughly 79\,\%.
+
+Two effects of comparable size are now measurable. The first is the coupled
+gate. Within the proposer's own distribution, replacing the position-only disc
+goal with the coupled T-block goal reduces scene success from 61.4\,\% to
+11.7\,\%, a drop of roughly 50 percentage points. The second is the
+generalisation collapse. The disc model loses a further 54 percentage points
+between its within-distribution rate and the held-out suite, and the T-block
+model falls from 11.7\,\% to zero. The coupled gate therefore bounds competence
+on the proposer's own goals, while the narrow goal distribution prevents that
+competence from transferring.
+
+The per-axis training logs confirm that the coupled gate, not a missing skill,
+limits the T-block. ASP-dPose satisfies the position gate on 41.0\,\% of its
+training pushes and the rotation gate on 33.9\,\%, yet the combined gate is met
+on only 11.7\,\% of within-distribution scenes. The two skills are present but
+rarely co-satisfied. On the disc, where only position is demanded, the
+within-distribution rate rises to 61.4\,\%, which confirms that the coupling is
+what suppresses the T-block within-distribution. The residual transfer failure,
+in which even the disc's competence does not reach the held-out suite, is a
+property of the goal distribution itself. Alice proposes goals near her own final
+pose, so the policy is trained on goals the held-out suite never presents, and
+its competence is tied to those goals rather than to a transferable skill.
+
+This answers RQ3. Self-play does not fail because a component of the method is
+broken, and it does not fail from a single cause. Two effects compound: the
+coupled multi-objective gate reduces the competence the policy acquires on its
+own goals by roughly 50 percentage points, and the narrow goal distribution
+prevents that competence from reaching the held-out suite. Both follow from the
+same curriculum, and together they reduce the disc's 61.4\,\% to a held-out
+7.3\,\% and the T-block's 11.7\,\% to zero.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth,height=0.42\textheight,keepaspectratio]{asp_diagnostic_2panel.png}
-    \caption{Self-play training diagnostics. Left: the goal-proposing agent's
-    goal-validity rate, between 83 and 91\,\% across variants. Right: the
-    goal-solving agent's per-axis success rates against its combined-gate success
-    rate. Each axis reaches roughly 50\,\% while the combined gate remains near
-    10\,\%.}
-    \label{fig:asp_diagnostic}
+    \caption{The generalisation gap. Grey bars: within-distribution scene
+    success rate (seed mean). Blue bars: held-out scene success rate with
+    95\,\% confidence intervals. The single-agent models show no gap, because
+    their training goal distribution coincides with the held-out suite; the
+    self-play models collapse from their within-distribution rate to the held-out
+    rate.}
+    \label{fig:train_heldout}
 \end{figure}
 
-This answers RQ3. Asymmetric self-play does enable the learning of the individual
-position and orientation skills, each to about 50\,\%. It does not, however,
-enable their combination: the combined success rate is roughly 2.5 times below
-what the independent skills would predict. The distinction matters for
-interpretation. It locates the difficulty in skill composition under a shifting
-goal distribution, rather than in the acquisition of the skills themselves.
-
-\subsection{Cross-Environment Confirmation}
+\subsection{Cross-Environment}
 \label{sec:cross_env_results}
 
-The ordering single-agent $\approx$ curriculum $\gg$ self-play holds in both
-simulators, which indicates it is a property of the methods rather than of Isaac
-Lab. Figure~\ref{fig:cross_env} shows the success rates in Isaac Lab and in
-\texttt{gym-pusht}, and Figure~\ref{fig:heatmap} shows the per-scene outcomes as a
-heatmap. In both environments the single-agent and curriculum models dominate
-while the self-play model remains low.
+The second-simulator counterpart provides a single-seed qualitative check, and
+each number below rests on that one seed. The numbers come from the primary
+configuration of 64 environments and 15 pushes per rollout; the remaining
+configurations of Section~\ref{sec:cross_env} are training-only. The
+single-agent model solves 3.3\,\% of the 30 scenes, far below the 79.3\,\% of
+the Isaac Lab model. The curriculum counterpart solves 9.0\,\%, and the
+self-play counterpart solves 1.0\,\%. The lower absolute rates reflect the lower
+fidelity of the second simulator and its single seed, not a contradiction of the
+Isaac Lab result. What transfers is the ordering. The self-play model remains
+the weakest of the three in both simulators. The curriculum model matches or
+exceeds the plain single-agent model, consistent with the curriculum comparison
+of Chapter~\ref{sec:conclusion}.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{p1_sr_bars.png}
-    \caption{Scene success rate in Isaac Lab and \texttt{gym-pusht} under the same
-    30-scene gate. The ordering of the methods is preserved across the two
-    simulators.}
-    \label{fig:cross_env}
-\end{figure}
-
-One nuance qualifies the equivalence of single-agent and curriculum training. At
-the small \texttt{gym-pusht} batch of 960 transitions per update, the curriculum
-model reaches 50.0\,\% while the plain single-agent model reaches only 10.0\,\%,
-so the curriculum is a large improvement there. At the large Isaac Lab batch of
-7{,}920 the two are equivalent, at 76.7\,\% and 80.0\,\%. The curriculum therefore
-substitutes for the shaped reward when the batch is small and gradient estimates
-are noisy. It adds nothing once the batch is large enough for stable estimates on
-both objectives at once. The value of the curriculum is thus regime-dependent, a
-point taken up in Chapter~\ref{sec:conclusion}.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{p3_heatmap.png}
-    \caption{Per-scene outcomes across models and simulators. Colour encodes the
-    number of successful attempts per scene out of 20. The combined
-    position-and-orientation block is the region that only the single-agent and
-    curriculum models on Isaac Lab solve consistently.}
-    \label{fig:heatmap}
-\end{figure}
-
-\subsection{Qualitative Behaviour and the Off-Policy Baseline}
+\subsection{Qualitative Behaviour}
 \label{sec:qualitative}
 
-Figure~\ref{fig:keyframes} shows keyframes of PPO-PBRS solving three
-representative scenes: a forward push, a lateral push, and a combined
-translate-and-rotate scene. The policy approaches the block along the
+Figure~\ref{fig:keyframes} shows keyframes of the single-agent PBRS policy
+solving three held-out scenes. The policy approaches the block along the
 object-relative offset, pushes along the decoded direction, and repeats until the
-combined gate is met. This behaviour matches the quantitative result of
-Section~\ref{sec:rq1}: position is controlled reliably, and the harder scenes are
-those requiring a large orientation change.
+combined gate is met. Its failures, on the rotation-dominant scenes, show
+position under control and orientation outside the 0.2\,rad tolerance, which
+matches the per-type breakdown of Table~\ref{tab:main_results}.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.32\textwidth]{rec_push_s11_key.png}\hfill
     \includegraphics[width=0.32\textwidth]{rec_push_s14_key.png}\hfill
     \includegraphics[width=0.32\textwidth]{rec_push_s21_key.png}
-    \caption{Keyframes of PPO-PBRS on three held-out scenes: a forward push
-    (left), a lateral push (centre), and a combined translate-and-rotate scene
-    (right).}
+    \caption{Keyframes of the single-agent PBRS policy on three held-out scenes.}
     \label{fig:keyframes}
 \end{figure}
 
-The off-policy baseline provides an external point of calibration from a different
-algorithm family. Under the constrained project budget, the SAC with Hindsight
-Experience Replay baseline did not converge within the time available. It is
-therefore not reported as a competitive number. Its role and status are recorded
-so that the on-policy results are read against a concrete off-policy attempt
-rather than in isolation. Published planar-pushing success rates provide the
-external calibration in its place. Completing this baseline is listed among the
-directions for future work in Chapter~\ref{sec:conclusion}.
+The off-policy baseline, SAC with Hindsight Experience Replay, did not converge
+within the available compute budget. Its status is recorded so that the on-policy
+results are read against a concrete off-policy attempt rather than in isolation.
+The failure is not evidence against the algorithm family: DDPG with hindsight
+experience replay reaches a median success rate of 100\,\% on FetchPush, a
+simulated tabletop pushing task, in \cite{Andrychowicz2017}. That published
+result serves as plausibility calibration only. The simulator, the object, the
+action space, and the compute budget all differ from the present task, so no
+success rate is compared directly.

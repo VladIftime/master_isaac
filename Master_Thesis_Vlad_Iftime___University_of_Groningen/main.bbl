@@ -42,11 +42,10 @@ S.~Sukhbaatar, Z.~Lin, I.~Kostrikov, G.~Synnaeve, A.~Szlam, and R.~Fergus,
   {\em International Conference on Learning Representations (ICLR)}, 2018.
 
 \bibitem{OpenAI2021AsymmetricSF}
-O.~OpenAI, M.~Plappert, R.~Sampedro, T.~Xu, I.~Akkaya, V.~Kosaraju,
-  P.~Welinder, R.~D'Sa, A.~Petron, H.~P. de~Oliveira~Pinto, A.~Paino, H.~Noh,
-  L.~Weng, Q.~Yuan, C.~Chu, and W.~Zaremba, ``Asymmetric self-play for
-  automatic goal discovery in robotic manipulation,'' {\em ArXiv},
-  vol.~abs/2101.04882, 2021.
+{OpenAI}, M.~Plappert, R.~Sampedro, T.~Xu, I.~Akkaya, V.~Kosaraju, P.~Welinder,
+  R.~D'Sa, A.~Petron, H.~P. de~Oliveira~Pinto, A.~Paino, H.~Noh, L.~Weng,
+  Q.~Yuan, C.~Chu, and W.~Zaremba, ``Asymmetric self-play for automatic goal
+  discovery in robotic manipulation,'' {\em ArXiv}, vol.~abs/2101.04882, 2021.
 
 \bibitem{Mason1986Pushing}
 M.~T. Mason, ``Mechanics and planning of manipulator pushing operations,'' {\em

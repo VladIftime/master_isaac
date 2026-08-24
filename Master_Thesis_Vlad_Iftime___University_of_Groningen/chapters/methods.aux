@@ -1,82 +1,88 @@
 \relax 
 \citation{Mittal2023IsaacLab}
 \citation{Makoviychuk2021IsaacGym}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Methods}{19}{}\protected@file@percent }
-\newlabel{section:methods}{{3}{19}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Simulation Environment}{19}{}\protected@file@percent }
-\newlabel{sec:env}{{3.1}{19}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The planar-pushing task. A UR5e arm pushes a T-block (blue) across a tabletop toward a goal pose (orange). Goals are defined in $\mathrm  {SE}(2)$ and combine a target position and a target orientation.}}{19}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methods}{18}{}\protected@file@percent }
+\newlabel{section:methods}{{3}{18}{Methods}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Simulation Environment}{18}{}\protected@file@percent }
+\newlabel{sec:env}{{3.1}{18}{Simulation Environment}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces The simulated environment in Isaac Lab: the UR5e arm, the tabletop workspace, the T-block, and the goal ghost.}}{18}{}\protected@file@percent }
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{fig:task_schematic}{{1}{19}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}The Planar-Pushing Markov Decision Process}{20}{}\protected@file@percent }
-\newlabel{sec:mdp}{{3.2}{20}{}{}{}}
+\newlabel{fig:env_render}{{1}{18}{Simulation Environment}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The planar-pushing task. A UR5e arm pushes a T-block (blue) across a tabletop toward a goal pose (orange). Goals are defined in $\mathrm  {SE}(2)$ and combine a target position and a target orientation.}}{19}{}\protected@file@percent }
+\newlabel{fig:task_schematic}{{2}{19}{Simulation Environment}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces A render of the batched simulation, showing 20 of the parallel environments; the training runs used between 256 and 2{,}048.}}{19}{}\protected@file@percent }
+\newlabel{fig:parallel_envs}{{3}{19}{Simulation Environment}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}The Planar-Pushing Markov Decision Process}{19}{}\protected@file@percent }
+\newlabel{sec:mdp}{{3.2}{19}{The Planar-Pushing Markov Decision Process}{}{}}
 \@writefile{toc}{\contentsline {paragraph}{State.}{20}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Action.}{20}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Transition.}{20}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Reward.}{20}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Success criterion.}{20}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}The Object-Relative Push Primitive}{20}{}\protected@file@percent }
-\newlabel{sec:primitive}{{3.3}{20}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The object-relative push primitive, drawn to scale over a top-down T-block. Panel (a) shows the approach placement in the object frame: the contact point is set by a radial offset $r$, sampled from the band between $0.04\,\text  {m}$ and $0.12\,\text  {m}$ from the object centre (dashed circles), and an approach angle $\phi $, one of 21 directions (grey spokes); the green points are the resulting grid of candidate contact points. The band is sized so that it encloses the object, whose outline reaches about $0.10\,\text  {m}$ from the tracked centre. Panel (b) shows the push itself in the world frame, from a representative contact point: the push direction $\theta $ is one of 21 headings (blue arrows), and the push length is one of 21 values from 0 to $0.20\,\text  {m}$ (marked along one heading). Each of the four parameters is discretised into 21 bins, so the action is a four-dimensional choice over a fixed grid rather than a continuous command.}}{22}{}\protected@file@percent }
-\newlabel{fig:primitive_bins}{{2}{22}{}{}{}}
+\newlabel{sec:primitive}{{3.3}{20}{The Object-Relative Push Primitive}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces The push primitive drawn to scale over a top-down T-block. Panel (a): the object-relative grid of candidate contact points (green), bounded by a radial band (dashed circles). Panel (b): the world-frame push, one of 21 headings (blue arrows) with lengths up to $0.20\,\text  {m}$ (marked along one heading).}}{21}{}\protected@file@percent }
+\newlabel{fig:primitive_bins}{{4}{21}{The Object-Relative Push Primitive}{}{}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Decode and execute one object-relative push primitive.}}{22}{}\protected@file@percent }
-\newlabel{alg:primitive}{{1}{22}{}{}{}}
+\newlabel{alg:primitive}{{1}{22}{The Object-Relative Push Primitive}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Why the Improvement Reward Underperforms}{22}{}\protected@file@percent }
+\newlabel{sec:frac_reward}{{3.4}{22}{Why the Improvement Reward Underperforms}{}{}}
+\newlabel{eq:fractional}{{16}{22}{Why the Improvement Reward Underperforms}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Potential-Based Reward Shaping for Pushing}{22}{}\protected@file@percent }
+\newlabel{sec:pbrs_design}{{3.5}{22}{Potential-Based Reward Shaping for Pushing}{}{}}
 \citation{Grzes2017RewardShaping}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Why the Improvement Reward Underperforms}{23}{}\protected@file@percent }
-\newlabel{sec:frac_reward}{{3.4}{23}{}{}{}}
-\newlabel{eq:fractional}{{16}{23}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Potential-Based Reward Shaping for Pushing}{23}{}\protected@file@percent }
-\newlabel{sec:pbrs_design}{{3.5}{23}{}{}{}}
-\newlabel{eq:phi_pos}{{17}{23}{}{}{}}
-\newlabel{eq:phi_rot}{{18}{23}{}{}{}}
-\newlabel{eq:pbrs_dense}{{19}{23}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Left: per-push reward over a representative five-push episode for the improvement reward and the potential-based reward. The improvement reward is negative or near-zero for most pushes; the potential-based reward is correctly signed on every push. Right: the gradient supplied by the two schemes as a function of distance to the goal.}}{24}{}\protected@file@percent }
-\newlabel{fig:pbrs_signal}{{3}{24}{}{}{}}
+\newlabel{eq:phi_pos}{{17}{23}{Potential-Based Reward Shaping for Pushing}{}{}}
+\newlabel{eq:phi_rot}{{18}{23}{Potential-Based Reward Shaping for Pushing}{}{}}
+\newlabel{eq:pbrs_dense}{{19}{23}{Potential-Based Reward Shaping for Pushing}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Left: per-push reward over a representative five-push episode for the improvement reward and the potential-based reward. The improvement reward is negative or near-zero for most pushes; the potential-based reward is correctly signed on every push. Right: the gradient supplied by the two schemes as a function of distance to the goal.}}{23}{}\protected@file@percent }
+\newlabel{fig:pbrs_signal}{{5}{23}{Potential-Based Reward Shaping for Pushing}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.6}The SE(2) Unified Distance}{24}{}\protected@file@percent }
-\newlabel{sec:se2}{{3.6}{24}{}{}{}}
-\newlabel{eq:dpose_methods}{{20}{24}{}{}{}}
-\newlabel{eq:phi_dpose}{{21}{24}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}The Models}{25}{}\protected@file@percent }
-\newlabel{sec:models}{{3.7}{25}{}{}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces The nine models. Every model uses the same PPO and LSTM backbone and the same object-relative push primitive; only the reward and the training dynamics change. The seed column gives the number of random seeds behind each model's headline confidence interval, taken at 528 environments. The single-agent Baseline and PBRS are trained across 256, 512, 1{,}024, 2{,}048, and 528 environments, with three seeds per swept count and five at the 528 anchor. The self-play subjects ASP-dPose and TASP-dPose are additionally trained at 256 and 2{,}048 environments, with three seeds, so that the single-GPU compute budget can be tested, rather than assumed, as a cause of the underperformance. The component ablations use three seeds and the gym runs a single seed; the full per-phase counts are given in Section~\ref {sec:experiment-set} and Chapter~\ref {sec:experiments}.}}{26}{}\protected@file@percent }
-\newlabel{tab:models}{{1}{26}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{PPO-Baseline.}{27}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{PPO-PBRS.}{27}{}\protected@file@percent }
-\@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces Single-agent training (PPO-Baseline and PPO-PBRS).}}{27}{}\protected@file@percent }
-\newlabel{alg:single}{{2}{27}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{PPO-Curriculum.}{27}{}\protected@file@percent }
+\newlabel{sec:se2}{{3.6}{24}{The SE(2) Unified Distance}{}{}}
+\newlabel{eq:dpose_methods}{{20}{24}{The SE(2) Unified Distance}{}{}}
+\newlabel{eq:phi_dpose}{{21}{24}{The SE(2) Unified Distance}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}The Models}{24}{}\protected@file@percent }
+\newlabel{sec:models}{{3.7}{24}{The Models}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces The nine models share the same PPO, LSTM backbone, and object-relative push primitive; only the reward and training dynamics differ. TASP-dPose and Bob-penalty report four held-out seeds each; the missing validation is noted in Section~\ref {sec:train_config}. The full per-phase counts appear in Section~\ref {sec:experiment-set} and Chapter~\ref {sec:experiments}.}}{25}{}\protected@file@percent }
+\newlabel{tab:models}{{1}{25}{The Models}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{PPO-Baseline.}{26}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{PPO-PBRS.}{26}{}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces Single-agent training (PPO-Baseline and PPO-PBRS).}}{26}{}\protected@file@percent }
+\newlabel{alg:single}{{2}{26}{PPO-PBRS.}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{PPO-Curriculum.}{26}{}\protected@file@percent }
 \citation{OpenAI2021AsymmetricSF}
 \citation{Sukhbaatar2018GoalEmbeddings}
 \citation{Sukhbaatar2018IntrinsicMotivation}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces Forced curriculum staging (PPO-Curriculum).}}{28}{}\protected@file@percent }
-\newlabel{alg:curriculum}{{3}{28}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{ASP-dPose.}{28}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{TASP-dPose.}{28}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces The asymmetric self-play loop. Alice proposes a goal by acting for a fixed number of pushes; the goal is validated; Bob then attempts it from a clean reset. Alice's reward differs between ASP-dPose (outcome-based) and TASP-dPose (time-based); Bob's $\mathrm  {SE}(2)$ potential-based reward is the same in both.}}{29}{}\protected@file@percent }
-\newlabel{fig:asp_loop}{{4}{29}{}{}{}}
-\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces Asymmetric self-play training (ASP-dPose and TASP-dPose).}}{30}{}\protected@file@percent }
-\newlabel{alg:asp}{{4}{30}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{ASP-disc and TASP-disc.}{30}{}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {3}{\ignorespaces Forced curriculum staging (PPO-Curriculum).}}{27}{}\protected@file@percent }
+\newlabel{alg:curriculum}{{3}{27}{PPO-Curriculum.}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{ASP-dPose.}{27}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{TASP-dPose.}{27}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces The asymmetric self-play loop. Alice proposes a goal by acting for a fixed number of pushes; the goal is validated; Bob then attempts it from a clean reset. Alice's reward differs between ASP-dPose (outcome-based) and TASP-dPose (time-based); Bob's $\mathrm  {SE}(2)$ potential-based reward is the same in both.}}{28}{}\protected@file@percent }
+\newlabel{fig:asp_loop}{{6}{28}{TASP-dPose.}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces The self-play scene as rendered: Alice (red) displaces the T-block to the proposed goal; Bob (blue) attempts it from a clean reset.}}{28}{}\protected@file@percent }
+\newlabel{fig:asp_render}{{7}{28}{TASP-dPose.}{}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {4}{\ignorespaces Asymmetric self-play training (ASP-dPose and TASP-dPose).}}{29}{}\protected@file@percent }
+\newlabel{alg:asp}{{4}{29}{TASP-dPose.}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{ASP-disc and TASP-disc.}{29}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Bird's-eye view of the disc self-play scene; the goal constrains position alone.}}{30}{}\protected@file@percent }
+\newlabel{fig:disc_render}{{8}{30}{ASP-disc and TASP-disc.}{}{}}
 \@writefile{toc}{\contentsline {paragraph}{Bob-penalty.}{30}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Cross-environment counterparts.}{30}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Why PBRS Assists Self-Play}{30}{}\protected@file@percent }
+\newlabel{sec:pbrs_asp}{{3.8}{30}{Why PBRS Assists Self-Play}{}{}}
+\newlabel{eq:gae_decomp}{{22}{30}{Why PBRS Assists Self-Play}{}{}}
 \citation{Henderson2018DeepRLMatters}
 \citation{Agarwal2021StatisticalPrecipice}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Why PBRS Assists Self-Play but Does Not Solve It}{31}{}\protected@file@percent }
-\newlabel{sec:pbrs_asp}{{3.8}{31}{}{}{}}
-\newlabel{eq:gae_decomp}{{22}{31}{}{}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.9}Experiment-Set Overview}{31}{}\protected@file@percent }
-\newlabel{sec:experiment-set}{{3.9}{31}{}{}{}}
+\newlabel{sec:experiment-set}{{3.9}{31}{Experiment-Set Overview}{}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces The experiment set. Each phase answers one question; the per-phase training configurations, environment counts, seeds, and job counts are tabulated in Chapter~\ref {sec:experiments}.}}{32}{}\protected@file@percent }
-\newlabel{tab:experiment-set}{{2}{32}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.10}Validation Protocol}{33}{}\protected@file@percent }
-\newlabel{sec:val_protocol_methods}{{3.10}{33}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The 30-scene held-out validation suite. Each panel shows the block start pose and the goal pose for one scene. The suite is identical for every model and every seed.}}{33}{}\protected@file@percent }
-\newlabel{fig:val_layout_methods}{{5}{33}{}{}{}}
+\newlabel{tab:experiment-set}{{2}{32}{Experiment-Set Overview}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.10}Validation Protocol}{32}{}\protected@file@percent }
+\newlabel{sec:val_protocol_methods}{{3.10}{32}{Validation Protocol}{}{}}
 \citation{OpenAI2021AsymmetricSF}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.11}Training Instrumentation for the Self-Play Mechanism}{34}{}\protected@file@percent }
-\newlabel{sec:instrumentation}{{3.11}{34}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.11}Training Instrumentation for the Self-Play Mechanism}{33}{}\protected@file@percent }
+\newlabel{sec:instrumentation}{{3.11}{33}{Training Instrumentation for the Self-Play Mechanism}{}{}}
 \@setckpt{chapters/methods}{
-\setcounter{page}{35}
+\setcounter{page}{34}
 \setcounter{equation}{22}
 \setcounter{enumi}{0}
 \setcounter{enumii}{0}
@@ -90,7 +96,7 @@
 \setcounter{subsubsection}{0}
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
-\setcounter{figure}{5}
+\setcounter{figure}{8}
 \setcounter{table}{2}
 \setcounter{caption@flags}{2}
 \setcounter{continuedfloat}{0}

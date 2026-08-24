@@ -1,36 +1,47 @@
 \relax 
 \@writefile{toc}{\contentsline {section}{\numberline {5}Results}{39}{}\protected@file@percent }
-\newlabel{sec:results}{{5}{39}{}{}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Principal validation results on the 30-scene held-out suite (best of 20 attempts, up to 30 pushes, combined gate). Scene SR counts a scene solved if any of its 20 attempts passes the gate; trial SR is the per-attempt rate. The PPO-Baseline row uses the improvement reward and the original, non-simplified potential formulation reported at the position-only gate; its combined-gate performance is discussed in the text.}}{39}{}\protected@file@percent }
-\newlabel{tab:main_results}{{4}{39}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}RQ1: Environment-Efficiency of Reward Shaping}{39}{}\protected@file@percent }
-\newlabel{sec:rq1}{{5.1}{39}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Per-scene position and orientation error for PPO-PBRS on the 30-scene suite. Position is within tolerance on every scene; the failing scenes are limited by orientation error on rotation-dominant scenes.}}{40}{}\protected@file@percent }
-\newlabel{fig:pbrs_errors}{{8}{40}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}RQ2: Curriculum and Self-Play Against Single-Agent}{40}{}\protected@file@percent }
-\newlabel{sec:rq2}{{5.2}{40}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Scene success rate (left) and the position-only against combined breakdown (right) for the five models. The single-agent and curriculum models cluster at the top; the self-play variants reach at most 16.7\,\%. The combined position-and-orientation gate is the discriminating objective.}}{41}{}\protected@file@percent }
-\newlabel{fig:val_multi}{{9}{41}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Per-scene error for TASP-dPose (left, 16.7\,\%) and ASP-dPose (right, 6.7\,\%). Both solve only the easiest scenes; orientation error remains far above tolerance on the rest.}}{41}{}\protected@file@percent }
-\newlabel{fig:selfplay_errors}{{10}{41}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}RQ3: Skill Composition Under Self-Play}{41}{}\protected@file@percent }
-\newlabel{sec:rq3}{{5.3}{41}{}{}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Training-time per-axis and combined success rates for the goal-solving agent under self-play. Under the improvement reward the agent learns almost nothing; under the potential-based reward it learns each axis to roughly 50\,\% but the combined gate remains near 10\,\%, well below the independence product of about 24 to 25\,\%. Alice's goal-validity rate is high throughout.}}{42}{}\protected@file@percent }
-\newlabel{tab:rq3}{{5}{42}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Self-play training diagnostics. Left: the goal-proposing agent's goal-validity rate, between 83 and 91\,\% across variants. Right: the goal-solving agent's per-axis success rates against its combined-gate success rate. Each axis reaches roughly 50\,\% while the combined gate remains near 10\,\%.}}{42}{}\protected@file@percent }
-\newlabel{fig:asp_diagnostic}{{11}{42}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Cross-Environment Confirmation}{42}{}\protected@file@percent }
-\newlabel{sec:cross_env_results}{{5.4}{42}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Scene success rate in Isaac Lab and \texttt  {gym-pusht} under the same 30-scene gate. The ordering of the methods is preserved across the two simulators.}}{43}{}\protected@file@percent }
-\newlabel{fig:cross_env}{{12}{43}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Per-scene outcomes across models and simulators. Colour encodes the number of successful attempts per scene out of 20. The combined position-and-orientation block is the region that only the single-agent and curriculum models on Isaac Lab solve consistently.}}{43}{}\protected@file@percent }
-\newlabel{fig:heatmap}{{13}{43}{}{}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Qualitative Behaviour and the Off-Policy Baseline}{43}{}\protected@file@percent }
-\newlabel{sec:qualitative}{{5.5}{43}{}{}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Keyframes of PPO-PBRS on three held-out scenes: a forward push (left), a lateral push (centre), and a combined translate-and-rotate scene (right).}}{44}{}\protected@file@percent }
-\newlabel{fig:keyframes}{{14}{44}{}{}{}}
+\newlabel{sec:results}{{5}{39}{Results}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Held-out generalisation of the headline models at 528 environments. Scene SR counts a scene solved if any of its attempts passes the combined gate; trial SR is the per-attempt rate. Pos-only is the scene SR on the ten position-only scenes. Values are seed means with 95\,\% confidence intervals across seeds, under the evaluation protocol of Section~\ref {sec:val_protocol}.}}{39}{}\protected@file@percent }
+\newlabel{tab:main_results}{{4}{39}{Results}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Baseline}{39}{}\protected@file@percent }
+\newlabel{sec:rq_baseline}{{5.1}{39}{Baseline}{}{}}
+\citation{OpenAI2021AsymmetricSF}
+\citation{Sukhbaatar2018IntrinsicMotivation}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces Per-scene generalisation errors, seed means across 5 seeds ($\pm $ 1 standard deviation). Top row: position error; bottom row: orientation error. Columns: PBRS, Curriculum, and ASP-dPose. Green bars mark scenes solved in the majority of seeds; the dashed line marks the combined-gate threshold. The single-agent models leave only rotation-dominant scenes unsolved, while ASP-dPose solves none.}}{40}{}\protected@file@percent }
+\newlabel{fig:per_scene_errors}{{12}{40}{Baseline}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Research Question 1: ASP performance under the single-GPU budget}{40}{}\protected@file@percent }
+\newlabel{sec:rq1}{{5.2}{40}{Research Question 1: ASP performance under the single-GPU budget}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces Held-out scene success rates for the headline models at 528 environments. The single-agent models solve roughly four scenes in five; the disc self-play models solve fewer than one in ten; the T-block self-play models solve none.}}{41}{}\protected@file@percent }
+\newlabel{fig:val_multi}{{13}{41}{Research Question 1: ASP performance under the single-GPU budget}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Research Question 2: Setup dimensions}{41}{}\protected@file@percent }
+\newlabel{sec:rq2}{{5.3}{41}{Research Question 2: Setup dimensions}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.1}Goal Coupling}{41}{}\protected@file@percent }
+\newlabel{sec:rq2_coupling}{{5.3.1}{41}{Goal Coupling}{}{}}
+\citation{Sukhbaatar2018IntrinsicMotivation}
+\citation{OpenAI2021AsymmetricSF}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.2}Reward Formulation}{42}{}\protected@file@percent }
+\newlabel{sec:rq2_reward}{{5.3.2}{42}{Reward Formulation}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.3}Compute Scale}{42}{}\protected@file@percent }
+\newlabel{sec:rq2_scale}{{5.3.3}{42}{Compute Scale}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.4}Imitation Signal}{42}{}\protected@file@percent }
+\newlabel{sec:rq2_abc}{{5.3.4}{42}{Imitation Signal}{}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.5}Goal Representation}{42}{}\protected@file@percent }
+\newlabel{sec:rq2_encoder}{{5.3.5}{42}{Goal Representation}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Research Question 3: Mechanism}{43}{}\protected@file@percent }
+\newlabel{sec:rq3}{{5.4}{43}{Research Question 3: Mechanism}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Within-distribution against held-out scene success for the two self-play subjects. Within-distribution SR is the scene success rate on goals proposed by the frozen goal-proposing agent and accepted by the validity check, under the evaluation protocol of Section~\ref {sec:val_protocol}; held-out SR is the 30-scene rate. Values are seed means with 95\,\% confidence intervals across the seeds listed. The single-agent models are omitted because their uniform training goal distribution coincides with the held-out suite, so their within-distribution and held-out rates are the same.}}{43}{}\protected@file@percent }
+\newlabel{tab:rq3}{{5}{43}{Research Question 3: Mechanism}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces The generalisation gap. Grey bars: within-distribution scene success rate (seed mean). Blue bars: held-out scene success rate with 95\,\% confidence intervals. The single-agent models show no gap, because their training goal distribution coincides with the held-out suite; the self-play models collapse from their within-distribution rate to the held-out rate.}}{44}{}\protected@file@percent }
+\newlabel{fig:train_heldout}{{14}{44}{Research Question 3: Mechanism}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Cross-Environment}{44}{}\protected@file@percent }
+\newlabel{sec:cross_env_results}{{5.5}{44}{Cross-Environment}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.6}Qualitative Behaviour}{44}{}\protected@file@percent }
+\newlabel{sec:qualitative}{{5.6}{44}{Qualitative Behaviour}{}{}}
+\citation{Andrychowicz2017}
+\@writefile{lof}{\contentsline {figure}{\numberline {15}{\ignorespaces Keyframes of the single-agent PBRS policy on three held-out scenes.}}{45}{}\protected@file@percent }
+\newlabel{fig:keyframes}{{15}{45}{Qualitative Behaviour}{}{}}
 \@setckpt{chapters/results}{
-\setcounter{page}{45}
+\setcounter{page}{46}
 \setcounter{equation}{22}
 \setcounter{enumi}{0}
 \setcounter{enumii}{0}
@@ -40,11 +51,11 @@
 \setcounter{mpfootnote}{0}
 \setcounter{part}{0}
 \setcounter{section}{5}
-\setcounter{subsection}{5}
+\setcounter{subsection}{6}
 \setcounter{subsubsection}{0}
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
-\setcounter{figure}{14}
+\setcounter{figure}{15}
 \setcounter{table}{5}
 \setcounter{caption@flags}{2}
 \setcounter{continuedfloat}{0}

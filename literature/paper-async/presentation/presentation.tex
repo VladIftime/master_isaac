@@ -143,24 +143,24 @@
 
 
 \begin{frame}[t]{Research Questions}
-  \begin{block}{Three Research Questions}
+  \begin{block}{Three Research Questions }
     \begin{enumerate}
-      \item \textbf{RQ1:} Can potential-based reward shaping reduce the number of parallel environments required for on-policy learning of a multi-objective planar pushing task on a simulated robotic arm?
-      \item \textbf{RQ2:} Given a well-shaped PBRS reward, does modifying the training dynamics — via sequential objective staging or adversarial goal generation — improve final task performance over a direct single-agent approach in a multi-objective planar pushing task on a simulated robotic arm?
-      \item \textbf{RQ3:} Does asymmetric self-play enable the learning of individual position and orientation skills in a multi-objective planar pushing task on a simulated robotic arm?
+      \item \textbf{RQ1:} Does asymmetric self-play match single-agent training in a contact-rich planar goal-reaching task under a single-GPU budget?
+      \item \textbf{RQ2:} Which single dimension, among goal coupling, reward formulation, imitation signal, goal representation, and compute scale, accounts for the self-play outcome?
+      \item \textbf{RQ3:} What mechanism prevents self-play from generalising its training-time success?
     \end{enumerate}
   \end{block}
 
   \vspace{2pt}
-  \vfill\litfooter{[Ng, Harada \& Russell 1999]~\textbf{[Grze\'s 2017]}~[Devlin \& Kudenko 2012]}
+  \vfill\litfooter{[Sukhbaatar et al.\ 2018]~[Plappert et al.\ 2021]~\textbf{[Ng et al.\ 1999]}~[Narvekar et al.\ 2020]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item RQ1: PPO with original fractional reward at 2{,}048 envs reaches 80\%. PPO-PBRS reaches 80\% at 528 envs — 4$\times$ fewer parallel environments. PBRS is more environment-efficient and theoretically principled.
-\item RQ2: PPO-Curriculum at 76.7\% is statistically tied with PPO-PBRS at 80.0\% (n.s.) — sequential staging adds no value at this batch size. Self-play variants at 6.7--16.7\% — 4.8--11.9$\times$ worse. Adversarial goal generation degrades performance.
-\item RQ3: Bob learns individual position (54\%) and rotation (45\%) under PBRS-ASP, but the combined gate caps at 10\% — 2.5$\times$ below the independence product. Under the original fractional reward, nothing is learned (1.3\% per-axis, 0.07\% combined). ASP teaches skills it cannot compose.
-\item Five models total: PPO-Baseline (orig.\ reward, 2{,}048 envs), PPO-PBRS, PPO-Curriculum, ASP-dPose, TASP-dPose (528 envs each). \texttt{\textasciitilde}3000 iterations per PBRS model, RTX Pro 6000.
+\item RQ1: does asymmetric self-play match single-agent training in this contact-rich task under a single-GPU budget? Answer: no — single-agent solves 79--80\%, self-play transfers 0\%
+\item RQ2: which of five dimensions (goal coupling, reward formulation, imitation signal, goal representation, compute scale) accounts for the self-play outcome? Answer: the coupled multi-objective gate
+\item RQ3: what mechanism prevents self-play from generalising? Answer: training-time competence confined to Alice's own goal distribution, with a stale value function under the non-stationary distribution
+\item Supporting RQ: does PBRS reach success with fewer environments than the improvement reward? (reward-efficiency comparison)
 }
 
 
@@ -400,8 +400,8 @@ penalty terms dominate the improvement.}
 \item Takeaway: Isaac gives self-play its best shot — same budget, same batch size as the winning single-agent — and it still reaches only 6.7--16.7\% SR. The 4.8× gap is structural, not a compute artifact
 }
 
-\begin{frame}[t]{Baseline — Fractional Reward at Scale}
-  \textbf{Same fractional reward, same PPO+LSTM, same 2{,}048 envs, same 100K iter budget:}
+\begin{frame}[t]{Results — Single-Agent Baselines vs Self-Play}
+  \textbf{Same PPO+LSTM, same push primitive, same 528-env budget, 5 seeds:}
   \vspace{4pt}
   \begin{center}
   \begin{tabular}{lccc}
@@ -409,25 +409,30 @@ penalty terms dominate the improvement.}
     \textbf{Model} & \textbf{Scene SR} & \textbf{Pos-only} & \textbf{Pos+rot} \\
     \midrule
     \rowcolor{hlgreen!15}
-    PPO single-agent & \textcolor{hlgreen}{\textbf{83.3\%}} & 100\% & 75\% \\
-    ASP (Alice+Bob)  & \textcolor{hlred}{\textbf{0.0\%}}  & 0\%   & 0\% \\
+    PPO-PBRS & \textcolor{hlgreen}{\textbf{79.3\%}} & 100\% & 69\% \\
+    \rowcolor{hlgreen!15}
+    PPO-Curriculum & \textcolor{hlgreen}{\textbf{80.0\%}} & 100\% & 70\% \\
+    ASP-dPose (outcome) & \textcolor{hlred}{\textbf{0.0\%}} & 0\% & 0\% \\
+    TASP-dPose (time) & \textcolor{hlred}{\textbf{0.0\%}} & 0\% & 0\% \\
+    ASP-disc (position-only) & 7.3\% & --- & --- \\
     \bottomrule
   \end{tabular}
   \end{center}
 
   \vspace{4pt}
-  {\small \text{\emph{Same PPO+LSTM, same push primitive, same training budget} — only the architecture differs.}  \textcolor{hlred}{\textbf{The adversarial goal distribution, not the reward formula, is the bottleneck.}}}
-  {\scriptsize \textit{(See Appendix K for training budget comparison.)}}
+  {\small \text{\emph{Single-agent baselines solve $\sim$4 in 5 scenes; self-play transfers none.}  \textcolor{hlred}{\textbf{Self-play's training-time success never reaches held-out scenes.}}}}
+  {\scriptsize \textit{(5 seeds; ASP-disc validated on its own position-only disc scenes.)}}
 
-  \vfill\litfooter{[Sukhbaatar et al.\ 2018]~[Plappert et al.\ 2021]}
+  \vfill\litfooter{[Ng et al.\ 1999]~[Narvekar et al.\ 2020]~\textbf{[Sukhbaatar et al.\ 2018]}~[Plappert et al.\ 2021]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item The original fractional reward at 2,048 envs reaches 83.3\% for single-agent — the task IS solvable at scale
-\item Same reward, same environment, same budget — ASP with Alice/Bob gets 0\%. The adversarial goal distribution prevents any learning
-\item This is the cleanest 1-axis comparison in the thesis: only the training architecture changes. Self-play is the bottleneck
-\item All subsequent models switch to PBRS — not because the original reward is broken, but because PBRS is principled, efficient (works at 528 envs), and provides correct per-step signal even under distribution shift
+\item The two single-agent baselines — plain PBRS (79.3\%) and PBRS with a forced curriculum (80.0\%) — both solve roughly four in five held-out scenes; the curriculum adds nothing on top of the already well-shaped reward
+\item Both solve every position-only scene (100\%) and only fail on rotation-requiring scenes (69--70\%) — position is never the problem
+\item The self-play subjects transfer nothing: ASP-dPose and TASP-dPose are at 0.0\% in every seed, under both Alice reward formulations
+\item ASP-disc — the same self-play loop on a rotationally symmetric disc with a position-only goal — retains only 7.3\%, isolating the coupled gate as the factor that removes self-play's residual generalisation
+\item Training-time rates tell the opposite story (ASP-dPose logs 35.8\% per-push), so the failure is a generalisation gap, not a lack of learning
 }
 
 
@@ -799,32 +804,32 @@ penalty terms dominate the improvement.}
 \begin{frame}[t]{PPO-PBRS — Per-Test Error}
   \centering
   \vspace{-2pt}
-  \includegraphics[width=0.95\textwidth]{figures/A_simp_20_isaac_errors.png}\\[2pt]
-  {\scriptsize 24/30 (80.0\%) — 100\% pos-only, 70\% pos+rot. All 6 failures are rotation-limited (large-yaw / spin scenes); 8/10 rotation-dominant scenes solved.}
+  \includegraphics[width=0.95\textwidth]{figures/pbrs_errors.png}\\[2pt]
+  {\scriptsize 79.3\% $\pm$ 3.5\% (5 seeds) — 100\% pos-only, 69\% pos+rot. All failures are rotation-limited; position stays within tolerance on every scene. \textit{(one representative seed shown)}}
 
 \end{frame}
 
 \begin{frame}[t]{PPO-Curriculum — Per-Test Error}
   \centering
   \vspace{-2pt}
-  \includegraphics[width=0.95\textwidth]{figures/results_valid_pbrs_curr_errors.png}\\[2pt]
-  {\scriptsize 23/30 (76.7\%) — same 100\% pos-only, 65\% pos+rot. Tighter position precision from Phase~1 (0.023 vs 0.032\,m), but marginally worse rotation (0.663 vs 0.568\,rad).}
+  \includegraphics[width=0.95\textwidth]{figures/curr_errors.png}\\[2pt]
+  {\scriptsize 80.0\% $\pm$ 4.1\% (5 seeds) — 100\% pos-only, 70\% pos+rot. Equivalent to PBRS: the forced curriculum adds nothing once the reward is well shaped. \textit{(one representative seed shown)}}
 
 \end{frame}
 
 \begin{frame}[t]{TASP-dPose — Per-Test Error}
   \centering
   \vspace{-2pt}
-  \includegraphics[width=0.95\textwidth]{figures/G_tasp_dpose_isaac_errors.png}\\[2pt]
-  {\scriptsize 5/30 (16.7\%) — 3 pos-only, 2 pos+rot. Only the easiest scenes pass, each with 1–2 successful trials; rotation never learned (RotErr 1.457\,rad).}
+  \includegraphics[width=0.95\textwidth]{figures/tasp_errors.png}\\[2pt]
+  {\scriptsize 0.0\% (4 seeds) — no held-out scene solved; rotation never learned (RotErr $\sim$1.35\,rad). Training-time success does not transfer. \textit{(one representative seed shown)}}
 
 \end{frame}
 
 \begin{frame}[t]{ASP-dPose — Per-Test Error}
   \centering
   \vspace{-2pt}
-  \includegraphics[width=0.95\textwidth]{figures/reults_valid_pbrs_asp_dpose_errors.png}\\[2pt]
-  {\scriptsize 2/30 (6.7\%) — only the two easiest position-only scenes pass. Zero pos+rot success; rotation never learned (RotErr 1.612\,rad). Outcome-based Alice collapses entirely.}
+  \includegraphics[width=0.95\textwidth]{figures/asp_errors.png}\\[2pt]
+  {\scriptsize 0.0\% (5 seeds) — no held-out scene solved; rotation never learned (RotErr $\sim$1.44\,rad). Outcome-based Alice transfers nothing. \textit{(one representative seed shown)}}
 
 \end{frame}
 
@@ -832,7 +837,7 @@ penalty terms dominate the improvement.}
   \centering
   \vspace{-2pt}
   \includegraphics[width=\textwidth,height=0.62\textheight,keepaspectratio]{figures/asp_vs_tasp_training.png}\\[1pt]
-  {\scriptsize ASP-dPose (outcome) vs TASP-dPose (time): displacement (top), valid-goal density (bottom). Bob solves few valid goals (3.9\% vs 5.5\%).}
+  {\scriptsize ASP-dPose (outcome) vs TASP-dPose (time): goal displacement (top) and valid-goal density (bottom).}
 
 \end{frame}
 
@@ -866,10 +871,10 @@ penalty terms dominate the improvement.}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item Same models, same 30-scene thesis gate, two simulators. Left: Isaac (batch 7,920). Right: gym HPC (batch 960)
-\item PPO-PBRS and PPO-Curriculum dominate in both; self-play (ASP, gym only as a genuine run) stays low
-\item Key nuance: at the small gym batch, PPO-Curriculum (50\%) far exceeds PPO-PBRS (10\%) — curriculum helps when gradients are noisy; at the large Isaac batch they tie. The substitution is regime-dependent
-\item There is no matched-protocol self-play Isaac best-of-20 entry, so the Isaac panel shows only the two single-agent variants
+\item Same models, same 30-scene thesis gate, two simulators. Left: Isaac (batch 7,920, 5 seeds). Right: gym-pusht (batch 960, 1 seed)
+\item Isaac: PBRS 79.3\% $\approx$ Curriculum 80.0\% $\gg$ ASP 0.0\% — self-play transfers nothing
+\item Gym: PBRS 3.3\%, Curriculum 9.0\%, ASP 1.0\% — the ordering holds, but absolute rates are far lower (fidelity + single seed)
+\item Nuance: curriculum exceeds plain single-agent only at the small gym batch (9.0\% vs 3.3\%); at the Isaac batch they tie. The substitution is regime-dependent
 }
 
 
@@ -878,16 +883,16 @@ penalty terms dominate the improvement.}
   \includegraphics[width=1.0\textwidth]{figures/p3_heatmap.png}
 
   \vspace{2pt}
-  {\small Colour: red (0 trials passed) $\to$ yellow (10) $\to$ green (all 20). Numbers = successful trials per scene out of 20.}
+  {\small Colour: red (0.0) $\to$ yellow (0.5) $\to$ green (1.0). Numbers = fraction of trials passed per scene.}
 
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item Per-scene pass/fail across the 30 scenes for each model×simulator
-\item Three blocks: rotation scenes, position-only scenes, pos+rot scenes
-\item PPO-PBRS / PPO-Curriculum on Isaac fill most of the grid; the same models in gym solve fewer; self-play (gym) only the easiest position-only scenes
-\item The pos+rot block is the universal bottleneck — only the Isaac single-agent models clear it consistently
+\item Per-scene fraction of trials passed across the 30 scenes: 5 Isaac models (PBRS, Curriculum, ASP-dPose, TASP-dPose, Bob-penalty) + gym-PBRS
+\item Three blocks: rotation (1-10), position-only (11-20), pos+rot (21-30)
+\item Isaac single-agent models (PBRS, Curriculum) fill most of the grid; the self-play models (ASP-dPose, TASP-dPose, Bob-penalty) are all 0.0 in every scene
+\item gym-PBRS solves a single scene (3.3\%) — the pos+rot block is the universal bottleneck, and only the Isaac single-agent models clear it consistently
 }
 
 
@@ -952,50 +957,60 @@ penalty terms dominate the improvement.}
 \sectionframe{8.\ Conclusion \& Takeaways}
 
 
-\begin{frame}[t]{Conclusion — Environment Efficiency (RQ1)}
-  \begin{block}{\textbf{RQ1 — PBRS reduces parallel-environment requirements}}
+\begin{frame}[t]{Conclusion — Self-Play vs Single-Agent (RQ1)}
+  \begin{block}{\textbf{RQ1 — Self-play does not match single-agent training}}
     \small
-    PBRS achieves 80.0\% SR at 528 parallel envs — 4$\times$ fewer than the fractional reward requires (2{,}048 envs) for the same performance (83.3\%). Dense, correctly-signed, bounded rewards on every push. Policy invariance (Ng et al.\ 1999) holds with stochastic PhysX.
+    Single-agent: \textbf{79--80\,\%} held-out (5 seeds), every position-only scene solved. Self-play: \textbf{0.0\,\%} in every seed, every reward formulation, every environment count (256--2{,}048). A categorical failure to generalise.
   \end{block}
 
-  \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Harutyunyan et al.\ 2015]}
+  \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item RQ1: PPO-PBRS at 528 envs matches PPO-Baseline at 2{,}048 envs — both reach 80--83\% validation SR
-\item PBRS reduces the parallel-environment requirement by 4$\times$ for this multi-objective planar pushing task
-\item Correctly-signed, bounded, Markovian rewards on every push enable stable on-policy GAE at lower parallelism
-\item The policy invariance theorem is supported empirically: PBRS does not alter the optimal policy, only the learning speed
+\item RQ1: single-agent models solve 79--80\% of held-out scenes and every position-only scene; self-play models solve 0.0\% in every seed, under both Alice reward formulations, at every environment count from 256 to 2{,}048
+\item The failure is categorical: not a small underperformance but a complete failure to transfer
 }
 
 
-\begin{frame}[t]{Conclusion — Curriculum \& Self-Play (RQ2)}
-  \begin{block}{\textbf{RQ2 — Staging adds no value; self-play degrades performance}}
+\begin{frame}[t]{Conclusion — Which Setup Dimension (RQ2)}
+  \begin{block}{\textbf{RQ2 — The coupled multi-objective gate is the factor}}
     \small
-    \textbf{Sequential objective staging} (PPO-Curriculum 76.7\%) is statistically tied with single-agent PBRS (80.0\%, n.s.).\\
-    \textbf{Adversarial goal generation}: five self-play configurations across three simulators yield 6.7--16.7\% SR — 4.8--11.9$\times$ below single-agent. The non-stationary goal distribution prevents stable on-policy learning.
+    The coupled gate turns the disc's \textbf{7.3\,\%} into \textbf{0.0\,\%} on the T-block. Compute scale, the imitation signal, and the goal representation contribute nothing: scale flat at zero; clip fraction 0.000.
   \end{block}
 
-  \vspace{4pt}
-  {\small \textbf{The substitution finding:} PBRS \emph{substitutes} for an explicit curriculum at this batch size — curriculum adds 3.3pp (n.s.). This is \textbf{regime-dependent}: at gym batch 960, curriculum helps (50\% vs 10\%). Self-play (4.8--11.9$\times$ worse) helps in neither regime. Practical implication: invest in reward design first.}
-
-  \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Narvekar et al.\ 2020]}
+  \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Berner et al.\ 2019]}
 \end{frame}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item RQ2: PPO-Curriculum 76.7\% vs PPO-PBRS 80.0\% — 3.3pp gap not statistically significant (p>0.05, SE diff=±10.6pp). Sequential staging adds no net value at this batch size
-\item Self-play at 6.7–16.7\% across five configurations: original fractional reward (0\%), outcome-based PBRS (6.7\%), time-based PBRS (16.7\%), symmetric Bob-penalty (0\%), gym-pusht (13.3\%)
-\item Time-based Alice partially mitigates (+10pp over outcome-based) but cannot close the 4.8× gap
-\item Self-play and single-agent cost the same per iteration — the gap is structural, not a budget artifact
+\item RQ2: five dimensions isolated one at a time: goal coupling, reward formulation, imitation signal, goal representation, compute scale
+\item Ruled out by experiment: compute scale (8$\times$ batch flat at zero), imitation signal (clip fraction 0.000, never flows), goal representation (ablation unchanged)
+\item The coupled gate is the factor: it reduces the disc's residual 7.3\% to the T-block's 0.0\%
 }
 
 
-\begin{frame}[t]{Conclusion — Individual Skills Under Self-Play (RQ3)}
-  \begin{block}{\textbf{RQ3 — ASP teaches individual skills it cannot compose}}
+\begin{frame}[t]{Ablations — Per-Scene Outcomes (RQ2)}
+  \centering
+  \includegraphics[width=1.0\textwidth]{figures/ablation_heatmap.png}
+
+  \vspace{2pt}
+  {\small Colour: red (0.0) $\to$ yellow (0.5) $\to$ green (1.0). Removing ABC or the goal encoder does not change self-play's 0.0\,\%; the disc positive control is unchanged (6.7\,\%).}
+
+\end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item Per-scene fraction of trials passed for the ablation arms: rows 1--5 on the 30 T-block scenes, rows 6--8 on the 30 disc scenes
+\item Removing ABC or the goal encoder leaves the T-block self-play models at 0.0\%: the ablations change nothing
+\item The disc positive control is unchanged at 6.7\%: imitation helps only where the task is already easy, and not at all in the discrete macro-action space
+}
+
+
+\begin{frame}[t]{Conclusion — Mechanism (RQ3)}
+  \begin{block}{\textbf{RQ3 — A generalisation failure, not a skill-composition failure}}
     \small
-    Under PBRS-ASP, Bob learns per-axis position (54\%) and rotation (45\%) individually — but the combined gate caps at 10\%, 2.5$\times$ below the independence product (24--25\%). Under the original fractional reward, nothing is learned (1.3\% per-axis, 0.07\% combined). The adversarial goal distribution prevents Bob from simultaneously satisfying coupled success criteria.
+    Self-play logs \textbf{77.9\,\%} (disc) and \textbf{35.8\,\%} (T-block) training-time success; none transfers. The value function is stale under the non-stationary goal distribution: a generalisation failure, not a skill-composition failure.
   \end{block}
 
   \vfill\litfooter{[Plappert et al.\ 2021]~\textbf{[Sukhbaatar et al.\ 2018]}~[Schulman et al.\ 2017]}
@@ -1003,10 +1018,25 @@ penalty terms dominate the improvement.}
 
 % ~~~~~ SPEAKER NOTES ~~~~~
 \note[itemize]{
-\item RQ3: Training data from TensorBoard events — Bob PositionSR 54\%, RotationSR 45\%, Combined SR 10\%. Independence product: 24--25\%
-\item Under the original fractional reward: PositionSR 1.3\%, Combined 0.07\% — no learning at all
-\item PBRS provides enough gradient for per-axis learning, but the adversarial distribution prevents composing these skills into joint achievement
-\item This is the mechanism behind RQ2's result: ASP degrades performance because it teaches decomposable skills under a distribution that forbids their simultaneous application
+\item RQ3: self-play logs substantial training-time success (77.9\% disc, 35.8\% T-block) but transfers none; the competence is confined to the goals Alice's own curriculum produces
+\item Single-agent moves in the opposite direction: a per-push training rate of $\sim$11\% rises to 79\% under the held-out evaluation budget
+\item The mechanism is a generalisation gap driven by the value-function bias under the shifting goal distribution: not a failure to compose two individually learned skills
+}
+
+
+\begin{frame}[t]{Conclusion — Reward Efficiency (Supporting RQ)}
+  \begin{block}{\textbf{Supporting RQ — PBRS solves the task; efficiency comparison pending}}
+    \small
+    PBRS solves \textbf{79.3\,\%} of held-out scenes (5 seeds); policy invariance (Ng et al.\ 1999) holds under stochastic PhysX. The efficiency comparison against the improvement reward is pending.
+  \end{block}
+
+  \vfill\litfooter{[Ng et al.\ 1999]~[Grze\'s 2017]~[Harutyunyan et al.\ 2015]}
+\end{frame}
+
+% ~~~~~ SPEAKER NOTES ~~~~~
+\note[itemize]{
+\item Supporting RQ: PBRS reaches 79.3\% held-out SR at 528 envs, confirming the Ng (1999) policy-invariance guarantee survives contact-rich stochastic PhysX
+\item The reward-efficiency comparison against the improvement reward (PPO-Baseline) is still training at writing time: its held-out validation is pending
 }
 
 

@@ -1,4 +1,4 @@
-This is BibTeX, Version 0.99e (TeX Live 2026)
+This is BibTeX, Version 0.99d (TeX Live 2023/Debian)
 Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: main.aux
 A level-1 auxiliary file: chapters/contents.aux
@@ -15,7 +15,7 @@ Database file #1: biblio.bib
 Warning--empty booktitle in Kasaei2024HarnessingTS
 You've used 54 entries,
             1876 wiz_defined-function locations,
-            814 strings with 17080 characters,
+            814 strings with 17075 characters,
 and the built_in function-call counts, 17297 in all, are:
 = -- 1487
 > -- 1018

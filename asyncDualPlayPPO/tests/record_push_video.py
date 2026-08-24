@@ -110,12 +110,16 @@ def main():
     parser.add_argument("--height", type=int, default=1080, help="Camera image height")
     parser.add_argument("--cam-margin", type=float, default=0.055, dest="cam_margin",
                         help="Extra height above the robot's highest link, in metres")
-    parser.add_argument("--cam-height", type=float, default=None, dest="cam_height",
+    parser.add_argument("--cam-height", type=float, default=3.5, dest="cam_height",
                         help="Manual camera Z height in metres (overrides auto-detection)")
     parser.add_argument("--repeats", type=int, default=5,
                         help="Number of rollouts to record per scene in interactive mode")
     parser.add_argument("--no-interact", action="store_true", dest="no_interact",
                         help="Disable keyboard controls; run non-interactively")
+    parser.add_argument("--gif", dest="gif", action="store_true", default=True,
+                        help="Also save a GIF version of each video (default: on)")
+    parser.add_argument("--no-gif", dest="gif", action="store_false",
+                        help="Disable GIF output")
     parser.add_argument("--clean", action="store_true",
                         help="Hide debug markers (push spheres/arrow). Goal ghost always shown.")
     parser.add_argument("--out-dir", type=str, dest="out_dir", default=None,
@@ -644,6 +648,29 @@ def main():
         _int_active = False
 
     # ── Record each scene ───────────────────────────────────────────────────────
+    def _save_gif(frames, gif_path):
+        if not args.gif:
+            return
+        try:
+            import cv2
+            from PIL import Image
+
+            imgs = []
+            for f in frames:
+                h, w = f.shape[:2]
+                if h != 480:
+                    scale = 480.0 / h
+                    f = cv2.resize(f, (max(1, int(w * scale)), 480),
+                                   interpolation=cv2.INTER_AREA)
+                imgs.append(Image.fromarray(np.ascontiguousarray(f[..., :3]).copy()))
+
+            duration = int(round(1000.0 / args.fps))
+            imgs[0].save(gif_path, save_all=True, append_images=imgs[1:],
+                         loop=0, duration=duration)
+            print(f"  saved {gif_path} ({os.path.getsize(gif_path) / 1e6:.1f} MB, 480p)")
+        except Exception as e:
+            print(f"  [error] GIF encoding failed for {gif_path}: {e}")
+
     n_tests = get_test_count()
     si = 0
     while si < len(scene_indices):
@@ -679,12 +706,14 @@ def main():
 
             stem = f"rec_push_s{idx:02d}"
             mp4_path = os.path.join(video_dir, f"{stem}.mp4")
+            gif_path = os.path.join(video_dir, f"{stem}.gif")
             key_path = os.path.join(args.out_dir, f"{stem}_key.png")
             try:
                 imageio.mimsave(mp4_path, best_frames, fps=args.fps, macro_block_size=None)
                 imageio.imwrite(key_path, best_frames[len(best_frames) // 2])
                 print(f"  saved {mp4_path} ({'success' if got_success else 'best-effort'}) "
                       f"+ keyframe {key_path}")
+                _save_gif(best_frames, gif_path)
             except Exception as e:
                 print(f"  [error] encoding failed for scene {idx}: {e}")
             si += 1
@@ -728,11 +757,13 @@ def main():
                         _keep_fl[0] = False
                         stem = f"rec_push_s{idx:02d}_{label}"
                         mp4_path = os.path.join(video_dir, f"{stem}.mp4")
+                        gif_path = os.path.join(video_dir, f"{stem}.gif")
                         key_path = os.path.join(args.out_dir, f"{stem}_key.png")
                         try:
                             imageio.mimsave(mp4_path, frames, fps=args.fps, macro_block_size=None)
                             imageio.imwrite(key_path, frames[len(frames) // 2])
                             print(f"  saved {mp4_path}")
+                            _save_gif(frames, gif_path)
                         except Exception as e:
                             print(f"  [error] encoding failed: {e}")
                         # hold — do NOT reset; wait for the next command
