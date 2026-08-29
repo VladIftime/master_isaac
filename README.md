@@ -1,5 +1,8 @@
 # Asymmetric Self-Play with Goal Encoders and PBRS for Robotic Pushing
 
+Master Thesis implemented by Vlad Iftime, supervised by Hamidreza Mohades Kasaei, PhD, Associate Professor at The University of Groningen.
+
+
 Tabletop-pushing policies trained in **Isaac Lab / Isaac Sim**, combining
 **Asymmetric Self-Play** (Plappert et al. 2021), **Goal Embeddings** (Sukhbaatar
 et al. 2018), and **Potential-Based Reward Shaping** (Ng et al. 1999) on a UR5e
@@ -289,18 +292,4 @@ To record MP4/GIF/keyframe demos of a trained agent (as shown in Section 1.5):
 
 ```bash
 python -m asyncDualPlayPPO.tests.record_push_video --chkpt runs/<name>/agent/model_best.pt --headless
-```
-
-### 2.8 References
-
-```bibtex
-@article{plappert2021asymmetric,
-  title={Asymmetric self-play for automatic goal discovery in robotic manipulation},
-  author={Plappert, Matthias and others}, journal={arXiv:2101.04882}, year={2021}}
-@article{sukhbaatar2018learning,
-  title={Learning Goal Embeddings via Self-Play for Hierarchical RL},
-  author={Sukhbaatar, Sainbayar and others}, journal={arXiv:1811.09083}, year={2018}}
-@inproceedings{ng1999policy,
-  title={Policy invariance under reward transformations: Theory and application to reward shaping},
-  author={Ng, Andrew Y and Harada, Daishi and Russell, Stuart}, booktitle={ICML}, year={1999}}
 ```
